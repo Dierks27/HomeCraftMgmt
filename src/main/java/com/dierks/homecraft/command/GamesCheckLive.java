@@ -22,6 +22,7 @@ import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
 import com.dierks.homecraft.games.gen.engine.GenAdminKeys;
 import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.games.gen.engine.KeptPlot;
+import com.dierks.homecraft.games.gen.engine.OldAreas;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
@@ -34,28 +35,31 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 /**
  * The live server's facts for {@link GamesCheck}: the config, the worlds, Multiverse, the Fresh
  * Courses engine, the course rows and the website feed, each read and nothing written.
  *
  * <p>Multiverse is a soft dependency and is only ever read: a world's game mode through its API by
- * reflection (Multiverse-Core 5, then 4), and Multiverse-Inventories' groups and game-mode setting from
- * its own files. Whatever can't be read comes back as "can't tell", and the check says what to look
- * at by hand. The website's {@code /api/arcade} is built in memory the way the dashboard builds it
- * (every open game's entries, the Scratch Ticket, prizes, packs, achievements), with each game's
- * {@code feed} called directly, not through the games' guard, so a feed that throws is reported
+ * reflection (Multiverse-Core 5, then 4), then from Multiverse-Core's {@code worlds.yml}
+ * ({@link MvGameMode}); and Multiverse-Inventories' groups and game-mode setting from its own files.
+ * Whatever can't be read comes back as "can't tell", and the check says what to look at by hand. The
+ * website's {@code /api/arcade} is built in memory the way the dashboard builds it (every open game's
+ * entries, the Scratch Ticket, prizes, packs, achievements), with each game's {@code feed} called
+ * directly, not through the games' guard, so a feed that throws is reported
  * instead of switching its game off.
  */
 final class GamesCheckLive implements GamesCheck.Facts {
+
+    /** How long the check still says an old area was emptied (two weeks). */
+    static final long OLD_NEWS_MS = 14L * 24 * 60 * 60 * 1000;
 
     private final HomeCraftManagement plugin;
 
@@ -106,26 +110,31 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (mv == null || !mv.isEnabled()) {
             return null;
         }
-        // Multiverse-Core 5: MultiverseCoreApi.get().getWorldManager().getWorld(name) -> Option<MultiverseWorld>.
+        // Multiverse-Core 5: MultiverseCoreApi.get().getWorldManager(), then getWorld(name) -> Option<MultiverseWorld>
+        // (vavr shaded under its own package) and getLoadedWorld(name)
         try {
             Class<?> api = Class.forName("org.mvplugins.multiverse.core.MultiverseCoreApi", true,
                     mv.getClass().getClassLoader());
-            Object core = api.getMethod("get").invoke(null);
-            Object worlds = call(core, "getWorldManager");
-            Object mode = call(unwrap(call(worlds, "getWorld", world)), "getGameMode");
+            String mode = MvGameMode.fromWorldManager(MvGameMode.call(api.getMethod("get").invoke(null),
+                    "getWorldManager"), world);
             if (mode != null) {
-                return String.valueOf(mode);
+                return mode;
             }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             // not Multiverse-Core 5
         }
         // Multiverse-Core 4: getMVWorldManager().getMVWorld(name).getGameMode().
         try {
-            Object mode = call(call(call(mv, "getMVWorldManager"), "getMVWorld", world), "getGameMode");
-            return mode == null ? null : String.valueOf(mode);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            return null;
+            String mode = MvGameMode.name(MvGameMode.call(MvGameMode.call(MvGameMode.call(mv, "getMVWorldManager"),
+                    "getMVWorld", world), "getGameMode"));
+            if (mode != null) {
+                return mode;
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // not Multiverse-Core 4
         }
+        // the last resort: Multiverse-Core 5's own file
+        return MvGameMode.fromWorldsFile(yaml(new File(mv.getDataFolder(), "worlds.yml")), world);
     }
 
     @Override
@@ -189,8 +198,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 continue;
             }
             if (!c.placed()) { // its origin is only a placeholder: nothing about it can be checked
-                regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()),
-                        Slots.isClassic(def.id()), true, List.of(GenService.UNPLACED), "where it was built"));
+                regions.add(unplaced(def, GenCopy.slotName(def, st.cadenceDays()), c.held()));
                 continue;
             }
             List<String> problems = new ArrayList<>();
@@ -215,6 +223,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         }
 
         List<GamesCheck.SlotFact> slots = null;
+        List<GamesCheck.OldArea> old = new ArrayList<>();
         String next = null;
         if (engine != null) {
             slots = new ArrayList<>();
@@ -230,11 +239,32 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 }
                 slots.add(new GamesCheck.SlotFact(r.id(), def == null ? r.id() : GenCopy.slotName(def, st.cadenceDays()),
                         r.classic(), r.wanted(), r.problem(), r.claimed(), r.live() != null, r.current(), r.building(),
-                        r.lastError(), r.healFailed(), holds));
+                        r.lastError(), r.healFailed(), holds, r.moving()));
             }
             long at = engine.nextChangeAt();
             if (at > 0) {
                 next = GenCopy.whenDated(at, zone) + " (in " + GenCopy.span(at - now) + ")";
+            }
+            List<OldAreas.Area> standing = engine.oldAreas();
+            for (OldAreas.Area a : standing) {
+                if (a.state() == OldAreas.State.EMPTIED) {
+                    continue; // emptied, only waiting to be known on disk (F09): its record below says so
+                }
+                Slots.Def def = Slots.any(a.slot());
+                String name = def == null ? a.slot() : GenCopy.slotName(def, st.cadenceDays());
+                old.add(new GamesCheck.OldArea(a.slot(), name, GamesCheck.OldState.valueOf(a.state().name()), a.where(),
+                        a.detail(), a.percent(), 0, 0));
+            }
+            for (Map.Entry<String, OldAreas.Retired> e : engine.retiredAreas().entrySet()) {
+                OldAreas.Retired r = e.getValue();
+                if (now - r.at() > OLD_NEWS_MS) {
+                    continue; // old news: the check stops saying it after two weeks
+                }
+                Slots.Def def = Slots.any(e.getKey());
+                String name = def == null ? e.getKey() : GenCopy.slotName(def, st.cadenceDays());
+                old.add(new GamesCheck.OldArea(e.getKey(), name, GamesCheck.OldState.EMPTIED,
+                        Regions.describeClaim(r.claim()), r.firstLeft().isEmpty() ? null : r.firstLeft().get(0), 100,
+                        r.removed(), r.left(), OldAreas.stillGuarded(standing, e.getKey(), r.claim())));
             }
         } else if (st.enabled()) {
             long at = ed.nextChangeAt(now);
@@ -245,7 +275,8 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 next, st.archive().keepProblem() != null ? st.archive().keepProblem()
                 : Regions.keepExtrasProblem(st.archive().keep(), extraBoxes), // or it crowds the arena or the Clubhouse
                 st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots",
-                facts == null ? null : Regions.keepWorldProblems(st.archive().keep(), facts)); // each plot fits
+                facts == null ? null : Regions.keepWorldProblems(st.archive().keep(), facts), // each plot fits
+                old); // the old areas a move left, and the ones emptied lately
     }
 
     // ---- what players can see (LAYOUT-SPEC §5.1) ----
@@ -330,11 +361,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
             boolean stands = r != null ? r.wanted() || r.claimed() : c.enabled() && st.enabled();
             List<Box> halves = def == null ? List.of() : Regions.halves(c);
             if (def != null && !c.placed()) {
-                // config can't say where it is: it stands where it was claimed, if anywhere (GenService)
-                String claim = meta.get(GenAdminKeys.claim(def.id()));
-                int[] at = Regions.claimOrigin(claim);
-                stands = at != null && world.equalsIgnoreCase(Regions.claimWorld(claim));
-                halves = stands ? Regions.halves(def, at, Regions.claimGap(claim)) : List.of();
+                // config can't say where it is (or it is held): it stands where it was claimed, if anywhere (GenService)
+                halves = claimedHalves(def, meta.get(GenAdminKeys.claim(def.id())), world);
+                stands = !halves.isEmpty();
             }
             if (def == null || !stands) {
                 continue;
@@ -386,6 +415,31 @@ final class GamesCheckLive implements GamesCheck.Facts {
                     new Box(x, y, z, x, y, z)));
         }
         return out;
+    }
+
+    /**
+     * The area line of a slot whose config doesn't place it: its spot can't be read ({@link GenService#UNPLACED}),
+     * or it is held where it was built because config.yml couldn't be saved at the update ({@code held}, the
+     * engine's own reason: ENG04).
+     */
+    static GamesCheck.Region unplaced(Slots.Def def, String name, String held) {
+        return new GamesCheck.Region(def.id(), name, Slots.isClassic(def.id()), true,
+                List.of(held != null ? held : GenService.UNPLACED), "where it was built", held != null);
+    }
+
+    /**
+     * The halves of a slot config doesn't place (unreadable, or held) as they stand: where its claim says, in
+     * {@code world}, at the sizes the claim RECORDED (ENG04: a held 0.36 boat is 128 x 16 x 128, never today's
+     * 480 x 176 x 640 at its old spot); today's sizes only for a claim that names none. None when it isn't claimed
+     * there.
+     */
+    static List<Box> claimedHalves(Slots.Def def, String claim, String world) {
+        int[] at = Regions.claimOrigin(claim);
+        if (at == null || !world.equalsIgnoreCase(Regions.claimWorld(claim))) {
+            return List.of();
+        }
+        List<Box> recorded = Regions.claimHalves(claim);
+        return recorded != null ? recorded : Regions.halves(def, at, Regions.claimGap(claim));
     }
 
     /**
@@ -701,41 +755,5 @@ final class GamesCheckLive implements GamesCheck.Facts {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /** A public no-arg or one-arg method by name, called; {@code null} target gives {@code null}. */
-    private static Object call(Object target, String name, Object... args) throws ReflectiveOperationException {
-        if (target == null) {
-            return null;
-        }
-        for (Method m : target.getClass().getMethods()) {
-            if (m.getName().equals(name) && m.getParameterCount() == args.length && accepts(m, args)) {
-                m.setAccessible(true);
-                return m.invoke(target, args);
-            }
-        }
-        throw new NoSuchMethodException(target.getClass().getName() + "." + name);
-    }
-
-    /** Whether {@code m} takes these arguments ({@code getWorld(String)}, not {@code getWorld(World)}). */
-    private static boolean accepts(Method m, Object[] args) {
-        Class<?>[] types = m.getParameterTypes();
-        for (int i = 0; i < args.length; i++) {
-            if (args[i] != null && !types[i].isInstance(args[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** An {@link Optional}, a vavr {@code Option}, or a plain value, unwrapped. */
-    private static Object unwrap(Object o) throws ReflectiveOperationException {
-        if (o instanceof Optional<?> opt) {
-            return opt.orElse(null);
-        }
-        if (o != null && o.getClass().getName().startsWith("io.vavr.")) {
-            return call(o, "getOrNull");
-        }
-        return o;
     }
 }

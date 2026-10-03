@@ -38,7 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The golf planner (GEN-SPEC §4.3, Course Variety §3), over 300 seeds of Golf of the Week
+ * Adventure Golf's planner, version 3, frozen ({@link GolfPlanner#v3()}: what made every algo-3
+ * layout; Golf v4 is {@code GolfPlannerV4Test}'s), over 300 seeds of Golf of the Week
  * ({@code EEEMMMMHH}) and Tiny Golf ({@code EEE}): every course passes the full independent check
  * (Adventure Golf's rules: every hole's blocks sound, its witness dropping in E and safe on a pond
  * hole, par 2-4, the sloppy player within par + 1, every rest spot on the lane, the scenery clear of
@@ -73,7 +74,7 @@ class GolfPlannerTest {
     private static Run run(Slots.Def slot, int n) {
         long t0 = System.nanoTime();
         try {
-            Plan plan = new GolfPlanner().plan(input(slot, n));
+            Plan plan = GolfPlanner.v3().plan(input(slot, n));
             return new Run(slot, n, plan, (System.nanoTime() - t0) / 1_000_000);
         } catch (GenFailed e) {
             throw new AssertionError(slot.id() + " seed " + n + " failed: " + e.getMessage(), e);
@@ -212,7 +213,7 @@ class GolfPlannerTest {
             PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
             for (int i = 0; i < g.course().holes().size(); i++) {
                 GolfCourse.Hole h = g.course().holes().get(i);
-                LaneMap lane = LaneMap.of(grid, h, GolfPlanner.ALGO);
+                LaneMap lane = LaneMap.of(grid, h, GolfPlanner.ALGO_V3);
                 String what = r.slot().id() + " seed " + r.n() + " hole " + (i + 1);
                 int[] wet = {0};
                 int[] off = {0};
@@ -253,7 +254,7 @@ class GolfPlannerTest {
             PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
             for (int i = 0; i < g.course().holes().size(); i++) {
                 GolfCourse.Hole h = g.course().holes().get(i);
-                if (LaneMap.of(grid, h, GolfPlanner.ALGO).hazards() == 0) {
+                if (LaneMap.of(grid, h, GolfPlanner.ALGO_V3).hazards() == 0) {
                     continue;
                 }
                 BallPhysics.Hole area = GolfShot.area(grid, h);
@@ -295,17 +296,17 @@ class GolfPlannerTest {
             String mix = r.slot().tierOrMix();
             for (int i = 0; i < mix.length(); i++) {
                 if (mix.charAt(i) == 'E' || r.slot() == Slots.TINY_GOLF) {
-                    assertEquals(0, LaneMap.of(grid, g.course().holes().get(i), GolfPlanner.ALGO).hazards(),
+                    assertEquals(0, LaneMap.of(grid, g.course().holes().get(i), GolfPlanner.ALGO_V3).hazards(),
                             r.slot().id() + " seed " + r.n() + " hole " + (i + 1) + ": no water in play on Easy");
                 }
             }
         }
         for (String mix : List.of("MMM", "HHH", "EMH", "MHM")) {
             for (long seed = 0; seed < 12; seed++) {
-                Plan p = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, seed, mix, 0));
+                Plan p = GolfPlanner.v3().plan(GolfKit.input(Slots.TINY_GOLF, seed, mix, 0));
                 PlanBlocks grid = PlanBlocks.of(p.half(), p.palette(), p.ops());
                 for (GolfCourse.Hole h : golf(p).course().holes()) {
-                    assertEquals(0, LaneMap.of(grid, h, GolfPlanner.ALGO).hazards(), "Tiny Golf at " + mix + " seed "
+                    assertEquals(0, LaneMap.of(grid, h, GolfPlanner.ALGO_V3).hazards(), "Tiny Golf at " + mix + " seed "
                             + seed + ": the four-year-old's course has no water in play, whatever an admin sets");
                 }
                 assertEquals(List.of(), GolfValidator.quickProblems(p), "and it is sound");
@@ -355,7 +356,7 @@ class GolfPlannerTest {
     @Test
     void theSameInputMakesTheSamePlan() throws GenFailed {
         for (int n = 0; n < 3; n++) {
-            Plan again = new GolfPlanner().plan(input(Slots.DAILY_GOLF, n));
+            Plan again = GolfPlanner.v3().plan(input(Slots.DAILY_GOLF, n));
             Plan first = RUNS.get(n).plan();
             assertEquals(first.hash(), again.hash(), "seed " + n + ": the same layout");
             assertEquals(first.work(), again.work(), "seed " + n + ": after the same counted work");
@@ -367,17 +368,17 @@ class GolfPlannerTest {
     @Test
     void goldenPlansArePinned() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
-        assertEquals(3, GolfPlanner.ALGO, "the version these hashes belong to");
+        assertEquals(3, GolfPlanner.ALGO_V3, "the version these hashes belong to");
         Map<Long, String> daily = Map.of(1L, "cf984e43e170", 20725L, "15c15b307eb2",
                 0x3f2a91c07d1e55b0L, "e4eb31cf3859");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
-            Plan p = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, e.getKey()));
+            Plan p = GolfPlanner.v3().plan(GolfKit.input(Slots.DAILY_GOLF, e.getKey()));
             assertEquals(e.getValue(), p.hash(), "Daily Golf seed " + Long.toHexString(e.getKey()));
         }
         Map<Long, String> tiny = Map.of(1L, "a61b98fd5199", 20725L, "44b393ccf0a4",
                 0x3f2a91c07d1e55b0L, "dac9542bf147");
         for (Map.Entry<Long, String> e : new TreeMap<>(tiny).entrySet()) {
-            Plan p = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, e.getKey()));
+            Plan p = GolfPlanner.v3().plan(GolfKit.input(Slots.TINY_GOLF, e.getKey()));
             assertEquals(e.getValue(), p.hash(), "Tiny Golf seed " + Long.toHexString(e.getKey()));
         }
     }
@@ -429,13 +430,13 @@ class GolfPlannerTest {
                     + half.describe());
         }
         long least = GolfPlanner.leastBudget(9);
-        Plan spent = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, 5, "EEEMMMMHH", least));
+        Plan spent = GolfPlanner.v3().plan(GolfKit.input(Slots.DAILY_GOLF, 5, "EEEMMMMHH", least));
         PlannedGolf g = golf(spent);
         assertEquals(9, g.attempts().size(), "with no work to spare the course is still never missing a hole");
         assertEquals(12, g.attempts().get(0), "the first is the fallback: only the fallbacks' work was there");
         assertTrue(spent.work() <= least, "and it keeps to its budget: " + spent.work() + " of " + least);
         assertEquals(List.of(), GolfValidator.problems(spent), "and that course passes the full check");
-        GenFailed tooLittle = assertThrows(GenFailed.class, () -> new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF,
+        GenFailed tooLittle = assertThrows(GenFailed.class, () -> GolfPlanner.v3().plan(GolfKit.input(Slots.DAILY_GOLF,
                 5, "EEEMMMMHH", least - 1)), "below a fallback for every hole there is no plan");
         assertTrue(tooLittle.getMessage().contains(Long.toString(least)), "and it says what the least is: "
                 + tooLittle.getMessage());
@@ -443,11 +444,11 @@ class GolfPlannerTest {
 
     @Test
     void aStoredLayoutIsRederivedWithoutSearchingToTheSameHash() throws GenFailed {
-        GolfPlanner planner = new GolfPlanner();
+        GolfPlanner planner = GolfPlanner.v3();
         for (int k = 0; k < 12; k++) {
             Run r = RUNS.get(k * 50 % RUNS.size());
             PlannedGolf g = golf(r.plan());
-            GenTag tag = tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO);
+            GenTag tag = tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO_V3);
             Plan again = planner.rederive(input(r.slot(), r.n()), tag);
             String what = r.slot().id() + " seed " + r.n();
             assertEquals(r.plan().hash(), again.hash(), what + ": the same layout");
@@ -461,28 +462,28 @@ class GolfPlannerTest {
         Run r = RUNS.get(0);
         PlannedGolf g = golf(r.plan());
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()),
-                tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO + 1)), "another version can't rebuild it");
+                tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO_V3 + 1)), "another version can't rebuild it");
         PlanInput otherMix = new PlanInput(r.slot(), LegacyBoxes.half(r.slot(), 'A'), 'A', 1, 0, r.plan().seed(),
                 "EEEMMMMHM", 8, 0, null);
         GenFailed mixed = assertThrows(GenFailed.class, () -> planner.rederive(otherMix, tag(r.plan(), g.attempts(),
-                g.witness(), GolfPlanner.ALGO)), "a changed mix doesn't rebuild the stored layout");
+                g.witness(), GolfPlanner.ALGO_V3)), "a changed mix doesn't rebuild the stored layout");
         assertTrue(mixed.getMessage().contains("mix"), "and the admin reads that the mix may be why: "
                 + mixed.getMessage());
         List<List<Putt>> wrong = new ArrayList<>(g.witness());
         wrong.set(0, List.of(new Putt(180, 1)));
         GenFailed missed = assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()),
-                tag(r.plan(), g.attempts(), wrong, GolfPlanner.ALGO)), "a stored line that doesn't drop");
+                tag(r.plan(), g.attempts(), wrong, GolfPlanner.ALGO_V3)), "a stored line that doesn't drop");
         assertTrue(missed.getMessage().contains("hole 1"), "names the hole: " + missed.getMessage());
         List<Integer> bent = new ArrayList<>(g.attempts());
         bent.set(0, 13);
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()), tag(r.plan(), bent,
-                g.witness(), GolfPlanner.ALGO)), "there is no attempt 13");
+                g.witness(), GolfPlanner.ALGO_V3)), "there is no attempt 13");
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()), null), "no tag, nothing");
     }
 
     @Test
     void aTightBudgetIsACapThatKeepsBackOnlyTheFallbacks() throws GenFailed {
-        GolfPlanner planner = new GolfPlanner();
+        GolfPlanner planner = GolfPlanner.v3();
         Plan free = planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", 0));
         long least = GolfPlanner.leastBudget(9);
         for (long budget : new long[]{free.work() + least, free.work() + least + 50_000, 3 * (free.work() + least)}) {
@@ -512,8 +513,8 @@ class GolfPlannerTest {
         }
         PlanInput a = GolfKit.input(Slots.DAILY_GOLF, seed, "EEEMMMMHH", 0);
         PlanInput b = GolfKit.input(Slots.DAILY_GOLF, seed, "EEEMMMMHM", 0);
-        PlannedGolf ga = golf(new GolfPlanner().plan(a));
-        PlannedGolf gb = golf(new GolfPlanner().plan(b));
+        PlannedGolf ga = golf(GolfPlanner.v3().plan(a));
+        PlannedGolf gb = golf(GolfPlanner.v3().plan(b));
         assertEquals(ga.course().holes().subList(0, 8), gb.course().holes().subList(0, 8),
                 "changing hole 9 leaves holes 1-8 exactly as they were");
         assertEquals(ga.witness().subList(0, 8), gb.witness().subList(0, 8), "lines and all");
@@ -543,7 +544,7 @@ class GolfPlannerTest {
 
     @Test
     void badInputsAndACancelledJobFail() {
-        GolfPlanner planner = new GolfPlanner();
+        GolfPlanner planner = GolfPlanner.v3();
         assertEquals(Slots.GOLF, planner.id(), "the golf generator");
         assertThrows(GenFailed.class, () -> planner.plan(new PlanInput(Slots.DAILY_PARKOUR_EASY,
                 LegacyBoxes.half(Slots.DAILY_PARKOUR_EASY, 'A'), 'A', 1, 0, 1, "easy", 8, 0, null)), "not a golf slot");

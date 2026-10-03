@@ -13,7 +13,7 @@ package com.dierks.homecraft.games.gen.engine;
  * @param edition its edition key ({@code 7:40})
  * @param from    when it was recalled (epoch ms): each recall is its own
  * @param until   when it closes again (epoch ms), or 0 to stay until replaced or unrecalled
- * @param remade  made again from its seed by today's generator (its stored plan couldn't be read)
+ * @param remade  made again from its seed ({@code Planner.remake}: its stored plan couldn't be read)
  */
 public record ClassicWant(String slot, String edition, long from, long until, boolean remade) {
 

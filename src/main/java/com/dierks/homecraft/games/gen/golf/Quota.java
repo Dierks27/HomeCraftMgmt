@@ -47,7 +47,23 @@ public final class Quota {
         /** A drop of a whole block the ball flies off (a hill, a volcano, terraces, a dogleg that drops). */
         BIG_DROP("big drop"),
         /** A pond to look at beyond the wall (Easy's pond side): Tiny Golf counts it as its tree hole. */
-        VIEW("pond view");
+        VIEW("pond view"),
+        /**
+         * Golf v4: a Swing layup, a pond past the first corner that the first-timer's Drive from the
+         * tee reaches along the line it aims and its Swing doesn't (so it lays up with Swing).
+         */
+        LAYUP("layup"),
+        /** Golf v4: three legs (an S-bend, a hairpin). */
+        THREE_LEGS("three legs"),
+        /** Golf v4: two legs (a dogleg, a layup). */
+        TWO_LEGS("two legs"),
+        /**
+         * Golf v4: a Chip layup, a pond past a short first leg that the first-timer's Swing from the tee
+         * reaches and its Chip doesn't.
+         */
+        CHIP_LAYUP("chip layup"),
+        /** Golf v4: a guarded par 3, its tee shot a Swing (a Drive goes in the water) and water behind its green. */
+        GUARDED("guarded par 3");
 
         private final String words;
 

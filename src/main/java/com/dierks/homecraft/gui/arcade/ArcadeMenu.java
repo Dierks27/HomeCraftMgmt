@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.games.Game;
@@ -222,7 +223,10 @@ public final class ArcadeMenu extends Menu {
 
     private void scratch(PluginConfig.Arcade arc) {
         int cost = arc.lotto().ticketTokens();
-        set(SCRATCH, Menus.glint(ArcadeIcons.of(plugin, player, "scratch", Material.FILLED_MAP,
+        set(SCRATCH, ArcadeService.ticketClosed(arc.lotto())
+                ? ArcadeIcons.of(plugin, player, "scratch", Material.FILLED_MAP, "&aScratch Ticket",
+                "&7" + ArcadeService.TICKET_CLOSED)
+                : Menus.glint(ArcadeIcons.of(plugin, player, "scratch", Material.FILLED_MAP,
                 "&aScratch Ticket &7- Jackpot &6" + plugin.arcade().pot(),
                 "&7Costs &6" + cost + " tokens&7.",
                 "&7Scratch three squares to see what you win.",

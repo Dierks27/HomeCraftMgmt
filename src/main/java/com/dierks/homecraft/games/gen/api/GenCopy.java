@@ -99,7 +99,19 @@ public final class GenCopy {
         /** Two ways round an island. */
         TWO_WAY("Pick a path!", "Short or safe?"),
         /** A dogleg that drops at the corner. */
-        DOGLEG_DOWN("Round the bend", "and down!");
+        DOGLEG_DOWN("Round the bend", "and down!"),
+        /** Golf v4 (GOLF-V4-SPEC §3.7): a pond straight on past the corner; a Drive splashes. */
+        LAYUP_WATER("Lay up short", "of the water"),
+        /** Golf v4: a sand trap straight on past the corner; a Drive stops in it. */
+        LAYUP_SAND("Lay up short", "of the sand"),
+        /** Golf v4: off a terrace and over a pond across the lane. */
+        CARRY("Fly the pond!", "Chip or more"),
+        /** Golf v4: a dogleg turning left (as the player faces from the tee). */
+        DOGLEG_LEFT("Dogleg", "left"),
+        /** Golf v4: a dogleg turning right. */
+        DOGLEG_RIGHT("Dogleg", "right"),
+        /** Golf v4: a hole of three legs (an S-bend, a hairpin). */
+        THREE_LEGS("Three legs", "use every club");
 
         private final String line3;
         private final String line4;
@@ -196,6 +208,81 @@ public final class GenCopy {
     /** Before the forest slalom. */
     public static List<String> boatForest() {
         return List.of("FOREST", "Weave through", "the trees!");
+    }
+
+    // ---- Mountain Run v2 (MOUNTAIN-V2-SPEC §7.1): its start, its new pieces, its milestones ----------
+
+    /** The Winding Road's start sign ({@code tier}: easy, medium, hard), on the pit wall. */
+    public static List<String> boatRoadStart(String tier) {
+        return List.of("WINDING ROAD", tierWord(tier) + " run", "It's a long", "way down!");
+    }
+
+    /** The Slalom's start sign. */
+    public static List<String> boatSlalomStart(String tier) {
+        return List.of("SLALOM!", tierWord(tier) + " run", "Weave through", "the gates!");
+    }
+
+    private static String tierWord(String tier) {
+        String t = tier == null ? "" : tier.trim().toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "easy" -> "Easy";
+            case "hard" -> "Hard";
+            default -> "Medium";
+        };
+    }
+
+    /** Before a hairpin link (§7.1: "HAIRPIN - ease off!"). */
+    public static List<String> boatHairpin() {
+        return List.of("HAIRPIN", "Ease off!");
+    }
+
+    /**
+     * Before a chicane, the way its first bend turns for a rider coming down (audit MTN00):
+     * {@code rightFirst} "Right, left!", else "Left, right!".
+     */
+    public static List<String> boatChicane(boolean rightFirst) {
+        return List.of("CHICANE", rightFirst ? "Right, left!" : "Left, right!");
+    }
+
+    /**
+     * At a staircase of {@code drops} lips down one straight (§7.1: "THE CLIFFS - 3 big drops!"); "big" only when
+     * every step is a 2-block drop (audit MTN-R3-01), else "3 drops ahead!".
+     */
+    public static List<String> boatCliffs(int drops, boolean big) {
+        return List.of("THE CLIFFS!", drops + (big ? " big drops!" : " drops ahead!"));
+    }
+
+    /** Before a slalom's gate set of {@code gates} gates ("SLALOM - 8 gates"). */
+    public static List<String> boatGates(int gates) {
+        return List.of("SLALOM", gates + " gates", "Go through", "the gaps!");
+    }
+
+    /** At the checkpoint nearest half way down. */
+    public static List<String> boatHalfway() {
+        return List.of("HALFWAY!", "Keep going!");
+    }
+
+    /** Before a tunnel through the rock. */
+    public static List<String> boatTunnel() {
+        return List.of("TUNNEL", "Lights on!");
+    }
+
+    /**
+     * Race Night's hype line for a Mountain Run v2 (MOUNTAIN-V2-SPEC §12), with {@code when} the set's own
+     * words ({@link #when}): "&amp;bThis week: the Winding Road - 27 drops, 48 blocks down the mountain!" or
+     * "&amp;bThis week: the Slalom - 14 drops through the gates!".
+     */
+    public static String boatV2Hype(String when, boolean slalom, int drops, int descent) {
+        String w = when == null || when.isBlank() ? "on this course" : when;
+        String head = "&b" + w.substring(0, 1).toUpperCase(Locale.ROOT) + w.substring(1) + ": ";
+        String count = drops + (drops == 1 ? " drop" : " drops");
+        return slalom ? head + "the Slalom - " + count + " through the gates!"
+                : head + "the Winding Road - " + count + ", " + descent + " blocks down the mountain!";
+    }
+
+    /** A Mountain Run v2's tile fact before its stars: "Winding Road · 27 drops · " or "Slalom · 14 drops · ". */
+    public static String boatV2Tile(boolean slalom, int drops) {
+        return (slalom ? "Slalom" : "Winding Road") + " · " + drops + (drops == 1 ? " drop" : " drops") + " · ";
     }
 
     /**
@@ -467,7 +554,7 @@ public final class GenCopy {
     /**
      * What an archived course recalled into a Classics slot is called: "Classic: Hard Parkour (week
      * of 5 Oct)", "Classic: Parkour (5 Oct)" for a daily one, "Classic: Sky Rings (5 Oct-7 Oct)" for
-     * a 3-day one, with " (re-made)" when it was made again from its seed by today's generator.
+     * a 3-day one, with " (re-made)" when it was made again from its seed, not moved from its stored plan.
      *
      * @param name     the course's own name ("Hard Parkour")
      * @param cadence  its edition's length in days
@@ -493,6 +580,39 @@ public final class GenCopy {
         }
         String bare = "Classic: " + name;
         return bare.length() <= NAME_CHARS ? bare : bare.substring(0, NAME_CHARS).trim();
+    }
+
+    /**
+     * What a course made again from its seed by ANOTHER planner version than the one that made it is, for the
+     * admin's replies to a {@code seed:} recall or keep ({@link Planner.Remake#exact} false; GOLF-V4-SPEC
+     * §5.3): "made again with today's golf (v4): not the same holes". An Adventure Golf edition is never
+     * this: golf keeps that version frozen, so it comes back as it was.
+     *
+     * @param def  the slot it was made for
+     * @param algo the version that makes it now (today's)
+     */
+    public static String remadeOther(Slots.Def def, int algo) {
+        boolean golf = def != null && def.golf();
+        return "made again with today's " + (def == null ? "planner" : def.generator()) + " (v" + algo + "): not the"
+                + " same " + (golf ? "holes" : "course");
+    }
+
+    /**
+     * What a {@code seed:} recall or keep makes of a course whose stored plan can't be read, for the admin's hint
+     * beside that command, true per edition ({@link Planner#remake}): "the same course again from its seed" when
+     * its planner is the version that made it or keeps it frozen (a 0.36 Adventure Golf edition), else "it again
+     * with today's golf (v4: not the same holes)"; with no planner for it ({@code again} null), "it again from its
+     * seed with today's generator". It follows "Make " or "make ".
+     */
+    public static String remakeHint(Slots.Def def, Planner.Remake again) {
+        if (again == null) {
+            return "it again from its seed with today's generator";
+        }
+        if (again.exact()) {
+            return "the same course again from its seed";
+        }
+        return "it again with today's " + (def == null ? "planner" : def.generator()) + " (v" + again.planner().algo()
+                + ": not the same " + (def != null && def.golf() ? "holes" : "course") + ")";
     }
 
     /** An edition's dates for players: "5 Oct" (a day), "week of 5 Oct" (a week), "5 Oct-7 Oct" (N days). */
@@ -621,7 +741,11 @@ public final class GenCopy {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
                 parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
-                boatIceCave(), boatForest()));
+                boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
+                boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
+                boatChicane(true), boatChicane(false), boatCliffs(2, true), boatCliffs(3, true),
+                boatCliffs(2, false), boatCliffs(3, false), boatGates(4), boatGates(11),
+                boatHalfway(), boatTunnel()));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
             for (TeeFeature f : TeeFeature.values()) {

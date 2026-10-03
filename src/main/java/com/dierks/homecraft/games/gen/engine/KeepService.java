@@ -12,6 +12,7 @@ import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GenArchiveDao;
@@ -99,6 +100,8 @@ final class KeepService {
         String name;
         boolean fresh;
         boolean remade;
+        /** A re-made keep: the planner and size it is made with ({@link Planner#remake}), set by {@link #prepare}. */
+        Planner.Remake again;
         Plan plan;
         // CLEAR
         String courseId;
@@ -276,6 +279,7 @@ final class KeepService {
         c.name = j.name;
         c.fresh = j.fresh;
         c.remade = j.remade;
+        c.again = j.again;
         c.plan = j.plan;
         c.courseId = j.courseId;
         c.courseGame = j.courseGame;
@@ -431,9 +435,12 @@ final class KeepService {
         j.build = new BuildJob(port, j.box, j.plan, BuildJob.Mode.CONVERGE);
     }
 
-    /** Make a course again from its seed with today's generator, straight into its place in the plot. */
+    /**
+     * Make a course again from its seed, straight into its place in the plot: by the version that made it when
+     * its planner keeps it (an algo-3 golf edition: the same holes), else by today's ({@link #prepare}).
+     */
     private void planRemade(PlotJob j) {
-        Planner p = planners.get(j.def.generator());
+        Planner p = j.again == null ? null : j.again.planner();
         if (p == null) {
             fail(j, "there is no " + j.def.generator() + " generator");
             return;
@@ -485,10 +492,15 @@ final class KeepService {
     /**
      * Where the course stands in its plot, {@value KeepArea#MARGIN} in from the plot's corner: the
      * archived plan's own half once it is moved there (its size as it was made, whatever the slot's
-     * size is now), or the slot's half size for a course made again from its seed.
+     * size is now), or, for a course made again from its seed, the size it is made in ({@link Planner#remake}:
+     * an Adventure Golf edition's own, else the slot's today).
      */
     static Box buildBox(PlotJob j) {
-        return j.plan != null ? j.plan.half() : at(j.box, j.def.sizeX(), j.def.sizeY(), j.def.sizeZ());
+        if (j.plan != null) {
+            return j.plan.half();
+        }
+        return j.again != null ? at(j.box, j.again.sizeX(), j.again.sizeY(), j.again.sizeZ())
+                : at(j.box, j.def.sizeX(), j.def.sizeY(), j.def.sizeZ());
     }
 
     /** A box of this size {@value KeepArea#MARGIN} in from {@code plot}'s corner. */
@@ -782,15 +794,24 @@ final class KeepService {
         String what = row.code() + " (" + row.name() + ", " + GenService.editionName(Edition.Key.parse(row.edition()),
                 row.day()) + ")" + (remade ? " made again from its seed (re-made)" : "") + " as &f" + shown + " &7("
                 + key + ") in plot " + n + " (" + j.box.describe() + ")";
+        // FX-GOLF (GOLF03/04): made by another version than the one that made it, it is another course
+        String other = j.again != null && !j.again.exact() ? "&eIt is " + GenCopy.remadeOther(def,
+                j.again.planner().algo()) + " as " + row.code() + ", so its board starts empty." : null;
         if (!confirm) {
             report.accept("&eThis keeps " + what + "&e for good: it becomes a normal course with a lasting board"
-                    + (fresh ? ", starting empty." : records > 0 ? ", and its " + records + " record"
+                    + (j.fresh ? ", starting empty." : records > 0 ? ", and its " + records + " record"
                     + (records == 1 ? " is" : "s are") + " copied onto it." : "."));
+            if (other != null) {
+                report.accept(other);
+            }
             report.accept("&7Add &econfirm &7at the end to do it.");
             return;
         }
         queue.add(j);
         report.accept("&7Keeping " + what + "&7...");
+        if (other != null) {
+            report.accept(other);
+        }
     }
 
     /**
@@ -803,26 +824,38 @@ final class KeepService {
         }
         j.plan = null;
         if (j.remade) {
-            if (!j.box.contains(buildBox(j))) {
-                return "it doesn't fit a plot";
+            // By the version that made it, in its own size, when its planner keeps it (an algo-3 golf edition:
+            // GolfPlanner.v3(), the same holes, so its records still belong to it); by today's it is another
+            // course from the same seed, which starts on an empty board (FX-GOLF, GOLF03/04)
+            Planner p = planners.get(j.def.generator());
+            j.again = p == null ? null : p.remake(j.def, j.row.algoVersion());
+            if (j.again != null && !j.again.exact()) {
+                j.fresh = true;
             }
-            if (planners.get(j.def.generator()) == null) {
+            Box made = buildBox(j);
+            if (!KeepArea.fits(made) || !j.box.contains(made)) {
+                return tooBig(j.def, made);
+            }
+            if (p == null) {
                 return "there is no " + j.def.generator() + " generator";
             }
             return null;
         }
+        PlanCodec.Head head = PlanCodec.head(j.row.plan());
+        if (head != null && !KeepArea.fits(head.half())) {
+            return tooBig(j.def, head.half()); // told from its first bytes: a Mountain Run's row is never read here (F11)
+        }
         PlanCodec.Read read = PlanCodec.decode(j.row.plan());
         if (!read.ok()) {
-            return "its stored plan can't be read (" + read.problem() + "). Make it again from its seed with today's"
-                    + " generator: /hcm games gen keep " + j.row.slot() + " seed:" + GenSeed.hex(j.row.seed()) + " "
-                    + j.id;
+            return "its stored plan can't be read (" + read.problem() + "). Make " + gen.remakeHint(j.row)
+                    + ": /hcm games gen keep " + j.row.slot() + " seed:" + GenSeed.hex(j.row.seed()) + " " + j.id;
         }
         // Sized by the plan's own half, not the slot's today: a generator that grew since can't
         // make an old course unbuildable.
         Box half = read.plan().half();
         Box build = at(j.box, half.sizeX(), half.sizeY(), half.sizeZ());
-        if (!j.box.contains(build)) {
-            return "it doesn't fit a plot";
+        if (!KeepArea.fits(half) || !j.box.contains(build)) {
+            return tooBig(j.def, half);
         }
         Plan moved = PlanShift.to(read.plan(), build);
         // (a moved Dropper or golf course is proven again in its plot too, on the planner thread as the
@@ -839,6 +872,20 @@ final class KeepService {
         }
         j.plan = moved;
         return null;
+    }
+
+    /**
+     * Why a course whose half is {@code half} can't be kept: it doesn't fit a plot (pinned at 144 x 176 x
+     * 336, {@link KeepArea#fits}). A Mountain Run v2 (an ice boat course bigger than a plot) says so in the
+     * owner's words: it stays in the archive and on its boards (MOUNTAIN-V2-SPEC D6).
+     */
+    static String tooBig(Slots.Def def, Box half) {
+        if (def != null && Slots.BOAT.equals(def.generator())) {
+            return "Mountain Run v2 courses are too big to keep; they stay in the archive";
+        }
+        return "it doesn't fit a plot (its area is " + (half == null ? "?" : half.sizeX() + " x " + half.sizeY() + " x "
+                + half.sizeZ()) + "; a plot holds " + (KeepArea.PLOT_X - 2 * KeepArea.MARGIN) + " x " + KeepArea.PLOT_Y
+                + " x " + (KeepArea.PLOT_Z - 2 * KeepArea.MARGIN) + ")";
     }
 
     /**

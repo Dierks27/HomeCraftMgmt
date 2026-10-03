@@ -105,32 +105,35 @@ final class GenKit {
             blocks.put(pos(x, y, z), canonicalOf(state));
         }
 
-        /** Blocks inside a box. */
+        /**
+         * Blocks inside a box: by the stored blocks, not every point of the box (a Mountain Run v2 half is 54
+         * million points).
+         */
         long count(Box b) {
             long n = 0;
-            for (int x = b.minX(); x <= b.maxX(); x++) {
-                for (int y = b.minY(); y <= b.maxY(); y++) {
-                    for (int z = b.minZ(); z <= b.maxZ(); z++) {
-                        if (blocks.containsKey(pos(x, y, z))) {
-                            n++;
-                        }
-                    }
+            for (long p : blocks.keySet()) {
+                if (inside(b, p)) {
+                    n++;
                 }
             }
             return n;
         }
 
+        /** Whether stored position {@code p} ({@link GenKit#pos}) is inside {@code b}. */
+        static boolean inside(Box b, long p) {
+            int x = (int) (p >> 38);
+            int z = (int) ((p << 26) >> 38);
+            int y = (int) ((p << 52) >> 52);
+            return b.contains(x, y, z);
+        }
+
         /** A copy of what a box holds, for "identical world" checks. */
         Map<Long, String> copy(Box b) {
             Map<Long, String> out = new HashMap<>();
-            for (int x = b.minX(); x <= b.maxX(); x++) {
-                for (int y = b.minY(); y <= b.maxY(); y++) {
-                    for (int z = b.minZ(); z <= b.maxZ(); z++) {
-                        String s = blocks.get(pos(x, y, z));
-                        if (s != null) {
-                            out.put(pos(x, y, z), s + (signs.containsKey(pos(x, y, z)) ? signs.get(pos(x, y, z)) : ""));
-                        }
-                    }
+            for (Map.Entry<Long, String> e : blocks.entrySet()) {
+                long p = e.getKey();
+                if (inside(b, p)) {
+                    out.put(p, e.getValue() + (signs.containsKey(p) ? signs.get(p) : ""));
                 }
             }
             return out;
@@ -443,6 +446,17 @@ final class GenKit {
         return settings(on).withCadence(Edition.WEEKLY);
     }
 
+    /**
+     * {@code d} with a budget that loads and reads 64 chunks a tick (the shipped one does 2 and 4): for a test
+     * that builds the Mountain Run v2's 480 x 176 x 640 halves (1,200 chunks each), so it takes seconds of the
+     * test's clock, not minutes. Every rule is the same; only the pace changes.
+     */
+    static DailySettings fast(DailySettings d) {
+        DailySettings.Budget b = d.budget();
+        return d.withBudget(new DailySettings.Budget(b.blocksPerTick(), b.blocksPerTickIdle(), 1_000, 64, 64,
+                b.pauseAboveMspt()));
+    }
+
     // ---- the host -----------------------------------------------------------------------------------
 
     /** A store that can be told to fail its secret or its flips. */
@@ -451,6 +465,8 @@ final class GenKit {
         boolean secretFails;
         boolean flipFails;
         boolean keepFails;
+        /** The meta keys whose writes fail (a locked or full database), or {@code null} for none. */
+        java.util.function.Predicate<String> metaWriteFails;
         int flips;
 
         FlakyStore(GenStore real) {
@@ -491,6 +507,9 @@ final class GenKit {
 
         @Override
         public void meta(String key, String value) throws SQLException {
+            if (metaWriteFails != null && metaWriteFails.test(key)) {
+                throw new SQLException("the database is locked");
+            }
             real.meta(key, value);
         }
 
@@ -629,6 +648,13 @@ final class GenKit {
         List<Regions.Extra> extras = List.of();
         /** {@code trials.fall_depth}. */
         int fallDepth = 6;
+        /** {@code games.race_night.enabled}: a random Ice Boat week is the Winding Road while it is on. */
+        boolean raceNight;
+        /**
+         * When the server process started ({@link GenHost#bootedAt}): by default every engine on this host is a new
+         * server run; a test sets it to have engines started again inside one process (ENG-R3-00).
+         */
+        long bootedAt = Long.MAX_VALUE;
 
         /** Another bench's clock (the cross-feature journeys: one clock for both), or {@code null}: {@link #now}. */
         java.util.function.LongSupplier clock;
@@ -725,6 +751,16 @@ final class GenKit {
         @Override
         public RestartHold restartHold() {
             return new RestartHold(restarts, ZONE, 5);
+        }
+
+        @Override
+        public boolean raceNightOn() {
+            return raceNight;
+        }
+
+        @Override
+        public long bootedAt() {
+            return bootedAt;
         }
 
         @Override

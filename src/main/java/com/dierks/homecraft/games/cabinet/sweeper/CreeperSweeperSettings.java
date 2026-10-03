@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.sweeper;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.Collections;
@@ -68,9 +69,9 @@ public record CreeperSweeperSettings(boolean enabled, int milestoneReward, int d
     public static CreeperSweeperSettings defaults() {
         return new CreeperSweeperSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 map("easy", 6, "normal", 8, "hard", 10),
                 ladder(List.of(180, 90, 45), List.of(240, 120, 75), List.of(300, 180, 120)));
     }

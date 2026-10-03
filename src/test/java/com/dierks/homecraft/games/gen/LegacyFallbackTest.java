@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LegacyFallbackTest {
 
     private static final String GOLF = "fresh_golf";
+    private static final String TINY = "fresh_tiny_golf";
     private static final String CLASSIC = "fresh_classic_golf";
 
     /** A 0.35 install that built, after the guard: its config.yml as the guard wrote it. */
@@ -68,18 +69,20 @@ class LegacyFallbackTest {
 
     @Test
     void aBadSwitchOrTierKeepsTheSpotConfigGivesAndTurnsTheCourseOff() {
+        // Tiny Golf: a course v4 didn't grow, so a server that kept 0.35's spots keeps its spot and shape
+        // (Golf of the Week takes its v4 spot whatever was built: LayoutGuard.RESIZED)
         for (Object[] bad : new Object[][]{{"enabled", "maybe"}, {"mix", List.of("E", "M")}}) {
             FileConfiguration c = kept();
-            c.set("games.fresh.slots." + GOLF + "." + bad[0], bad[1]);
-            DailySettings.SlotConfig golf = fresh(c, new ArrayList<>()).slot(GOLF);
+            c.set("games.fresh.slots." + TINY + "." + bad[0], bad[1]);
+            DailySettings.SlotConfig golf = fresh(c, new ArrayList<>()).slot(TINY);
             String what = bad[0] + ": " + bad[1];
             assertFalse(golf.enabled(), what + ": the course is off");
             assertTrue(golf.placed(), what + ": its spot is still read");
-            assertArrayEquals(LegacyBoxes.origin(Slots.DAILY_GOLF), golf.origin(), what + ": at its 0.35 spot, where it"
+            assertArrayEquals(LegacyBoxes.origin(Slots.TINY_GOLF), golf.origin(), what + ": at its 0.35 spot, where it"
                     + " was built, not the new shipped one");
             assertEquals(Slots.LEGACY_HALF_GAP, golf.halfGap(), what + ": at its 0.35 gap");
-            assertEquals(Regions.claim(Slots.DAILY_GOLF, LayoutScenarios.WORLD, golf.origin(), golf.halfGap()),
-                    Install.claim035(Slots.DAILY_GOLF), what + ": so its claim still matches: nothing moves");
+            assertEquals(Regions.claim(Slots.TINY_GOLF, LayoutScenarios.WORLD, golf.origin(), golf.halfGap()),
+                    Install.claim035(Slots.TINY_GOLF), what + ": so its claim still matches: nothing moves");
         }
     }
 
@@ -106,7 +109,10 @@ class LegacyFallbackTest {
         c.set("games.fresh.keep.area", List.of(7488, 128, 4096));
         List<String> warns = new ArrayList<>();
         DailySettings st = fresh(c, warns);
-        assertEquals(1, warns.size(), "only the origin's WARN: " + warns);
+        // (the fixture is 0.35's file before revision 20, so its Falling Floors' 1/2/3 under a cap of 3 have a WARN
+        // of their own, RewardCeilings': not this test's matter)
+        assertEquals(1, warns.stream().filter(w -> w.startsWith("games.fresh.")).count(),
+                "only the origin's WARN: " + warns);
         assertEquals(null, st.archive().keepProblem(), "the keep area isn't checked against an unplaced course's"
                 + " placeholder (the shipped spot)");
 

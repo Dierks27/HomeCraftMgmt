@@ -29,7 +29,10 @@ public record CupSettings(boolean enabled, int entry, int serverTopup) {
         serverTopup = Math.max(0, Math.min(CupRules.MAX_TOPUP, serverTopup));
     }
 
-    /** The shipped settings: on, 5 tokens to enter, 10 from the server once 2 or more are in. */
+    /**
+     * The shipped settings: on, {@link CupRules#DEFAULT_ENTRY} to enter, {@link CupRules#DEFAULT_TOPUP} on
+     * top once 2 or more are in.
+     */
     public static CupSettings defaults() {
         return new CupSettings(true, CupRules.DEFAULT_ENTRY, CupRules.DEFAULT_TOPUP);
     }

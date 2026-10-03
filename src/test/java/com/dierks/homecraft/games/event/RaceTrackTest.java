@@ -86,8 +86,10 @@ class RaceTrackTest {
         assertEquals(8, RaceTrack.raced(c, null, 0).checkpoints().size(), "laps 0: the course's own");
         assertNotNull(RaceTrack.lapsProblem(straight(), 3), "a straight course can't have laps");
         assertEquals(1, RaceTrack.laps(straight(), 3), "so it races its one lap");
-        assertNotNull(RaceTrack.lapsProblem(c.withCheckpoints(repeat(c.checkpoints().subList(0, 4), 1, 13)), 5),
-                "5 laps of 13 checkpoints would be 66 targets: refused (64 at most)");
+        assertNotNull(RaceTrack.lapsProblem(c.withCheckpoints(repeat(c.checkpoints().subList(0, 4), 1, 26)), 5),
+                "5 laps of 26 checkpoints would be 131 targets: refused (128 at most since Mountain Run v2)");
+        assertNull(RaceTrack.lapsProblem(c.withCheckpoints(repeat(c.checkpoints().subList(0, 4), 1, 25)), 5),
+                "5 laps of 25 checkpoints are 126 targets: within Course.MAX_CHECKPOINTS (128)");
     }
 
     private static List<Course.Mark> repeat(List<Course.Mark> base, int times, int per) {

@@ -11,9 +11,9 @@ import java.util.List;
  * Where kept courses stand (GEN-SPEC-KEEP §4): a grid of plots in the Games world, well apart from
  * every generator region, as pure geometry.
  *
- * <p>Every plot is the same size: the largest half of any generator (Sky Rings', 128 x 176 x 320)
- * plus 16 blocks along x and z, so any course fits any plot and two kept courses side by side are
- * at least 16 blocks apart. A course is built at its plot's corner plus {@value #MARGIN} along x and
+ * <p>Every plot is the same size, 144 x 176 x 336 (Sky Rings' 128 x 176 x 320 half plus 16 blocks along
+ * x and z), pinned, so a kept course never moves when a generator grows; a course whose half fits a plot
+ * fits any plot ({@link #fits}), and two kept courses side by side are at least 16 blocks apart. A course is built at its plot's corner plus {@value #MARGIN} along x and
  * z. Plots run {@value #COLUMNS} to a row along +x, rows along +z, from {@code keep.area}, with
  * {@code gap} empty blocks between neighbours ({@code keep.plot_gap}): 0 in 0.35 (the plots touch,
  * so every kept course is in plain sight of its neighbours), {@link Sight#GAP} to keep each out of
@@ -50,26 +50,16 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
     public static final int MAX_GAP = 4096;
     /** A course stands this far in from its plot's edges along x and z. */
     public static final int MARGIN = 8;
-    /** One plot's size. */
-    public static final int PLOT_X;
-    public static final int PLOT_Y;
-    public static final int PLOT_Z;
-
-    static {
-        int sx = 0;
-        int sy = 0;
-        int sz = 0;
-        List<Slots.Def> all = new ArrayList<>(Slots.ALL);
-        all.addAll(Slots.CLASSICS);
-        for (Slots.Def d : all) {
-            sx = Math.max(sx, d.sizeX());
-            sy = Math.max(sy, d.sizeY());
-            sz = Math.max(sz, d.sizeZ());
-        }
-        PLOT_X = sx + 2 * MARGIN;
-        PLOT_Y = sy;
-        PLOT_Z = sz + 2 * MARGIN;
-    }
+    /**
+     * One plot's size: 144 x 176 x 336, pinned (GOLF-V4-SPEC §4.1, MOUNTAIN-V2-SPEC §10.3 item 3). It was
+     * the largest half of any generator plus 16 along x and z (Sky Rings' 128 x 176 x 320), and it stays
+     * that as literals: every kept plot's corner is worked out from it, so a generator that grows (the
+     * Mountain Run v2's 480 x 176 x 640 half) must never move a kept course. A course whose half doesn't
+     * fit a plot can't be kept ({@link #fits}); it stays in the archive and on its boards.
+     */
+    public static final int PLOT_X = 144;
+    public static final int PLOT_Y = 176;
+    public static final int PLOT_Z = 336;
 
     public KeepArea {
         if (gap < 0) {
@@ -105,6 +95,20 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
     public Box build(int n, Slots.Def def) {
         Box p = plot(n);
         return Box.sized(p.minX() + MARGIN, p.minY(), p.minZ() + MARGIN, def.sizeX(), def.sizeY(), def.sizeZ());
+    }
+
+    /**
+     * Whether a course whose half is {@code sx} x {@code sy} x {@code sz} fits a plot, {@value #MARGIN} in
+     * from its edges along x and z: at most 128 x 176 x 320. Golf of the Week's 128 x 16 x 224 does; the
+     * Mountain Run v2's 480 x 176 x 640 doesn't (those courses stay in the archive).
+     */
+    public static boolean fits(int sx, int sy, int sz) {
+        return sx > 0 && sy > 0 && sz > 0 && sx <= PLOT_X - 2 * MARGIN && sy <= PLOT_Y && sz <= PLOT_Z - 2 * MARGIN;
+    }
+
+    /** {@link #fits(int, int, int)} for a half. */
+    public static boolean fits(Box half) {
+        return half != null && fits(half.sizeX(), half.sizeY(), half.sizeZ());
     }
 
     /** Every plot together, the gaps between them included. */

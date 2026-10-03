@@ -367,6 +367,38 @@ class GamesDaoTest {
     }
 
     @Test
+    void bothFreshGolfFirstFinishesFitTheShippedGolfCapInEitherOrder() throws Exception {
+        // the v4 audit, ECON06: Tiny Golf and Golf of the Week share golf's cap. Tiny Golf first, with par and
+        // all three holes-in-one, must not hold back Golf of the Week's 25: that would be a 9-hole replay.
+        int cap = com.dierks.homecraft.games.TokenBalance.GOLF_DAILY_CAP;
+        int skill = com.dierks.homecraft.games.TokenBalance.SKILL_DAILY_CAP;
+        int par = com.dierks.homecraft.games.TokenBalance.GOLF_PAR;
+        int hio = com.dierks.homecraft.games.TokenBalance.GOLF_HOLE_IN_ONE;
+        int tiny = com.dierks.homecraft.games.TokenBalance.FRESH_TINY_GOLF_WEEKLY;
+        int big = com.dierks.homecraft.games.TokenBalance.FRESH_GOLF_WEEKLY;
+        String set = "7:38";
+        for (UUID p : List.of(alice, bob)) {
+            boolean tinyFirst = p.equals(alice);
+            String first = tinyFirst ? "fresh_tiny_golf" : "fresh_golf";
+            String second = tinyFirst ? "fresh_golf" : "fresh_tiny_golf";
+            assertEquals(tinyFirst ? tiny : big, dao.payReward(p, "golf", Source.GAMES_GOLF, DAY, RewardKind.DAILY_CLEAR,
+                    SkillRewards.freshClearRef(first, set), tinyFirst ? tiny : big, cap, skill, true, true, "first",
+                    NOW), first + "'s first finish");
+            assertEquals(par, dao.payReward(p, "golf", Source.GAMES_GOLF, DAY, RewardKind.PAR,
+                    SkillRewards.parRef(first, set), par, cap, skill, true, "par", NOW), "its par");
+            for (int hole = 1; hole <= 3; hole++) {
+                assertEquals(hio, dao.payReward(p, "golf", Source.GAMES_GOLF, DAY, RewardKind.HOLE_IN_ONE,
+                        SkillRewards.holeInOneRef(first, hole, set), hio, cap, skill, true, "hio", NOW),
+                        "a hole-in-one on hole " + hole);
+            }
+            assertEquals(tinyFirst ? big : tiny, dao.payReward(p, "golf", Source.GAMES_GOLF, DAY,
+                    RewardKind.DAILY_CLEAR, SkillRewards.freshClearRef(second, set), tinyFirst ? big : tiny, cap, skill,
+                    true, true, "second", NOW), second + "'s first finish is paid whole the same day, after " + first
+                    + "'s (cap " + cap + ")");
+        }
+    }
+
+    @Test
     void aWholeRewardBiggerThanADaysCapPaysThatCapOnceAndIsDone() throws Exception {
         // an owner lowered games.trials.daily_cap to 3 under Hard Parkour's weekly first finish of 4
         String ref = SkillRewards.freshClearRef("fresh_parkour_hard", "7:38");

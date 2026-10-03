@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.simon;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -42,9 +43,9 @@ public record SimonSaysSettings(boolean enabled, int milestoneReward, int dailyR
     public static SimonSaysSettings defaults() {
         return new SimonSaysSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 List.of(5, 10, 15));
     }
 

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.admin;
 
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
@@ -64,6 +65,16 @@ class GenAdminTest {
         }
 
         @Override
+        public void preview(String slot, String seed, BoatStyle style, Consumer<String> report) {
+            calls.add("preview " + slot + " " + seed + (style == null ? "" : " " + style.id()));
+        }
+
+        @Override
+        public void previewNext(String slot, String seed, BoatStyle style, Consumer<String> report) {
+            calls.add("previewNext " + slot + " " + seed + (style == null ? "" : " " + style.id()));
+        }
+
+        @Override
         public void promote(String slot, boolean confirm, Consumer<String> report) {
             calls.add("promote " + slot + " " + confirm);
         }
@@ -111,6 +122,11 @@ class GenAdminTest {
         @Override
         public void clear(String slot, Consumer<String> report) {
             calls.add("clear " + slot);
+        }
+
+        @Override
+        public void tidy(String slot, boolean confirm, Consumer<String> report) {
+            calls.add("tidy " + slot + " " + confirm);
         }
 
         @Override
@@ -237,6 +253,32 @@ class GenAdminTest {
 
     private String heard() {
         return String.join("\n", said);
+    }
+
+    @Test
+    void tidyAndItsOtherNameRetireListAnOldAreaAndEmptyItOnConfirm() {
+        run("tidy fresh_golf");
+        run("retire fresh_boat");
+        run("tidy fresh_classic_golf");
+        assertEquals(List.of("tidy fresh_golf false", "tidy fresh_boat false", "tidy fresh_classic_golf false"),
+                ops.calls, "without confirm it only looks (a Classics slot is taken too)");
+        assertTrue(logs.isEmpty(), "looking isn't logged as a change");
+        run("retire fresh_boat confirm");
+        assertEquals("tidy fresh_boat true", ops.calls.get(3), "retire is tidy");
+        assertTrue(logs.stream().anyMatch(r -> r.getMessage().equals("Fresh Courses: Console ran /hcm games gen retire"
+                + " fresh_boat confirm")), "a change is logged as it was typed");
+        assertEquals("tidy", GenAdmin.verb("Retire"), "the alias names the verb");
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        run("tidy fresh_golf confirm");
+        assertEquals(4, ops.calls.size(), "refused near a restart: emptying never starts that close to one");
+        assertTrue(heard().contains("A restart is coming at 4:00 PM"), heard());
+        run("tidy mystery confirm");
+        assertTrue(heard().contains("'mystery'"), "an unknown course never reaches the engine: " + heard());
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"tidy", "fresh_golf", ""}), "then confirm");
+        assertTrue(admin.tab(console, new String[]{"retire", ""}).contains("fresh_classic_golf"),
+                "tab offers the Classics slots too");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("tidy|retire <course> [confirm]")),
+                "one help line names both");
     }
 
     @Test
@@ -471,8 +513,8 @@ class GenAdminTest {
         assertEquals(List.of("live"), admin.tab(console, new String[]{"pin", "fresh_rings", "l"}), "pin live");
         assertEquals(List.of(), admin.tab(console, new String[]{"nonsense", ""}), "nothing for an unknown verb");
         assertEquals("gen", admin.name(), "it is /hcm games gen");
-        assertEquals(GenAdmin.VERBS.size() - 4, admin.help().size(),
-                "one help line per verb (on/off, pin/unpin, choose/unchoose and retry/regenerate share one)");
+        assertEquals(GenAdmin.VERBS.size() - 5, admin.help().size(), "one help line per verb (on/off, pin/unpin,"
+                + " choose/unchoose, retry/regenerate and tidy/retire share one)");
     }
 
     // ---- picking a good course (WP-ADM) --------------------------------------------------------
@@ -528,12 +570,44 @@ class GenAdminTest {
                 + " confirm")), "a change is logged as it was typed");
         assertEquals("reroll", GenAdmin.verb("Regenerate"), "the alias names the verb");
         assertEquals("reroll", GenAdmin.verb("retry"), "both of them");
-        assertEquals(List.of("reroll", "retry", "regenerate", "rebuild", "recall"), admin.tab(console, new String[]{"re"}),
+        assertEquals(List.of("reroll", "retry", "regenerate", "rebuild", "retire", "recall"), admin.tab(console,
+                new String[]{"re"}),
                 "tab completion offers them beside reroll");
         assertTrue(admin.tab(console, new String[]{"regenerate", ""}).contains("all"), "regenerate all, as reroll");
         assertEquals(List.of("confirm"), admin.tab(console, new String[]{"retry", "fresh_rings", ""}), "then confirm");
         assertTrue(admin.help().stream().anyMatch(l -> l.contains("retry|regenerate <course|all> confirm")),
                 "and a help line: " + admin.help());
+    }
+
+    /** MOUNTAIN-V2-SPEC §5.1: {@code preview fresh_boat [next] [seed] style:road|slalom}, the style anywhere after the course. */
+    @Test
+    void aPreviewOfIceBoatTakesAStyle() {
+        run("preview fresh_boat style:road");
+        run("preview fresh_boat next style:SLALOM");
+        run("preview fresh_boat style:road 3f2a");
+        run("preview fresh_boat next 3f2a style:slalom");
+        run("preview fresh_boat");
+        assertEquals(List.of("preview fresh_boat null road", "previewNext fresh_boat null slalom",
+                "preview fresh_boat 3f2a road", "previewNext fresh_boat 3f2a slalom", "preview fresh_boat null"),
+                ops.calls, "the style goes to the engine with the seed (or none), now or for the next set");
+        ops.calls.clear();
+        run("preview fresh_boat style:fast");
+        assertTrue(heard().contains("A style is style:road (the Winding Road) or style:slalom."), "a bad style: "
+                + heard());
+        run("preview fresh_parkour style:road");
+        assertTrue(heard().contains("Only Ice Boat has styles"), "another course has none: " + heard());
+        run("preview fresh_boat style:road nope");
+        assertTrue(heard().contains("16 hex digits"), "a bad seed is still refused: " + heard());
+        assertTrue(ops.calls.isEmpty(), "none of them reached the engine: " + ops.calls);
+        assertEquals(List.of("next", "style:road", "style:slalom"),
+                admin.tab(console, new String[]{"preview", "fresh_boat", ""}), "tab offers next and the styles");
+        assertEquals(List.of("style:road", "style:slalom"),
+                admin.tab(console, new String[]{"preview", "fresh_boat", "next", ""}), "and the styles after next");
+        assertEquals(List.of("style:slalom"), admin.tab(console, new String[]{"preview", "fresh_boat", "st", "style:s"})
+                .stream().filter(w -> w.startsWith("style:s")).toList(), "matching what is typed");
+        assertEquals(List.of("next"), admin.tab(console, new String[]{"preview", "fresh_parkour", ""}),
+                "another course: next only, as before");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("style:road|slalom")), "and a help line");
     }
 
     /** "Like I could do the course preview a week early or whatever and find a good one." */

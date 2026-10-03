@@ -20,6 +20,7 @@ import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.event.RaceNightSettings;
 import com.dierks.homecraft.games.event.RaceTrack;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
@@ -70,7 +71,8 @@ class MountainRunRacesTest {
     private static final long MIN = 60_000L;
     private static final String NIGHT = "rn-20260929-1215";
     private static final Slots.Def SLOT = Slots.ICE_BOAT;
-    private static final Box HALF = SLOT.half('A');
+    /** The v3 Mountain Run's own 0.36 box (128 x 16 x 128): the slot's v4 half is the Mountain Run v2's. */
+    private static final Box HALF = LegacyBoxes.v036(SLOT, 'A');
 
     /** A medium Mountain Run and its blocks as the world will read them. */
     private static final Plan PLAN;

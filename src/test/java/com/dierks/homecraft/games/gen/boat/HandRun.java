@@ -45,8 +45,11 @@ import java.util.function.Predicate;
  */
 final class HandRun {
 
-    /** The Ice Boat's half A: 128 x 16 x 128 at (4480, 160, 4352). */
-    static final Box HALF = Slots.ICE_BOAT.half('A');
+    /**
+     * The 0.36 Ice Boat's half A, 128 x 16 x 128 at (6080, 160, 5888): pinned as a literal, as the
+     * algo-3 rules it is judged by are frozen, so the slot's v4 area (480 x 176 x 640) never moves it.
+     */
+    static final Box HALF = Box.sized(6080, 160, 5888, 128, 16, 128);
     static final int H0 = HALF.minY();
     /** The top ice (the pit), H0 + 8: the start's surface is H0 + 9, the stand's floor H0 + 13. */
     static final int TOP = H0 + 8;

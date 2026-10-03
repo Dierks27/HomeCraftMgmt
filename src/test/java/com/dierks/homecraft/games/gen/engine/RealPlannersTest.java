@@ -1,12 +1,14 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.engine.GenKit.Host;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
+import com.dierks.homecraft.games.gen.golf.PlotGrid;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
@@ -40,8 +42,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RealPlannersTest {
 
-    private static final List<String> SHIPPED = List.of("fresh_parkour_easy", "fresh_parkour",
-            "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf", "fresh_boat");
+    private static final List<String> SHIPPED = shipped();
+
+    /**
+     * Every shipped slot. The ice boat only once its planner makes the Mountain Run v2 (boat algo 4, package
+     * MA): its shipped half is the v4 one now (480 x 176 x 640), which the v3 spiral planner doesn't plan; the
+     * v3 planner keeps its own tests at its 0.36 box (LegacyBoxes.v036).
+     */
+    private static List<String> shipped() {
+        List<String> out = new java.util.ArrayList<>(List.of("fresh_parkour_easy", "fresh_parkour",
+                "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf"));
+        if (BoatPlanner.ALGO >= PlanCheck.BOAT_MOUNTAIN_ALGO) {
+            out.add("fresh_boat");
+        }
+        return List.copyOf(out);
+    }
 
     private Host host;
     private GenService gen;
@@ -54,9 +69,21 @@ class RealPlannersTest {
         host.connection.close();
     }
 
+    /**
+     * The golf planner the shipped Golf of the Week half holds: Golf v4 once its 128 x 224 area is
+     * the shipped one (GOLF-V4-SPEC §4.1, the area package), until then the frozen Adventure Golf
+     * planner ({@link GolfPlanner#v3()}), so the engine's end-to-end golf path is proven at the
+     * shipped size either way. Tiny Golf plans Golf v4 in its unchanged half.
+     */
+    static Planner golf() {
+        int[] need = PlotGrid.V4.needs(Slots.DAILY_GOLF.tierOrMix().length());
+        Box half = Slots.DAILY_GOLF.half('A');
+        return half.sizeX() >= need[0] && half.sizeZ() >= need[1] ? new GolfPlanner() : GolfPlanner.v3();
+    }
+
     static Map<String, Planner> planners() {
         Map<String, Planner> out = new LinkedHashMap<>();
-        for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), new GolfPlanner(),
+        for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), golf(),
                 new BoatPlanner())) {
             out.put(p.id(), p);
         }
@@ -118,7 +145,8 @@ class RealPlannersTest {
         assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"
                 + " Fresh Courses first in slot order");
         assertEquals(List.of(), open(GeneratedCourses.NONE), "and none of them without Fresh Courses");
-        assertTrue(host.changed.getOrDefault("trials", 0) >= 5 && host.changed.getOrDefault("golf", 0) >= 2,
+        long trials = SHIPPED.stream().filter(id -> !Slots.of(id).golf()).count();
+        assertTrue(host.changed.getOrDefault("trials", 0) >= trials && host.changed.getOrDefault("golf", 0) >= 2,
                 "each flip told Time Trials or Mini Golf to read its courses again: " + host.changed);
         List<String> status = adminSays("status");
         for (String id : SHIPPED) {

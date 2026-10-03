@@ -133,7 +133,7 @@ class ClubGolfTest {
 
     private static GolfGroup.Card card() {
         return new GolfGroup.Card("meadow", "Meadow Links", List.of(3, 3, 3), 2, List.of(row(SAM, "Sam", 3, 4, 3),
-                row(AVA, "Ava", 2, 3, 3), row(LEE, "Lee", 4, 4, 5)), true, -1);
+                row(AVA, "Ava", 2, 3, 3), row(LEE, "Lee", 4, 4, 5)), true, -1, GolfGroup.HOLE_CLOCK_SECONDS);
     }
 
     /**

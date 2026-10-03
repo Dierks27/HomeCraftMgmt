@@ -20,6 +20,8 @@ import java.util.List;
  *       change, until its set is over or a new pick is made (round 2);</li>
  *   <li>{@code reroll.<edition>} — how many times an admin rerolled that edition ({@code 7:38});</li>
  *   <li>{@code claim} — {@code world,x,y,z,sx,sy,sz}: the region it may build in ({@link Regions#claim});</li>
+ *   <li>{@code old} — the claims of regions it left behind, until they are emptied ({@link #old});
+ *       {@code retired} — the last one emptied ({@link #retired});</li>
  *   <li>{@code mix} — {@code plan:mix}: the tier or mix the live layout was made with, written with the
  *       flip, so the boot check derives the same plan even after an admin changed the tier.</li>
  * </ul>
@@ -95,6 +97,36 @@ public final class GenAdminKeys {
      */
     public static String wet(String slot) {
         return "gen." + slot + ".wet";
+    }
+
+    /**
+     * A slot's old regions ({@link Regions#oldText}): every claim it held before its region changed whose
+     * halves may still hold its blocks, each with the world, origin, half size and gap it RECORDED. Guarded
+     * until it is emptied (RETIRE: by itself when this version changed the slot's size, or by
+     * {@code /hcm games gen tidy}), or claimed there again. It replaces 0.35's {@link #wet}, which is read
+     * into it once. Unset when there are none. A claim RETIRE has emptied carries {@code |emptied@<epoch ms>}
+     * ({@link Regions#oldEmptied}) and stays, guarded, until the world has been saved twice since or a later
+     * start finds it still empty (F09).
+     */
+    public static String old(String slot) {
+        return "gen." + slot + ".old";
+    }
+
+    /**
+     * F12: what a slot's halves held when its world was last known to be saved, for the claim it names:
+     * {@code claim=<claim>;A=<fact>;B=<fact>}, a fact being {@code empty} or {@code plan:<hash>}. A start reads
+     * it to skip loading a spare half known to be empty, and to check a big live half by a sample first.
+     */
+    public static String onDisk(String slot) {
+        return "gen." + slot + ".ondisk";
+    }
+
+    /**
+     * The last time a slot's old region was emptied ({@code OldAreas.Retired#text}): when, which claim, the
+     * blocks taken away and any left there that weren't Fresh Courses', for {@code /hcm games check}.
+     */
+    public static String retired(String slot) {
+        return "gen." + slot + ".retired";
     }
 
     /** What is recalled into a Classics slot ({@link ClassicWant#text()}); unset when it is empty. */

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,33 @@ class RaceNightSettingsTest {
         assertTrue(parse(block, warns).hype(), "junk keeps the default");
         assertEquals(1, warns.size(), "one WARN: " + warns);
         assertTrue(warns.get(0).startsWith("games.race_night.hype "), "naming its full key: " + warns);
+    }
+
+    @Test
+    void thePrizesClampAtThirtyAndTheFinisherPrizeAtTen() {
+        // the 2 Oct token balance: prizes 20/12/8 + 5, so the limits moved from 0-10 and 0-2
+        int max = RaceNightSettings.MAX_PRIZE;
+        int fin = RaceNightSettings.MAX_FINISHER_PRIZE;
+        Map<String, Object> block = new LinkedHashMap<>();
+        block.put("prizes", List.of(max, 12, 8));
+        block.put("finisher_prize", fin);
+        List<String> warns = new ArrayList<>();
+        RaceNightSettings at = parse(block, warns);
+        assertEquals(List.of(max, 12, 8), at.prizes(), "the bound is allowed");
+        assertEquals(fin, at.finisherPrize(), "and so is the finisher prize's");
+        assertEquals(List.of(), warns, "with no WARN");
+
+        block.put("prizes", List.of(max + 1, 12, 8));
+        block.put("finisher_prize", fin + 1);
+        warns.clear();
+        RaceNightSettings over = parse(block, warns);
+        assertEquals(List.of(max, 12, 8), over.prizes(), "one over is held to the bound");
+        assertEquals(fin, over.finisherPrize(), "and so is the finisher prize");
+        assertEquals(2, warns.size(), "one WARN each: " + warns);
+        assertTrue(warns.get(0).startsWith("games.race_night.prizes "), "naming its key: " + warns);
+        assertTrue(warns.get(1).startsWith("games.race_night.finisher_prize "), "naming its key: " + warns);
+        assertEquals(NightRules.MAX_PRIZE_PER_NIGHT, RaceNightSettings.MAX_PRIZE, "the same bound as a night's");
+        assertEquals(TokenBalance.RACE_MAX_FINISHER_PRIZE, fin, "the token balance's bounds");
     }
 
     @Test

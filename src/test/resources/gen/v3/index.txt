@@ -1,0 +1,4 @@
+# The algo-3 Mountain Runs frozen before Mountain Run v2 (MOUNTAIN-V2-SPEC §11.4): name slot tier half seed day hash
+boat-easy fresh_boat easy A 0000000000000001 20725 fd8f2e7b7d3b
+boat-medium fresh_boat medium A c454d3d6504ca5bd 20725 ea9b102704fe
+boat-hard fresh_boat hard A 000000005eed5eed 20725 e04acb2fb26b

@@ -11,8 +11,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Scenery on every golf plot (Course Variety §3.10): 2-5 decoration trees of oak, birch or cherry,
- * each on a 3 x 3 moss planter at T - 1, round the hole but never in it.
+ * Scenery on every golf plot (Course Variety §3.10, GOLF-V4-SPEC §4.1): decoration trees of oak,
+ * birch or cherry — 2-5 on a 20 x 40 plot, 4-9 on Golf v4's 40 x 64 one ({@link PlotGrid}) — each on
+ * a 3 x 3 moss planter at T - 1, round the hole but never in it.
  *
  * <p><b>Why it can't change a proof.</b> Every block of a tree — planter, trunk and canopy — stands
  * at least {@value #GAP} columns outside the hole's bounds, so outside the physics grid (the bounds
@@ -25,9 +26,12 @@ import java.util.Set;
  */
 final class GolfScenery {
 
-    /** Trees per plot, at least and at most (fewer when the hole leaves no room). */
+    /** Trees per 20 x 40 plot, at least and at most (fewer when the hole leaves no room). */
     static final int LEAST = 2;
     static final int MOST = 5;
+    /** Trees per Golf v4 plot (40 x 64), at least and at most. */
+    static final int LEAST_V4 = 4;
+    static final int MOST_V4 = 9;
     /** Columns every tree block keeps clear of the hole's bounds. */
     static final int GAP = GolfValidatorV3.SCENERY_GAP;
     /** Columns every leaf keeps inside the half. */
@@ -39,10 +43,20 @@ final class GolfScenery {
     }
 
     /**
-     * The trees for the hole {@code hole} drawn in the plot at ({@code plotX}, {@code plotZ}) of
-     * {@code half}, from {@code r}.
+     * The trees for the hole {@code hole} drawn in the 20 x 40 plot at ({@code plotX}, {@code plotZ})
+     * of {@code half}, from {@code r} (Adventure Golf's, and Tiny Golf's at every version).
      */
     static List<HoleLayout.Placed> trees(GenRandom r, HoleLayout hole, int plotX, int plotZ, Box half) {
+        return trees(r, hole, plotX, plotZ, PlotGrid.V3, half);
+    }
+
+    /**
+     * The trees for the hole {@code hole} drawn in the plot at ({@code plotX}, {@code plotZ}) of
+     * {@code half}, a plot of {@code grid}'s size, from {@code r}: {@value #LEAST}-{@value #MOST} on
+     * a 20 x 40 plot, {@value #LEAST_V4}-{@value #MOST_V4} on a bigger one, by the same rules.
+     */
+    static List<HoleLayout.Placed> trees(GenRandom r, HoleLayout hole, int plotX, int plotZ, PlotGrid grid,
+                                         Box half) {
         int turf = hole.turfY();
         Box b = hole.bounds();
         Set<Long> taken = new HashSet<>();
@@ -54,14 +68,15 @@ final class GolfScenery {
             }
         }
         List<int[]> spots = new ArrayList<>();
-        for (int x = plotX + 1; x <= plotX + HoleTemplate.PLOT_X - 2; x++) {
-            for (int z = plotZ + 1; z <= plotZ + HoleTemplate.PLOT_Z - 2; z++) {
+        for (int x = plotX + 1; x <= plotX + grid.plotX() - 2; x++) {
+            for (int z = plotZ + 1; z <= plotZ + grid.plotZ() - 2; z++) {
                 if (fits(x, z, b, half, taken)) {
                     spots.add(new int[]{x, z});
                 }
             }
         }
-        int want = r.nextInt(LEAST, MOST);
+        boolean small = grid.plotX() * grid.plotZ() <= PlotGrid.V3.plotX() * PlotGrid.V3.plotZ();
+        int want = small ? r.nextInt(LEAST, MOST) : r.nextInt(LEAST_V4, MOST_V4);
         List<HoleLayout.Placed> out = new ArrayList<>();
         List<int[]> trunks = new ArrayList<>();
         while (trunks.size() < want && !spots.isEmpty()) {

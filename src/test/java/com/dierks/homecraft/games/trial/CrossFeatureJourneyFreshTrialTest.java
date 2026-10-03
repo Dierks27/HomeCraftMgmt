@@ -67,7 +67,9 @@ class CrossFeatureJourneyFreshTrialTest {
     @BeforeEach
     void setUp() throws Exception {
         j = new JourneyBench(T0, List.of(TimeTrials.SPEC, WeeklyCup.SPEC), "trials", TimeTrialsSettings.defaults(),
-                "cup", CupSettings.defaults());
+                "cup", new CupSettings(true, 5, 10) /* 0.36's Cup: 5 in, 10 on top */);
+        // the shipped skill cap (60): a Fresh first finish of 10 fits it whole, as on the owner's server
+        j.bench.skillCap(com.dierks.homecraft.config.GamesConfig.Common.defaults().skillDailyCap());
         ava = j.player("Ava", "SURVIVAL", "red");
         ben = j.player("Ben", "SURVIVAL", "blue");
         admin = j.bench.player("Admin");

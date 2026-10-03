@@ -466,7 +466,7 @@ class ArchiveRecallTest {
         drive(5);
         assertEquals(List.of(), oldAreaLines(), "so status never says its emptied old area is still guarded, nor"
                 + " tells the owner to drain it");
-        assertNull(host.store.meta(GenAdminKeys.wet(Slots.CLASSIC_GOLF.id())), "nothing is remembered as wet");
+        assertNull(host.store.meta(GenAdminKeys.old(Slots.CLASSIC_GOLF.id())), "nothing is remembered as an old area");
     }
 
     @Test
@@ -479,15 +479,16 @@ class ArchiveRecallTest {
                 .halfGap(), 'A');
         host.world().put(newA.minX() + 5, newA.minY() + 5, newA.minZ() + 5, "minecraft:stone_bricks"); // the owner's
         moveClassic(Slots.CLASSIC_GOLF.id(), to);
-        assertTrue(warnings().contains(Slots.CLASSIC_GOLF.id() + " moved from") && warnings().contains("move it back"
-                + " and restart"), "its halves weren't emptied yet: a WARN with the Classic's way: " + warnings());
+        assertTrue(warnings().contains(Slots.CLASSIC_GOLF.id() + " moved from") && warnings().contains("/hcm games gen"
+                + " tidy " + Slots.CLASSIC_GOLF.id() + " confirm"), "its halves weren't emptied yet: a WARN with the way"
+                + " to drain it (tidy takes a Classic): " + warnings());
         assertFalse(warnings().contains("gen clear " + Slots.CLASSIC_GOLF.id()), "never clear: " + warnings());
         assertNotNull(host.store.meta(GenAdminKeys.claim(Slots.CLASSIC_GOLF.id())), "its old claim stays");
         drive(5);
         List<String> lines = oldAreaLines();
         assertEquals(1, lines.size(), "status names the old area, still guarded: " + gen.summary());
-        assertTrue(lines.get(0).contains("drain first: move it back and restart"), "with the Classic's way to drain it: "
-                + lines.get(0));
+        assertTrue(lines.get(0).contains("/hcm games gen tidy " + Slots.CLASSIC_GOLF.id() + " confirm"),
+                "with the way to empty it, ponds first: " + lines.get(0));
         assertFalse(lines.get(0).contains("gen clear"), "not clear, which a Classic can't take: " + lines.get(0));
         assertTrue(gen.inArea(GenKit.WORLD, oldA.minX(), oldA.minY(), oldA.minZ()), "and the old area is still"
                 + " guarded");

@@ -64,7 +64,7 @@ class CrossFeatureJourneyPartyRaceTest {
     @BeforeEach
     void setUp() throws Exception {
         j = new JourneyBench(T0, List.of(TimeTrials.SPEC, WeeklyCup.SPEC, Clubhouse.SPEC), "trials",
-                TimeTrialsSettings.defaults(), "cup", CupSettings.defaults(), "clubhouse", ClubhouseSettings.defaults());
+                TimeTrialsSettings.defaults(), "cup", new CupSettings(true, 5, 10) /* 0.36's Cup: 5 in, 10 on top */, "clubhouse", ClubhouseSettings.defaults());
         loop = j.loop();
         j.cup.desk().dao().choose(loop.id(), true); // a hand-built course runs a Cup once an admin says so
         ava = j.player("Ava", "SURVIVAL", "red");

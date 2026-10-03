@@ -55,13 +55,17 @@ class GenCopyTest {
         String[][] lines = {{"WATER", "Mind the pond!", "Splash = +1"}, {"SAND", "Sand is slow!", "Hit it harder"},
                 {"HILL", "Up and over", "the hill!"}, {"TERRACES", "Down the steps!", "Watch it roll"},
                 {"VOLCANO", "Up the volcano!", "Not too hard!"}, {"TREES", "Bank off the", "trees!"},
-                {"TWO_WAY", "Pick a path!", "Short or safe?"}, {"DOGLEG_DOWN", "Round the bend", "and down!"}};
+                {"TWO_WAY", "Pick a path!", "Short or safe?"}, {"DOGLEG_DOWN", "Round the bend", "and down!"},
+                // Golf v4 (GOLF-V4-SPEC §3.7)
+                {"LAYUP_WATER", "Lay up short", "of the water"}, {"LAYUP_SAND", "Lay up short", "of the sand"},
+                {"CARRY", "Fly the pond!", "Chip or more"}, {"DOGLEG_LEFT", "Dogleg", "left"},
+                {"DOGLEG_RIGHT", "Dogleg", "right"}, {"THREE_LEGS", "Three legs", "use every club"}};
         for (String[] l : lines) {
             GenCopy.TeeFeature f = GenCopy.TeeFeature.valueOf(l[0]);
             assertEquals(List.of("HOLE 5", "Par 3", l[1], l[2]), GenCopy.golfTee(5, 3, f), f + "'s tee sign");
             assertEquals(f, GenCopy.golfTeeFeature(GenCopy.golfTee(5, 3, f), 5, 3), f + " is read back off its sign");
         }
-        assertEquals(9, GenCopy.TeeFeature.values().length, "none and the eight features");
+        assertEquals(15, GenCopy.TeeFeature.values().length, "none, Adventure Golf's eight features and Golf v4's six");
         assertEquals(GenCopy.TeeFeature.NONE, GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 1, 2), "a plain tee");
         assertNull(GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 2, 2), "another hole's sign is none of these");
         assertNull(GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 1, 3), "nor another par's");

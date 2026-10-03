@@ -64,15 +64,28 @@ public record Plan(String slot, int algo, long seed, Box half, List<String> pale
      * The layout's hash: 12 hex digits of a SHA-256 over the ops (by position, each as its block
      * text), the signs (by position) and the course's geometry. World, name, switches, rev and tag
      * are left out: they aren't the layout.
+     *
+     * <p>The text is one line per op, then one per sign, then the course; it is fed to the digest a
+     * few KB at a time, always cut just after a line's {@code '\n'} (never inside a character), so
+     * the bytes hashed are exactly the UTF-8 of the whole text without ever holding it: a Mountain
+     * Run v2's 350,000 ops would be a 12 MB string (MOUNTAIN-V2-SPEC §3.6).
      */
     public static String hash(List<String> palette, List<BlockOp> ops, List<SignText> signs, PlannedCourse course) {
-        StringBuilder sb = new StringBuilder();
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            // Every Java runtime ships SHA-256.
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
+        StringBuilder sb = new StringBuilder(FLUSH_AT + 256);
         List<BlockOp> sortedOps = new ArrayList<>(ops == null ? List.of() : ops);
         sortedOps.sort(Comparator.comparingInt(BlockOp::x).thenComparingInt(BlockOp::y).thenComparingInt(BlockOp::z)
                 .thenComparing(op -> block(palette, op)));
         for (BlockOp op : sortedOps) {
             sb.append("op ").append(op.x()).append(' ').append(op.y()).append(' ').append(op.z()).append(' ')
                     .append(block(palette, op)).append('\n');
+            flush(digest, sb, false);
         }
         List<SignText> sortedSigns = new ArrayList<>(signs == null ? List.of() : signs);
         sortedSigns.sort(Comparator.comparingInt(SignText::x).thenComparingInt(SignText::y)
@@ -81,14 +94,25 @@ public record Plan(String slot, int algo, long seed, Box half, List<String> pale
         for (SignText s : sortedSigns) {
             sb.append("sign ").append(s.x()).append(' ').append(s.y()).append(' ').append(s.z()).append(' ')
                     .append(s.blockData()).append(' ').append(String.join("|", s.lines())).append('\n');
+            flush(digest, sb, false);
         }
         sb.append(canonical(course));
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(sb.toString().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest).substring(0, 12);
-        } catch (NoSuchAlgorithmException e) {
-            // Every Java runtime ships SHA-256.
-            throw new IllegalStateException("SHA-256 is not available", e);
+        flush(digest, sb, true);
+        return HexFormat.of().formatHex(digest.digest()).substring(0, 12);
+    }
+
+    /** The hash text is handed to the digest in pieces of about this many chars. */
+    private static final int FLUSH_AT = 8192;
+
+    /**
+     * Hand the text so far to the digest once it is long enough (or at the end). Called only right
+     * after a {@code '\n'}, which is never half of a surrogate pair, so the pieces' UTF-8 joined is the
+     * whole text's UTF-8.
+     */
+    private static void flush(MessageDigest digest, StringBuilder sb, boolean end) {
+        if (end || sb.length() >= FLUSH_AT) {
+            digest.update(sb.toString().getBytes(StandardCharsets.UTF_8));
+            sb.setLength(0);
         }
     }
 

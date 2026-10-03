@@ -539,7 +539,8 @@ final class RaceMode {
             return;
         }
         Location here = p.getLocation();
-        Location at = new Location(w, rr.stand.x(), rr.stand.y(), rr.stand.z(), here.getYaw(), 0f);
+        Location at = new Location(w, rr.stand.x(), rr.stand.y(), rr.stand.z(),
+                RaceStand.facing(run.course, here.getYaw()), 0f); // Mountain Run v2: north, up the mountain
         run.expect = at;
         run.suspended = true;
         if (!trials.sessions().teleport(p, at)) {

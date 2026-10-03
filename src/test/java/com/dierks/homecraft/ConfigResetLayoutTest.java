@@ -87,9 +87,11 @@ class ConfigResetLayoutTest {
             FileConfiguration c = disk.load();
             ConfigReset.Plan plan = ConfigReset.plan(c, LayoutFixtures.bundled(), "games.fresh",
                     ConfigReset.kept(c, "games.fresh"));
-            assertEquals(List.of(4864, 160, 4096), plan.kept().get("games.fresh.slots.fresh_golf.origin"),
-                    "Golf of the Week's 0.35 origin, kept: " + plan.kept().keySet());
-            assertEquals(32, plan.kept().get("games.fresh.slots.fresh_golf.half_gap"), "and its 0.35 gap");
+            assertEquals(List.of(5120, 160, 4096), plan.kept().get("games.fresh.slots.fresh_tiny_golf.origin"),
+                    "Tiny Golf's 0.35 origin, kept: " + plan.kept().keySet());
+            assertEquals(32, plan.kept().get("games.fresh.slots.fresh_tiny_golf.half_gap"), "and its 0.35 gap");
+            assertNull(plan.kept().get("games.fresh.slots.fresh_golf.origin"), "Golf of the Week is at its shipped v4"
+                    + " spot (v4 grew it, so the guard gave it its new one): a reset has nothing of it to keep");
             assertEquals(0, plan.kept().get("games.fresh.keep.plot_gap"), "and the kept courses' spacing");
             assertFalse(plan.kept().containsKey("games.clubhouse.origin"), "only what the reset covers");
         }

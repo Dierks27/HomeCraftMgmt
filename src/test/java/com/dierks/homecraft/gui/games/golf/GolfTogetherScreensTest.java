@@ -113,6 +113,42 @@ class GolfTogetherScreensTest {
         assertEquals(Material.ARROW, t.get(GolfGroupCardMenu.NEXT).material(), "hole 9 is on the next page");
     }
 
+    /**
+     * Audit GOLF00: the card's own words about the hole clock say the clock THIS hole gives, as the chat line
+     * and the action bar do: 3:00 on a Golf v4 par 5 ({@link GolfGroup#holeClock(int)}), 2:00 on a par 3 and on
+     * every older or hand-built course, never a fixed 2:00.
+     */
+    @Test
+    void theCardSaysTheClockThisHoleGives() {
+        Map<UUID, String> names = new LinkedHashMap<>();
+        names.put(SAM, "Sam");
+        names.put(AVA, "Ava");
+        List<Integer> pars = List.of(5, 3);
+        GolfGroup g = new GolfGroup(1, "week", "Golf of the Week", pars,
+                List.of(GolfGroup.holeClock(5), GolfGroup.holeClock(3)), names);
+        g.holeDone(SAM, new GolfRun.HoleScore(5, 4, false));
+        GolfGroup.Card card = g.card();
+        assertEquals(180, card.holeClock(), "a v4 par 5 gives 3:00");
+        List<GolfGroupCardMenu.Tile> t = GolfGroupCardMenu.tiles(card, 0, false);
+        assertEquals("&7Still playing: Ava &8- &epicked up in 3:00", t.get(GolfGroupCardMenu.STATUS).name(),
+                "the running clock");
+        assertTrue(t.get(GolfGroupCardMenu.STATUS).lore().contains("&7The first ball in starts a 3:00"),
+                "and the words about it say the same 3:00: " + t.get(GolfGroupCardMenu.STATUS).lore());
+        assertFalse(String.join(" ", t.get(GolfGroupCardMenu.STATUS).lore()).contains("2:00"), "never a fixed 2:00");
+
+        g.holeDone(AVA, new GolfRun.HoleScore(5, 6, false));
+        assertTrue(g.advance(), "everyone in: on to the par 3");
+        g.holeDone(SAM, new GolfRun.HoleScore(3, 3, false));
+        List<GolfGroupCardMenu.Tile> next = GolfGroupCardMenu.tiles(g.card(), 0, false);
+        assertTrue(next.get(GolfGroupCardMenu.STATUS).lore().contains("&7The first ball in starts a 2:00"),
+                "a par 3 gives 2:00: " + next.get(GolfGroupCardMenu.STATUS).lore());
+
+        GolfGroup old = group(9); // a hand-built course, or an Adventure Golf layout: 2:00 on every hole
+        old.holeDone(SAM, new GolfRun.HoleScore(3, 2, false));
+        assertTrue(GolfGroupCardMenu.tiles(old.card(), 0, false).get(GolfGroupCardMenu.STATUS).lore()
+                .contains("&7The first ball in starts a 2:00"), "an older course keeps 2:00");
+    }
+
     @Test
     void eighteenHolesPageWithArrowsOnlyAt45And53() {
         GolfGroup g = group(18);

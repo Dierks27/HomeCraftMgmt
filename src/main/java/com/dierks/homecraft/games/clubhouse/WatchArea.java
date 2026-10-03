@@ -2,7 +2,10 @@ package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceStand;
 
 /**
  * Where a watcher may fly while watching a race or a golf group live (CLUBHOUSE-SPEC §10): the course
@@ -18,8 +21,14 @@ import com.dierks.homecraft.games.trial.Course;
  * A Dropper's area holds its shafts, so a watcher can look in; a boat track's holds its whole loop.
  * Pure: made from values, tested for every kind of course.
  *
+ * <p><b>Mountain Run v2</b> (MOUNTAIN-V2-SPEC §12, red-team F07): a watcher is first put {@value #STAND_UP}
+ * over its viewing stand at the bottom, by the finish, looking north up the mountain, where the riders come
+ * down to the finish. The summit is 500+ blocks away, beyond any view distance, so nothing here (or in
+ * any copy) promises the whole run; a watcher can fly anywhere in the area.
+ *
  * @param box   the area (feet anywhere inside it)
- * @param viewX where a watcher is first put: above the start, looking along it
+ * @param viewX where a watcher is first put: above the start, looking along it (a Mountain Run v2: over
+ *              the stand, looking north)
  */
 public record WatchArea(Box box, double viewX, double viewY, double viewZ, float viewYaw) {
 
@@ -29,6 +38,8 @@ public record WatchArea(Box box, double viewX, double viewY, double viewZ, float
     public static final int HAND_GROW = 16;
     /** A watcher is first put this high above the start. */
     public static final int VIEW_UP = 4;
+    /** Mountain Run v2: a watcher is first put this high over the stand (where its players stand). */
+    public static final int STAND_UP = 6;
 
     public WatchArea {
         if (box == null) {
@@ -58,6 +69,11 @@ public record WatchArea(Box box, double viewX, double viewY, double viewZ, float
                 grow(b, c.finish().x(), c.finish().y(), c.finish().z());
             }
             area = new Box(b[0], b[1], b[2], b[3], b[4], b[5]).expand(HAND_GROW);
+        }
+        Point stand = half != null && BoatHype.mountainV2(c) ? RaceStand.of(c, half) : null;
+        if (stand != null) {
+            double[] v = nearest(area, stand.x(), stand.y() + STAND_UP, stand.z());
+            return new WatchArea(area, v[0], v[1], v[2], RaceStand.FACING_V4);
         }
         return view(area, c.start().x(), c.start().y(), c.start().z(), c.start().yaw());
     }

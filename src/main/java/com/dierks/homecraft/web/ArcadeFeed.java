@@ -232,16 +232,23 @@ public final class ArcadeFeed implements FeedWriter {
      * @param rtp          the steady-state return as a fraction
      * @param paytable     its winning lines, in tokens
      * @param pot          the pot now, or {@code null} when the ticket has no jackpot line
+     * @param closed       whether it is closed ({@link ArcadeService#ticketClosed}: it would give back 100% or
+     *                     more), written as {@code "closed": true} on its entry, and left out otherwise
      */
-    public record Scratch(int ticketTokens, double rtp, List<PayRow> paytable, Integer pot) {
+    public record Scratch(int ticketTokens, double rtp, List<PayRow> paytable, Integer pot, boolean closed) {
 
         public Scratch {
             paytable = paytable == null ? List.of() : List.copyOf(paytable);
         }
 
+        /** An open ticket. */
+        public Scratch(int ticketTokens, double rtp, List<PayRow> paytable, Integer pot) {
+            this(ticketTokens, rtp, paytable, pot, false);
+        }
+
         ChanceRow row() {
             return new ChanceRow(SCRATCH_ID, SCRATCH_NAME, List.of(ticketTokens), Map.of(ticketTokens, rtp), null,
-                    paytable, null, Map.of());
+                    paytable, null, closed ? Map.of("closed", true) : Map.of());
         }
     }
 
@@ -1273,7 +1280,8 @@ public final class ArcadeFeed implements FeedWriter {
                 rows.add(new PayRow(stake, tokens + (tokens == 1 ? " token" : " tokens"), tokens, chance, null, null));
             }
         }
-        return new Scratch(stake, ArcadeService.rtp(lotto), rows, weights.containsKey(-1) ? Math.max(0, pot) : null);
+        return new Scratch(stake, ArcadeService.rtp(lotto), rows, weights.containsKey(-1) ? Math.max(0, pot) : null,
+                ArcadeService.ticketClosed(lotto));
     }
 
     /**

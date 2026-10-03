@@ -54,7 +54,9 @@ import java.util.Set;
  * wall rule below are today's, byte for byte. A plan of version 3 or later
  * (Adventure Golf: ponds, sand, trees, terraces) goes to {@link GolfValidatorV3}, whose walls are
  * checked locally with the flight rule, whose ponds are sealed and never beside the tee, and whose
- * witness line has room to miss on a pond hole ({@link SafeExpert}).
+ * witness line has room to miss on a pond hole ({@link SafeExpert}). A plan of version 4 or later (Golf
+ * v4) goes to {@link GolfValidatorV4}: Adventure Golf's block rules on its own plots, and Golf v4's play
+ * rules (par measured by the ordinary player, a witness of at most par putts, the kid within par + 2).
  */
 public final class GolfValidator {
 
@@ -67,12 +69,26 @@ public final class GolfValidator {
 
     /** Every problem, the sloppy player included (planner thread). Empty when the plan is fine. */
     public static List<String> problems(Plan plan) {
-        return adventure(plan) ? GolfValidatorV3.problems(plan, true) : problems(plan, true);
+        return v4(plan) ? GolfValidatorV4.problems(plan, true)
+                : adventure(plan) ? GolfValidatorV3.problems(plan, true) : problems(plan, true);
     }
 
-    /** Every problem but the sloppy player's: cheap enough for the main thread. */
+    /**
+     * Every problem but the sloppy player's: cheap enough for the main thread up to Adventure Golf; a
+     * Golf v4 plan's par is worked out again (64 rollouts a hole, a few hundred milliseconds), so it
+     * belongs on the planner thread, where every caller runs it.
+     */
     public static List<String> quickProblems(Plan plan) {
-        return adventure(plan) ? GolfValidatorV3.problems(plan, false) : problems(plan, false);
+        return v4(plan) ? GolfValidatorV4.problems(plan, false)
+                : adventure(plan) ? GolfValidatorV3.problems(plan, false) : problems(plan, false);
+    }
+
+    /**
+     * Whether {@code plan} plays Golf v4's rules (GOLF-V4-SPEC §6.1): made by golf planner version 4 or
+     * later. Its blocks are still judged by Adventure Golf's per-hole rules, on its own plots.
+     */
+    static boolean v4(Plan plan) {
+        return plan != null && plan.algo() > PlotGrid.LAST_V3_ALGO;
     }
 
     /** Whether {@code plan} is judged by Adventure Golf's rules: made by golf planner version 3 or later. */

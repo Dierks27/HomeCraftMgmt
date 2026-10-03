@@ -161,7 +161,7 @@ class BoatPlannerTest {
         if (p.ops().size() > DownhillValidator.MAX_OPS) {
             return p.ops().size() + " blocks";
         }
-        if (p.algo() != BoatPlanner.ALGO) {
+        if (p.algo() != BoatPlanner.ALGO_V3) {
             return "algo " + p.algo();
         }
         Course c = course(p);
@@ -265,7 +265,7 @@ class BoatPlannerTest {
      * in front of the stand with the finish next; nowhere on a run whose last drop is far up the mountain.
      */
     static String titleProblem(BoatPlanner.Made m) {
-        Course c = course(m.plan).withGen(new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, m.in.seed(),
+        Course c = course(m.plan).withGen(new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO_V3, 20725, 0, m.in.seed(),
                 m.in.halfId(), m.plan.hash(), 1, 2, 3, List.of(), List.of(), 0L, 7));
         boolean sign = m.plan.signs().stream().anyMatch(t -> t.lines().equals(GenCopy.boatFinalDrop()));
         int at = BoatHype.finalDrop(c);
@@ -330,7 +330,8 @@ class BoatPlannerTest {
 
     @Test
     void goldenHashesPinThreeSeedsPerTier() throws GenFailed {
-        // A change here means the planner makes different layouts: bump BoatPlanner.ALGO. Algo 3 is the
+        // A change here means the spiral makes different layouts (it is frozen as BoatPlanner.ALGO_V3, the
+        // 0.36 box's; Mountain Run v2 pins its own in MountainPlannerTest). Algo 3 is the
         // Mountain Run (Course Variety §2) without BoatSim's V14 (the §11 schedule valve); V14 comes as
         // algo 4 after the owner's boat test strip (Gate 0), and re-pins these. Re-pinned without a bump
         // by the CV final gate (algo 3 is unreleased): checkpoint legs at most 60 along the track with no
@@ -351,7 +352,7 @@ class BoatPlannerTest {
             made.append('\n');
         }
         assertEquals(golden, made.toString(), "every tier's three seeds (if this changed, bump ALGO)");
-        assertEquals(3, BoatPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(3, BoatPlanner.ALGO_V3, "the version these hashes were pinned at");
     }
 
     @Test
@@ -388,8 +389,8 @@ class BoatPlannerTest {
                                 || Math.abs(r - (level.width() / 2.0 + BoatPlanner.ARC_SPOT)) < 1e-9,
                         level + ": a checkpoint spans its lane (half the width and a half; a bend's a block more): " + r);
             }
-            assertTrue(c.checkpoints().size() >= 5 && c.checkpoints().size() <= Course.MAX_CHECKPOINTS,
-                    level + ": checkpoints all the way down, at most 64: " + c.checkpoints().size());
+            assertTrue(c.checkpoints().size() >= 5 && c.checkpoints().size() <= DownhillValidator.MAX_CHECKPOINTS,
+                    level + ": checkpoints all the way down, at most the spiral's frozen 64: " + c.checkpoints().size());
             boolean sign = false;
             boolean stand = false;
             for (SignText s : p.signs()) {
@@ -545,7 +546,7 @@ class BoatPlannerTest {
     @Test
     void theBootCheckMakesTheLiveLayoutAgainFromItsTag() throws GenFailed {
         Plan live = PLANNER.plan(input('A', 31, "medium"));
-        GenTag tag = new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, 31, 'A', live.hash(), 1, 2, 3,
+        GenTag tag = new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO_V3, 20725, 0, 31, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(live.hash(), PLANNER.rederive(input('A', 0, "hard"), tag).hash(), "from the tag, any tier asked");
         assertEquals(live.hash(), PLANNER.rederive(input('A', 0, "medium"), tag).hash(), "the stored tier first");

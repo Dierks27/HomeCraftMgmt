@@ -24,9 +24,11 @@ import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Pools;
 import com.dierks.homecraft.games.gen.api.Putt;
+import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
@@ -46,6 +48,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -60,6 +63,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -79,7 +83,11 @@ import java.util.logging.Level;
  * blocks: its live half was verified against its plan in this run. At every start the gate is
  * shut and every live half is verified first — derived again from its tag, converged, and for
  * golf its witness lines replayed on the real blocks — which is also how the world heals after a
- * crash between the database's flip and the world's save (§3.5). A run keeps counting while the
+ * crash between the database's flip and the world's save (§3.5). The smallest halves are checked first,
+ * and a big half (the Mountain Run v2's 1,200 chunks) that the world was saved right after its last full
+ * check ({@link GenAdminKeys#onDisk}) is checked by a sample of its chunks, opened, and checked whole later
+ * in idle time with the course open; a spare half known to be empty on disk isn't loaded at all (F12). A
+ * run keeps counting while the
  * layout it started on still stands ({@link #standing}): the live layout, or the one before it
  * until its half starts being cleared.
  *
@@ -106,12 +114,25 @@ import java.util.logging.Level;
  *
  * <p>Driven by the game: {@link #start} and {@link #stop}, {@link #worldsReady} a tick after enable,
  * {@link #tick} every tick and {@link #check} every second. Everything runs on the main thread;
- * only plans are made elsewhere, and they come back through {@link #tick}'s inbox.
+ * only plans are made elsewhere, and they come back through {@link #tick}'s inbox. So does all the
+ * work the size of a plan (MOUNTAIN-V2-SPEC F11: a Mountain Run v2 is 350,000 blocks): its checks
+ * ({@link PlanCheck#problems}), its archive row and its build index are made with it on the planner
+ * thread, a big plan that comes another way (a promote, a recall) has its index and row made there
+ * before they are needed, and an admin's {@code history} or {@code keep} reads a big archived row
+ * there too; the main thread only stores and builds what comes back.
  */
 public final class GenService implements GeneratedCourses, GenOps {
 
     /** A plan still running after this long is given up (a failed try, never a different plan). */
     public static final long PLAN_KILL_MS = 120_000L;
+    /**
+     * A plan with more blocks than this (a Mountain Run v2: 350,000) never has plan-sized work done on the
+     * main thread (MOUNTAIN-V2-SPEC F11): its checks, archive row and build index are made on the planner
+     * thread. A smaller one's index and row take a millisecond or two and are made in place, as always.
+     */
+    static final int OFF_MAIN_OPS = 20_000;
+    /** A stored plan bigger than this (gzipped) is read on the planner thread for an admin command (F11). */
+    static final int OFF_MAIN_BYTES = 16 * 1024;
     /** CLEAR_OLD looks for an empty half this often. */
     public static final long CLEAR_EVERY_MS = 10_000L;
     /** A missing seed secret is logged at most this often. */
@@ -155,7 +176,14 @@ public final class GenService implements GeneratedCourses, GenOps {
         /** An archived course into a Classics slot's idle half, then the flip (no planner). */
         RECALL,
         /** Empty both halves of a Classics slot that holds nothing any more. */
-        UNRECALL
+        UNRECALL,
+        /**
+         * Empty an OLD area the slot left behind ({@code gen.<slot>.old}): both halves of an old claim, at the
+         * sizes it recorded, of Fresh Courses' own blocks only, water first; then mark the claim emptied, and
+         * forget it once the world has been saved or a later start finds it still empty (F09)
+         * (V4-DECISIONS "One move mechanism"; {@link OldAreas}).
+         */
+        RETIRE
     }
 
     /** Where a job is. */
@@ -163,8 +191,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         START, PLANNING, SCANNING, EVACUATE, CONVERGE
     }
 
-    /** One pass of a job over one half. */
-    private record Step(char which, Plan plan, BuildJob.Mode mode) {
+    /**
+     * One pass of a job over one half: the slot's half {@code which}, or {@code box} when it is given (an
+     * old area's half, RETIRE: not one of the slot's halves now).
+     */
+    private record Step(char which, Plan plan, BuildJob.Mode mode, Box box,
+                        java.util.function.BiPredicate<Integer, Integer> only) {
+
+        Step(char which, Plan plan, BuildJob.Mode mode, Box box) {
+            this(which, plan, mode, box, null);
+        }
+
+        Step(char which, Plan plan, BuildJob.Mode mode) {
+            this(which, plan, mode, null, null);
+        }
     }
 
     /** A job: one slot, one kind, run to the end or failed. */
@@ -208,6 +248,41 @@ public final class GenService implements GeneratedCourses, GenOps {
         /** The slot the plan is made for, and where (a recall's are the original slot, moved). */
         Slots.Def planDef;
         Box planBox;
+        /** RETIRE: the old claim it empties, and its world (the claim's own, not the slot's now). */
+        String retire;
+        String world;
+        /** RETIRE: the blocks it left because they aren't Fresh Courses', and the first few. */
+        long left;
+        List<String> leftAt = List.of();
+        /**
+         * A BUILD that found its region empty and claimed it itself: nothing of the layout before it (if any)
+         * stands in this region, so its flip leaves nothing to clear (GOLF-V4-SPEC §5.2 step 4, RePlot).
+         */
+        boolean claimedHere;
+        /**
+         * The plan's archive row, written on the planner thread (F11): a BUILD's with its plan, a big
+         * PROMOTE's as it starts; {@code archivedReady} once it is (a row that couldn't be written is
+         * {@code null}: it reads as unreadable, as before).
+         */
+        byte[] archived;
+        boolean archivedReady;
+        /** The next step's build index, made on the planner thread (F11), or {@code null}. */
+        BuildIndex.Prepared prepared;
+        /** Since when a step waits for its index from the planner thread, or -1. */
+        long preparing = -1;
+        /**
+         * F12: a HEAL at a start of a big half known to be on disk as verified: a SCAN of a sample of its chunks
+         * first; the course opens on a clean one, and the whole half is checked later ({@link #background}).
+         */
+        boolean sampled;
+        /** F12: the whole-half check of a course opened on a sample: it runs with the course open. */
+        boolean background;
+        /**
+         * F12 (ENG07): the job's steps so far only read its half against the plan (a {@link #sampled} check, or the
+         * {@link #background} whole-half one): nothing is written and the half's on-disk fact stays, unless the
+         * read finds a difference ({@link #differs}).
+         */
+        boolean reading;
 
         Job(Kind kind, SlotState slot, Consumer<String> report) {
             this.kind = kind;
@@ -224,6 +299,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     private final ArrayDeque<Job> queue = new ArrayDeque<>();
     private final Set<String> said = new HashSet<>();
     private Job job;
+    /** WorldSaveEvents seen this run, by world (lower case): when an emptied area or a half is known to be on disk. */
+    private final Map<String, Integer> saves = new HashMap<>();
     private volatile boolean online;
     private boolean running;
     private long readyAt = -1;
@@ -279,11 +356,32 @@ public final class GenService implements GeneratedCourses, GenOps {
     private long archivePrunedDay = Long.MIN_VALUE;
 
     /**
+     * Where an old claim's halves are, for the guard and for RETIRE. Always {@link #RECORDED}: the sizes the
+     * claim recorded. The engine takes it as a parameter only so the mutation proof
+     * ({@code RetireMutationTest}) can give it the old bug (today's def sizes) and see the scenarios fail.
+     */
+    @FunctionalInterface
+    interface OldHalves {
+        List<Box> of(Slots.Def def, String claim);
+    }
+
+    /** An old claim's halves at the sizes, origin and gap it RECORDED (GOLF-V4-SPEC §5.2 step 2, the fix). */
+    static final OldHalves RECORDED = (def, claim) -> Regions.claimHalves(claim);
+
+    private final OldHalves oldHalves;
+
+    /**
      * @param planners each generator's planner by its id ({@code parkour}, {@code rings}, {@code golf},
      *                 {@code boat}); a slot whose planner is missing never builds
      */
     public GenService(GenHost host, Map<String, Planner> planners) {
+        this(host, planners, RECORDED);
+    }
+
+    /** The engine with {@code oldHalves} for where an old claim stands (only the mutation proof passes another). */
+    GenService(GenHost host, Map<String, Planner> planners, OldHalves oldHalves) {
         this.host = host;
+        this.oldHalves = oldHalves;
         this.planners = Map.copyOf(planners);
         for (Slots.Def d : Slots.ALL) {
             slots.put(d.id(), new SlotState(d));
@@ -333,6 +431,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 }
             }
         }
+        List<Job> heals = new ArrayList<>();
         for (SlotState s : slots.values()) {
             if (s.classic && s.live == null && s.claimed) {
                 s.bothDirty = true; // a recall or a clearing may have stopped halfway
@@ -341,12 +440,25 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             if (s.claimed) {
-                s.oldDirty = true; // unknown after a restart: emptied once nothing else is due
-                queue.add(new Job(Kind.HEAL, s, null));
+                // unknown after a restart, so emptied once nothing else is due; unless it was known to be empty
+                // when the world was last saved (F12): then nothing is loaded there
+                s.oldDirty = s.classic || !EMPTY.equals(s.onDisk.get(s.live.otherHalf()));
+                Job heal = new Job(Kind.HEAL, s, null);
+                // F12: a big half saved right after its last full check is checked by a sample now, the rest later;
+                // only when today's planner can make its plan again (ENG00: an older planner's layout has no plan
+                // to compare a sample with, so it gets the quick structure check, as every start gave it)
+                Planner p = planners.get(s.def.generator());
+                heal.sampled = !s.classic && p != null && p.algo() == s.live.algo()
+                        && s.half(s.live.half()).chunkCount() > BIG_HALF_CHUNKS
+                        && planFact(s.live.planHash()).equals(s.onDisk.get(s.live.half()));
+                heals.add(heal);
             } else {
                 unclaimedLive(s);
             }
         }
+        // F12: the smallest halves first, so a Mountain Run's check never keeps the droppers closed
+        heals.sort(java.util.Comparator.comparingInt(h -> h.slot.half(h.slot.live.half()).chunkCount()));
+        queue.addAll(heals);
         for (SlotState s : slots.values()) {
             restoreChosen(s);
         }
@@ -388,8 +500,23 @@ public final class GenService implements GeneratedCourses, GenOps {
     private void unclaimedLive(SlotState s) {
         s.verified = false;
         s.healFailed = true;
+        if (movingByVersion(s)) {
+            // ENG-R3-01: the move this version makes (announced as news in refresh), not a fault
+            sayOnce(s, "Fresh Courses: " + s.def.id() + "'s course from before this version stays closed in its old"
+                    + " area; a new one is built in its new area once that is checked.");
+            return;
+        }
         warnOnce(s, "Fresh Courses: " + s.def.id() + "'s live course isn't in its claimed region "
                 + "- a new one will be built once the area is checked");
+    }
+
+    /**
+     * ENG-R3-01: whether {@code s} is moving to the area this version gave it: not claimed there yet, with an old
+     * claim of another size on record (the "area changed with this version" move, its old area emptied by itself).
+     * Its course is rebuilt there as expected, which the check shows as on its way, not as a fault.
+     */
+    private static boolean movingByVersion(SlotState s) {
+        return !s.claimed && s.old.stream().anyMatch(c -> Regions.resized(s.def, c));
     }
 
     /** Stop: give up the running job (its tickets go), forget the queue. The blocks stay as they are. */
@@ -502,6 +629,13 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return;
             }
         }
+        // An old area a region waits for (the same slot's, resized in place, or another's next to a new
+        // spot) is emptied before anything is built there (MOUNTAIN-V2-SPEC §11.2 "Ordering").
+        Job first = now >= readyAt ? nextRetire(true) : null;
+        if (first != null) {
+            begin(first);
+            return;
+        }
         for (SlotState s : slots.values()) {
             if (s.classic) {
                 continue; // built only when an admin recalls something (below)
@@ -515,6 +649,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             s.waiting = d.kind() == GenScheduler.Kind.WAIT ? d.reason() : null;
             switch (d.kind()) {
                 case BUILD -> {
+                    String old = oldInTheWay(s);
+                    if (old != null) {
+                        s.waiting = old; // emptied first (above), or held: status and the check say why
+                        continue;
+                    }
                     String edition = Edition.editionKey(d.cadence(), d.day(), 0);
                     if (!queueEdition.equals(edition)) {
                         queueEdition = edition;
@@ -562,7 +701,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             ClassicWant w = s.want;
             if (w != null && (!holds(s, w) || s.healFailed)) {
-                s.waiting = recallWait(s, now, hold);
+                String old = oldInTheWay(s);
+                s.waiting = old != null ? old : recallWait(s, now, hold);
                 if (s.waiting == null) {
                     Job j = new Job(Kind.RECALL, s, s.recallReport);
                     j.want = w;
@@ -591,6 +731,22 @@ public final class GenService implements GeneratedCourses, GenOps {
                     clear = s;
                 }
             }
+        }
+        // F12: the whole half of a course opened at this start on a sample, with the course open
+        for (SlotState s : slots.values()) {
+            if (now >= readyAt && s.fullCheckDue && s.on() && s.verified && s.live != null && s.claimed) {
+                Job j = new Job(Kind.HEAL, s, null);
+                j.background = true;
+                begin(j);
+                return;
+            }
+        }
+        // Any other old area once nothing is due to be built: so a moved course (Golf of the Week at the
+        // update) is down for as short a time as can be, and its old area goes right after its new one is up.
+        Job retire = now >= readyAt ? nextRetire(false) : null;
+        if (retire != null) {
+            begin(retire);
+            return;
         }
         if (clear != null) {
             begin(new Job(Kind.CLEAR_OLD, clear, null));
@@ -949,9 +1105,19 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.verified = false;
         s.healFailed = false;
         s.oldDirty = false;
+        host.coursesChanged(s.def.game());
+        if (!s.claimed) {
+            // ENG01: never converge a region Fresh Courses doesn't hold (as forgetRecall): the closed course stood
+            // in the area it was claimed in before (the update moved it), and nothing of it stands here
+            s.previous = null; // nothing of it stands in the slot's halves
+            boolean byItself = s.old.stream().anyMatch(c -> Regions.resized(s.def, c));
+            host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "). Its area isn't claimed, so"
+                    + " nothing is cleared there: the course stood in its old area" + (byItself
+                    ? ", which is emptied by itself." : "."));
+            return;
+        }
         s.bothDirty = true;
         s.lastClearCheck = 0;
-        host.coursesChanged(s.def.game());
         host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "); its halves are cleared once"
                 + " nobody is on them.");
     }
@@ -961,7 +1127,23 @@ public final class GenService implements GeneratedCourses, GenOps {
         GenScheduler.Choice chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
                 s.liveMix, s.mix, s.reroll, chosen != null ? chosen.pin() : s.pin, p == null ? 0 : p.algo(), s.triesDay,
-                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince);
+                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince, style(s));
+    }
+
+    /**
+     * The Mountain Run v2 style a new layout of {@code s} must have ({@link StyleSeed#want}): Ice Boat's
+     * configured {@code style}, or the Winding Road while Race Night is on; {@code null} for the edition's own
+     * seed (every other slot, an Ice Boat still in the 0.36 box, a random week with no Race Night).
+     */
+    private BoatStyle style(SlotState s) {
+        DailySettings.SlotConfig c = s.classic ? null : host.settings().slot(s.def.id());
+        boolean night;
+        try {
+            night = host.raceNightOn();
+        } catch (RuntimeException e) {
+            night = false;
+        }
+        return StyleSeed.want(s.def, s.half('A'), c == null ? null : c.style(), night);
     }
 
     /** The edition a slot should show now ({@link GenScheduler#target}). */
@@ -1007,10 +1189,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             int[] origin = c.origin();
             int gap = c.halfGap();
             boolean was = s.unplaced;
+            String wasWhy = unplacedWhy(s);
+            boolean wasHeld = s.heldWhy != null; // F10: its place was its old claim, never an owner's choice
             s.unplaced = !c.placed();
-            if (s.unplaced && !was) {
+            s.heldWhy = s.unplaced ? c.held() : null;
+            if (s.unplaced && (!was || !wasWhy.equals(unplacedWhy(s)))) {
                 vet(s, null); // off at once, and why said once
-            } else if (was && !s.unplaced && UNPLACED.equals(s.problem)) {
+            } else if (was && !s.unplaced && wasWhy.equals(s.problem)) {
                 s.problem = null; // config reads again: the next check says whether anything else is in the way
             }
             if (s.unplaced) {
@@ -1025,7 +1210,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()
                     && moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
-                    && meta.get(GenAdminKeys.claim(s.def.id())) == null) && meta != null) {
+                    && meta.get(GenAdminKeys.claim(s.def.id())) == null, wasHeld && !s.unplaced,
+                    meta == null ? null : meta.get(GenAdminKeys.claim(s.def.id()))) && meta != null) {
                 meta = new HashMap<>(meta); // an emptied Classic let its old claim go: nothing to remember as wet
                 meta.remove(GenAdminKeys.claim(s.def.id()));
             }
@@ -1040,7 +1226,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                     s.claimed = Regions.claim(s.def, world, origin, gap)
                             .equals(meta.get(GenAdminKeys.claim(s.def.id())));
                 }
-                wetRegions(s, meta, world, origin, gap, kept);
+                oldRegions(s, meta, world, origin, gap, kept);
                 if (s.wanted() || s.claimed) {
                     for (char h : new char[]{'A', 'B'}) {
                         kept.add(new Object[]{world, s.half(h)});
@@ -1059,16 +1245,38 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
                 boolean claimed = Regions.claim(s.def, world, origin, gap).equals(claim);
-                if (claim != null && !claimed) {
-                    int[] old = Regions.claimOrigin(claim);
-                    String where = old == null ? claim : Regions.describe(s.def, old, Regions.claimGap(claim));
-                    warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
-                            + (s.def.mayHoldWater() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
-                            + " hand.") + " The new region is checked before it is used.");
+                if (claim != null && !claimed && s.heldWhy == null) {
+                    if (Regions.resized(s.def, claim) && Regions.claimWorld(claim) != null) {
+                        // This version changed the slot's size: its old area is emptied by itself (RETIRE).
+                        sayOnce(s, "Fresh Courses: " + id + "'s area changed with this version: its halves are "
+                                + s.def.sizeX() + " x " + s.def.sizeY() + " x " + s.def.sizeZ() + " now, at "
+                                + Regions.describe(s.def, origin, gap) + ". Its old area (" + Regions.describeClaim(claim)
+                                + ") is emptied by itself" + (s.def.mayHoldWater() ? ", the " + water(s) + " drained first"
+                                : "") + "; the new one is checked before it is used.");
+                    } else {
+                        // The claim's own sizes, never today's (the old area is where it was built).
+                        String where = Regions.claimOrigin(claim) == null ? claim : Regions.describeClaim(claim);
+                        warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
+                                + (s.def.mayHoldWater() ? drainFirst(s) : "Those blocks are left as they are: clear"
+                                + " them by hand.") + " The new region is checked before it is used.");
+                    }
                 }
                 s.claimed = claimed;
+                s.onDisk.clear();
+                if (claimed) {
+                    s.onDisk.putAll(diskFacts(meta.get(GenAdminKeys.onDisk(id)), claim));
+                } else {
+                    s.pendingDisk.clear(); // what was reached in another region says nothing of this one
+                    if (meta.get(GenAdminKeys.onDisk(id)) != null) {
+                        try {
+                            host.store().meta(GenAdminKeys.onDisk(id), null); // nor if it is ever claimed there again
+                        } catch (SQLException | RuntimeException e) {
+                            // read only for the claim it names: a claim made there again finds the scan's word first
+                        }
+                    }
+                }
             }
-            wetRegions(s, meta, world, origin, gap, kept);
+            oldRegions(s, meta, world, origin, gap, kept);
             if (s.wanted() || s.claimed) {
                 for (char h : new char[]{'A', 'B'}) {
                     kept.add(new Object[]{world, s.half(h)});
@@ -1096,65 +1304,106 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * The old regions of a slot that {@link Slots.Def#mayHoldWater may hold water} (a Dropper's
-     * pools, golf's ponds) that may still hold it though the slot stands elsewhere now
-     * ({@link GenAdminKeys#wet}), added to the guarded {@code kept}: the claim it held when its
-     * origin (or the world) moved is remembered the first time it is seen, before a claim at the new
-     * place can overwrite it. Each stays guarded (nothing changes there, and nothing flows out) until
-     * the slot is claimed there again, which puts it under the claim's guard and lets a {@code clear}
-     * drain it (a CLEAR empties the water before anything else). Any other slot: nothing.
+     * The old regions a slot left behind ({@link GenAdminKeys#old}), added to the guarded {@code kept}: the
+     * claim it held when its region changed is recorded the first time it is seen, before a claim at the new
+     * place can overwrite it, with the world, origin, half size and gap it RECORDED. Recorded are:
+     * <ul>
+     *   <li>a claim made at another half size than the slot's now: this version changed its shape (Golf v4,
+     *       the Mountain Run v2), so what stands there is the plugin's own and is emptied by itself (RETIRE,
+     *       {@link #nextRetire});</li>
+     *   <li>any old claim of a slot that {@link Slots.Def#mayHoldWater may hold water} (a Dropper's pools,
+     *       golf's ponds), as 0.35's {@code wet} list was, which is read into this once: an owner's move
+     *       keeps it guarded (nothing changes there, and nothing flows out) until an admin empties it
+     *       ({@code /hcm games gen tidy}) or it is claimed there again. A dry slot's owner move is left as
+     *       0.35 left it (a WARN: clear it by hand).</li>
+     * </ul>
+     * Every recorded region is guarded at its claim's own sizes ({@link #oldHalves}, the fix of GOLF-V4-SPEC
+     * §5.2: never the slot's size now, which would guard the wrong boxes after a resize).
      */
-    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, int gap,
+    private void oldRegions(SlotState s, Map<String, String> meta, String world, int[] origin, int gap,
                             List<Object[]> kept) {
-        if (!s.def.mayHoldWater()) {
-            return;
-        }
         if (meta != null) {
-            String key = GenAdminKeys.wet(s.def.id());
-            List<String> stored = Regions.wetClaims(meta.get(key));
+            String key = GenAdminKeys.old(s.def.id());
+            String wetKey = GenAdminKeys.wet(s.def.id());
+            List<String> stored = Regions.oldClaims(meta.get(key));
+            Map<String, Long> marks = Regions.oldEmptied(meta.get(key));
+            List<String> legacy = Regions.oldClaims(meta.get(wetKey));
             List<String> now = new ArrayList<>(stored);
+            for (String c : legacy) {
+                if (!now.contains(c)) {
+                    now.add(c); // 0.35's wet list, read into the old list once
+                }
+            }
             String here = Regions.claim(s.def, world, origin, gap);
             String claim = meta.get(GenAdminKeys.claim(s.def.id()));
-            if (claim != null && !claim.equals(here) && Regions.claimOrigin(claim) != null && !now.contains(claim)) {
+            if (claim != null && !claim.equals(here) && Regions.claimOrigin(claim) != null
+                    && Regions.claimWorld(claim) != null && !now.contains(claim)
+                    && (s.def.mayHoldWater() || Regions.resized(s.def, claim))) {
                 now.add(claim);
             }
             if (s.claimed) {
                 now.remove(here); // claimed here again: the claim guards it, and a clear drains it
             }
+            marks.keySet().retainAll(now);
+            boolean saved = true;
             if (!now.equals(stored)) {
                 try {
-                    host.store().meta(key, Regions.wetText(now));
+                    host.store().meta(key, Regions.oldText(now, marks));
                 } catch (SQLException | RuntimeException e) {
+                    saved = false;
                     host.logger().log(Level.WARNING, "Fresh Courses: could not record " + s.def.id()
                             + "'s old region", e);
                 }
             }
-            s.wet = List.copyOf(now);
+            if (saved && meta.get(wetKey) != null) {
+                try {
+                    host.store().meta(wetKey, null);
+                } catch (SQLException | RuntimeException e) {
+                    // read into the old list again next time: the same claims, nothing lost
+                }
+            }
+            s.oldUnsaved = !saved;
+            s.old = List.copyOf(now);
+            s.emptied.clear();
+            s.emptied.putAll(marks);
+            s.emptiedSaves.keySet().retainAll(s.emptied.keySet());
+            long boot = host.bootedAt();
+            for (Map.Entry<String, Long> m : marks.entrySet()) {
+                // ENG-R3-00: one emptied earlier in this server process (the engine started again in it) may be
+                // in memory only: it waits for the world's saves too, and is never let go on a look at memory
+                if (m.getValue() >= boot && !s.emptiedSaves.containsKey(m.getKey())) {
+                    s.emptiedSaves.put(m.getKey(), saves.getOrDefault(
+                            String.valueOf(Regions.claimWorld(m.getKey())).toLowerCase(Locale.ROOT), 0));
+                }
+            }
+            s.retireHeld.keySet().retainAll(s.old);
+            s.tidyAsked.retainAll(s.old);
         }
-        for (String c : s.wet) {
+        for (String c : s.old) {
             String w = Regions.claimWorld(c);
-            int[] o = Regions.claimOrigin(c);
-            if (w != null && o != null) {
-                for (Box h : Regions.halves(s.def, o, Regions.claimGap(c))) {
+            List<Box> halves = oldHalves.of(s.def, c);
+            if (w != null && halves != null) {
+                for (Box h : halves) {
                     kept.add(new Object[]{w, h});
                 }
             }
         }
     }
 
+    /** "ponds" (golf) or "pools" (a Dropper). */
+    private static String water(SlotState s) {
+        return s.def.golf() ? "ponds" : "pools";
+    }
+
     /**
      * What the admin of a moved slot that may hold water reads: a Dropper's pools (golf's ponds) may
-     * still stand in the old place, which stays guarded until they are drained there.
+     * still stand in the old place, which stays guarded until it is emptied.
      */
     private static String drainFirst(SlotState s) {
-        String water = s.def.golf() ? "ponds" : "pools";
-        if (s.classic) {
-            // clear doesn't take a Classic: back at its claimed place, a start empties both halves of an empty one
-            return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and"
-                    + " restart (an empty Classic's halves are emptied then, the " + water + " before anything else).";
-        }
-        return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and use"
-                + " /hcm games gen clear " + s.def.id() + " (it empties the " + water + " before anything else).";
+        String water = water(s);
+        return "Its " + water + " may still be there, so that area stays guarded: drain first - empty it with"
+                + " /hcm games gen tidy " + s.def.id() + " confirm (it drains the " + water + " before anything else,"
+                + " and takes away only Fresh Courses' own blocks).";
     }
 
     /**
@@ -1232,11 +1481,19 @@ public final class GenService implements GeneratedCourses, GenOps {
      * its old claim is let go here, as a clear lets a course's go, so a Golf or Dropper Classic's old
      * place isn't remembered as one that may still hold water.
      *
+     * <p>A slot {@code released} from the F10 hold (config.yml saved at last, read by {@code /hcm reload}) is no
+     * owner's move (ENG08): it stood at its old claim only while held, and goes where revision 21 put it, as a
+     * restart would. Nothing is said here (the "area changed with this version" line and RETIRE say it), and its
+     * old claim stays, so its old area is recorded and emptied by itself.
+     *
+     * @param claim the claim stored now, or {@code null}: the old place is described at its recorded sizes when
+     *              it is that claim's
      * @return whether it was such an emptied Classic and its old claim is gone
      */
-    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
-        boolean emptied = s.classic && s.want == null && s.live == null && s.previous == null && !s.bothDirty
-                && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
+    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared, boolean released,
+                          String claim) {
+        boolean emptied = !released && s.classic && s.want == null && s.live == null && s.previous == null
+                && !s.bothDirty && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
         if (emptied) {
             try {
                 host.store().meta(GenAdminKeys.claim(s.def.id()), null);
@@ -1250,10 +1507,15 @@ public final class GenService implements GeneratedCourses, GenOps {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
+        // the old place as it was built: the claim's recorded sizes when it is that place's (ENG08)
+        boolean recorded = Regions.claimHalves(claim) != null && Arrays.equals(Regions.claimOrigin(claim), s.origin)
+                && s.world.equalsIgnoreCase(Regions.claimWorld(claim));
         String line = "Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
-                + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
-                + Regions.describe(s.def, origin, gap);
-        if (!cleared) {
+                + (recorded ? Regions.describeClaim(claim) : Regions.describe(s.def, s.origin, s.gap)) + " to " + world
+                + " " + Regions.describe(s.def, origin, gap);
+        if (released) {
+            // ENG08: out of the F10 hold: the resize line and RETIRE say what happens, as after a restart
+        } else if (!cleared) {
             host.logger().warning(line + ". The old halves were not cleared (" + (s.classic
                     ? "close it first with /hcm games gen unrecall " + s.def.id() + " confirm and wait until its"
                     + " halves are empty" : "use /hcm games gen clear before moving a course") + ")."
@@ -1285,7 +1547,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     private String vet(SlotState s, List<Regions.Area> built) {
         String why = null;
         if (s.unplaced) {
-            why = UNPLACED;
+            why = unplacedWhy(s);
         } else if (s.wanted()) {
             why = vetProblem(s, built);
         }
@@ -1303,6 +1565,11 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** Why a slot whose origin or half_gap config can't read is off ({@link SlotState#unplaced}). */
     public static final String UNPLACED = "its origin or half_gap in config.yml can't be read (the WARN at the last start or"
             + " /hcm reload says which), so it stays where it was built and is off until that is fixed";
+
+    /** Why an {@link SlotState#unplaced} slot is off: config.yml held back at an older revision (F10), or unreadable. */
+    private static String unplacedWhy(SlotState s) {
+        return s.heldWhy != null ? s.heldWhy : UNPLACED;
+    }
 
     private String vetProblem(SlotState s, List<Regions.Area> built) {
         if (planners.get(s.def.generator()) == null) {
@@ -1373,6 +1640,38 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
+    /**
+     * Whether the live row's course stands in the half its tag names, where config puts the slot now: a time
+     * trial's start, every golf hole's tee. False only when the row says it stands elsewhere (an older
+     * place); a row that can't be read is left to the heal itself, which then fails as before.
+     */
+    private boolean standsIn(SlotState s) {
+        if (s.live == null) {
+            return true;
+        }
+        Box half = s.half(s.live.half());
+        try {
+            GamesDao.CourseRow row = host.store().course(s.def.id());
+            if (row == null) {
+                return true;
+            }
+            if (s.def.golf()) {
+                for (GolfCourse.Hole h : com.dierks.homecraft.games.golf.CourseCodec.fromRow(row).holes()) {
+                    if (h.tee() != null && !half.contains((int) Math.floor(h.tee().x()), (int) Math.floor(h.tee().y()),
+                            (int) Math.floor(h.tee().z()))) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            Course c = CourseCodec.decode(row.id(), row.data()).course();
+            return c == null || c.start() == null || half.contains((int) Math.floor(c.start().x()),
+                    (int) Math.floor(c.start().y()), (int) Math.floor(c.start().z()));
+        } catch (SQLException | RuntimeException e) {
+            return true;
+        }
+    }
+
     /** The live row of a slot: its tag, rev and the mix it was made with. */
     private void readRow(SlotState s) {
         s.live = null;
@@ -1415,6 +1714,579 @@ public final class GenService implements GeneratedCourses, GenOps {
         return fallback;
     }
 
+    // ---- old areas (RETIRE: V4-DECISIONS "One move mechanism") ----------------------------------------
+
+    /**
+     * Whether RETIRE empties old claim {@code c} of {@code s} by itself: this version changed the slot's size
+     * (the move of an area), or an admin asked ({@code tidy confirm}). An owner's move of origin, gap or world
+     * alone waits for an admin, as 0.35 left it.
+     */
+    private boolean retireDue(SlotState s, String c) {
+        if (s.emptied.containsKey(c)) {
+            // F09: emptied in an earlier run: looked at once more (writing nothing when it stayed empty) before
+            // it is let go; emptied in this run: let go once the world has been saved (worldSaved)
+            return !s.emptiedSaves.containsKey(c) || s.tidyAsked.contains(c);
+        }
+        return Regions.resized(s.def, c) || s.tidyAsked.contains(c);
+    }
+
+    /**
+     * Whether old claim {@code c} of {@code s} was emptied in this run (F09). One marked emptied in an earlier run
+     * (a hard stop before the world was saved may have brought its blocks back) still stands until its re-look
+     * (ENG06): it is emptied before a region it crowds is scanned, so its blocks are never taken for foreign ones.
+     */
+    private static boolean emptiedThisRun(SlotState s, String c) {
+        return s.emptied.containsKey(c) && s.emptiedSaves.containsKey(c);
+    }
+
+    /**
+     * The next old area to empty, or {@code null}: with {@code urgent} only one that a region waiting to be
+     * built crowds ({@link #wantedUnclaimed}); else any that is due. One whose world isn't loaded waits for
+     * it; one held by something in its way is looked at again every {@value #VET_EVERY_MS} ms.
+     */
+    private Job nextRetire(boolean urgent) {
+        long now = host.now();
+        for (SlotState s : slots.values()) {
+            if (busyWith(s) || s.heldWhy != null) {
+                continue; // F10: config.yml is still below the revision that moved it: nothing is done there yet
+            }
+            for (String c : s.old) {
+                if (!retireDue(s, c) || host.world(worldOf(s, c)) == null) {
+                    continue;
+                }
+                if (s.retireHeld.containsKey(c) && now - s.retireHeldAt < VET_EVERY_MS) {
+                    continue;
+                }
+                List<Box> halves = oldHalves.of(s.def, c);
+                if (urgent && (emptiedThisRun(s, c) || !OldAreas.crowds(halves, wantedUnclaimed(worldOf(s, c))))) {
+                    continue; // one emptied in this run crowds nothing (ENG06: one emptied before may be back)
+                }
+                Job j = new Job(Kind.RETIRE, s, s.tidyAsked.contains(c) ? s.tidyReport : null);
+                j.retire = c;
+                return j;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The halves of every slot and Classic that is switched on but not claimed where config puts it now
+     * (in {@code world}): nothing of theirs stands there yet, and their next build scans them.
+     */
+    private List<Box> wantedUnclaimed(String world) {
+        List<Box> out = new ArrayList<>();
+        for (SlotState o : slots.values()) {
+            if (o.wanted() && !o.claimed && !o.unplaced && o.world.equalsIgnoreCase(world)) {
+                out.add(o.half('A'));
+                out.add(o.half('B'));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Why {@code s}'s region must wait before it is scanned, claimed or built: an old area still standing
+     * within {@value Regions#APART} blocks of it (its own, resized in place, or another's), which is emptied
+     * first; {@code null} when none is, or when it is claimed already. Also while its own old claim couldn't
+     * be recorded ({@link SlotState#oldUnsaved}).
+     */
+    private String oldInTheWay(SlotState s) {
+        if (s.claimed) {
+            return null;
+        }
+        if (s.oldUnsaved) {
+            return "its old area couldn't be recorded in the database yet; it is tried again every second";
+        }
+        List<Box> mine = List.of(s.half('A'), s.half('B'));
+        for (SlotState o : slots.values()) {
+            for (String c : o.old) {
+                String w = Regions.claimWorld(c);
+                if (emptiedThisRun(o, c)) {
+                    continue; // emptied already (F09: still recorded until it is known to be on disk)
+                }
+                if (w != null && w.equalsIgnoreCase(s.world) && OldAreas.crowds(oldHalves.of(o.def, c), mine)) {
+                    String held = o.retireHeld.get(c);
+                    return (o == s ? "its old area" : o.def.name() + "'s old area") + " (" + Regions.describeClaim(c)
+                            + ") is next to it and is emptied first" + (held != null ? ", but it can't be now: " + held
+                            : retireDue(o, c) ? "" : " - /hcm games gen tidy " + o.def.id() + " confirm");
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * What is in the way of emptying {@code s}'s old claim {@code c} ({@code halves} in {@code world}), or
+     * {@code null}: checked at the start of every RETIRE ({@link OldAreas#inTheWay}). The obstacles are every
+     * slot's and Classic's claimed halves (and an older claim of another, and every other old area still
+     * standing), the Clubhouse and the arena, the keep area and every kept plot, every hand-built course, the
+     * world's spawn and the safe spot. A region switched on but not claimed is no obstacle: nothing stands
+     * there yet (that is how a slot resized in place has its old area emptied first).
+     */
+    private String retireProblem(SlotState s, String c, List<Box> parts, List<Character> which, String world,
+                                 WorldPort port, boolean cut) {
+        List<OldAreas.Obstacle> in = new ArrayList<>();
+        Map<String, String> meta;
+        try {
+            meta = host.store().metaLike("gen.");
+        } catch (SQLException | RuntimeException e) {
+            return "the database can't be read, so what is next to it can't be checked";
+        }
+        for (SlotState o : slots.values()) {
+            // the slot's own course, cut out of the parts looked at ({@code cut}): nothing is written in it
+            boolean own = cut && o == s && o.claimed;
+            if (o.claimed && !own) {
+                in.add(new OldAreas.Obstacle(o.world, o.half('A'), o.def.name() + "'s half A"));
+                in.add(new OldAreas.Obstacle(o.world, o.half('B'), o.def.name() + "'s half B"));
+            }
+            String claim = meta.get(GenAdminKeys.claim(o.def.id()));
+            if (own && Regions.claim(o.def, o.world, o.origin, o.gap).equals(claim)) {
+                claim = null;
+            }
+            if (claim != null && !claim.equals(c) && Regions.claimHalves(claim) != null) {
+                for (Box h : Regions.claimHalves(claim)) {
+                    in.add(new OldAreas.Obstacle(Regions.claimWorld(claim), h, o.def.name() + "'s claimed area"));
+                }
+            }
+            for (String other : o.old) {
+                if (o == s && other.equals(c)) {
+                    continue;
+                }
+                List<Box> oh = oldHalves.of(o.def, other);
+                for (Box h : oh == null ? List.<Box>of() : oh) {
+                    in.add(new OldAreas.Obstacle(Regions.claimWorld(other), h, o.def.name() + "'s other old area"));
+                }
+            }
+        }
+        for (Regions.Extra e : extras()) {
+            in.add(new OldAreas.Obstacle(genWorld(), e.box(), e.name().replace('_', ' ')));
+        }
+        KeepArea keep = host.settings().archive().keep();
+        if (keep != null && keep.maxPlots() > 0) {
+            in.add(new OldAreas.Obstacle(genWorld(), keep.area(), "the kept courses' area"));
+        }
+        for (Map.Entry<String, String> e : meta.entrySet()) {
+            int n = GenAdminKeys.plotOf(e.getKey());
+            KeptPlot p = n < 1 ? null : KeptPlot.parse(n, e.getValue());
+            if (p != null) {
+                in.add(new OldAreas.Obstacle(p.world(), p.box(), "kept plot " + n));
+            }
+        }
+        List<Regions.Area> built = handBuilt();
+        if (built == null) {
+            return "the courses can't be read from the database, so the hand-built ones can't be checked";
+        }
+        for (Regions.Area a : built) {
+            in.add(new OldAreas.Obstacle(a.world(), a.box(), "the hand-built course " + a.courseId()));
+        }
+        return OldAreas.inTheWay(parts, which, world, in, port.spawn(), host.settings().safeSpot());
+    }
+
+    /** A RETIRE starts: the safety check, then both old halves, A then B, after moving anyone there out. */
+    private void beginRetire(Job j) {
+        SlotState s = j.slot;
+        String c = j.retire;
+        String world = worldOf(s, c);
+        List<Box> halves = oldHalves.of(s.def, c);
+        WorldPort port = world == null ? null : host.world(world);
+        if (halves == null || port == null) {
+            end(j); // unreadable (never recorded) or its world isn't loaded: it waits
+            return;
+        }
+        // F09: the slot's own course, where it is claimed again over part of its old area (resized in place),
+        // is cut out: only the rest is looked at and emptied (the course's own checks keep the part it covers)
+        List<Box> own = s.claimed && s.world.equalsIgnoreCase(world) ? List.of(s.half('A'), s.half('B')) : List.of();
+        List<Step> steps = new ArrayList<>();
+        List<Box> parts = new ArrayList<>();
+        List<Character> which = new ArrayList<>();
+        for (int i = 0; i < halves.size(); i++) {
+            for (Box part : OldAreas.minus(halves.get(i), own)) {
+                steps.add(new Step(i == 0 ? 'A' : 'B', null, BuildJob.Mode.CONVERGE, part));
+                parts.add(part);
+                which.add(i == 0 ? 'A' : 'B');
+            }
+        }
+        String why = retireProblem(s, c, parts, which, world, port, !own.isEmpty());
+        if (why != null) {
+            end(j);
+            s.retireHeld.put(c, why);
+            s.retireHeldAt = host.now();
+            warnOnce(s, "Fresh Courses: " + s.def.id() + "'s old area (" + Regions.describeClaim(c) + ") isn't emptied: "
+                    + why + ". It stays guarded and nothing there was changed; /hcm games check lists it.");
+            j.report.accept("&c" + s.def.name() + "'s old area can't be emptied: &7" + why);
+            return;
+        }
+        s.retireHeld.remove(c);
+        j.world = world;
+        j.steps.addAll(steps);
+        j.stage = Stage.EVACUATE;
+        j.evacStart = host.now();
+        host.logger().info("Fresh Courses: emptying " + s.def.id() + "'s old area in " + world + " ("
+                + Regions.describeClaim(c) + ")" + (s.def.mayHoldWater() ? ", the " + water(s) + " first" : "")
+                + "; only Fresh Courses' own blocks are taken away.");
+    }
+
+    /**
+     * Both old halves were converged to nothing of ours and verified (a pass that writes nothing).
+     *
+     * <p><b>Two phases (F09).</b> That verify read chunks in memory: until they are written to disk, a hard stop
+     * (a kill, a crash, a power cut) brings the old course and its ponds back. So the claim isn't forgotten here:
+     * it is marked {@code emptied@T} ({@link Regions#oldEmptied}), stays recorded and guarded, and the outcome is
+     * recorded for the check. It is let go ({@link #forget}) once the world has been saved twice since
+     * ({@link #worldSaved}), or when a later start looks at it again and finds nothing of ours there (this method
+     * again, with nothing written). A later start that finds blocks back empties them again, says so, and marks
+     * it anew. The record stays until then, so a stop anywhere before just runs it again (writing nothing more).
+     */
+    private void retired(Job j) {
+        SlotState s = j.slot;
+        String c = j.retire;
+        String id = s.def.id();
+        end(j);
+        boolean again = s.emptied.containsKey(c) && !s.emptiedSaves.containsKey(c); // emptied in an earlier run
+        String where = Regions.claimWorld(c) + " (" + Regions.describeClaim(c) + ")";
+        if (again && j.writes == 0) {
+            if (forget(s, c)) {
+                host.logger().info("Fresh Courses: " + id + "'s old area in " + where + " was still empty at this start,"
+                        + " so it was saved that way: it is let go.");
+                j.report.accept("&a" + s.def.name() + "'s old area is empty: &7nothing more to take away.");
+            }
+            return;
+        }
+        long now = host.now();
+        OldAreas.Retired done = new OldAreas.Retired(now, c, j.writes, j.left, j.leftAt);
+        try {
+            if (c.equals(host.store().meta(GenAdminKeys.claim(id)))) {
+                host.store().meta(GenAdminKeys.claim(id), null); // its claim was this old one: nothing holds it now
+            }
+            String stored = host.store().meta(GenAdminKeys.old(id));
+            List<String> claims = new ArrayList<>(Regions.oldClaims(stored));
+            if (!claims.contains(c)) {
+                claims.add(c);
+            }
+            Map<String, Long> marks = new LinkedHashMap<>(Regions.oldEmptied(stored));
+            marks.put(c, now);
+            host.store().meta(GenAdminKeys.old(id), Regions.oldText(claims, marks));
+            host.store().meta(GenAdminKeys.retired(id), done.text());
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: " + id + "'s old area is empty, but the database couldn't"
+                    + " be told; it is checked again (nothing more to do) at the next check", e);
+            return;
+        }
+        s.emptied.put(c, now);
+        s.emptiedSaves.put(c, saves.getOrDefault(String.valueOf(Regions.claimWorld(c)).toLowerCase(Locale.ROOT), 0));
+        s.tidyAsked.remove(c);
+        s.retireHeld.remove(c);
+        String blocks = String.format(Locale.ROOT, "%,d", j.writes) + " block" + (j.writes == 1 ? "" : "s");
+        if (again) {
+            host.logger().warning("Fresh Courses: " + id + "'s old area in " + where + " had " + blocks + " of its own"
+                    + " back at this start (the world wasn't saved after it was emptied): emptied again.");
+        }
+        String line = "Fresh Courses: " + id + "'s old area in " + where + " is empty now: " + blocks + " taken away"
+                + (s.def.mayHoldWater() ? ", the " + water(s) + " drained first" : "") + ". " + id + " builds at "
+                + Regions.describe(s.def, s.origin, s.gap) + ". The area stays guarded until the world has been saved"
+                + " (or the next start finds it still empty).";
+        if (j.left > 0) {
+            host.logger().warning(line + " " + String.format(Locale.ROOT, "%,d", j.left) + " block" + (j.left == 1
+                    ? " that isn't" : "s that aren't") + " Fresh Courses' " + (j.left == 1 ? "was" : "were") + " left"
+                    + " there as they are (first at " + String.join("; ", j.leftAt) + "): they are yours to remove by"
+                    + " hand.");
+        } else {
+            host.logger().info(line);
+        }
+        j.report.accept("&a" + s.def.name() + "'s old area is empty: &7" + j.writes + " blocks taken away"
+                + (j.left > 0 ? ", " + j.left + " that aren't Fresh Courses' left as they are (first at "
+                + j.leftAt.get(0) + ")." : "."));
+        if (s.tidyAsked.isEmpty()) {
+            s.tidyReport = null;
+        }
+    }
+
+    /**
+     * F09's second phase: an emptied old claim known to be on disk is let go: out of {@link GenAdminKeys#old}
+     * (its outcome stays in {@link GenAdminKeys#retired} for the check), and the guard lets its halves go.
+     *
+     * @return whether it was (the database may refuse: then it is tried again at the next save or start)
+     */
+    private boolean forget(SlotState s, String c) {
+        String id = s.def.id();
+        try {
+            String stored = host.store().meta(GenAdminKeys.old(id));
+            List<String> claims = new ArrayList<>(Regions.oldClaims(stored));
+            claims.remove(c);
+            Map<String, Long> marks = new LinkedHashMap<>(Regions.oldEmptied(stored));
+            marks.remove(c);
+            host.store().meta(GenAdminKeys.old(id), Regions.oldText(claims, marks));
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: " + id + "'s emptied old area couldn't be let go in the"
+                    + " database; it stays guarded and is tried again", e);
+            return false;
+        }
+        List<String> old = new ArrayList<>(s.old);
+        old.remove(c);
+        s.old = List.copyOf(old);
+        s.emptied.remove(c);
+        s.emptiedSaves.remove(c);
+        s.tidyAsked.remove(c);
+        s.retireHeld.remove(c);
+        refresh(); // the guard lets the old halves go
+        return true;
+    }
+
+    // ---- what is known to be on disk (F12) ----------------------------------------------------------
+
+    /** A big half (the Mountain Run v2's 1,200 chunks): one known to be on disk is checked by a sample at a start. */
+    static final int BIG_HALF_CHUNKS = 256;
+    /** A sampled check reads every chunk on a lattice this many chunks apart, and every chunk with a sign. */
+    static final int SAMPLE_EVERY = 4;
+    /** The fact of a half known to be empty. */
+    static final String EMPTY = "empty";
+
+    /** The fact of a half verified against {@code planHash}. */
+    static String planFact(String planHash) {
+        return "plan:" + planHash;
+    }
+
+    /** The facts stored for {@code claim} ({@link GenAdminKeys#onDisk}); none when they were stored for another. */
+    static Map<Character, String> diskFacts(String stored, String claim) {
+        Map<Character, String> out = new HashMap<>();
+        if (stored == null || claim == null) {
+            return out;
+        }
+        String[] p = stored.split(";");
+        if (p.length == 0 || !p[0].equals("claim=" + claim)) {
+            return out;
+        }
+        for (int i = 1; i < p.length; i++) {
+            if (p[i].length() > 2 && (p[i].charAt(0) == 'A' || p[i].charAt(0) == 'B') && p[i].charAt(1) == '=') {
+                out.put(p[i].charAt(0), p[i].substring(2));
+            }
+        }
+        return out;
+    }
+
+    /** {@link #diskFacts}'s text for {@code s}'s claim now, or {@code null} for none. */
+    private static String diskText(SlotState s, Map<Character, String> facts) {
+        if (facts.isEmpty()) {
+            return null;
+        }
+        StringBuilder b = new StringBuilder("claim=").append(Regions.claim(s.def, s.world, s.origin, s.gap));
+        for (char h : new char[]{'A', 'B'}) {
+            if (facts.containsKey(h)) {
+                b.append(';').append(h).append('=').append(facts.get(h));
+            }
+        }
+        return b.toString();
+    }
+
+    /**
+     * Before anything is written into half {@code h} of {@code s}: its fact goes, first from the database (so a
+     * fact left after any stop is still true on disk).
+     *
+     * @return false when the database refused (nothing may be written then)
+     */
+    private boolean unsettle(SlotState s, char h) {
+        s.pendingDisk.remove(h);
+        if (!s.onDisk.containsKey(h)) {
+            return true;
+        }
+        Map<Character, String> rest = new HashMap<>(s.onDisk);
+        rest.remove(h);
+        try {
+            host.store().meta(GenAdminKeys.onDisk(s.def.id()), diskText(s, rest));
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not record that " + s.def.id() + "'s half " + h
+                    + " is about to change", e);
+            return false;
+        }
+        s.onDisk.remove(h);
+        return true;
+    }
+
+    /** Half {@code h} of {@code s} holds {@code fact} in memory now: on disk after the next saves ({@link #settle}). */
+    private void pend(SlotState s, char h, String fact) {
+        if (!s.classic && s.claimed) {
+            s.pendingDisk.put(h, new SlotState.DiskFact(fact, saves.getOrDefault(s.world.toLowerCase(Locale.ROOT), 0)));
+        }
+    }
+
+    /** {@code s}'s facts that world {@code w} has saved twice since ({@value #SAVES_TO_SETTLE}), recorded. */
+    private void settle(SlotState s, String w, int n) {
+        if (s.pendingDisk.isEmpty() || !s.world.equalsIgnoreCase(w) || !s.claimed) {
+            return;
+        }
+        Map<Character, String> facts = new HashMap<>(s.onDisk);
+        List<Character> done = new ArrayList<>();
+        for (Map.Entry<Character, SlotState.DiskFact> e : s.pendingDisk.entrySet()) {
+            boolean writing = job != null && job.slot == s && job.kind != Kind.RETIRE;
+            if (!writing && n >= e.getValue().saves() + SAVES_TO_SETTLE) {
+                facts.put(e.getKey(), e.getValue().fact());
+                done.add(e.getKey());
+            }
+        }
+        if (done.isEmpty()) {
+            return;
+        }
+        try {
+            host.store().meta(GenAdminKeys.onDisk(s.def.id()), diskText(s, facts));
+        } catch (SQLException | RuntimeException e) {
+            return; // tried again at the next save
+        }
+        s.onDisk.clear();
+        s.onDisk.putAll(facts);
+        done.forEach(s.pendingDisk::remove);
+    }
+
+    /**
+     * The chunks a sampled check of {@code half} reads (F12): every {@value #SAMPLE_EVERY}th chunk each way from
+     * the half's corner, and every chunk holding one of the plan's signs (a course's start and finish).
+     */
+    static java.util.function.BiPredicate<Integer, Integer> sample(Box half, Plan plan) {
+        Set<Long> signs = new HashSet<>();
+        for (SignText t : plan.signs()) {
+            signs.add(((long) (t.x() >> 4) << 32) | ((t.z() >> 4) & 0xFFFFFFFFL));
+        }
+        int cx0 = half.minX() >> 4;
+        int cz0 = half.minZ() >> 4;
+        return (cx, cz) -> (Math.floorMod(cx - cx0, SAMPLE_EVERY) == 0 && Math.floorMod(cz - cz0, SAMPLE_EVERY) == 0)
+                || signs.contains(((long) cx << 32) | (cz & 0xFFFFFFFFL));
+    }
+
+    /**
+     * How many saves of a world must follow an emptied old area before it is let go ({@link #worldSaved}): Paper
+     * fires the event as a save BEGINS, and an autosave writes chunks over the ticks after it, so the first one
+     * after the verify may still be writing; by the second (an autosave interval later) it has finished.
+     */
+    static final int SAVES_TO_SETTLE = 2;
+
+    /**
+     * A world was saved ({@code WorldSaveEvent}, the plugin's listener): an emptied old area in it that has seen
+     * {@value #SAVES_TO_SETTLE} saves since it was emptied is on disk, and is let go (F09); the halves known to
+     * be right are recorded for the next start (F12, {@link #settle}).
+     */
+    public void worldSaved(String world) {
+        if (!running || world == null) {
+            return;
+        }
+        String w = world.toLowerCase(Locale.ROOT);
+        int n = saves.merge(w, 1, Integer::sum);
+        for (SlotState s : slots.values()) {
+            for (Map.Entry<String, Integer> e : List.copyOf(s.emptiedSaves.entrySet())) {
+                String c = e.getKey();
+                boolean busy = job != null && job.kind == Kind.RETIRE && job.slot == s && c.equals(job.retire);
+                if (!busy && n >= e.getValue() + SAVES_TO_SETTLE && w.equalsIgnoreCase(Regions.claimWorld(c))
+                        && forget(s, c)) {
+                    host.logger().info("Fresh Courses: " + s.def.id() + "'s old area in " + Regions.claimWorld(c) + " ("
+                            + Regions.describeClaim(c) + ") has been saved empty: it is let go.");
+                }
+            }
+            settle(s, w, n);
+        }
+    }
+
+    /** Every old area still standing, slot by slot, as status and the check read them. Read-only. */
+    public List<OldAreas.Area> oldAreas() {
+        List<OldAreas.Area> out = new ArrayList<>();
+        for (SlotState s : slots.values()) {
+            for (String c : s.old) {
+                String world = worldOf(s, c);
+                OldAreas.State state;
+                String detail = null;
+                int percent = 0;
+                if (job != null && job.slot == s && job.kind == Kind.RETIRE && c.equals(job.retire)) {
+                    state = OldAreas.State.RUNNING;
+                    percent = retirePercent(job);
+                } else if (s.heldWhy != null) {
+                    state = OldAreas.State.HELD;
+                    detail = s.heldWhy;
+                } else if (s.retireHeld.containsKey(c)) {
+                    state = OldAreas.State.HELD;
+                    detail = s.retireHeld.get(c);
+                } else if (s.emptied.containsKey(c) && !retireDue(s, c)) {
+                    state = OldAreas.State.EMPTIED; // F09: let go once it is known to be on disk
+                } else if (world == null || host.world(world) == null) {
+                    state = OldAreas.State.ELSEWHERE;
+                    detail = world;
+                } else {
+                    state = retireDue(s, c) ? OldAreas.State.WAITING : OldAreas.State.MANUAL;
+                }
+                out.add(new OldAreas.Area(s.def.id(), s.def.name(), s.classic, c, Regions.describeClaim(c), state,
+                        detail, percent));
+            }
+        }
+        return out;
+    }
+
+    /** How far a RETIRE is, 0-100: its halves in turn. */
+    private static int retirePercent(Job j) {
+        if (j.steps.isEmpty()) {
+            return 0;
+        }
+        double done = j.stepIndex + (j.build == null ? 0 : j.build.progress());
+        return (int) Math.min(99, Math.floor(100 * done / j.steps.size()));
+    }
+
+    /**
+     * The last old area each slot had emptied ({@link GenAdminKeys#retired}), by slot id, for the check;
+     * empty when the database can't be read.
+     */
+    public Map<String, OldAreas.Retired> retiredAreas() {
+        Map<String, OldAreas.Retired> out = new LinkedHashMap<>();
+        try {
+            Map<String, String> meta = host.store().metaLike("gen.");
+            for (SlotState s : slots.values()) {
+                OldAreas.Retired r = OldAreas.Retired.parse(meta.get(GenAdminKeys.retired(s.def.id())));
+                if (r != null) {
+                    out.put(s.def.id(), r);
+                }
+            }
+        } catch (SQLException | RuntimeException e) {
+            // nothing to say
+        }
+        return out;
+    }
+
+    @Override
+    public void tidy(String slotId, boolean confirm, Consumer<String> report) {
+        SlotState s = slots.get(slotId);
+        if (s == null) {
+            report.accept("&cNo course called " + slotId + ".");
+            return;
+        }
+        OldAreas.Retired last = retiredAreas().get(s.def.id());
+        List<String> toEmpty = new ArrayList<>(s.old);
+        toEmpty.removeIf(s.emptied::containsKey);
+        if (toEmpty.isEmpty()) {
+            report.accept("&7" + s.def.name() + " has no old area to empty." + (last == null ? "" : " The last one ("
+                    + Regions.describeClaim(last.claim()) + ") was emptied " + GenCopy.whenDated(last.at(), host.zone())
+                    + ": " + last.removed() + " blocks taken away" + (last.left() > 0 ? ", " + last.left()
+                    + " that aren't Fresh Courses' left as they are" : "") + "." + (s.old.isEmpty() ? ""
+                    : " It stays guarded until the world has been saved (or the next start finds it still empty).")));
+            return;
+        }
+        for (OldAreas.Area a : oldAreas()) {
+            if (a.slot().equals(s.def.id())) {
+                report.accept("&7" + s.def.name() + ": " + OldAreas.line(a));
+            }
+        }
+        if (s.heldWhy != null) {
+            return; // F10: its line above says why nothing is done there yet
+        }
+        if (!confirm) {
+            report.accept("&7Add &econfirm &7to empty " + (toEmpty.size() == 1 ? "it" : "them") + " now: only Fresh"
+                    + " Courses' own blocks go (water first); anything else stays as it is and is listed.");
+            return;
+        }
+        if (!running || readyAt < 0) {
+            report.accept("&cFresh Courses is still starting; try in a moment.");
+            return;
+        }
+        s.tidyAsked.addAll(toEmpty);
+        s.retireHeld.clear(); // looked at again as it starts
+        s.tidyReport = report;
+        report.accept("&7Emptying " + s.def.name() + "'s old area: it starts once nothing else is being built (a"
+                + " minute or so). &e/hcm games gen status " + s.def.id() + " &7shows how far.");
+    }
+
     // ---- jobs -------------------------------------------------------------------------------------
 
     private void begin(Job j) {
@@ -1434,8 +2306,17 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.plan = s.preview.plan();
                     j.steps.add(new Step(j.half, j.plan, BuildJob.Mode.CONVERGE));
                     j.stage = Stage.CONVERGE;
+                    archiveOffMain(j); // ready long before its verify pass is done
                 }
                 case CLEAR_OLD -> {
+                    if (!s.claimed) {
+                        // safety net (as UNRECALL's): never converge a region Fresh Courses doesn't hold
+                        s.oldDirty = false;
+                        end(j);
+                        host.logger().info("Fresh Courses: " + s.def.id() + "'s area isn't claimed, so its old half"
+                                + " isn't cleared.");
+                        return;
+                    }
                     s.clearing = true; // the previous layout stops standing now
                     j.steps.add(new Step(s.idleHalf(), null, BuildJob.Mode.CONVERGE));
                     j.stage = Stage.CONVERGE;
@@ -1458,7 +2339,20 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.evacStart = host.now();
                 }
                 case RECALL -> beginRecall(j);
+                case RETIRE -> beginRetire(j);
                 case UNRECALL -> {
+                    if (!s.claimed) {
+                        // ENG01's safety net: never converge a region Fresh Courses doesn't hold (beginHeal's rule);
+                        // nothing of the slot's stands there, and its next recall scans the region first
+                        s.previous = null;
+                        s.clearing = false;
+                        s.bothDirty = false;
+                        s.oldDirty = false;
+                        end(j);
+                        host.logger().info("Fresh Courses: " + s.def.id() + "'s halves aren't claimed, so they"
+                                + " aren't cleared; its next recall checks them first.");
+                        return;
+                    }
                     s.clearing = true; // the closed layout stops standing now
                     j.steps.add(new Step('A', null, BuildJob.Mode.CONVERGE));
                     j.steps.add(new Step('B', null, BuildJob.Mode.CONVERGE));
@@ -1491,7 +2385,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (built == null) {
             return "the courses can't be read from the database, so the area can't be checked";
         }
-        return vetProblem(s, built);
+        String why = vetProblem(s, built);
+        return why != null ? why : oldInTheWay(s);
     }
 
     private void beginHeal(Job j) {
@@ -1502,8 +2397,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             j.report.accept("&c" + s.def.name() + " can't be checked: &7" + (why == null ? "it has no course" : why));
             return;
         }
-        if (!s.claimed) {
-            // Never converge a region Fresh Courses doesn't hold: the next build scans it first.
+        if (!s.claimed || !standsIn(s)) {
+            // Never converge a region Fresh Courses doesn't hold: the next build scans it first. Nor heal a live
+            // row whose course stands somewhere else (it was made at an old place, and the region here was
+            // claimed after it, for its replacement): its blocks are in an old area, which RETIRE empties.
             end(j);
             unclaimedLive(s);
             j.report.accept("&e" + s.def.name() + "'s area isn't claimed, so it isn't healed in place. &7A new"
@@ -1523,7 +2420,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         Planner p = planners.get(s.def.generator());
         if (p.algo() != j.tag.algo()) {
-            // An older planner made it: it can't be derived again, so it gets the quick check.
+            // An older planner made it: it can't be derived again, so it gets the quick check. Never by a sample
+            // (ENG00): there is no plan to compare one with, and a plan-less converge would empty the half.
+            j.sampled = false;
             j.steps.add(new Step(j.half, null, BuildJob.Mode.SCAN));
             j.stage = Stage.CONVERGE;
             return;
@@ -1538,6 +2437,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             // CV final gate: a preview of a slot that is off (vet checks only one that is on) passes §2.4 as a
             // build does before it scans, claims or writes anything
             why = claimProblem(s);
+        }
+        if (why == null) {
+            why = oldInTheWay(s); // an old area next to its region is emptied first
         }
         if (why != null) {
             end(j);
@@ -1565,15 +2467,27 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         boolean heal = j.kind == Kind.HEAL;
+        boolean archive = j.kind == Kind.BUILD;
+        Box build = s.half(j.half); // where its one step builds it (a remade recall's plan may be smaller)
         GenTag tag = j.tag;
         host.planner().execute(() -> {
             long t0 = System.nanoTime();
             Plan made = null;
             List<String> refused = List.of();
             Throwable error = null;
+            byte[] row = null;
+            BuildIndex.Prepared index = null;
             try {
                 made = heal ? p.rederive(in, tag) : p.plan(in);
-                refused = PlanCheck.generator(p, made, in, heal); // §3.3 step 2, with today's settings
+                List<String> generator = PlanCheck.generator(p, made, in, heal); // §3.3 step 2, today's settings
+                // Plan-sized work stays off the main thread (F11): the shared checks, the archive row, the index.
+                List<String> problems = new ArrayList<>(PlanCheck.problems(made, def, half));
+                problems.addAll(generator);
+                refused = problems;
+                if (problems.isEmpty()) {
+                    row = archive ? encode(made) : null;
+                    index = BuildIndex.prepare(build, made);
+                }
             } catch (Throwable e) {
                 error = e;
             }
@@ -1581,7 +2495,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             Plan result = made;
             List<String> checked = refused;
             Throwable failure = error;
-            inbox.add(() -> planned(j, result, checked, failure, ms));
+            byte[] archived = row;
+            BuildIndex.Prepared ready = index;
+            inbox.add(() -> planned(j, result, checked, failure, ms, half, archived, ready));
         });
     }
 
@@ -1612,7 +2528,14 @@ public final class GenService implements GeneratedCourses, GenOps {
         };
     }
 
-    private void planned(Job j, Plan plan, List<String> refused, Throwable error, long ms) {
+    /**
+     * The plan came back from the planner thread with everything plan-sized already done there (F11): its
+     * problems ({@link PlanCheck#problems} for {@code checked}, then the generator's own), a BUILD's archive
+     * row and its build index. Here, on the main thread, only what can have changed since is looked at:
+     * the half it is for.
+     */
+    private void planned(Job j, Plan plan, List<String> refused, Throwable error, long ms, Box checked,
+                         byte[] archived, BuildIndex.Prepared index) {
         if (job != j || j.stage != Stage.PLANNING) {
             return; // cancelled, killed or superseded: dropped
         }
@@ -1625,9 +2548,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, error instanceof GenFailed ? String.valueOf(error.getMessage()) : "the planner threw " + error);
             return;
         }
-        List<String> problems = new ArrayList<>(PlanCheck.problems(plan, j.planDef != null ? j.planDef : s.def,
-                j.planBox != null ? j.planBox : s.half(j.half)));
-        problems.addAll(refused);
+        List<String> problems = new ArrayList<>(refused);
+        Box half = j.planBox != null ? j.planBox : s.half(j.half);
+        if (plan != null && !half.equals(checked) && !half.equals(plan.half())) {
+            // the slot moved while it was planning: the plan was checked for where it was
+            problems.add(0, "the plan is for " + (plan.half() == null ? "no half" : plan.half().describe())
+                    + ", not " + half.describe());
+        }
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
@@ -1637,7 +2564,20 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         j.plan = plan;
-        j.steps.add(new Step(j.half, plan, BuildJob.Mode.CONVERGE));
+        j.archived = archived;
+        j.archivedReady = j.kind == Kind.BUILD;
+        j.prepared = index;
+        if (j.kind == Kind.HEAL && j.sampled) {
+            j.reading = true;
+            j.steps.add(new Step(j.half, plan, BuildJob.Mode.SCAN, null, sample(s.half(j.half), plan)));
+        } else if (j.kind == Kind.HEAL && j.background) {
+            // ENG07: the whole half is read first, its on-disk fact left alone; it is written (and the fact goes)
+            // only when that read finds a difference, so a clean check keeps the next start's sample
+            j.reading = true;
+            j.steps.add(new Step(j.half, plan, BuildJob.Mode.SCAN));
+        } else {
+            j.steps.add(new Step(j.half, plan, BuildJob.Mode.CONVERGE));
+        }
         if (j.kind == Kind.HEAL) {
             j.stage = Stage.CONVERGE;
         } else {
@@ -1663,9 +2603,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         SlotState s = j.slot;
-        WorldPort port = host.world(s.world);
+        String world = worldOf(j);
+        WorldPort port = host.world(world);
         if (port == null) {
-            fail(j, "the world " + s.world + " isn't loaded");
+            fail(j, "the world " + world + " isn't loaded");
             return;
         }
         if (j.build == null) {
@@ -1674,14 +2615,29 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return;
             }
             Step st = j.steps.get(j.stepIndex);
+            Box box = st.box() != null ? st.box() : s.half(st.which());
+            BuildIndex.Prepared ready = st.plan() == null ? null : readyIndex(j, st.plan(), box, now);
+            if (ready == null && st.plan() != null && st.plan().ops().size() > OFF_MAIN_OPS) {
+                return; // its index is being made on the planner thread (F11)
+            }
+            if (st.mode() == BuildJob.Mode.CONVERGE && st.box() == null && !unsettle(s, st.which())) {
+                fail(j, "the database can't be written, so half " + st.which() + " can't be changed");
+                return;
+            }
             try {
                 // a half that may hold water (a Dropper's pools, golf's ponds): drained before any wall
-                // goes, even when clearing
-                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.mayHoldWater());
+                // goes, even when clearing; an old area keeps whatever isn't Fresh Courses' (RETIRE)
+                Predicate<String> leave = j.kind == Kind.RETIRE ? OldAreas::foreign : null;
+                j.build = ready != null ? BuildJob.ready(port, box, ready, st.mode(), s.def.mayHoldWater(), leave)
+                        : new BuildJob(port, box, st.plan(), st.mode(), s.def.mayHoldWater(), leave);
+                if (st.only() != null) {
+                    j.build.only(st.only()); // F12: a sampled check reads only part of its half
+                }
             } catch (IllegalArgumentException e) {
                 fail(j, e.getMessage());
                 return;
             }
+            j.prepared = null;
         }
         DailySettings.Budget cfg = host.settings().budget();
         if (!j.budget.begin(cfg, online, host.mspt())) {
@@ -1695,7 +2651,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         List<Person> here = new ArrayList<>();
         for (Person p : host.people()) {
-            if (p.world() != null && p.world().equalsIgnoreCase(s.world)) {
+            if (p.world() != null && p.world().equalsIgnoreCase(world)) {
                 here.add(p);
             }
         }
@@ -1706,8 +2662,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         for (UUID stuck : j.build.stuckPeople()) {
             Person p = find(here, stuck);
-            if (p != null && !(j.kind == Kind.HEAL && p.playing(s.def.id()))) {
-                moveToSafety(s, p);
+            if (p != null && !(j.kind == Kind.HEAL && p.playing(s.def.id())) && !onOwnHalves(j, p, world)) {
+                moveToSafety(world, p);
             }
         }
         if (j.build.deferring() && !j.deferWarned) {
@@ -1723,6 +2679,16 @@ public final class GenService implements GeneratedCourses, GenOps {
             j.writes += j.build.writes();
             if (j.steps.get(j.stepIndex).mode() == BuildJob.Mode.CONVERGE) {
                 j.chunks += j.build.chunkCount();
+                if (j.build.left() > 0) {
+                    j.left += j.build.left(); // RETIRE: what stays because it isn't ours
+                    List<String> at = new ArrayList<>(j.leftAt);
+                    for (String a : j.build.leftAt()) {
+                        if (at.size() < BuildJob.NAMED) {
+                            at.add(a);
+                        }
+                    }
+                    j.leftAt = List.copyOf(at);
+                }
             } else {
                 j.found += j.build.found();
                 if (j.firstFound.isEmpty()) {
@@ -1737,6 +2703,57 @@ public final class GenService implements GeneratedCourses, GenOps {
                 stepsDone(j);
             }
         }
+    }
+
+    /**
+     * A step's build index when it is ready (F11): the one the planner thread made with the plan, or, for a
+     * big plan that came another way (a promote, a recall, a boot check), one asked of the planner thread
+     * now and ready a tick or so later; {@code null} meanwhile (the job waits, at most {@link #PLAN_KILL_MS}),
+     * and for a small plan, whose index is made in place as always.
+     */
+    private BuildIndex.Prepared readyIndex(Job j, Plan plan, Box box, long now) {
+        BuildIndex.Prepared p = j.prepared;
+        if (p != null && p.plan() == plan && p.half().equals(box)) {
+            return p;
+        }
+        if (plan.ops().size() <= OFF_MAIN_OPS) {
+            return null;
+        }
+        if (j.preparing < 0) {
+            j.preparing = now;
+            host.planner().execute(() -> {
+                BuildIndex.Prepared made = BuildIndex.prepare(box, plan);
+                inbox.add(() -> {
+                    if (job == j) {
+                        j.preparing = -1;
+                        j.prepared = made;
+                    }
+                });
+            });
+        } else if (now - j.preparing > PLAN_KILL_MS) {
+            fail(j, "its build couldn't be made ready in " + PLAN_KILL_MS / 1000 + " seconds");
+        }
+        return null;
+    }
+
+    /**
+     * A big plan's archive row, written on the planner thread as the job starts (a PROMOTE: its plan was
+     * made by the preview), so the flip only stores it (F11). A small plan's is written at the flip.
+     */
+    private void archiveOffMain(Job j) {
+        Plan plan = j.plan;
+        if (plan == null || j.archivedReady || plan.ops().size() <= OFF_MAIN_OPS) {
+            return;
+        }
+        host.planner().execute(() -> {
+            byte[] row = encode(plan);
+            inbox.add(() -> {
+                if (job == j && j.plan == plan) {
+                    j.archived = row;
+                    j.archivedReady = true;
+                }
+            });
+        });
     }
 
     /** Every step of the job is done; the last one's chunks are still loaded (for the golf replay). */
@@ -1778,11 +2795,13 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.report.accept(previewReady(s, j));
                 }
             }
+            case RETIRE -> retired(j);
             case CLEAR_OLD -> {
                 s.oldDirty = false;
                 s.previous = null;
                 s.clearing = false;
                 end(j);
+                pend(s, j.steps.get(0).which(), EMPTY); // F12: known empty on disk after the next saves
                 host.logger().info("Fresh Courses: " + s.def.id() + "'s old half " + j.steps.get(0).which()
                         + " is empty (" + j.writes + " blocks cleared).");
             }
@@ -1837,6 +2856,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = j.slot;
         if (j.found == 0) {
             claimed(s);
+            if (!s.claimed) {
+                // the database refused the claim: nothing is built into a region it doesn't record as ours (a build
+                // or a recall is tried again later, and scans first again)
+                fail(j, "its claim couldn't be recorded");
+                return;
+            }
+            j.claimedHere = s.claimed; // both halves found empty: nothing of an older layout stands here
             if (j.kind == Kind.SCAN) {
                 end(j);
                 j.report.accept("&a" + s.def.name() + "'s area is empty and now claimed.");
@@ -1881,26 +2907,54 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private void healed(Job j) {
         SlotState s = j.slot;
+        if (j.reading && j.plan != null) {
+            // F12: what was read against the plan (a sample, or the whole half in the background). Never a read
+            // with no plan (ENG00: an older planner's layout), which gets the structure check below.
+            j.reading = false;
+            if (j.found > 0) {
+                differs(j);
+                return;
+            }
+            if (j.sampled) {
+                sampledCheck(j);
+                return;
+            }
+            // the whole half in the background, and nothing differs: it ends below, its on-disk fact as it was
+        }
         if (j.plan == null) {
-            // The quick check of a layout an older planner made.
+            // The quick check of a layout another planner version made (older, or newer after a rollback).
+            Planner p = planners.get(s.def.generator());
+            String version = p != null && j.tag != null && p.algo() < j.tag.algo() ? "a different" : "an older";
             List<String> problems = structure(j);
             if (!problems.isEmpty()) {
-                fail(j, "its layout from an older version failed the check: " + String.join("; ", problems));
+                fail(j, "its layout from " + version + " version failed the check: " + String.join("; ", problems));
                 return;
             }
             host.logger().warning("Fresh Courses: " + s.def.id() + (s.classic ? "'s recalled course can't be made"
                     + " again block for block (it was re-made from its seed, or its archived plan is gone), so only"
-                    + " its structure was checked." : "'s course was made by an older version of its planner, so"
-                    + " only its structure was checked; the new version builds from the next set."));
+                    + " its structure was checked." : "'s course was made by " + version + " version of its planner,"
+                    + " so only its structure was checked; " + ("an older".equals(version) ? "the new" : "this")
+                    + " version builds from the next set."));
         } else if (!proven(j)) {
             return;
         }
         end(j);
         s.verified = true;
         s.healFailed = false;
-        s.builtAt = host.now();
-        String line = "checked " + s.def.id() + " in half " + j.half + " - " + j.writes + " blocks healed";
-        if (j.writes > 0) {
+        s.fullCheckDue = false;
+        if (j.plan != null && !planFact(j.plan.hash()).equals(s.onDisk.get(j.half))) {
+            pend(s, j.half, planFact(j.plan.hash())); // F12: known on disk after the next saves
+        }
+        if (!j.background) {
+            s.builtAt = host.now();
+        }
+        String line = (j.background ? "checked the whole of " : "checked ") + s.def.id() + " in half " + j.half + " - "
+                + j.writes + " blocks healed";
+        if (j.writes > 0 && j.background) {
+            // ENG02: it opened on its sample and was never closed; the world was saved (that is why it was sampled)
+            host.logger().severe("Fresh Courses: " + line + " (something edited it after its last full check, where"
+                    + " the sample at the start didn't look); it stayed open.");
+        } else if (j.writes > 0) {
             host.logger().severe("Fresh Courses: " + line + " (the world wasn't saved after the last change, or"
                     + " something edited it); it is open again.");
         } else {
@@ -1908,6 +2962,54 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.lastLine = lastLine(j);
         j.report.accept("&a" + s.def.name() + " checked: &7" + j.writes + " blocks healed.");
+    }
+
+    /**
+     * F12: the sample of a big half known to be on disk as verified is read, and nothing differs: the course
+     * opens now, and the whole half is checked once nothing else is being built ({@link SlotState#fullCheckDue}),
+     * with the course open.
+     */
+    private void sampledCheck(Job j) {
+        SlotState s = j.slot;
+        int read = j.build == null ? 0 : j.build.chunkCount();
+        int of = s.half(j.half).chunkCount();
+        end(j);
+        s.verified = true;
+        s.healFailed = false;
+        s.fullCheckDue = true;
+        s.builtAt = host.now();
+        host.logger().info("Fresh Courses: checked " + s.def.id() + " in half " + j.half + " by a sample of " + read
+                + " of its " + of + " chunks (it was saved right after its last full check) - it is open; the whole"
+                + " half is checked once nothing else is being built.");
+        s.lastLine = lastLine(j);
+        j.report.accept("&a" + s.def.name() + " checked (a sample of " + read + " chunks): &7open; the whole half is"
+                + " checked later.");
+    }
+
+    /**
+     * F12: a read of a half against its plan found something that differs (the world was edited, or a backup put
+     * back). A sample's: the whole half is converged now, closed, as every start checked it before. The background
+     * whole-half check's (ENG07): the half is converged now with the course open, its on-disk fact dropped first
+     * (as before any write); what it heals is said when it ends.
+     */
+    private void differs(Job j) {
+        SlotState s = j.slot;
+        if (j.sampled) {
+            host.logger().warning("Fresh Courses: " + s.def.id() + "'s check by a sample found " + j.found + " block"
+                    + (j.found == 1 ? "" : "s") + " that differ (first at " + String.join(" ", j.firstFound) + "): the"
+                    + " whole half is checked now, before it opens.");
+        }
+        if (j.build != null) {
+            j.build.release();
+            j.build = null;
+        }
+        j.sampled = false;
+        j.found = 0;
+        j.firstFound = List.of();
+        j.steps.clear();
+        j.stepIndex = 0;
+        j.steps.add(new Step(j.half, j.plan, BuildJob.Mode.CONVERGE));
+        j.stage = Stage.CONVERGE;
     }
 
     /** The golf witness replay on the real blocks (§3.3 step 6); true when proven (or not golf). */
@@ -2007,8 +3109,11 @@ public final class GenService implements GeneratedCourses, GenOps {
                 // a promote, or a replacement for a layout nobody could vouch for, takes the next reroll
                 meta.put(GenAdminKeys.reroll(def.id(), tag.edition()), Integer.toString(j.reroll));
             }
-            // The archive row lands in the same transaction: every edition that goes live is archived.
-            GenStore.Flipped f = host.store().flip(row, meta, archiveEntry(def, tag, encode(j.plan), j.mix, now), now);
+            // The archive row lands in the same transaction: every edition that goes live is archived. It was
+            // written on the planner thread with the plan (F11); only a small plan's (or a promote's whose
+            // planner thread was busy all through its verify pass) is written here.
+            byte[] plan = j.archivedReady ? j.archived : encode(j.plan);
+            GenStore.Flipped f = host.store().flip(row, meta, archiveEntry(def, tag, plan, j.mix, now), now);
             rev = f.rev();
             if (f.archived() != null) {
                 codes.put(def.id() + "|" + tag.editionKey(), f.archived().code());
@@ -2026,10 +3131,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.liveMix = j.mix;
         s.verified = true;
         s.healFailed = false;
-        s.previous = beforeStood && before.half() != tag.half() ? before : null;
+        // RePlot (GOLF-V4-SPEC §5.2 step 4): a build that found its region empty and claimed it itself put the
+        // first layout there, so the layout before it (an older version's, at its old place) never stood in
+        // this region. Nothing of it can be run on here and nothing here needs clearing; its own old area is
+        // emptied by RETIRE.
+        boolean replot = j.claimedHere;
+        s.previous = !replot && beforeStood && before.half() != tag.half() ? before : null;
         s.clearing = false;
-        s.oldDirty = before != null;
+        s.oldDirty = !replot && before != null;
         s.preview = null;
+        s.fullCheckDue = false;
+        pend(s, tag.half(), planFact(j.plan.hash())); // F12: converged and verified: on disk after the next saves
+        if (replot) {
+            pend(s, tag.otherHalf(), EMPTY); // its claim scan found it empty, and nothing was written there since
+        }
         // round 2, G2 #3: a dropped pick's note stays through the flips of the set it was for (the usual
         // drop is at the restart at the change, a minute before this set's own build); droppedUpkeep ends it
         s.tries = 0;
@@ -2043,6 +3158,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         host.logger().info("Fresh Courses: built " + def.id() + " for " + editionName(j.cadence, j.day) + " ("
                 + tag.editionKey() + ") in half " + j.half + " - seed " + GenSeed.shortHex(j.seed) + ", "
                 + s.lastLine.substring("last: ".length()));
+        if (replot && before != null) {
+            host.logger().info("Fresh Courses: " + def.id() + " stands in its new area now ("
+                    + Regions.describe(def, s.origin, s.gap) + "): a new course for " + editionName(j.cadence, j.day)
+                    + " on a fresh board; its first-finish reward isn't paid twice.");
+        }
         j.report.accept("&a" + def.name() + " is live: &7" + editionName(j.cadence, j.day) + ", half " + j.half + ".");
         prune();
     }
@@ -2289,6 +3409,13 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.lastError = why;
                 host.logger().warning("Fresh Courses: emptying " + id + "'s old half failed - " + why);
             }
+            case RETIRE -> {
+                // the old area stays recorded and guarded; it is tried again in a few minutes
+                s.retireHeld.put(j.retire, "the last try failed (" + why + ")");
+                s.retireHeldAt = host.now();
+                host.logger().warning("Fresh Courses: emptying " + id + "'s old area failed - " + why + ". It stays"
+                        + " guarded and is tried again in " + VET_EVERY_MS / 60_000 + " minutes.");
+            }
             case RECALL -> {
                 s.failedTry(edition().day(host.now()), host.now(), why);
                 host.logger().warning("Fresh Courses: " + id + " couldn't be brought back - " + why + " (try " + s.tries
@@ -2336,13 +3463,29 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         boolean waiting = false;
+        if (j.kind == Kind.RETIRE) {
+            // An old area: nobody plays there, so anyone in it (or within 8 of it) is moved out at once. Never anyone
+            // on the slot's own halves (ENG05): a slot resized in place has its course next to (or over) its old
+            // area, which beginRetire cut out of the parts, and nothing is written there.
+            String world = worldOf(j);
+            List<Person> near = people.stream().filter(p -> !onOwnHalves(j, p, world)).toList();
+            for (Step st : j.steps) {
+                for (Evacuator.Action a : j.evac.step(near, world, st.box(), s.def.id(), false, null, now, deadline)) {
+                    act(world, people, a);
+                }
+            }
+            if (j.stage == Stage.EVACUATE) {
+                j.stage = Stage.CONVERGE;
+            }
+            return;
+        }
         Box live = s.live == null ? null : s.half(s.live.half());
         for (char h : halves) {
             Box half = s.half(h);
             boolean holdsRun = j.stage == Stage.EVACUATE && (j.kind == Kind.BUILD || j.kind == Kind.PREVIEW
                     || j.kind == Kind.RECALL) && s.previous != null && !s.clearing && s.previous.half() == h;
             for (Evacuator.Action a : j.evac.step(people, s.world, half, s.def.id(), holdsRun, live, now, deadline)) {
-                act(s, people, a);
+                act(s.world, people, a);
             }
             waiting |= Evacuator.waiting(people, s.world, half, s.def.id(), holdsRun, live);
         }
@@ -2363,13 +3506,24 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
-    private void act(SlotState s, List<Person> people, Evacuator.Action a) {
+    /**
+     * ENG05: whether {@code p} stands on the halves a RETIRE's slot is claimed in now (in {@code world}): a slot
+     * resized in place has its course next to, or over, its old area. Those halves are cut out of what is emptied
+     * ({@link #beginRetire}), so nobody there is moved; a write next to them waits for them instead.
+     */
+    private static boolean onOwnHalves(Job j, Person p, String world) {
+        SlotState s = j.slot;
+        return j.kind == Kind.RETIRE && s.claimed && s.world.equalsIgnoreCase(world)
+                && (p.in(world, s.half('A')) || p.in(world, s.half('B')));
+    }
+
+    private void act(String world, List<Person> people, Evacuator.Action a) {
         try {
             switch (a.kind()) {
                 case MOVE -> {
                     Person p = find(people, a.player());
                     if (p != null) {
-                        moveToSafety(s, p);
+                        moveToSafety(world, p);
                     }
                 }
                 case TELL -> host.tell(a.player(), a.line());
@@ -2377,23 +3531,115 @@ public final class GenService implements GeneratedCourses, GenOps {
                 case END -> host.endRun(a.player());
             }
         } catch (RuntimeException e) {
-            host.logger().log(Level.WARNING, "Fresh Courses: could not move a player out of " + s.def.id(), e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not move a player out of the way in " + world, e);
         }
     }
 
-    /** To {@code safe_spot}, or the world's spawn (§6.3). */
-    private void moveToSafety(SlotState s, Person p) {
+    /** To {@code safe_spot}, or {@code world}'s spawn (§6.3). */
+    private void moveToSafety(String world, Person p) {
         double[] spot = host.settings().safeSpot();
         if (spot == null) {
-            WorldPort port = host.world(s.world);
+            WorldPort port = host.world(world);
             int[] spawn = port == null ? null : port.spawn();
             if (spawn == null) {
                 return;
             }
             spot = new double[]{spawn[0] + 0.5, spawn[1], spawn[2] + 0.5};
         }
-        host.move(p.id(), s.world, spot[0], spot[1], spot[2]);
+        host.move(p.id(), world, spot[0], spot[1], spot[2]);
         host.tell(p.id(), GenCopy.MOVED);
+    }
+
+    /**
+     * ENG03: someone joined with no world session and nothing on its way home (a saved-state row sends them home
+     * by itself; the host asks a moment after the join, and never for someone flying). An old area's RETIRE, a
+     * clear and an unrecall move only who is online, so someone who logged out on a course, or on an old area
+     * (the owner walking Golf of the Week before the update), may come back over nothing in a void world. When
+     * their feet are in, or within {@value Evacuator#MARGIN} of, a place Fresh Courses empties (any slot's half,
+     * an old area, or the last one emptied, whose record stays) and nothing is under them down to the world's
+     * floor, they are moved to safety at once, before they fall.
+     *
+     * @return whether they were moved
+     */
+    public boolean joined(Person p) {
+        if (!running || p == null || p.world() == null || p.world().isBlank() || p.sessionGame() != null) {
+            return false;
+        }
+        String w = p.world();
+        WorldPort port = emptiedHere(w, p.x(), p.y(), p.z()) ? host.world(w) : null;
+        if (port == null || !overNothing(port, p)) {
+            return false;
+        }
+        moveToSafety(w, p);
+        host.logger().info("Fresh Courses: " + p.name() + " joined over an area that was emptied while they were"
+                + " away (" + w + " " + (int) Math.floor(p.x()) + "," + (int) Math.floor(p.y()) + ","
+                + (int) Math.floor(p.z()) + "): moved to safety before they fell.");
+        return true;
+    }
+
+    /** Whether (x, y, z) in {@code world} is in, or next to, a place Fresh Courses empties (ENG03). */
+    private boolean emptiedHere(String world, double x, double y, double z) {
+        List<Box> boxes = new ArrayList<>();
+        for (Object[] a : areas) {
+            if (world.equalsIgnoreCase((String) a[0])) {
+                boxes.add((Box) a[1]); // every slot's and Classic's halves, and every old area still recorded
+            }
+        }
+        for (OldAreas.Retired r : retiredAreas().values()) {
+            List<Box> h = Regions.claimHalves(r.claim()); // an old area let go (F09) keeps its record
+            if (h != null && world.equalsIgnoreCase(Regions.claimWorld(r.claim()))) {
+                boxes.addAll(h);
+            }
+        }
+        for (Box b : boxes) {
+            if (b.expand(Evacuator.MARGIN).contains(x, y, z)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether nothing but air is under a player's feet, in every column their 0.6-wide body stands over, down to
+     * the world's floor (ENG03). A chunk that isn't loaded says nothing: nobody is moved on a guess.
+     */
+    private static boolean overNothing(WorldPort port, Person p) {
+        int floor = port.minHeight();
+        int top = (int) Math.floor(p.y());
+        Map<Long, WorldPort.ChunkView> views = new HashMap<>();
+        for (int bx = (int) Math.floor(p.x() - Person.HALF_WIDTH); bx <= (int) Math.floor(p.x() + Person.HALF_WIDTH);
+             bx++) {
+            for (int bz = (int) Math.floor(p.z() - Person.HALF_WIDTH); bz <= (int) Math.floor(p.z() + Person.HALF_WIDTH);
+                 bz++) {
+                long key = ((long) (bx >> 4) << 32) | ((bz >> 4) & 0xFFFFFFFFL);
+                WorldPort.ChunkView v = views.computeIfAbsent(key, k -> port.snapshot((int) (k >> 32), (int) (long) k));
+                if (v == null) {
+                    return false;
+                }
+                for (int y = top; y >= floor; y--) {
+                    if (v.sectionEmpty(y)) {
+                        y = (y >> 4) << 4; // the rest of an empty section is skipped
+                    } else if (!v.air(bx, y, bz)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The world an old claim of {@code s} was made in, spelled as the slot's world is when they are the
+     * same one (a claim records it in lower case), else as the claim has it; {@code null} when unreadable.
+     */
+    private static String worldOf(SlotState s, String claim) {
+        String w = Regions.claimWorld(claim);
+        return w != null && w.equalsIgnoreCase(s.world) ? s.world : w;
+    }
+
+    /** The world a job works in: an old area's own (RETIRE), else its slot's. */
+    private String worldOf(Job j) {
+        return j.world != null ? j.world : j.slot.world;
     }
 
     private static Person find(List<Person> people, UUID id) {
@@ -2695,6 +3941,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         return ed.weekKey(ed.day(host.now()));
     }
 
+    /**
+     * The command that must come before a reroll of {@code slotId} can go ahead ({@link #reroll} refuses while
+     * either holds the set): {@code /hcm games gen unchoose <id>} while an admin's pick does, {@code /hcm games
+     * gen unpin <id>} while a pin does; {@code null} when nothing holds it (audit M11: Race Night's Slalom line
+     * never offers a reroll that would be refused).
+     */
+    public String rerollHeldBy(String slotId) {
+        SlotState s = slots.get(slotId);
+        if (s == null || activePin(s) == null) {
+            return null;
+        }
+        return (chosenNow(s) != null ? "/hcm games gen unchoose " : "/hcm games gen unpin ") + s.def.id();
+    }
+
     /** The live tag of a slot, or {@code null}. */
     public GenTag liveTag(String slotId) {
         SlotState s = slots.get(slotId);
@@ -2713,10 +3973,12 @@ public final class GenService implements GeneratedCourses, GenOps {
      * @param current   the live layout is vouched for and is its current edition's
      * @param building  a job is running on it now
      * @param lastError why its last try failed, or {@code null}
+     * @param moving    ENG-R3-01: it is moving to the area this version gave it, its course rebuilt there
+     *                  ({@link #movingByVersion}): expected, not a fault
      */
     public record SlotReport(String id, boolean classic, boolean wanted, boolean on, String problem, boolean claimed,
                              String world, GenTag live, boolean verified, boolean current, boolean building,
-                             String lastError, boolean healFailed) {
+                             String lastError, boolean healFailed, boolean moving) {
     }
 
     /** Every slot, then every Classics slot, as they stand now. Read-only. */
@@ -2725,8 +3987,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState s : slots.values()) {
             boolean current = s.live != null && s.verified && (s.classic ? s.want != null && holds(s, s.want)
                     : target(s).holds(s.live));
+            // building: not an old area being emptied (RETIRE), nor the whole-half check of a course that stays
+            // open while it runs (ENG02: the course is live, as trouble() and the status line say)
             out.add(new SlotReport(s.def.id(), s.classic, s.wanted(), s.on(), s.problem, s.claimed, s.world, s.live,
-                    s.verified, current, job != null && job.slot == s, s.lastError, s.healFailed));
+                    s.verified, current, job != null && job.slot == s && job.kind != Kind.RETIRE && !job.background,
+                    s.lastError, s.healFailed, movingByVersion(s)));
         }
         return out;
     }
@@ -2771,14 +4036,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add(s.def.id() + ": " + classicHolds(s));
             }
         }
-        for (SlotState s : slots.values()) {
-            for (String c : s.wet) {
-                int[] o = Regions.claimOrigin(c);
-                out.add(s.def.id() + ": its old area in " + Regions.claimWorld(c) + " (" + (o == null ? c
-                        : Regions.describe(s.def, o, Regions.claimGap(c))) + ") is still guarded - drain first:"
-                        + " move it back and " + (s.classic ? "restart (an empty Classic's halves are emptied then;"
-                        + " clear doesn't take a Classic)" : "/hcm games gen clear " + s.def.id()));
-            }
+        for (OldAreas.Area a : oldAreas()) {
+            out.add(a.slot() + ": " + OldAreas.line(a));
         }
         return out;
     }
@@ -2838,8 +4097,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (s.problem != null) {
             return "off - " + s.problem;
         }
-        if (job != null && job.slot == s) {
-            return "being built";
+        if (job != null && job.slot == s && job.kind != Kind.RETIRE && !job.background) {
+            return "being built"; // emptying its old area isn't building it (its own line says so)
         }
         boolean behind = s.live != null && !target(s).holds(s.live);
         if (behind && s.lastError != null) {
@@ -2911,6 +4170,12 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (pick != null) {
                 out.add("  &7" + pick);
             }
+            for (OldAreas.Area a : oldAreas()) {
+                if (a.slot().equals(s.def.id())) {
+                    out.add("  " + (a.state() == OldAreas.State.HELD ? "&c" : a.state() == OldAreas.State.RUNNING ? "&e"
+                            : "&7") + OldAreas.line(a));
+                }
+            }
             if (slotId != null && s.classic) {
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
                         + (s.claimed ? " (claimed)"
@@ -2927,6 +4192,10 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
                         + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
+                String style = styleLine(s);
+                if (style != null) {
+                    out.add("  &7" + style);
+                }
                 if (s.pin != null) {
                     String ignored = pinIgnored(s);
                     out.add("  &7pinned seed " + GenSeed.hex(s.pin.seed()) + (s.pin.until() > 0 ? " until "
@@ -2986,7 +4255,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return b.append("&7off").toString();
         }
         b.append(s.on() ? "&aon  " : "&coff  ").append("&7").append(pad(s.mix, 11));
-        if (job != null && job.slot == s && job.kind != Kind.CLEAR_OLD) {
+        if (job != null && job.slot == s && job.kind != Kind.CLEAR_OLD && job.kind != Kind.RETIRE && !job.background) {
             return b.append("&eBUILDING").toString();
         }
         if (s.live == null) {
@@ -3000,6 +4269,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     private String jobLine(Job j) {
+        if (j.kind == Kind.RETIRE) {
+            return "RETIRE: emptying its old area (" + Regions.describeClaim(j.retire) + ") · " + retirePercent(j) + "%";
+        }
         String what = switch (j.stage) {
             case START -> "starting";
             case PLANNING -> "planning (" + (host.now() - j.planStarted) / 1000 + "s)";
@@ -3010,7 +4282,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                     : (j.build.pass() == 1 ? "converging" : "verifying") + " · " + j.build.waiting()
                     + " blocks to go · " + j.build.writes() + " written";
         };
-        return j.kind.name() + ": " + what;
+        return j.kind.name() + (j.background ? " (the whole half, open)" : j.sampled ? " (a sample)" : "") + ": " + what;
     }
 
     private int playing(SlotState s) {
@@ -3052,6 +4324,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         long day = t.start();
         int cadence = t.cadence();
         long seed;
+        BoatStyle want = style(s); // a Mountain Run v2 week's seed is its first of the wanted style, as a build's
         if (arg != null && (arg.equalsIgnoreCase("next") || arg.equalsIgnoreCase("tomorrow"))) {
             day = ed.editionStart(t.endsAt());
             cadence = ed.cadenceDays();
@@ -3059,7 +4332,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, cadence, day, s.def.id(), 0);
+            seed = StyleSeed.seed(secret, cadence, day, s.def.id(), 0, want);
         } else if (arg != null) {
             Long parsed = GenSeed.parse(arg);
             if (parsed == null) {
@@ -3072,7 +4345,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, cadence, day, s.def.id(), s.reroll);
+            seed = StyleSeed.seed(secret, cadence, day, s.def.id(), s.reroll, want);
         }
         char which = s.idleHalf();
         Box half = s.half(which);
@@ -3106,8 +4379,19 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void preview(String slotId, String seedText, Consumer<String> report) {
+        preview(slotId, seedText, null, report);
+    }
+
+    /**
+     * {@link #preview(String, String, Consumer)} of the style {@code style} ({@code style:road|slalom}, Ice Boat
+     * only): with no seed, the first of this set's next-reroll seeds of that style, by the same search a
+     * build makes; {@code null} for the style a build would pick (Ice Boat's {@code style}, or the Winding
+     * Road while Race Night is on). A typed seed is used as given.
+     */
+    @Override
+    public void preview(String slotId, String seedText, BoatStyle style, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
+        if (!styleFits(s, style, report) || !readyToTry(s, report)) { // CV final gate: an off slot can be previewed
             return;
         }
         GenScheduler.Target t = target(s);
@@ -3121,7 +4405,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, t.cadence(), t.start(), s.def.id(), s.reroll + 1);
+            seed = StyleSeed.seed(secret, t.cadence(), t.start(), s.def.id(), s.reroll + 1,
+                    style != null ? style : style(s));
         }
         Job j = new Job(Kind.PREVIEW, s, report);
         j.day = t.start();
@@ -3131,7 +4416,70 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.mix = s.mix;
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " (seed " + GenSeed.hex(seed) + ") is on its way into half "
-                + s.idleHalf() + "." + choiceStays(s) + offNote(s));
+                + s.idleHalf() + "." + styleNote(s, seed, style) + choiceStays(s) + offNote(s));
+    }
+
+    /**
+     * Ice Boat's style line for its status (MOUNTAIN-V2-SPEC §5.1): "style random: the Winding Road every week
+     * while Race Night is on" and the like; {@code null} for every other slot and for Ice Boat still in its old
+     * box (the spiral has no styles).
+     */
+    private String styleLine(SlotState s) {
+        if (!Slots.BOAT.equals(s.def.generator()) || !BoatPlanner.mountain(s.half('A'))) {
+            return null;
+        }
+        DailySettings.SlotConfig c = host.settings().slot(s.def.id());
+        BoatStyle config = c == null ? null : c.style();
+        BoatStyle want = style(s);
+        BoatStyle got = s.live == null || s.live.algo() < BoatPlanner.ALGO ? null : BoatStyle.of(s.live.seed());
+        String live = got == null ? "" : "; this set's is " + StyleSeed.words(got);
+        if (got != null && want != null && got != want) {
+            // audit M10: made before the rule applied (Race Night or the style switched on after the set was built,
+            // or an admin's seed); never rerolled silently, so say how
+            String held = rerollHeldBy(s.def.id());
+            live += held != null ? " &e(held: " + held + ", then /hcm games gen reroll " + s.def.id() + " confirm makes"
+                    + " it " + StyleSeed.words(want) + ")"
+                    : " &e(made before; the next set is " + StyleSeed.words(want) + ", or /hcm games gen reroll "
+                    + s.def.id() + " confirm makes this one now)";
+        }
+        if (config != null) {
+            return "style " + config.id() + ": " + StyleSeed.words(config) + " every week" + live;
+        }
+        return "style random: " + (want == BoatStyle.ROAD ? "the Winding Road every week while Race Night is on"
+                : "each week's own (Winding Road or Slalom)") + live;
+    }
+
+    /**
+     * Whether {@code style:} can be asked of {@code s}: none asked, or Ice Boat in a Mountain Run v2 area. Says
+     * why not otherwise.
+     */
+    private boolean styleFits(SlotState s, BoatStyle style, Consumer<String> report) {
+        if (style == null) {
+            return true;
+        }
+        if (s == null || !Slots.BOAT.equals(s.def.generator())) {
+            report.accept("&cOnly Ice Boat has styles (style:road or style:slalom).");
+            return false;
+        }
+        if (!BoatPlanner.mountain(s.half('A'))) {
+            report.accept("&c" + s.def.name() + " is still in its old 128-block area, where it makes the spiral"
+                    + " Mountain Run: that has no styles.");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * " It is the Winding Road." after a Mountain Run v2 preview's line (its style, read off the seed), with a
+     * note when a typed seed isn't the {@code asked} style; {@code ""} for any other slot.
+     */
+    private String styleNote(SlotState s, long seed, BoatStyle asked) {
+        if (!Slots.BOAT.equals(s.def.generator()) || !BoatPlanner.mountain(s.half('A'))) {
+            return "";
+        }
+        BoatStyle got = BoatStyle.of(seed);
+        return " &7It is " + StyleSeed.words(got) + (asked != null && asked != got ? " (that seed is used as typed,"
+                + " so it isn't " + StyleSeed.words(asked) + ")." : ".");
     }
 
     /** WP-ADM: what a preview, reroll or promote adds while a choice waits: it stays chosen. */
@@ -3465,8 +4813,18 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void previewNext(String slotId, String seedText, Consumer<String> report) {
+        previewNext(slotId, seedText, null, report);
+    }
+
+    /**
+     * {@link #previewNext(String, String, Consumer)} of the style {@code style} ({@code style:road|slalom}, Ice
+     * Boat only): a random candidate of that style ({@code null}: of the style a build would pick). A typed
+     * seed is used as given.
+     */
+    @Override
+    public void previewNext(String slotId, String seedText, BoatStyle style, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
+        if (!styleFits(s, style, report) || !readyToTry(s, report)) { // CV final gate: an off slot can be previewed
             return;
         }
         Long seed = seedText == null ? null : GenSeed.parse(seedText);
@@ -3474,8 +4832,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
             return;
         }
-        if (seed == null) {
-            seed = java.util.concurrent.ThreadLocalRandom.current().nextLong(); // a random candidate
+        if (seed == null) { // a random candidate (of the style the next build would have, or the one asked)
+            seed = StyleSeed.random(java.util.concurrent.ThreadLocalRandom.current()::nextLong,
+                    style != null ? style : style(s));
         }
         NextSet n = nextSet(s);
         Job j = new Job(Kind.PREVIEW, s, report);
@@ -3487,6 +4846,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " for " + editionName(n.cadence(), n.day()) + " (" + s.mix
                 + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + "."
+                + styleNote(s, seed, style)
                 + choiceStays(s) // fix2-D (D6): building another candidate doesn't replace the pick
                 + offNote(s));
     }
@@ -3891,18 +5251,22 @@ public final class GenService implements GeneratedCourses, GenOps {
         Box target = s.half(j.half);
         j.planDef = orig;
         if (w.remade()) {
-            Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(), orig.sizeZ());
-            if (!target.contains(box)) {
-                dropWant(j, row.name() + " doesn't fit " + s.def.name());
-                return;
-            }
             Planner p = planners.get(orig.generator());
             if (p == null) {
                 dropWant(j, "there is no " + orig.generator() + " generator");
                 return;
             }
+            // By the version that made it, in its own size, when its planner keeps it (an algo-3 golf edition:
+            // GolfPlanner.v3(), the same holes); else today's at today's size (Planner.remake, FX-GOLF)
+            Planner.Remake again = p.remake(orig, row.algoVersion());
+            Box box = Box.sized(target.minX(), target.minY(), target.minZ(), again.sizeX(), again.sizeY(),
+                    again.sizeZ());
+            if (!target.contains(box)) {
+                dropWant(j, row.name() + " doesn't fit " + s.def.name());
+                return;
+            }
             j.planBox = box;
-            plan(j, p);
+            plan(j, again.planner());
             return;
         }
         PlanCodec.Read read = PlanCodec.decode(row.plan());
@@ -4347,11 +5711,38 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public List<String> historyOf(String slotId, GenArgs.Which which) {
         List<String> out = new ArrayList<>();
+        historyOf(slotId, which, out::add, false);
+        return out;
+    }
+
+    /** As {@link #historyOf(String, GenArgs.Which)}, a big stored plan read on the planner thread (F11). */
+    @Override
+    public void historyOf(String slotId, GenArgs.Which which, Consumer<String> report) {
+        historyOf(slotId, which, report, true);
+    }
+
+    private void historyOf(String slotId, GenArgs.Which which, Consumer<String> report, boolean offMain) {
         String slot = slotId != null ? slotId : which.slot();
-        GenArchiveDao.Row r = resolve(slot, which, out::add);
+        GenArchiveDao.Row r = resolve(slot, which, report);
         if (r == null) {
-            return out;
+            return;
         }
+        readStored(r.plan(), offMain, read -> historyLines(r, read).forEach(report));
+    }
+
+    /**
+     * What a {@code seed:} recall or keep of {@code r} makes ({@link GenCopy#remakeHint}): the same course when its
+     * planner made it or keeps that version frozen (an algo-3 golf edition), else another course (FX-LAST).
+     */
+    String remakeHint(GenArchiveDao.Row r) {
+        Slots.Def d = Slots.of(r.slot());
+        Planner p = d == null ? null : planners.get(d.generator());
+        return GenCopy.remakeHint(d, p == null ? null : p.remake(d, r.algoVersion()));
+    }
+
+    /** One past course's lines: what it was, its plan ({@code read}), its players and top 5. */
+    private List<String> historyLines(GenArchiveDao.Row r, PlanCodec.Read read) {
+        List<String> out = new ArrayList<>();
         Slots.Def d = Slots.of(r.slot());
         String game = d == null ? Slots.GAME_TRIALS : d.game();
         Edition.Key key = Edition.Key.parse(r.edition());
@@ -4359,10 +5750,9 @@ public final class GenService implements GeneratedCourses, GenOps {
                 + r.edition() + ")" + flags(r));
         out.add("&7Up " + dates(r) + " · " + r.kind() + " " + r.tierOrMix() + " · seed " + GenSeed.hex(r.seed())
                 + " · " + r.algo() + " · built " + GenCopy.whenDated(r.builtAt(), host.zone()));
-        PlanCodec.Read read = PlanCodec.decode(r.plan());
         out.add(read.ok() ? "&7Plan: " + read.plan().ops().size() + " blocks, hash " + read.plan().hash()
                 + " &8(it can be brought back exactly)" : "&cPlan: can't be read (" + read.problem()
-                + ") &7- it can be made again from its seed: recall ... seed:" + GenSeed.hex(r.seed()));
+                + ") &7- make " + remakeHint(r) + ": recall ... seed:" + GenSeed.hex(r.seed()));
         try {
             GenArchiveDao.BoardStats st = host.store().boardStats(game, r.board());
             out.add("&7" + st.players() + " player" + (st.players() == 1 ? "" : "s") + ", " + st.plays() + " play"
@@ -4479,6 +5869,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         Slots.Def fits = Slots.classicFor(orig);
         Slots.Def classic = classicWord != null ? Slots.classicByWord(classicWord) : fits;
         if (fits == null) {
+            PlanCodec.Head head = row.plan() == null ? null : PlanCodec.head(row.plan());
+            if (head != null && !KeepArea.fits(head.half())) {
+                // nor can it be kept (KeepService.tooBig), so don't advise a keep that is refused
+                report.accept("&c" + row.name() + " has no Classics slot, and " + row.code() + " can't be kept: &7"
+                        + KeepService.tooBig(orig, head.half()) + ".");
+                return;
+            }
             report.accept("&c" + row.name() + " has no Classics slot. &7Keep it for good instead: &e/hcm games gen keep "
                     + row.code() + " <new-id> [name]");
             return;
@@ -4497,8 +5894,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             PlanCodec.Read read = PlanCodec.decode(row.plan());
             if (!read.ok()) {
                 report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + ").");
-                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
-                        + " recall " + classic.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
+                report.accept("&7Make " + remakeHint(row) + ", marked re-made: &e/hcm games gen recall "
+                        + classic.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
                 return;
             }
         }
@@ -4540,9 +5937,16 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.recallReport = report;
         host.logger().info("Fresh Courses: " + row.code() + " (" + row.slot() + " " + row.edition() + ")"
                 + (remade ? " (re-made)" : "") + " is recalled into " + classic.id() + " " + span + ".");
+        // FX-GOLF: made again by another version than the one that made it, it is not the same course (its board
+        // stays the original edition's: the recall's tag is that edition's)
+        Planner today = remade ? planners.get(orig.generator()) : null;
+        Planner.Remake again = today == null ? null : today.remake(orig, row.algoVersion());
+        boolean other = again != null && !again.exact();
         report.accept("&7Bringing back &f" + row.code() + " &7(" + row.name() + ", " + editionName(Edition.Key.parse(
-                row.edition()), row.day()) + ")" + (remade ? " re-made from its seed" : "") + " into " + classic.name()
-                + " " + span + ". &7It opens once it is built and checked; its old records are the ones to beat.");
+                row.edition()), row.day()) + ")" + (other ? " " + GenCopy.remadeOther(orig, again.planner().algo())
+                + "," : remade ? " re-made from its seed" : "") + " into " + classic.name() + " " + span
+                + ". &7It opens once it is built and checked; " + (other ? "its board is still " + row.code()
+                + "'s, whose records were set on the old course." : "its old records are the ones to beat."));
     }
 
     private boolean storeWant(SlotState s, ClassicWant w, Consumer<String> report) {
@@ -4571,7 +5975,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         int on = playing(s);
         if (on > 0 && !confirm) {
             report.accept("&e" + on + " player" + (on == 1 ? " is" : "s are") + " on " + c.name() + " now. &7They"
-                    + " finish; its halves are cleared once nobody is on them.");
+                    + " finish; " + (s.claimed ? "its halves are cleared once nobody is on them."
+                    : "its area isn't claimed, so nothing is cleared there."));
             report.accept("&7Add &econfirm &7at the end to do it.");
             return;
         }
@@ -4585,7 +5990,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         } else {
             forgetRecall(s, "it was unrecalled");
         }
-        report.accept("&a" + c.name() + " is closed. &7Its halves are cleared once nobody is on them.");
+        // ENG01: an area it doesn't hold is never cleared, so the admin isn't told it will be
+        report.accept("&a" + c.name() + " is closed. &7" + (s.claimed ? "Its halves are cleared once nobody is on them."
+                : "Its area isn't claimed, so nothing is cleared there."));
     }
 
     @Override
@@ -4608,17 +6015,36 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             return;
         }
-        if (!which.remade()) {
-            PlanCodec.Read read = PlanCodec.decode(row.plan());
+        if (which.remade()) {
+            keeper.keep(row, true, id, name, freshBoard, confirm, report);
+            return;
+        }
+        readStored(row.plan(), true, read -> { // a Mountain Run's row is read on the planner thread (F11)
             if (!read.ok()) {
                 report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + "), so it can't"
                         + " be kept as it was.");
-                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
-                        + " keep " + row.slot() + " seed:" + GenSeed.hex(row.seed()) + " " + id);
+                report.accept("&7Make " + remakeHint(row) + ", marked re-made: &e/hcm games gen keep " + row.slot()
+                        + " seed:" + GenSeed.hex(row.seed()) + " " + id);
                 return;
             }
+            keeper.keep(row, false, id, name, freshBoard, confirm, report);
+        });
+    }
+
+    /**
+     * Read a stored plan, then go on with {@code then} on the main thread: a big row (over
+     * {@value #OFF_MAIN_BYTES} bytes, a Mountain Run v2's) on the planner thread when {@code offMain}, its
+     * answer back through the inbox (F11); a small one here and now, as always.
+     */
+    private void readStored(byte[] stored, boolean offMain, Consumer<PlanCodec.Read> then) {
+        if (!offMain || stored == null || stored.length <= OFF_MAIN_BYTES) {
+            then.accept(PlanCodec.decode(stored));
+            return;
         }
-        keeper.keep(row, which.remade(), id, name, freshBoard, confirm, report);
+        host.planner().execute(() -> {
+            PlanCodec.Read read = PlanCodec.decode(stored);
+            inbox.add(() -> then.accept(read));
+        });
     }
 
     @Override
@@ -4651,6 +6077,13 @@ public final class GenService implements GeneratedCourses, GenOps {
     private void warnOnce(SlotState s, String line) {
         if (said.add(s.def.id() + "|" + line)) {
             host.logger().warning(line);
+        }
+    }
+
+    /** {@link #warnOnce}, as an INFO line: news, not a problem. */
+    private void sayOnce(SlotState s, String line) {
+        if (said.add(s.def.id() + "|" + line)) {
+            host.logger().info(line);
         }
     }
 

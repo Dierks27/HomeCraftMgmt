@@ -597,7 +597,7 @@ final class Draft {
         int u0 = l.length() + runout + 1;
         water(l, u0, u0 + deep - 1, -l.half() - 1, l.half() + 1);
         features.add(Quota.Feature.WATER);
-        words.add("water behind the green");
+        words.add("water " + deep + " deep behind the green");
     }
 
     /**

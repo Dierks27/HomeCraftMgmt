@@ -32,9 +32,10 @@ import java.util.stream.Collectors;
  * honest par, on 40 x 64 plots. {@link GolfPlanner} plans with it; pure.
  *
  * <p><b>The course.</b> The deal ({@link DealV4}) gives each hole a length class and a recipe
- * ({@link HoleRecipe}), a Swing layup, a Chip layup and a guarded par 3 pinned to holes of every
- * course of 7 or more; hole i is drawn on plot i of the half ({@link PlotGrid#of(String, int)}: 40 x
- * 64 for Golf of the Week and Classic Golf, Tiny Golf's 20 x 40 as before), T = the half's floor + 4.
+ * ({@link HoleRecipe}), a Swing layup and a Chip layup pinned to holes of every course of 7 or more
+ * (a guarded par 3 to one in {@value DealV4#GUARDED_IN}); hole i is drawn on plot i of the half
+ * ({@link PlotGrid#of(String, int)}: 40 x 64 for Golf of the Week and Classic Golf, Tiny Golf's
+ * 20 x 40 as before), T = the half's floor + 4.
  *
  * <p><b>A hole is proven</b> where it stands:
  * <ol>
@@ -756,7 +757,7 @@ final class GolfPlannerV4 {
 
         /** The plan, {@code again} marking the holes drawn again to settle the course ({@link #settle}). */
         Plan assemble(List<Solved> holes, long work, boolean[] again) {
-            return GolfPlannerV4.assemble(in, holes, work, geometry, DealV4.targets(mix, classes, dry), deal.k(),
+            return GolfPlannerV4.assemble(in, holes, work, geometry, deal.targets(), deal.k(),
                     kidOver, most, gate, again);
         }
     }

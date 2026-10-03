@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.golf;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,11 +32,11 @@ import java.util.Set;
  * Tiny Golf the first that also starts every hole with a different recipe (the owner found Golf v4
  * "pretty repetitive"), else the one meeting the most with the fewest twice.
  *
- * <p><b>The v4 quota</b> for 7 holes or more: water 2, sand 2, height 3, trees 1, big drop 1 (as
- * Adventure Golf), plus a Swing layup, a Chip layup, a guarded par 3 (red-team F00: every club has a
- * job), a hole of three legs and three of two. The layups and the guarded par 3 are pinned to holes
- * before the shuffles ({@link #pins}), so every course has each of them once. Tiny Golf: sand 1,
- * height 1, and a tree hole or a pond to look at (as Adventure Golf).
+ * <p><b>The v4 quota</b> for 7 holes or more: water 2, sand 1, height 2, trees 1, big drop 1, plus a
+ * Swing layup, a Chip layup (red-team F00: every club has a job), on about half the courses a guarded
+ * par 3, a hole of three legs and three of two. The layups and the guarded par 3 are pinned to holes
+ * before the shuffles ({@link #pins}), so a course has each of them once. Tiny Golf: sand 1, height
+ * 1, and a tree hole or a pond to look at (as Adventure Golf).
  */
 final class DealV4 {
 
@@ -56,6 +57,12 @@ final class DealV4 {
     /** The features every course of 7 holes or more is sure of, a hole pinned to each ({@link #pins}). */
     static final List<Quota.Feature> PINNED = List.of(Quota.Feature.GUARDED, Quota.Feature.LAYUP,
             Quota.Feature.CHIP_LAYUP);
+    /**
+     * One course in this many has a guarded par 3 (GOLF-R3 skeptics: three corner-pond holes every week
+     * made the same water corners every week); the Swing and Chip layups, which give those clubs their
+     * jobs, are on every course.
+     */
+    static final int GUARDED_IN = 2;
     /** One time in this many, Hard deals two X holes rather than an L and an X. */
     static final int TWO_X_IN = 3;
 
@@ -72,7 +79,8 @@ final class DealV4 {
      * @param met     how many targets they meet
      */
     record Deal(int k, List<LengthClass> classes, Map<Integer, HoleRecipe> pinned,
-                Map<String, List<HoleRecipe>> order, Map<Quota.Feature, Integer> counts, int met, boolean dry) {
+                Map<String, List<HoleRecipe>> order, Map<Quota.Feature, Integer> counts, int met, boolean dry,
+                Map<Quota.Feature, Integer> targets) {
 
         /**
          * Hole {@code i}'s recipe: its pinned one ({@link #pins}, on every attempt), else the j-th of
@@ -103,13 +111,15 @@ final class DealV4 {
     }
 
     /**
-     * The holes that take a recipe of {@link #PINNED}'s features (red-team F00: a Swing layup, a Chip
-     * layup and a guarded par 3 on every course of 7 holes or more), from the course's stream
+     * The holes that take a recipe of {@link #PINNED}'s features (red-team F00: a Swing layup and a
+     * Chip layup on every course of 7 holes or more, a guarded par 3 on one in {@value #GUARDED_IN}, by
+     * the fork {@code pin:GUARDED:week}), from the course's stream
      * {@code root}. For each feature in turn, the most constrained first (the guarded par 3, an M hole;
      * the Chip layup, an L hole; the Swing layup, an L or an X hole), one hole that isn't pinned yet and
      * whose class and tier have such a recipe, picked from fork {@code pin:<feature>}. The Swing layup
-     * never takes a course's last free L hole while an X hole can take it (so both par 4s aren't
-     * corner-pond layups, and an L S-bend has room), and on an L hole it is the three-leg one
+     * takes an L hole where another stays free, else an X hole (so both par 4s aren't corner-pond
+     * layups and an L S-bend has room, and a course's one par 5 is left to the S-bends, doglegs and
+     * straights), and on an L hole it is the three-leg one
      * ({@link HoleRecipe#L_LAYUP_BEND}) where no other hole could have three legs, else either, from
      * the same fork. Dealt before the shuffles, so the quota's deal is left only Adventure Golf's own
      * targets and the legs to meet, and no other hole of the course is dealt a pinned feature's recipe.
@@ -118,7 +128,8 @@ final class DealV4 {
         Map<Integer, HoleRecipe> out = new HashMap<>();
         Map<Quota.Feature, Integer> table = table(mix.length());
         for (Quota.Feature f : PIN_ORDER) {
-            if (table.get(f) == 0) {
+            if (table.get(f) == 0
+                    || f == Quota.Feature.GUARDED && root.fork("pin:GUARDED:week").nextInt(GUARDED_IN) != 0) {
                 continue;
             }
             List<Integer> can = new ArrayList<>();
@@ -136,6 +147,8 @@ final class DealV4 {
             }
             if (f == Quota.Feature.LAYUP && x && freeL < 2) {
                 can.removeIf(i -> classes.get(i) == LengthClass.L);
+            } else if (f == Quota.Feature.LAYUP && freeL >= 2) {
+                can.removeIf(i -> classes.get(i) == LengthClass.X); // the par 5 left to the S-bends and straights
             }
             if (can.isEmpty()) {
                 continue;
@@ -242,14 +255,17 @@ final class DealV4 {
 
     /**
      * The targets for a course of {@code holes} holes, before they are capped to what its groups can
-     * hold: 7 or more {water 2, sand 2, height 3, trees 1, big drop 1, layup 1, chip layup 1, guarded
+     * hold: 7 or more {water 2, sand 1, height 2, trees 1, big drop 1, layup 1, chip layup 1, guarded
      * par 3 1, three legs 1, two legs 3}; 4-6 {1, 1, 2, 1, 0, 0, 0, 0, 0, 1}; 3 {0, 1, 1, 1, 0, ...},
-     * the tree hole a tree hole or a pond to look at; 2 or fewer, none.
+     * the tree hole a tree hole or a pond to look at; 2 or fewer, none. (Adventure Golf's sand 2 and
+     * height 3 left the six holes the pins leave over to the few recipes with two or three features
+     * each: the same par 5s every week, GOLF-R3 skeptics.) A pinned feature's target holds only when
+     * the deal pins it ({@link #deal}).
      */
     static Map<Quota.Feature, Integer> table(int holes) {
         int[] t;
         if (holes >= TABLE_FULL) {
-            t = new int[]{2, 2, 3, 1, 1, 1, 1, 1, 1, 3};
+            t = new int[]{2, 1, 2, 1, 1, 1, 1, 1, 1, 3};
         } else if (holes >= 4) {
             t = new int[]{1, 1, 2, 1, 0, 0, 0, 0, 0, 1};
         } else if (holes == 3) {
@@ -300,8 +316,15 @@ final class DealV4 {
     /** The deal for a course of {@code mix} from its seed's stream {@code root}. */
     static Deal deal(GenRandom root, String mix, boolean dry) {
         List<LengthClass> classes = classes(root, mix, dry);
-        Map<Quota.Feature, Integer> targets = targets(mix, classes, dry);
         Map<Integer, HoleRecipe> pinned = pins(root, mix, classes, dry);
+        Map<Quota.Feature, Integer> targets = targets(mix, classes, dry);
+        for (Quota.Feature f : PINNED) {
+            if (pinned.entrySet().stream().noneMatch(e -> e.getValue().features(mix.charAt(e.getKey()), dry)
+                    .contains(f))) {
+                targets.put(f, 0); // not pinned this week (a guarded par 3 on about half the courses): no target
+            }
+        }
+        targets = Collections.unmodifiableMap(new EnumMap<>(targets));
         Deal best = null;
         int bestTwice = 0;
         for (int k = 0; k < DEALS; k++) {
@@ -326,7 +349,7 @@ final class DealV4 {
                 }
                 order.put(g, List.copyOf(list));
             }
-            Deal d = new Deal(k, classes, pinned, Map.copyOf(order), Map.of(), 0, dry);
+            Deal d = new Deal(k, classes, pinned, Map.copyOf(order), Map.of(), 0, dry, targets);
             List<Set<Quota.Feature>> first = new ArrayList<>();
             for (int i = 0; i < mix.length(); i++) {
                 first.add(d.recipe(mix, i, false).features(mix.charAt(i), dry));
@@ -335,7 +358,7 @@ final class DealV4 {
             int met = met(counts, targets);
             int twice = dry ? 0 : twice(d, mix);
             if (best == null || met > best.met() || met == best.met() && twice < bestTwice) {
-                best = new Deal(k, classes, pinned, Map.copyOf(order), counts, met, dry);
+                best = new Deal(k, classes, pinned, Map.copyOf(order), counts, met, dry, targets);
                 bestTwice = twice;
             }
             if (met == COUNTED.size() && twice == 0) {

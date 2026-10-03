@@ -392,7 +392,8 @@ class GolfPlannerV4Test {
                 assertTrue(GolfPlannerV4.inBand(path, LengthClass.ofPar(h.par())), what + ": its par's length");
                 assertTrue(h.par() != 4 || path >= 26 - 1e-9, what + ": no par 4 under 27 (less a block)");
                 assertTrue(h.par() != 5 || path >= 39 - 1e-9, what + ": no par 5 under 40 (less a block)");
-                byPar.computeIfAbsent(h.par(), k -> new ArrayList<>()).add(path);
+                boolean straight = holeLines(r.plan()).get(i).contains(" X_STRAIGHT ");
+                byPar.computeIfAbsent(straight ? 50 : h.par(), k -> new ArrayList<>()).add(path);
                 total += path;
                 count[h.par()]++;
                 shortest[h.par()] = Math.min(shortest[h.par()], path);
@@ -411,8 +412,9 @@ class GolfPlannerV4Test {
         StringBuilder b = new StringBuilder("Golf v4 hole lengths by par:");
         for (Map.Entry<Integer, List<Double>> e : byPar.entrySet()) {
             double[] v = e.getValue().stream().mapToDouble(Double::doubleValue).sorted().toArray();
-            b.append(String.format(Locale.ROOT, " par %d %.1f-%.1f (median %.1f, %d holes);", e.getKey(), v[0],
-                    v[v.length - 1], v[v.length / 2], v.length));
+            b.append(String.format(Locale.ROOT, " %s %.1f-%.1f (p10-p90 %.1f-%.1f, median %.1f, %d holes);",
+                    e.getKey() == 50 ? "par 5 X_STRAIGHT" : "par " + e.getKey() + (e.getKey() == 5 ? " (others)" : ""),
+                    v[0], v[v.length - 1], v[v.length / 10], v[v.length * 9 / 10], v[v.length / 2], v.length));
         }
         double[] t = totals.stream().mapToDouble(Double::doubleValue).sorted().toArray();
         System.out.println(b + String.format(Locale.ROOT, " course %.0f-%.0f blocks (median %.0f); par mixes %s", t[0],
@@ -479,6 +481,52 @@ class GolfPlannerV4Test {
         int swing = shapes.getOrDefault("L_LAYUP", Set.of()).size() + shapes.getOrDefault("L_LAYUP_BEND", Set.of()).size()
                 + shapes.getOrDefault("X_LAYUP", Set.of()).size();
         assertTrue(swing >= 100, "the Swing layup: " + swing);
+        // GOLF-R3 skeptics: the free holes aren't starved down to a few multi-feature recipes, and every recipe
+        // Golf of the Week can deal turns up; a pinned hole is pinned (the Chip layup on every course)
+        Map<Character, Map<String, Integer>> byClass = new TreeMap<>();
+        for (Run r : runs(Slots.DAILY_GOLF)) {
+            for (String line : holeLines(r.plan())) {
+                String recipe = shapeOf(line).substring(0, shapeOf(line).indexOf(' '));
+                byClass.computeIfAbsent(cls(line), k -> new TreeMap<>()).merge(recipe, 1, Integer::sum);
+            }
+        }
+        for (Map.Entry<Character, Map<String, Integer>> e : byClass.entrySet()) {
+            int all = e.getValue().values().stream().mapToInt(Integer::intValue).sum();
+            for (Map.Entry<String, Integer> h : e.getValue().entrySet()) {
+                assertTrue(h.getKey().equals("L_CHIP_LAYUP") || h.getValue() * 100 <= all * 35, h.getKey() + " is "
+                        + h.getValue() + " of " + all + " " + e.getKey() + " holes: at most about a third");
+            }
+        }
+        for (String g : List.of("ES", "EM", "MM", "ML", "HL", "HX")) {
+            for (HoleRecipe h : HoleRecipe.list(g.charAt(0), LengthClass.valueOf(g.substring(1)), false)) {
+                assertTrue(holes.containsKey(h.name()), h + " turns up on some Golf of the Week course: " + holes);
+            }
+        }
+        // week to week: a guarded par 3 or Chip layup the same as one of the four courses before is rare
+        Map<String, int[]> copies = new TreeMap<>();
+        List<Run> weeks = runs(Slots.DAILY_GOLF);
+        for (int w = 1; w < weeks.size(); w++) {
+            Set<String> before = new HashSet<>();
+            for (int k = Math.max(0, w - 4); k < w; k++) {
+                holeLines(weeks.get(k).plan()).forEach(l -> before.add(shapeOf(l)));
+            }
+            for (String line : holeLines(weeks.get(w).plan())) {
+                String shape = shapeOf(line);
+                for (String pin : List.of("M_GUARDED", "L_CHIP_LAYUP")) {
+                    if (shape.startsWith(pin + " ")) {
+                        int[] c = copies.computeIfAbsent(pin, k -> new int[2]);
+                        c[0] += before.contains(shape) ? 1 : 0;
+                        c[1]++;
+                    }
+                }
+            }
+        }
+        for (Map.Entry<String, int[]> e : copies.entrySet()) {
+            System.out.println("Golf v4: " + e.getKey() + " the same as one of the 4 courses before on " + e.getValue()[0]
+                    + " of " + e.getValue()[1]);
+            assertTrue(e.getValue()[0] * 10 <= e.getValue()[1], e.getKey() + " repeats a recent week's rarely: "
+                    + e.getValue()[0] + " of " + e.getValue()[1]);
+        }
     }
 
     /**
@@ -530,10 +578,18 @@ class GolfPlannerV4Test {
                     return line.contains("layup 1/1") || line.contains("layup 2/1");
                 }).count();
                 for (Quota.Feature f : DealV4.PINNED) {
-                    long with = runs.stream().filter(r -> holeLines(r.plan()).stream().anyMatch(l -> l.contains(f.words())))
+                    List<Run> pinned = runs.stream().filter(r -> DealV4.deal(new GenRandom(r.plan().seed()),
+                            slot.tierOrMix(), false).targets().get(f) > 0).toList();
+                    long with = pinned.stream().filter(r -> holeLines(r.plan()).stream().anyMatch(l -> l.contains(f.words())))
                             .count();
-                    assertTrue(with * 100 >= runs.size() * 99L, "Golf of the Week: a " + f.words() + " on (nearly) every"
-                            + " course: " + with + " of " + runs.size());
+                    assertTrue(with * 100 >= pinned.size() * 99L, "Golf of the Week: a " + f.words() + " on (nearly)"
+                            + " every course it is pinned to: " + with + " of " + pinned.size());
+                    if (f == Quota.Feature.GUARDED) {
+                        assertTrue(pinned.size() * 100 >= runs.size() * 35L && pinned.size() * 100 <= runs.size() * 65L,
+                                "the guarded par 3 is pinned to about half the courses: " + pinned.size());
+                    } else {
+                        assertEquals(runs.size(), pinned.size(), "the " + f.words() + " is pinned to every course");
+                    }
                 }
                 assertTrue(layups > 0, "the summary counts layups");
             }
@@ -541,10 +597,12 @@ class GolfPlannerV4Test {
         Map<Quota.Feature, Integer> t = DealV4.table(9);
         assertEquals(1, t.get(Quota.Feature.LAYUP), "every 9-hole course has a Swing layup");
         assertEquals(1, t.get(Quota.Feature.CHIP_LAYUP), "a Chip layup (red-team F00: layups 2)");
-        assertEquals(1, t.get(Quota.Feature.GUARDED), "and a guarded par 3");
+        assertEquals(1, t.get(Quota.Feature.GUARDED), "and a guarded par 3 (where it is pinned)");
         assertEquals(1, t.get(Quota.Feature.THREE_LEGS), "a hole of three legs");
         assertEquals(3, t.get(Quota.Feature.TWO_LEGS), "and three of two (G3)");
-        assertEquals(3, t.get(Quota.Feature.HEIGHT), "plus Adventure Golf's height 3");
+        assertEquals(2, t.get(Quota.Feature.HEIGHT), "height 2 and sand 1 (GOLF-R3: Adventure Golf's 3 and 2 left the"
+                + " holes the pins leave to the same few recipes)");
+        assertEquals(1, t.get(Quota.Feature.SAND), "sand 1");
     }
 
     @Test
@@ -807,8 +865,8 @@ class GolfPlannerV4Test {
     void goldenPlansArePinnedAtTheV4Boxes() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
         assertEquals(4, GolfPlanner.ALGO, "the version these hashes belong to");
-        Map<Long, String> daily = Map.of(1L, "a1401a04deae", 20725L, "f555558cfa74", 0x3f2a91c07d1e55b0L,
-                "b135e58ecd7b");
+        Map<Long, String> daily = Map.of(1L, "fee08f671d69", 20725L, "208bad7dfe3f", 0x3f2a91c07d1e55b0L,
+                "0d6a5bca44c9");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
             Plan p = new GolfPlanner().plan(input(Slots.DAILY_GOLF, e.getKey(), Slots.DAILY_GOLF.tierOrMix(), 0));
             assertEquals(e.getValue(), p.hash(), "Golf of the Week seed " + Long.toHexString(e.getKey()));

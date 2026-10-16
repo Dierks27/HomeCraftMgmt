@@ -41,7 +41,7 @@ import java.util.logging.Logger;
 
 /**
  * The Weekly Cup (EVENTS-OWNER-DECISIONS §D2, EVENTS-RECONCILED decision 3): on a time-trial course
- * that runs one, a player pays a small entry once a week ({@code games.cup.entry}, 5 tokens), their
+ * that runs one, a player pays a small entry once a week ({@code games.cup.entry}, 10 tokens), their
  * best counted time that week is their Cup time, and at the week's rollover (the quests' week start
  * at 04:00, when the Fresh Courses change) the pool, every entry plus a small server top-up, is
  * shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, and no share without one.
@@ -335,15 +335,28 @@ public final class WeeklyCup implements Game {
             g.tell(player, Refusal.of("The Cup can't take entries right now. Nothing was paid."));
             return false;
         }
+        int fee = fee(c);
         if (r != null) {
-            g.tell(player, Refusal.of(r.message(settings().entry())));
+            g.tell(player, Refusal.of(r.message(fee)));
             return false;
         }
-        player.sendMessage(Text.of(CupWords.entered(c.name(), settings().entry())));
+        player.sendMessage(Text.of(CupWords.entered(c.name(), fee)));
         Sounds.paid(player);
         logger().info("Weekly Cup: " + player.getName() + " entered the Cup on " + c.id() + " ("
-                + CupText.tokens(settings().entry()) + ").");
+                + CupText.tokens(fee) + ").");
         return true;
+    }
+
+    /**
+     * What this week's Cup on {@code c} costs ({@link CupDesk#fee}: what its first entrant paid, so what a player
+     * just in paid; the v4 audit, ECON01), or {@code games.cup.entry} when it can't be read.
+     */
+    private int fee(Course c) {
+        try {
+            return desk().fee(c.id());
+        } catch (SQLException e) {
+            return settings().entry();
+        }
     }
 
     /**

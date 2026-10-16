@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cup.live;
 
 import com.dierks.homecraft.games.ChanceRounds;
+import com.dierks.homecraft.games.cup.CupEntry;
 import com.dierks.homecraft.games.cup.CupKey;
 import com.dierks.homecraft.games.cup.CupLayout;
 import com.dierks.homecraft.games.cup.CupPlan;
@@ -94,7 +95,8 @@ class CupDeskTest {
     private static final class FakeHost implements CupDesk.Host {
         long now = TUESDAY_NOON;
         Edition edition = WEEKLY;
-        CupSettings settings = CupSettings.defaults();
+        /** The Cup's mechanism at 0.36's 5 to enter and 10 on top (the shipped 10/20 is CupSettingsTest's). */
+        CupSettings settings = new CupSettings(true, 5, 10);
         final Map<String, Course> courses = new HashMap<>();
         final Map<String, Boolean> wanted = new HashMap<>();
         final Set<UUID> online = new HashSet<>();
@@ -352,6 +354,43 @@ class CupDeskTest {
         host.now += 7L * 86_400_000;
         assertEquals(List.of(), desk.tick(), "nor a week later");
         assertEquals(ledger, count("SELECT COUNT(*) FROM token_ledger"), "paid exactly once");
+    }
+
+    @Test
+    void aCupOpenedBeforeTheEntryChangedKeepsItsFeeSoNobodyTimedInACupOfThreeLoses() throws Exception {
+        // the v4 audit, ECON01: the upgrade week. Two enter at 0.36's 5; the restart brings 0.37's 10 and 20.
+        switchOn(lava);
+        assertNull(desk.enter(alice, lava));
+        assertNull(desk.enter(bob, lava));
+        host.settings = new CupSettings(true, 10, 20);
+        CupDesk.View v = desk.view(lava, carol);
+        assertEquals(5, v.fee(), "this week's Cup still costs what its first entrant paid");
+        assertEquals(5, desk.fee(lava.id()), "which is what the entry's line says (WeeklyCup.enter)");
+        assertNull(desk.enter(carol, lava), "carol enters");
+        assertEquals(15, balance(carol), "for 5, like the others");
+        assertTrue(race(alice, lava, 40_000));
+        assertTrue(race(bob, lava, 41_000));
+        assertTrue(race(carol, lava, 42_000));
+        host.now = ROLLOVER;
+        CupPlan plan = desk.tick().get(0).plan();
+        assertEquals(35, plan.pool(), "15 in, plus the new 20");
+        assertEquals(15 + 7, balance(carol), "third gets 7 of the 5 she paid: nobody timed loses");
+
+        assertEquals(15 + 18, balance(alice), "1st: 18 (half of 35, and the odd token)");
+        assertEquals(10, desk.view(lava, alice).fee(), "the next week's Cup costs the new entry");
+        assertNull(desk.enter(alice, lava));
+        assertEquals(15 + 18 - 10, balance(alice), "and its first entrant pays it");
+    }
+
+    @Test
+    void theEntrysOwnTransactionChargesTheCupsFeeToo() throws Exception {
+        // a screen built before the first entry landed shows the setting; the transaction reads the Cup again
+        switchOn(lava);
+        CupKey key = desk.key(lava.id());
+        assertNull(dao.enter(key, alice, 5, "Lava Leap", host.now, W, null), "alice opens the Cup at 5");
+        assertNull(dao.enter(key, bob, 10, "Lava Leap", host.now + 1, W, null), "bob's screen said 10");
+        assertEquals(15, balance(bob), "but he is charged the Cup's 5");
+        assertEquals(List.of(5, 5), dao.entries(key).stream().map(CupEntry::paid).toList(), "one fee a Cup");
     }
 
     @Test

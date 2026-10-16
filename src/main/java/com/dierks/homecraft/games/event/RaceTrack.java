@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceStand;
@@ -27,7 +28,8 @@ import java.util.Locale;
  * of two can't seat enough), the same one party races use.
  *
  * <p><b>The stand.</b> A Fresh Boat layout of algo 2 or later has one built in, where Time Trials'
- * {@code RaceStand} says (the half's centre block, 5 above the start). A hand-built track needs an
+ * {@code RaceStand} says (the half's centre block, 5 above the start; on a Mountain Run v2, at the bottom,
+ * 5 above the finish). A hand-built track needs an
  * admin's ({@value #STAND_CLEAR} or more from the racing line). Without a stand a night has one race
  * and finishers go home at the line.
  */
@@ -136,8 +138,19 @@ public final class RaceTrack {
     // ---- raceable ------------------------------------------------------------------------------
 
     /**
+     * The end of what a night says of a Mountain Run v2 Slalom (red-team F05: racing is the Winding Road, the
+     * Slalom is for solo runs; a Slalom week with Race Night on comes only from an admin's seed, {@code style:
+     * slalom}, or Race Night switched on after the week's course was made): the same whatever the set's cadence,
+     * so callers can tell the refusal by it.
+     */
+    public static final String SLALOM = "Race Night races only on the Winding Road";
+
+    /**
      * Why a night can't race on {@code c} with {@code spots} grid spots, or {@code null} (§A.4.1): it
-     * must be a boat course with a start, and seat at least {@code minRacers}.
+     * must be a boat course with a start, not a Mountain Run v2 Slalom ("Ice Boat is the Slalom this week, and
+     * {@value #SLALOM}", in its set's own words: {@link BoatHype#slalomNow}), and seat at least {@code minRacers}.
+     * The Slalom's line names no fix: what fixes it depends on config (its style, a pin), which Race Night adds
+     * where an admin reads it (audit M08, M11), and players never see a command.
      */
     public static String raceProblem(Course c, int spots, int minRacers) {
         if (c == null) {
@@ -148,6 +161,9 @@ public final class RaceTrack {
         }
         if (c.start() == null) {
             return c.name() + " has no start";
+        }
+        if (BoatHype.slalom(c)) {
+            return c.name() + " is " + BoatHype.slalomNow(c) + ", and " + SLALOM;
         }
         if (spots < minRacers) {
             return c.name() + "'s starting grid seats " + spots + " - Race Night needs " + minRacers
@@ -240,8 +256,9 @@ public final class RaceTrack {
 
     /**
      * A Fresh Boat layout's built-in stand, where the boat planner builds it ({@code RaceStand.of}:
-     * the half's centre block, 5 above the start, for algo 2 or later); {@code null} for anything
-     * else. Whether it really stands in the world is the caller's check ({@code RaceStand.standable}).
+     * the half's centre block, 5 above the start, for algo 2 or 3; at the bottom, 5 above the finish, for a
+     * Mountain Run v2); {@code null} for anything else. Whether it really stands in the world is the
+     * caller's check ({@code RaceStand.standable}).
      */
     public static Point freshStand(Course c, Box half) {
         return RaceStand.of(c, half);

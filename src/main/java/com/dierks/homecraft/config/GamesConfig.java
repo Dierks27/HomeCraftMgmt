@@ -4,7 +4,9 @@ import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.RewardCeilings;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Slots;
 import org.bukkit.configuration.ConfigurationSection;
@@ -158,7 +160,8 @@ public final class GamesConfig {
          * schedule, 04:00 and 16:00.
          */
         public static Common defaults() {
-            return new Common(false, List.of("games"), List.of(), 600, 100, 250, 6, "auto", 1,
+            return new Common(false, List.of("games"), List.of(), 600, 100, 250, TokenBalance.SKILL_DAILY_CAP, "auto",
+                    TokenBalance.FEATURED_BONUS,
                     List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), RestartHold.DEFAULT_MINUTES,
                     List.of(10, 25, 50, 100), List.of(1, 7, 30), 7);
         }
@@ -315,10 +318,24 @@ public final class GamesConfig {
                     settings.put(spec.id(), spec.defaults());
                 }
             }
-            return new Parsed(common, settings, unreadable);
+            Parsed parsed = new Parsed(common, settings, unreadable);
+            ceilings(parsed, w);
+            return parsed;
         } catch (RuntimeException e) {
             w.accept(PATH + " could not be read (" + e + ") - the games are off until it is fixed");
             return Parsed.OFF;
+        }
+    }
+
+    /**
+     * The one-time rewards paid whole that a daily cap can't hold ({@link RewardCeilings}): one WARN
+     * each, nothing changed. A failure here never stops the games loading.
+     */
+    private static void ceilings(Parsed parsed, Consumer<String> w) {
+        try {
+            RewardCeilings.warn(parsed, w);
+        } catch (RuntimeException | LinkageError e) {
+            w.accept(PATH + ": the reward and cap check could not run (" + e + ") - nothing was changed");
         }
     }
 

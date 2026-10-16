@@ -27,4 +27,29 @@ public interface Planner {
      * no solver), for the boot check and the rebuild of a live half.
      */
     Plan rederive(PlanInput in, GenTag tag) throws GenFailed;
+
+    /**
+     * How a course of version {@code algo} made for {@code def} is made again from its seed (a {@code seed:}
+     * recall or keep): by the planner that made it, in the half size it was made in, when this planner is that
+     * version or keeps it frozen ({@link Remake#exact}: the same course, so its old records are still the ones
+     * to beat); otherwise by this planner at {@code def}'s size today — a different course from the same seed,
+     * which must not take over the old one's records. This planner at its own version is exact; a planner that
+     * keeps an older version frozen says so (golf: Adventure Golf, {@code GolfPlanner.v3()}).
+     */
+    default Remake remake(Slots.Def def, int algo) {
+        return new Remake(this, def.sizeX(), def.sizeY(), def.sizeZ(), algo == algo());
+    }
+
+    /**
+     * How a course is made again from its seed ({@link #remake}).
+     *
+     * @param planner the planner to plan it with
+     * @param sizeX   the half's size to plan it in (x)
+     * @param sizeY   (y)
+     * @param sizeZ   (z)
+     * @param exact   whether {@code planner} is the version that made it, so it gives the same course back;
+     *                {@code false}: today's planner, another course from the same seed
+     */
+    record Remake(Planner planner, int sizeX, int sizeY, int sizeZ, boolean exact) {
+    }
 }

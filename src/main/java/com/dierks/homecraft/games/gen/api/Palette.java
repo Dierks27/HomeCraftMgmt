@@ -28,6 +28,11 @@ import java.util.TreeMap;
  * never changes it and the daily verify pass never churns), every log upright and every slab a
  * bottom slab. The planners write them through {@link #log} and {@link #leaves}.
  *
+ * <p><b>Mountain Run v2 (MOUNTAIN-V2-SPEC §8).</b> The snow block and stone (a mountain's tops and
+ * faces), and spruce logs and leaves (the same state rules as every wood; {@link #TREE_WOODS}) join
+ * the list. Snow is the full block only: never powder snow, which traps players, nor the thin snow
+ * layer, which melts.
+ *
  * <p>Plans carry blocks as block-data text ({@code minecraft:smooth_stone_slab[type=bottom]}), so
  * nothing here needs a server; the builder parses each entry once on the main thread.
  */
@@ -96,12 +101,36 @@ public final class Palette {
     public static final String SAND_SLAB = "minecraft:smooth_sandstone_slab[type=bottom]";
     /** Grass that never spreads or ticks: terraces, the summit cone, island tops, planters. */
     public static final String MOSS = "minecraft:moss_block";
-    /** The woods a tree may be, in the order the planners pick them. */
+    /**
+     * The woods the Course Variety planners pick a tree from, in their order. Frozen at these three:
+     * those planners pick {@code WOODS.get(r.nextInt(WOODS.size()))}, so another wood here would
+     * change every layout they make for a seed (their golden hashes, every rederive). A wood a newer
+     * planner adds goes in {@link #TREE_WOODS}.
+     */
     public static final List<String> WOODS = List.of("oak", "birch", "cherry");
+    /**
+     * Every wood a plan may grow ({@link #log}, {@link #leaves}): {@link #WOODS}, then Mountain Run
+     * v2's spruce (MOUNTAIN-V2-SPEC §8: spruce above the middle of the mountain).
+     */
+    public static final List<String> TREE_WOODS = List.of("oak", "birch", "cherry", "spruce");
     /** The farthest a leaf may be from a log ({@code distance=7} is vanilla's cap). */
     public static final int MAX_LEAF_DISTANCE = 7;
 
     // ---- existing blocks, their Course Variety jobs (§1.1.3) ---------------------------------------
+
+    // ---- Mountain Run v2 (MOUNTAIN-V2-SPEC §8): the mountain's rock and snow, its gate fences ------
+
+    /**
+     * Snow that never melts or falls: the full block, on tops above the snowline. Never
+     * {@code powder_snow} (it traps players) and never the thin {@code snow} layer (it melts and
+     * breaks).
+     */
+    public static final String SNOW = "minecraft:snow_block";
+    /** Plain stone: cliff faces, outcrops, the summit, a tunnel's roof. */
+    public static final String STONE = "minecraft:stone";
+    /** The slalom's gate fences: red where the opening is against the left wall, blue the right (§5.4). */
+    public static final String GATE_LEFT = "minecraft:red_concrete";
+    public static final String GATE_RIGHT = "minecraft:blue_concrete";
 
     /** Yellow drop-ahead caps in both walls at a boat track's lip. */
     public static final String LIP_CAP = "minecraft:yellow_concrete";
@@ -150,7 +179,10 @@ public final class Palette {
             // Course Variety (§1.1): the sand that never falls, moss, and trees (states: stateProblems)
             "minecraft:smooth_sandstone", "minecraft:smooth_sandstone_slab", "minecraft:moss_block",
             "minecraft:oak_log", "minecraft:birch_log", "minecraft:cherry_log", "minecraft:oak_leaves",
-            "minecraft:birch_leaves", "minecraft:cherry_leaves"), GLASS_AND_LIGHTS);
+            "minecraft:birch_leaves", "minecraft:cherry_leaves",
+            // Mountain Run v2 (§8): snow and stone, and spruce (its states: stateProblems, like every wood)
+            "minecraft:snow_block", "minecraft:stone", "minecraft:spruce_log", "minecraft:spruce_leaves"),
+            GLASS_AND_LIGHTS);
 
     private Palette() {
     }
@@ -323,7 +355,7 @@ public final class Palette {
     }
 
     /**
-     * An upright log of {@code wood} (one of {@link #WOODS}): {@code minecraft:oak_log[axis=y]}.
+     * An upright log of {@code wood} (one of {@link #TREE_WOODS}): {@code minecraft:oak_log[axis=y]}.
      *
      * @throws IllegalArgumentException for a wood the palette doesn't have
      */
@@ -347,7 +379,7 @@ public final class Palette {
 
     private static String wood(String wood) {
         String w = wood == null ? "" : wood.trim().toLowerCase(Locale.ROOT);
-        if (!WOODS.contains(w)) {
+        if (!TREE_WOODS.contains(w)) {
             throw new IllegalArgumentException("not a wood of the palette: " + wood);
         }
         return w;

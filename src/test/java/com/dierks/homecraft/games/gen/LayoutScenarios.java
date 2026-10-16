@@ -69,11 +69,14 @@ public final class LayoutScenarios {
             }
         }
 
-        /** 0.35's claim of {@code def}'s region: {@code world,x,y,z,sx,sy,sz} at its 0.35 origin (gap 32). */
+        /**
+         * 0.35's claim of {@code def}'s region: {@code world,x,y,z,sx,sy,sz} at its 0.35 origin and 0.35 size
+         * (gap 32): what 0.35 wrote, whatever size the slot has now (v4 grew golf's and the boat's).
+         */
         public static String claim035(Slots.Def def) {
             int[] o = LegacyBoxes.origin(def);
-            return WORLD + "," + o[0] + "," + o[1] + "," + o[2] + "," + def.sizeX() + "," + def.sizeY() + ","
-                    + def.sizeZ();
+            int[] s = LegacyBoxes.size(def);
+            return WORLD + "," + o[0] + "," + o[1] + "," + o[2] + "," + s[0] + "," + s[1] + "," + s[2];
         }
 
         /** {@code def}'s region claimed at its 0.35 spot (a set being built, or one that stands). */
@@ -228,6 +231,10 @@ public final class LayoutScenarios {
      * as moved, or {@code null} when nothing would: every stored slot and Classic claim is still exactly
      * the region config now gives that slot, and the Clubhouse's and the arena's claims their boxes; the
      * keep area is 0.35's, so new keeps go on in the same grid; and every place is where 0.35 built it.
+     *
+     * <p>v4: the places whose size v4 changed ({@link LayoutGuard#RESIZED}: golf's two and the boat) can't
+     * keep 0.35's shape, so they must be at their shipped spot, and a 0.35 claim of theirs must read as
+     * resized: the engine records it as an old area and empties it (RETIRE), so nothing strands.
      */
     public static String legacyProblem(FileConfiguration c, Install install) {
         try {
@@ -248,6 +255,13 @@ public final class LayoutScenarios {
                 continue;
             }
             List<Box> halves = places.get(d.id());
+            if (LayoutGuard.RESIZED.contains(d.id())) {
+                if (!Regions.resized(d, claim)) {
+                    return d.id() + " was claimed as " + claim + ", which doesn't read as an older size: its old area"
+                            + " wouldn't be emptied";
+                }
+                continue;
+            }
             String now = Regions.claim(d, Regions.claimWorld(claim), new int[]{halves.get(0).minX(),
                     halves.get(0).minY(), halves.get(0).minZ()}, halves.get(1).minX() - halves.get(0).maxX() - 1);
             if (!now.equals(claim)) {
@@ -263,7 +277,15 @@ public final class LayoutScenarios {
             return "the arena was claimed as " + arena + " but config now gives " + places.get("falling_floors").get(0);
         }
         Map<String, List<Box>> legacy = LayoutFixtures.legacyPlaces();
+        Map<String, List<Box>> shipped = LayoutFixtures.shippedPlaces();
         for (Map.Entry<String, List<Box>> e : legacy.entrySet()) {
+            if (LayoutGuard.RESIZED.contains(e.getKey())) {
+                if (!shipped.get(e.getKey()).equals(places.get(e.getKey()))) {
+                    return e.getKey() + " is at " + places.get(e.getKey()) + ", not its shipped spot: v4 grew it, so no"
+                            + " server keeps its 0.35 one";
+                }
+                continue;
+            }
             if (!e.getValue().equals(places.get(e.getKey()))) {
                 return e.getKey() + " is at " + places.get(e.getKey()) + ", not where 0.35 built it (" + e.getValue()
                         + ")";
@@ -300,6 +322,8 @@ public final class LayoutScenarios {
             new Scenario("a Fresh set up", i -> i.edition(Slots.DAILY_PARKOUR_EASY), true),
             new Scenario("a claim alone (the first set being built)", i -> i.claim(Slots.DAILY_GOLF), true),
             new Scenario("a Dropper's old halves alone", i -> i.set(GenAdminKeys.wet("fresh_dropper"),
+                    Install.claim035(Slots.FRESH_DROPPER)), true),
+            new Scenario("a course's old area alone (v4's record)", i -> i.set(GenAdminKeys.old("fresh_dropper"),
                     Install.claim035(Slots.FRESH_DROPPER)), true),
             new Scenario("a Classic holding a recall", i -> i.recall(Slots.CLASSIC_PARKOUR), true),
             new Scenario("a recall alone (not built yet)", i -> i.set(GenAdminKeys.recall("fresh_classic_golf"),

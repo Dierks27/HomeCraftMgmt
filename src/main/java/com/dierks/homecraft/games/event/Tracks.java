@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
@@ -222,6 +223,29 @@ final class Tracks {
         }
         out.sort(null);
         return out;
+    }
+
+    /**
+     * The candidate night {@code eventId} will race on under {@code course: auto}, as far as a cheap look can
+     * tell (no blocks are read): its turn among the candidates ({@link RaceTrack#pick}), or the next one after
+     * it in turn that isn't a Mountain Run v2 Slalom, which a night refuses (red-team F05, audit M07), the way
+     * {@link #pick} goes on past it; {@code null} when there is none.
+     */
+    String inTurn(String eventId) {
+        List<String> ids = candidates();
+        String first = RaceTrack.pick(ids, eventId);
+        if (first == null) {
+            return null;
+        }
+        TimeTrials t = game.trials();
+        int at = ids.indexOf(first);
+        for (int i = 0; i < ids.size(); i++) {
+            String id = ids.get((at + i) % ids.size());
+            if (t == null || !BoatHype.slalom(t.course(id))) {
+                return id;
+            }
+        }
+        return null; // only Slaloms: fit() already skips the night
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.cabinet.tictactoe;
 
+import com.dierks.homecraft.games.TokenBalance;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -140,8 +141,8 @@ class TicTacToeTest {
         TicTacToeSettings s = TicTacToeSettings.defaults();
         assertEquals(0, s.milestoneReward(), "Tic-Tac-Toe has no milestones (spec §10b)");
         assertTrue(s.milestonesFor(TicTacToe.BOARD).isEmpty(), "not even on the wins board");
-        assertEquals(1, s.dailyReward(), "the day's first easy win or hard draw pays one token");
-        assertEquals(1, s.dailyCap(), "and that's all it pays in a day");
+        assertEquals(TokenBalance.DUEL_DAILY, s.dailyReward(), "the day's first easy win or hard draw pays the token balance's");
+        assertEquals(s.dailyReward(), s.dailyCap(), "and that's all it pays in a day");
     }
 
     @Test

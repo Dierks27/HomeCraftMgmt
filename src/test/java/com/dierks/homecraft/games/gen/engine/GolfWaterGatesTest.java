@@ -92,13 +92,14 @@ class GolfWaterGatesTest {
         gen.check();
         assertTrue(guarded(oldA) && guarded(Regions.half(golf, here, Slots.HALF_GAP, 'B')),
                 "moved away: the old halves (maybe holding ponds) stay guarded");
-        assertEquals(Regions.claim(golf, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.wet(golf.id())),
-                "remembered as a wet region, as a Dropper's is");
+        assertEquals(Regions.claim(golf, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.old(golf.id())),
+                "remembered as an old region, as a Dropper's is");
         assertTrue(host.logged(Level.WARNING, "Its ponds may still be there") > 0
-                && host.logged(Level.WARNING, "drain first - move it back and use /hcm games gen clear " + golf.id()
-                + " (it empties the ponds before anything else)") > 0, "the admin is told to drain its ponds first");
+                && host.logged(Level.WARNING, "drain first - empty it with /hcm games gen tidy " + golf.id()
+                + " confirm (it drains the ponds before anything else") > 0, "the admin is told to drain its ponds first");
         assertTrue(gen.summary().stream().anyMatch(l -> l.startsWith(golf.id() + ": its old area")
-                && l.contains("drain first")), "and the status says so: " + gen.summary());
+                && l.contains("/hcm games gen tidy " + golf.id() + " confirm")), "and the status says so: "
+                + gen.summary());
 
         Slots.Def boat = Slots.ICE_BOAT;
         int[] boatHere = boat.origin();
@@ -109,7 +110,7 @@ class GolfWaterGatesTest {
         Box boatOld = Regions.half(boat, boatHere, Slots.HALF_GAP, 'A');
         assertFalse(gen.inArea(W, boatOld.minX(), boatOld.minY(), boatOld.minZ()),
                 "the ice boat stays dry: its old region isn't kept guarded");
-        assertNull(host.store.meta(GenAdminKeys.wet(boat.id())), "nor remembered");
+        assertNull(host.store.meta(GenAdminKeys.old(boat.id())), "nor remembered");
     }
 
     @Test

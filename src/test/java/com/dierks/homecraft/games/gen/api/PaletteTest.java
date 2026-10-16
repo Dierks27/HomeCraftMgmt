@@ -38,7 +38,9 @@ class PaletteTest {
                 // Course Variety §1.1: the sand that never falls, moss, and trees (their states: stateProblems)
                 "minecraft:smooth_sandstone", "minecraft:smooth_sandstone_slab", "minecraft:moss_block",
                 "minecraft:oak_log", "minecraft:birch_log", "minecraft:cherry_log", "minecraft:oak_leaves",
-                "minecraft:birch_leaves", "minecraft:cherry_leaves")),
+                "minecraft:birch_leaves", "minecraft:cherry_leaves",
+                // MOUNTAIN-V2-SPEC §8: the mountain's snow and stone, and spruce (states: stateProblems)
+                "minecraft:snow_block", "minecraft:stone", "minecraft:spruce_log", "minecraft:spruce_leaves")),
                 new TreeSet<>(Palette.ALLOWED),
                 "adding a block to generated courses is a decision: change this test with it");
     }
@@ -90,11 +92,12 @@ class PaletteTest {
     @Test
     void nothingThatFallsFlowsMeltsOrTicksIsAllowed() {
         for (String banned : List.of("sand", "red_sand", "gravel", "white_concrete_powder", "anvil", "dragon_egg",
-                "scaffolding", "pointed_dripstone", "water", "lava", "ice", "frosted_ice", "snow", "snow_block",
+                "scaffolding", "pointed_dripstone", "water", "lava", "ice", "frosted_ice", "snow", "powder_snow",
                 "soul_sand", "wheat", "redstone_block", "redstone_wire", "piston", "sticky_piston",
                 "chest", "hopper", "barrier", "light", "tnt", "fire", "magma_block", "honey_block", "air",
                 "player_head", "cactus", "sugar_cane", "grass_block", "dirt", "farmland", "moss_carpet",
-                "sandstone_slab", "spruce_leaves", "azalea_leaves", "oak_sapling", "bubble_column")) {
+                "sandstone_slab", "dark_oak_leaves", "azalea_leaves", "oak_sapling", "bubble_column", "snow_layer",
+                "cobblestone", "spruce_sapling", "stripped_spruce_log")) {
             assertFalse(Palette.allowed(banned), banned + " must never be in a generated course");
         }
     }
@@ -142,8 +145,11 @@ class PaletteTest {
         assertEquals("minecraft:cherry_leaves[distance=7,persistent=true,waterlogged=false]",
                 Palette.leaves(" Cherry ", 7), "any case, the farthest");
         assertEquals("minecraft:birch_log[axis=y]", Palette.log("birch"), "an upright trunk");
-        assertEquals(List.of("oak", "birch", "cherry"), Palette.WOODS, "the three woods");
-        for (String wood : Palette.WOODS) {
+        assertEquals(List.of("oak", "birch", "cherry"), Palette.WOODS,
+                "the three woods the Course Variety planners pick from, frozen: they pick by its size");
+        assertEquals(List.of("oak", "birch", "cherry", "spruce"), Palette.TREE_WOODS,
+                "every wood a plan may grow: Mountain Run v2's spruce is the fourth");
+        for (String wood : Palette.TREE_WOODS) {
             assertTrue(Palette.allowed(Palette.log(wood)), wood + " logs are allowed");
             assertNotNull(Material.matchMaterial(Palette.id(Palette.log(wood))), wood + " log is a real block");
             for (int d = 1; d <= Palette.MAX_LEAF_DISTANCE; d++) {
@@ -155,8 +161,10 @@ class PaletteTest {
             }
         }
         assertEquals(7, Palette.MAX_LEAF_DISTANCE, "vanilla's cap");
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.log("spruce"),
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.log("dark_oak"),
                 "a wood the palette doesn't have");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> Palette.leaves("jungle", 2), "nor its leaves");
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.leaves("oak", 0),
                 "a leaf touching nothing");
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.leaves("oak", 8),
@@ -229,6 +237,37 @@ class PaletteTest {
                 "a stripped-wood wall holds a leaf as a log does: beside one a leaf is 1, not 2");
         assertEquals(List.of(), Palette.leafProblems(palette, List.of(new BlockOp(0, 0, 0, (short) 0))), "no leaves");
         assertEquals(List.of(), Palette.leafProblems(null, List.of()), "nothing, nothing to say");
+    }
+
+    @Test
+    void theMountainsBlocksAreSnowStoneSpruceAndTheGateColoursWithExactStates() {
+        // MOUNTAIN-V2-SPEC §8: what Mountain Run v2's scenery and gates are built of, as the game spells it
+        assertEquals("minecraft:snow_block", Palette.SNOW, "the full snow block: it never melts or falls");
+        assertEquals("minecraft:stone", Palette.STONE, "plain stone for faces, the summit and tunnel roofs");
+        assertEquals("minecraft:red_concrete", Palette.GATE_LEFT, "a gate whose opening is on the left is red");
+        assertEquals("minecraft:blue_concrete", Palette.GATE_RIGHT, "and one on the right is blue");
+        assertEquals("minecraft:spruce_log[axis=y]", Palette.log("spruce"), "an upright spruce trunk");
+        assertEquals("minecraft:spruce_leaves[distance=3,persistent=true,waterlogged=false]",
+                Palette.leaves("spruce", 3), "spruce leaves, persistent and dry, at their distance");
+        assertEquals(List.of(), Palette.stateProblems(List.of(Palette.SNOW, Palette.STONE, Palette.GATE_LEFT,
+                Palette.GATE_RIGHT, Palette.log("spruce"), Palette.leaves("spruce", 1), Palette.leaves("spruce", 7))),
+                "every mountain block as the planner writes it keeps the state rules");
+        assertEquals(List.of("'minecraft:spruce_leaves[distance=2,persistent=false,waterlogged=false]' would decay:"
+                        + " leaves must say persistent=true", "'minecraft:spruce_log[axis=x]' isn't upright (axis=y)"),
+                Palette.stateProblems(List.of("minecraft:spruce_leaves[distance=2,persistent=false,waterlogged=false]",
+                        "minecraft:spruce_log[axis=x]")), "spruce keeps the same state rules as every wood");
+        for (String b : List.of(Palette.SNOW, Palette.STONE, Palette.log("spruce"), Palette.leaves("spruce", 2))) {
+            assertTrue(Palette.allowed(b), b + " is allowed");
+            assertNotNull(Material.matchMaterial(Palette.id(b)), b + " is a real block");
+        }
+        for (String banned : List.of("powder_snow", "snow", "ice", "frosted_ice", "gravel", "cobblestone")) {
+            assertFalse(Palette.allowed(banned), banned + " never: it traps, melts, falls or isn't the mountain's");
+        }
+        assertTrue(Palette.holdsLeaves(Palette.log("spruce")) && Palette.isLeaves(Palette.leaves("spruce", 1)),
+                "a spruce trunk holds its leaves as any log does");
+        List<String> palette = List.of(Palette.log("spruce"), Palette.leaves("spruce", 1), Palette.leaves("spruce", 2));
+        assertEquals(List.of(), Palette.leafProblems(palette, List.of(new BlockOp(0, 0, 0, (short) 0),
+                new BlockOp(0, 1, 0, (short) 1), new BlockOp(0, 2, 0, (short) 2))), "a spruce top at vanilla's distances");
     }
 
     @Test

@@ -15,7 +15,7 @@ public final class CupText {
     private CupText() {
     }
 
-    /** "Enter this week's Cup: 5 tokens. Best time wins the pool." */
+    /** "Enter this week's Cup: 10 tokens. Best time wins the pool." */
     public static String enterPrompt(int fee) {
         return "Enter this week's Cup: " + tokens(fee) + ". Best time wins the pool.";
     }

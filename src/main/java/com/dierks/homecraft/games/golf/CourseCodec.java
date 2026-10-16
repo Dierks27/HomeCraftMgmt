@@ -35,7 +35,9 @@ import java.util.Map;
  * with each hole's attempt and witness line); a course without one is written exactly as it
  * always was. A course kept from an Adventure Golf layout says {@code adventure: true}
  * ({@link GolfCourse#adventure}: it keeps playing Adventure Golf's rules); every other course
- * leaves it out.
+ * leaves it out. A course kept from a plan also says which golf planner version made it,
+ * {@code kept_algo: 4} ({@link GolfCourse#keptAlgo}: a kept Golf v4 course keeps its hole clock by
+ * par); a row without it reads as 0, as every row kept before Golf v4 does.
  */
 public final class CourseCodec {
 
@@ -46,6 +48,8 @@ public final class CourseCodec {
     static final int FORMAT = 1;
     /** The key a course kept from an Adventure Golf layout carries ({@link GolfCourse#adventure}). */
     static final String ADVENTURE = "adventure";
+    /** The key a course kept from a plan carries: the planner version that made it ({@link GolfCourse#keptAlgo}). */
+    static final String KEPT_ALGO = "kept_algo";
 
     private CourseCodec() {
     }
@@ -65,6 +69,14 @@ public final class CourseCodec {
      * kept from an Adventure Golf layout ({@link GolfCourse#adventure}), as YAML text.
      */
     public static String write(List<GolfCourse.Hole> holes, GenTag gen, boolean adventure) {
+        return write(holes, gen, adventure, 0);
+    }
+
+    /**
+     * {@link #write(List, GenTag, boolean)}, and for a course kept from a plan of golf planner version
+     * {@code keptAlgo} (more than 0) {@code kept_algo: <version>} ({@link GolfCourse#keptAlgo}).
+     */
+    public static String write(List<GolfCourse.Hole> holes, GenTag gen, boolean adventure, int keptAlgo) {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("format", FORMAT);
         List<Map<String, Object>> list = new ArrayList<>();
@@ -90,6 +102,9 @@ public final class CourseCodec {
         }
         if (adventure) {
             yaml.set(ADVENTURE, true);
+        }
+        if (keptAlgo > 0) {
+            yaml.set(KEPT_ALGO, keptAlgo);
         }
         return yaml.saveToString();
     }
@@ -169,7 +184,22 @@ public final class CourseCodec {
         YamlConfiguration yaml = load(row.data());
         return new GolfCourse(row.id(), row.name(), row.world(), row.enabled(), row.rev(),
                 yaml == null ? List.of() : holes(yaml), yaml == null ? null : gen(yaml),
-                yaml != null && adventure(yaml));
+                yaml != null && adventure(yaml), yaml == null ? 0 : keptAlgo(yaml));
+    }
+
+    /**
+     * The golf planner version a kept course says it was planned at ({@code kept_algo}), 0 when it
+     * doesn't say; throws {@link IllegalArgumentException} if it says something that isn't one.
+     */
+    private static int keptAlgo(YamlConfiguration yaml) {
+        Object raw = yaml.get(KEPT_ALGO);
+        if (raw == null) {
+            return 0;
+        }
+        if (raw instanceof Integer i && i >= 0) {
+            return i;
+        }
+        throw new IllegalArgumentException(KEPT_ALGO + " is not a golf planner version: " + raw);
     }
 
     /**
@@ -195,7 +225,7 @@ public final class CourseCodec {
      */
     public static GamesDao.CourseRow toRow(GolfCourse c, long createdAt, long now) {
         return new GamesDao.CourseRow(c.id(), GAME, KIND, c.name(), c.world(), c.enabled(),
-                write(c.holes(), c.gen(), c.adventure()), c.rev(), createdAt, now);
+                write(c.holes(), c.gen(), c.adventure(), c.keptAlgo()), c.rev(), createdAt, now);
     }
 
     private static void put(Map<String, Object> m, String key, GolfCourse.Spot s) {

@@ -21,6 +21,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -103,6 +104,28 @@ class GolfAdminTest {
         for (String verb : List.of("info", "tp", "hole", "name", "enable", "disable", "delete")) {
             assertNull(GolfAdmin.dailyRefusal(handBuilt, verb), "a hand-built course is untouched: " + verb);
         }
+    }
+
+    /**
+     * {@code info} names the kind a kept course was kept from (the docs pass's code issue): a course kept from a
+     * Golf v4 plan is "Kept from Golf v4", never "Adventure Golf"; one kept from an Adventure Golf plan, or kept
+     * before the version was recorded (only 0.36's Adventure Golf could be), is "Kept from Adventure Golf"; a
+     * hand-built or generated course has no such line.
+     */
+    @Test
+    void infoNamesTheKindAKeptCourseWasKeptFrom() {
+        GolfCourse handBuilt = GolfCourse.create("meadow", "Meadow Links", "games");
+        String v4 = GolfAdmin.keptLine(handBuilt.withAdventure(true).withKeptAlgo(4));
+        assertTrue(v4.startsWith("&dKept from Golf v4: "), v4);
+        assertFalse(v4.contains("Adventure Golf"), "a kept Golf v4 course isn't called Adventure Golf: " + v4);
+        assertTrue(v4.contains("hole clock grows with par"), "and says its group clock: " + v4);
+        for (int algo : new int[]{3, 0}) {
+            String v3 = GolfAdmin.keptLine(handBuilt.withAdventure(true).withKeptAlgo(algo));
+            assertTrue(v3.startsWith("&dKept from Adventure Golf: "), "kept at version " + algo + ": " + v3);
+            assertFalse(v3.contains("clock"), "an Adventure Golf course keeps the 2:00 clock: " + v3);
+        }
+        assertNull(GolfAdmin.keptLine(handBuilt), "a hand-built course");
+        assertNull(GolfAdmin.keptLine(dailyGolf()), "a generated course says what made it instead");
     }
 
     @Test

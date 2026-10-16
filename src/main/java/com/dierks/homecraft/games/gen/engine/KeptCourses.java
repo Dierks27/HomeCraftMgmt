@@ -76,23 +76,25 @@ public final class KeptCourses {
      * (no {@code gen:} block), open, at layout 1.
      */
     public static GamesDao.CourseRow row(String id, String name, String world, PlannedCourse moved, long now) {
-        return row(id, name, world, moved, false, now);
+        return row(id, name, world, moved, false, 0, now);
     }
 
     /**
      * The row of a course kept from {@code moved} (its plan, already moved into its plot):
      * {@link #row(String, String, String, PlannedCourse, long)}, and a golf course planned at a
      * version that plays Adventure Golf's rules keeps playing by them ({@link GolfCourse#adventure}:
-     * its sand stays sand, as its par and proofs were worked out; Course Variety review).
+     * its sand stays sand, as its par and proofs were worked out; Course Variety review), and a golf
+     * course says the version it was planned at ({@link GolfCourse#keptAlgo}: a kept Golf v4 course
+     * keeps its hole clock by par).
      */
     public static GamesDao.CourseRow row(String id, String name, String world, Plan moved, long now) {
-        return row(id, name, world, moved.course(), LiveBlocks.sandPlays(moved.algo()), now);
+        return row(id, name, world, moved.course(), LiveBlocks.sandPlays(moved.algo()), moved.algo(), now);
     }
 
     private static GamesDao.CourseRow row(String id, String name, String world, PlannedCourse moved,
-                                          boolean adventure, long now) {
+                                          boolean adventure, int algo, long now) {
         if (moved instanceof PlannedGolf g) {
-            GolfCourse c = new GolfCourse(id, name, world, true, 1, g.course().holes(), null, adventure);
+            GolfCourse c = new GolfCourse(id, name, world, true, 1, g.course().holes(), null, adventure, algo);
             return com.dierks.homecraft.games.golf.CourseCodec.toRow(c, now, now);
         }
         Course p = ((PlannedTrial) moved).course();

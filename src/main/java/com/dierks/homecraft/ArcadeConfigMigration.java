@@ -576,7 +576,7 @@ final class ArcadeConfigMigration {
         return out;
     }
 
-    private static List<Map<String, Object>> mapRows(List<?> raw) {
+    static List<Map<String, Object>> mapRows(List<?> raw) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (raw == null) {
             return out;
@@ -607,7 +607,7 @@ final class ArcadeConfigMigration {
     }
 
     /** Two lists of rows with the same fields and values, in the same order. */
-    private static boolean sameRows(List<Map<String, Object>> a, List<Map<String, Object>> b) {
+    static boolean sameRows(List<Map<String, Object>> a, List<Map<String, Object>> b) {
         if (a.size() != b.size()) {
             return false;
         }

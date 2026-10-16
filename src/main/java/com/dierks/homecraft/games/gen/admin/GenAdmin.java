@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.admin;
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -65,13 +66,15 @@ public final class GenAdmin implements GameAdmin {
     /** The verbs, in help order. */
     public static final List<String> VERBS = List.of("status", "plan", "preview", "test", "promote", "choose", "unchoose",
             "reroll", "retry", "regenerate", "rebuild", "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear",
-            "history", "recall", "unrecall", "keep", "plots", "clear-plot");
+            "tidy", "retire", "history", "recall", "unrecall", "keep", "plots", "clear-plot");
     /** Other names for a verb (the owner's words): each does exactly what its verb does. */
-    public static final Map<String, String> ALIASES = Map.of("retry", "reroll", "regenerate", "reroll");
+    public static final Map<String, String> ALIASES = Map.of("retry", "reroll", "regenerate", "reroll", "retire", "tidy");
     /** Verbs that change nothing (not logged). */
     private static final List<String> LOOKS = List.of("status", "plan", "tp", "help", "history", "plots", "test");
     /** Verbs that also take a Classics slot's id. */
-    private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim");
+    private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim", "tidy");
+    /** How a preview asks for a Mountain Run v2 style: {@code style:road} or {@code style:slalom}. */
+    static final String STYLE = "style:";
 
     /**
      * Starts an admin's test run on a course that isn't the live one (a preview): Time Trials' test
@@ -117,7 +120,7 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen status [course] &7- how often they change, when next, what is up, and why not",
                 "&e/hcm games gen plan <course> [seed|next] &7- a dry run: what a build would make, no blocks",
                 "&e/hcm games gen preview <course> [next] [seed] &7- build into the spare half to try it (no switch,"
-                        + " even while it's off); next: a candidate for the next set",
+                        + " even while it's off); next: a candidate for the next set; Ice Boat: style:road|slalom",
                 "&e/hcm games gen test <course> &7- a test run on the preview (nothing is recorded; golf: tp idle)",
                 "&e/hcm games gen promote <course> [seed] [confirm] &7- the preview becomes the current course (with"
                         + " a seed: only while the preview is that seed)",
@@ -134,6 +137,8 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen claim <course|plot n> [confirm] &7- count what is in a new area; confirm clears"
                         + " foreign blocks and claims it",
                 "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)",
+                "&e/hcm games gen tidy|retire <course> [confirm] &7- the old area a course left when it moved or grew:"
+                        + " confirm empties it now (only Fresh Courses' own blocks, water first)",
                 "&e/hcm games gen history <course|all> [page] &7- every past course with its code; history <code> for one",
                 "&e/hcm games gen recall <code> [days|forever] [confirm] &7- bring a past course back into a Classics"
                         + " slot (or: recall <classic|kind> <course> <last|number|date d|seed:hex>)",
@@ -243,8 +248,21 @@ public final class GenAdmin implements GameAdmin {
                 engine.plan(id, arg, report);
             }
             case "preview" -> {
-                boolean next = arg != null && arg.equalsIgnoreCase("next");
-                String seed = next ? (rest.size() > 2 ? rest.get(2) : null) : arg;
+                // style:road|slalom anywhere after the course (Ice Boat, MOUNTAIN-V2-SPEC §5.1): the seed search
+                List<String> words = new ArrayList<>(rest.subList(1, rest.size()));
+                String styleWord = styleWord(words);
+                BoatStyle style = styleWord == null ? null : BoatStyle.byWord(styleWord);
+                if (styleWord != null && style == null) {
+                    say(sender, "&cA style is style:road (the Winding Road) or style:slalom.");
+                    return;
+                }
+                if (style != null && !Slots.BOAT.equals(def.generator())) {
+                    say(sender, "&cOnly Ice Boat has styles (style:road or style:slalom).");
+                    return;
+                }
+                String first = words.isEmpty() ? null : words.get(0);
+                boolean next = first != null && first.equalsIgnoreCase("next");
+                String seed = next ? (words.size() > 1 ? words.get(1) : null) : first;
                 if (seed != null && GenSeed.parse(seed) == null) {
                     say(sender, "&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
                     return;
@@ -254,9 +272,9 @@ public final class GenAdmin implements GameAdmin {
                 }
                 logChange(sender, args);
                 if (next) {
-                    engine.previewNext(id, seed, report);
+                    engine.previewNext(id, seed, style, report);
                 } else {
-                    engine.preview(id, seed, report);
+                    engine.preview(id, seed, style, report);
                 }
             }
             case "test" -> test(sender, engine, id);
@@ -357,8 +375,29 @@ public final class GenAdmin implements GameAdmin {
                 logChange(sender, args);
                 engine.clear(id, report);
             }
+            case "tidy" -> {
+                if (confirm) {
+                    if (refusedNearRestart(sender, engine)) {
+                        return;
+                    }
+                    logChange(sender, args);
+                }
+                engine.tidy(id, confirm, report);
+            }
             default -> help().forEach(report);
         }
+    }
+
+    /** The {@code style:} word's value taken out of {@code words} ({@code style:road} gives "road"), or {@code null}. */
+    static String styleWord(List<String> words) {
+        for (int i = 0; i < words.size(); i++) {
+            String w = words.get(i);
+            if (w.toLowerCase(Locale.ROOT).startsWith(STYLE)) {
+                words.remove(i);
+                return w.substring(STYLE.length());
+            }
+        }
+        return null;
     }
 
     /**
@@ -466,7 +505,7 @@ public final class GenAdmin implements GameAdmin {
                 if (h.error() != null) {
                     say(sender, "&c" + h.error());
                 } else if (h.detail() != null) {
-                    engine.historyOf(h.slot(), h.detail()).forEach(report);
+                    engine.historyOf(h.slot(), h.detail(), report);
                 } else {
                     engine.history(h.slot(), h.page()).forEach(report);
                 }
@@ -600,6 +639,13 @@ public final class GenAdmin implements GameAdmin {
             return out;
         }
         Slots.Def def = Slots.of(args[1]);
+        if (verb.equals("preview") && def != null && Slots.BOAT.equals(def.generator()) && args.length >= 3
+                && args.length <= 5) { // Ice Boat's style:road|slalom, anywhere after the course
+            List<String> offer = new ArrayList<>(args.length == 3 ? List.of("next") : List.of());
+            offer.addAll(List.of(STYLE + BoatStyle.ROAD.id(), STYLE + BoatStyle.SLALOM.id()));
+            match(out, last, offer);
+            return out;
+        }
         if (args.length == 3) {
             switch (verb) {
                 case "plan", "preview" -> match(out, last, List.of("next"));
@@ -607,7 +653,7 @@ public final class GenAdmin implements GameAdmin {
                 case "mix" -> match(out, last, def == null ? List.of() : List.of(def.tierOrMix()));
                 case "pin" -> match(out, last, List.of("live"));
                 case "tp" -> match(out, last, List.of("live", "idle"));
-                case "promote", "choose", "reroll", "claim", "clear" -> match(out, last, List.of("confirm"));
+                case "promote", "choose", "reroll", "claim", "clear", "tidy" -> match(out, last, List.of("confirm"));
                 default -> {
                     // nothing more to offer
                 }

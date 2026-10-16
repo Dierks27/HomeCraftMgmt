@@ -1,0 +1,88 @@
+format: 1
+holes:
+- par: 3
+  tee:
+    x: 5129.5
+    y: 164.0
+    z: 4099.5
+    yaw: 0.0
+  cup:
+    x: 5129
+    y: 162
+    z: 4112
+  corner1:
+    x: 5126
+    y: 161
+    z: 4097
+  corner2:
+    x: 5132
+    y: 168
+    z: 4114
+- par: 3
+  tee:
+    x: 5151.5
+    y: 164.0
+    z: 4099.5
+    yaw: 0.0
+  cup:
+    x: 5151
+    y: 162
+    z: 4114
+  corner1:
+    x: 5148
+    y: 161
+    z: 4097
+  corner2:
+    x: 5154
+    y: 168
+    z: 4116
+- par: 3
+  tee:
+    x: 5173.5
+    y: 164.0
+    z: 4099.5
+    yaw: 0.0
+  cup:
+    x: 5172
+    y: 162
+    z: 4115
+  corner1:
+    x: 5169
+    y: 161
+    z: 4097
+  corner2:
+    x: 5177
+    y: 168
+    z: 4117
+gen:
+  slot: fresh_tiny_golf
+  generator: golf
+  algo: 3
+  day: 20725
+  date: '2026-09-29'
+  cadence: 7
+  reroll: 0
+  seed: '0000000000000001'
+  half: A
+  plan: a61b98fd5199
+  ref_ms: 0
+  gold_ms: 0
+  silver_ms: 0
+  built_at: 1790000000000
+  attempts:
+  - 0
+  - 0
+  - 0
+  witness:
+  - - - 5.0
+      - 5
+    - - 275.0
+      - 1
+  - - - 0.0
+      - 5
+    - - 0.0
+      - 1
+  - - - 10.0
+      - 5
+    - - 340.0
+      - 2

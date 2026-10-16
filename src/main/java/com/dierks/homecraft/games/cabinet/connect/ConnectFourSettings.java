@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.connect;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -26,8 +27,8 @@ public record ConnectFourSettings(boolean enabled, int dailyReward, int dailyCap
     public static ConnectFourSettings defaults() {
         return new ConnectFourSettings(
                 true,
-                1,
-                1);
+                TokenBalance.DUEL_DAILY,
+                TokenBalance.DUEL_DAILY_CAP);
     }
 
     /** Read {@code games.connect_four} over {@code d}; never throws. */

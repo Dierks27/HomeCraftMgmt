@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.snake;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -44,9 +45,9 @@ public record SnakeSettings(boolean enabled, int milestoneReward, int dailyRewar
     public static SnakeSettings defaults() {
         return new SnakeSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 6,
                 10,
                 List.of(10, 20, 30));

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.arena;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.RoundSettings;
 import com.dierks.homecraft.games.gen.api.Box;
@@ -26,9 +27,9 @@ import java.util.List;
  * @param solo                whether a lone player may play a solo round
  * @param roundSeconds        sudden death (the edges fall in) after this long (30-900)
  * @param resetBlocksPerTick  how many blocks the reset between rounds writes a tick
- * @param dailyReward         tokens for the first full round of the day
+ * @param dailyReward         tokens for the first full round of the day (0-{@value #MAX_REWARD})
  * @param milestones          solo survival seconds for the three milestones, rising
- * @param milestoneRewards    tokens for each milestone, once ever
+ * @param milestoneRewards    tokens for each milestone, once ever, paid whole (each 0-{@value #MAX_REWARD})
  * @param dailyCap            the most tokens Falling Floors pays a player a day
  */
 public record FallingFloorsSettings(boolean enabled, List<Integer> origin, int fadeTicks, int minPlayers,
@@ -53,6 +54,9 @@ public record FallingFloorsSettings(boolean enabled, List<Integer> origin, int f
      */
     public static final List<Integer> ORIGIN = List.of(6688, 176, 8544);
 
+    /** The most {@code daily_reward} and each {@code milestone_rewards} entry may be (0.37: was 10). */
+    public static final int MAX_REWARD = TokenBalance.FLOORS_MAX_REWARD;
+
     public FallingFloorsSettings {
         origin = List.copyOf(origin == null ? ORIGIN : origin);
         milestones = List.copyOf(milestones == null ? List.of() : milestones);
@@ -70,10 +74,10 @@ public record FallingFloorsSettings(boolean enabled, List<Integer> origin, int f
                 true,
                 RoundSettings.DEFAULT_ROUND_SECONDS,
                 400,
-                1,
+                TokenBalance.FLOORS_DAILY,
                 List.of(30, 60, 120),
-                List.of(1, 2, 3),
-                3);
+                TokenBalance.FLOORS_MILESTONES,
+                TokenBalance.FLOORS_DAILY_CAP);
     }
 
     /** Read {@code games.falling_floors} over {@code d}; never throws. */
@@ -98,9 +102,9 @@ public record FallingFloorsSettings(boolean enabled, List<Integer> origin, int f
         int roundSeconds = n.whole("round_seconds", d.roundSeconds(), RoundSettings.MIN_ROUND_SECONDS,
                 RoundSettings.MAX_ROUND_SECONDS);
         int resetBlocksPerTick = n.whole("reset_blocks_per_tick", d.resetBlocksPerTick(), 50, 5000);
-        int dailyReward = n.whole("daily_reward", d.dailyReward(), 0, 10);
+        int dailyReward = n.whole("daily_reward", d.dailyReward(), 0, MAX_REWARD);
         List<Integer> milestones = n.ladder("milestones", d.milestones(), 3600, false);
-        List<Integer> milestoneRewards = n.intList("milestone_rewards", d.milestoneRewards(), 0, 10, 3);
+        List<Integer> milestoneRewards = n.intList("milestone_rewards", d.milestoneRewards(), 0, MAX_REWARD, 3);
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 100);
         return new FallingFloorsSettings(enabled, origin, fadeTicks, minPlayers, maxPlayers, solo, roundSeconds,
                 resetBlocksPerTick, dailyReward, milestones, milestoneRewards, dailyCap);

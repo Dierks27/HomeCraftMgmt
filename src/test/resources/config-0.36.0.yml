@@ -1,0 +1,2169 @@
+# =====================================================================
+#  HomeCraft Management — configuration
+#  Phase 1 wires the `crafting` section fully. `market`, `shipping`, and
+#  `minis` are stubs here so the schema is stable for later phases.
+#  Recipes are DATA-DRIVEN and RELOADABLE — never hardcoded. Ship empty;
+#  nothing is craftable until an admin fills a recipe in. `/hcm reload`
+#  re-reads this file and re-registers recipes live.
+# =====================================================================
+
+# The online store branding shown in-game (the PC opens this). Both are just
+# display text — the URL is not clickable and never resolves.
+store:
+  name: "Crate"
+  display_url: "www.Crate.com"
+
+# Which worlds the ECONOMY runs in (§11 #1 — the creative-world money exploit).
+# Outside these worlds: no Market buy/sell, no Marketplace listing/buying, no Card
+# Pack purchase, no Printer use, no Vending sales, no auction bids, no wild drops or
+# natural spawns, no token earning, and HomeCraft blocks can't be placed (existing
+# ones say "the economy is disabled in this world"). On first run the server's main
+# world is written here automatically. Pair it with Multiverse-Inventories groups so
+# items can't cross from a creative world (see README).
+worlds:
+  economy_enabled: [world]
+  log_blocked_attempts: true    # log every refused attempt with player + world
+
+# SQLite backups (§11 #6). A copy is ALWAYS taken before a schema migration
+# (backups/hcm-<timestamp>-pre-migration.db); on top of that a scheduled backup runs
+# through SQLite's online backup API and the oldest beyond `keep` are pruned.
+# /hcm backup now writes one immediately. Every backup is logged with size + path.
+backups:
+  enabled: true
+  interval_hours: 24
+  keep: 14
+
+# Shop presentation. Vending Machines float their upper half as an ItemDisplay
+# (flush on the lower head, no gap) with a glow outline visible only to players
+# within `radius` (through walls, on purpose), a small hologram listing up to
+# `lines` items with prices, and an action-bar "peek" of the listings while your
+# crosshair rests on the machine within `peek.range` blocks.
+shops:
+  glow:
+    enabled: true
+    radius: 16
+    color: { vending: light_purple }   # per block type; named colours or #rrggbb
+  hologram: { enabled: true, lines: 3 }
+  peek: { range: 6 }
+
+# The players' clock. The login streak, daily and weekly quests, and every Arcade
+# "per day" / "per week" limit roll over at MIDNIGHT IN THIS ZONE — not at UTC midnight,
+# which is 7 PM in Minnesota (6 PM in winter), right in the middle of evening play.
+# Any region name Java knows (America/Chicago, Europe/London, …). Blank or unknown falls
+# back to UTC with a warning in the log.
+# (The market's and the Courier's daily limits still roll over at UTC midnight — they
+# are money limits and are deliberately not moved by this.)
+clock:
+  time_zone: America/Chicago
+
+# Written by the plugin: the last config revision applied to this file. Each release
+# runs only the steps a file is behind on, so a value you have tuned is never dragged
+# back through an earlier step. Don't edit this by hand.
+config_revision: 19
+
+# GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
+# No section label is hard-coded. The store title supports {store} and {url}
+# tokens (filled from store.name / store.display_url above).
+menus:
+  admin_title: "&4Admin Studio"
+  museum_title: "&5Mini Museum &8&l·&r &7Collectibles"
+  market_title: "&1Sell to Crate"
+  store_title: "&6Welcome to {store} &8· &7{url}"
+  # The PC's root screen — the Site launcher (§2.2). The PC is a browser and each
+  # feature is a Site you open on it; this is the address bar, not a shop front.
+  pc_title: "&9PC &8· &7{url}"
+  # Where the browsing menus start before a player touches anything. Each player's
+  # choices are then remembered for the rest of their session (not saved to disk).
+  store:
+    # The department tab selected first: All, or any name from marketplace.departments.
+    default_department: All
+    # NAME | PRICE_UP | PRICE_DOWN | STOCK | HOT (HOT only while the live market runs, else NAME)
+    default_sort: NAME
+  museum:
+    # How the Museum groups Minis: SERIES | RARITY | TYPE
+    default_view: SERIES
+
+# The Crate Marketplace (Phase 5): player-run Pallets sell ordinary items online;
+# purchases ship to the buyer's Mailbox. (Minis are NOT sold here — they stay on
+# the tracked Vending Machine + Auction House.) Obtain the blocks with
+# /hcm give <mailbox|pallet>.
+marketplace:
+  # The Mailbox comes in colour variants (see skins.mailbox + recipes.mailbox);
+  # {variant} in the name becomes the colour, e.g. "Blue Mailbox".
+  mailbox_block: { material: BARREL, name: "&e{variant} Mailbox" }
+  pallet_block:  { material: CHEST,  name: "&6Pallet" }
+  fee:
+    commission_percent: 8.0     # % of each sale burned as a money sink
+    daily_storage_fee: 0.0      # per-Pallet per-day rent (0 = off)
+  require_protected_land: true  # a Pallet only works on claimed Towny/WG land
+  # Auto-sorted by item property + name; override the exceptions here (MATERIAL: Department).
+  # Also the department tabs in the Store and instant Market, so one item sits in the
+  # same place wherever a player meets it. Misc (the LAST entry) catches anything the
+  # classifier cannot place — watch the "Market departments:" line at startup for a Misc
+  # that is growing, and add a category_overrides entry here.
+  # EIGHT is the ceiling: the tab row is nine slots and "All" takes the first. A ninth
+  # department is still sold and still shows under "All", but it gets no tab of its own,
+  # so trim or merge before adding. (Weapons + Armor are one Combat tab for this reason.)
+  departments: [ Blocks, Materials, Food, Tools, Combat, Redstone, Collectibles, Misc ]
+  category_overrides: {}
+  #  ENDER_PEARL: Misc
+  # Items that can never be listed (spawn eggs are always banned automatically).
+  ban_list: [ BEDROCK, COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK,
+              COMMAND_BLOCK_MINECART, BARRIER, STRUCTURE_BLOCK, STRUCTURE_VOID, JIGSAW,
+              LIGHT, DEBUG_STICK, KNOWLEDGE_BOOK ]
+
+crafting:
+  # Respect Towny / WorldGuard build permissions when placing/using/breaking
+  # HomeCraft custom blocks. If those plugins are absent this is a no-op.
+  respect_town_perms: true
+
+  # ---- The Mini Workbench --------------------------------------------
+  # A placeable custom block. Right-click opens the custom crafting GUI
+  # where the PC (and, later, craftable Minis) are made.
+  workbench:
+    # Vanilla base block it is disguised as. Must be a tile-entity block so
+    # the placed block can also carry a PDC marker. CRAFTER is thematic.
+    base_block: CRAFTER
+    display_name: "&6Mini Workbench"
+    lore:
+      - "&7Right-click to open the crafting bench."
+      - "&8HomeCraft Management"
+    # Bootstrap recipe for obtaining the Workbench itself, registered as a
+    # normal (vanilla) shaped recipe. EMPTY by default = not craftable yet.
+    # Fill `shape` (1–3 rows, up to 3 chars each) and map every symbol in
+    # `ingredients` to a Material. Space = empty cell.
+    recipe:
+      shape: []
+      ingredients: {}
+      # Example (delete the [] above and uncomment to enable):
+      # shape:
+      #   - "IRI"
+      #   - "RCR"
+      #   - "IRI"
+      # ingredients:
+      #   I: IRON_INGOT
+      #   R: REDSTONE
+      #   C: CRAFTING_TABLE
+
+  # ---- The PC --------------------------------------------------------
+  # The gate to the Crate market. Crafted at any crafting table (vanilla recipe,
+  # see `recipes.pc` below) or in a Printer's / legacy Workbench's craft grid.
+  pc:
+    base_block: PLAYER_HEAD
+    display_name: "&bPersonal Computer"
+    lore:
+      - "&7Right-click to open the store."
+      - "&8HomeCraft Management"
+    # Legacy computer/monitor head texture. `skins.pc` (below) wins when set; this
+    # is only the fallback when that is blank. Kept in sync with skins.pc.
+    head_texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTQxZWFhNDA2NWUwYjVkMTVmOTA3OGEzZGMyZTZkMzQ0OWUxMjdkN2JjZjFhNmJiM2JmZGNlOGUzYjg4MjYzNiJ9fX0="
+    # The PC recipe now lives under `recipes.pc` (below) with every other
+    # craftable block — one data-driven loader, registered as vanilla recipes.
+
+# ---------------------------------------------------------------------
+#  Phase 9 — The Mini Printer (the ONLY place a Mini is minted).
+#  Bring a Card, pay a fee + filament, roll a grade (Gray→Gold), and
+#  print a graded Mini. A printer flagged public (via /hcm printer public)
+#  is FREE — the house covers filament & fee, basic finishes only (no Shiny).
+# ---------------------------------------------------------------------
+printer:
+  # Vanilla base block it is disguised as (tile-entity so it can carry a PDC tag).
+  base_block: SMITHING_TABLE
+  display_name: "&bMini Printer"
+  lore:
+    - "&7Right-click with a Card to print a graded Mini."
+    - "&8HomeCraft Management"
+  # PRIVATE (home) printers: consume the player's own filament + this money fee
+  # (0 = filament only) and offer the Shiny finish.
+  fee: 0
+  # PUBLIC (Mall) printers: charge this flat money fee, the house covers the
+  # filament, no Shiny. Flag a printer public with /hcm printer public.
+  public_fee: 150
+  # The premium Shiny finish (private printers only): extra filament + fee.
+  shiny:
+    filament: MAGENTA   # a DyeColor; the Shiny finish consumes this colour
+    amount: 2           # units of the above filament (0 = no material cost)
+    fee: 25             # extra money on top of the base fee (0 = none)
+
+# ---------------------------------------------------------------------
+#  Card Packs (§3.5). Open a pack, get a Card, print it into a Mini.
+#  A pack is bought sealed (for dollars, tokens, or either) and opened with a
+#  right-click; it gives CARDS, never Minis — a Card is printed into a Mini at a
+#  Printer. Build/edit packs in-game with /hcm packs (Admin Studio → Card Packs);
+#  this list is kept in sync, so there's no need to edit it by hand.
+#    id            unique key
+#    display       shown name (&-colour codes ok)
+#    price         dollars (0 = not sold for dollars)
+#    price_tokens  tokens (0 = not sold for tokens)
+#    count         Cards per pack. A pack that can only fill some of them refunds
+#                  the rest's share in whatever currency paid for it.
+#    tag           optional: only Minis with this tag (blank = every Mini)
+#    rarity_odds   relative odds per rarity. A rarity with no Cards left drops out
+#                  and the rest scale up; if nothing is left the pack is Sold out.
+#                  New Minis join automatically — no list to keep up to date.
+#    pool          optional hand-picked list ({ card: <mini id>, weight: N });
+#                  when present it is used INSTEAD of rarity_odds.
+# ---------------------------------------------------------------------
+packs:
+  - id: starter
+    display: "&aStarter Pack"
+    price: 100
+    price_tokens: 50
+    count: 1
+    tag: ""
+    rarity_odds: { COMMON: 62, UNCOMMON: 28, RARE: 9, EPIC: 1, LEGENDARY: 0 }
+  - id: premium
+    display: "&dPremium Pack"
+    price: 300
+    price_tokens: 0
+    count: 1
+    tag: ""
+    rarity_odds: { COMMON: 0, UNCOMMON: 45, RARE: 38, EPIC: 13, LEGENDARY: 4 }
+
+# ---------------------------------------------------------------------
+#  Courier — paid delivery runs (Phase 1: economy only, no world changes).
+#
+#  A player takes a job from the Courier Site on the PC, travels to a waypoint,
+#  and is paid on DISTANCE and TRAVEL METHOD. The payout locks at acceptance, so
+#  running in circles earns nothing.
+#
+#  Why it pays what it pays: per §3.1 material enters the house market ONLY when
+#  players mine and sell it in. If deliveries paid as well as mining, mining stops
+#  and the market starves. So a full day of runs sits meaningfully BELOW a mining
+#  session per minute and is still worth doing — five jobs at band midpoints, all
+#  on foot, is about $93 against a ~$150 mining day for slightly more wall-clock
+#  time. Do not raise these without re-checking that relationship.
+# ---------------------------------------------------------------------
+courier:
+  enabled: true
+  # travel_fee = (base + per_block * distance) * travel_multiplier
+  # distance is the horizontal straight line from where the job was accepted to
+  # the waypoint, clamped to [min_distance, max_distance].
+  payout:
+    base: 4.0
+    per_block: 0.012
+    min_distance: 200
+    max_distance: 4000
+  # How much of the fee each way of travelling is worth. Vanilla movement
+  # statistics are snapshotted at accept and diffed at turn-in, then blended by the
+  # FRACTION of centimetres moved in each group — never a total. A player who runs
+  # the route once and one who runs it four times both score 1.00.
+  #   foot     WALK / SPRINT / CROUCH / SWIM / WALK_ON_WATER / WALK_UNDER_WATER / CLIMB
+  #   mount    HORSE / STRIDER / PIG / NAUTILUS  (a Nautilus is a tameable saddled
+  #            mount like a Strider, not a boat — hence 0.85 rather than 0.80)
+  #   boat     BOAT
+  #   rail     MINECART
+  #   elytra   AVIATE
+  #   ghast    HAPPY_GHAST — it flies, so it removes more effort than a horse, but
+  #            it is slow and a real investment to get one
+  #   creative FLY (creative flight earns nothing)
+  travel:
+    foot: 1.00
+    mount: 0.85
+    boat: 0.80
+    ghast: 0.70
+    rail: 0.65
+    elytra: 0.45
+    creative: 0.00
+  # Anti-teleport: if total tracked movement comes to less than `floor` of the
+  # locked straight-line distance, the travel fee pays `payout` instead. Cargo value
+  # on a trade run still pays in full. Logged at debug, never called out in chat —
+  # the smaller number is the message.
+  anti_teleport:
+    floor: 0.70
+    payout: 0.20
+  # Distance bands and how many of each a player may run per UTC day. Keyed by
+  # epoch-day at read time like every other daily tally here — no scheduler.
+  bands:
+    local:     { min: 200,  max: 600,  per_day: 2 }
+    regional:  { min: 600,  max: 1800, per_day: 2 }
+    long_haul: { min: 1800, max: 4000, per_day: 1 }
+  # An accepted job left unfinished this long is abandoned and its slot returned.
+  expire_minutes: 60
+  # How close to the waypoint counts as arriving. This is the fallback route — the
+  # normal way to finish is the villager at the delivery building — and it stays
+  # enabled on purpose so a failed placement never strands anyone 1,800 blocks out.
+  turn_in_radius: 10
+  # Waypoint generation: a random bearing and distance from the player, resolved to
+  # the highest solid block. A spot is rejected if it is liquid, in an ocean biome,
+  # or on Towny/WorldGuard claimed land; after `max_rerolls` the job is not offered
+  # rather than placed somewhere unreachable.
+  waypoint:
+    max_rerolls: 20
+  # ---- The package ----------------------------------------------------
+  # A courier run hands you a crate to carry. Trade runs do not get one — the
+  # cargo IS the player's own goods, which is the point of that kind of run.
+  #
+  # The crate is worth nothing and must stay worth nothing: anything that survives
+  # its job is an item you could mint on demand by taking Courier work, in an
+  # economy whose premise is that material only enters when somebody mines it. So
+  # it cannot be placed, worn, stacked, listed on a Pallet, or carried into another
+  # job, and it is destroyed the moment the delivery ends by any route. A crate
+  # belonging to a job that is over is removed on sight.
+  #
+  # It is a player head, and so is a Mini — they are told apart by their PDC keys
+  # and never by looking like a head, so nothing that handles Minis can ever pick
+  # one up by mistake.
+  package:
+    enabled: true
+    name: "&6Delivery Crate"
+    # Dropped on death by default: the grave is the recovery path, and losing it is
+    # a real consequence rather than a bug. Turn this on to be kinder to the
+    # younger players.
+    keep_on_death: false
+    # What losing the crate costs, as a multiple of what the run would have paid on
+    # foot. At 1.0 a lost crate cancels the run out: you walked it for nothing.
+    #
+    # The crate is worthless, so this is not compensation for an item — it is the
+    # only reason carrying one is a responsibility rather than a decoration. It is
+    # charged when the run ends WITHOUT the crate coming back, never merely for
+    # failing the run, and the same figure buys a replacement at any PC so a lost
+    # crate does not strand a delivery.
+    #
+    # What cannot be paid becomes debt, which blocks the courier board (and nothing
+    # else) until it is cleared. Set to 0 to turn the fee and the debt off entirely.
+    loss_multiplier: 1.0
+  # ---- The destination (Phase 2) --------------------------------------
+  # A small house appears at the waypoint with a villager outside it. Right-click
+  # the villager to hand the cargo over. When the run ends — delivered, expired,
+  # abandoned, or the plugin shutting down — the field is put back exactly as it
+  # was from a snapshot taken before the first block changed.
+  building:
+    enabled: true
+    # Log every refusal to place a building at INFO, with the job, the coordinates and the
+    # reason. On by default because the alternative — which is what 0.26.0 shipped — is a
+    # delivery that quietly arrives at an empty field with nothing anywhere to explain why.
+    # Set false once the numbers below are tuned; refusals then drop to FINE.
+    debug: true
+    # How close the player must get before the site is built. NOT the ~100 blocks
+    # that reads naturally: a server view-distance of 10 chunks is 160 blocks, so a
+    # house placed at 100 would materialise in front of the player. At 220 it is
+    # comfortably outside any normal view distance and streams in with the terrain.
+    # A job accepted closer than this places immediately, before the player looks.
+    place_at_blocks: 220
+    # Reject rather than flatten: if the ground under the footprint varies by more
+    # than this many blocks, the waypoint is rerolled. Terraforming somebody's
+    # hillside cannot be undone by putting blocks back; picking a new field can.
+    max_slope: 3
+    # Trees are cleared, not refused. Ground level is found by looking DOWN through leaves,
+    # trunks and undergrowth to real terrain, so a wood is a buildable field and only genuine
+    # relief rejects it. How far down to look before giving up:
+    ground_scan_depth: 32
+    # How much of the footprint may be water before the spot is refused. A shoreline is a fine
+    # place for a delivery; a lake is not.
+    max_liquid_percent: 10
+    # Radius of the flatness test, in blocks — roughly half the largest house. This runs while
+    # the waypoint is being chosen, so broken ground costs a reroll rather than a walk.
+    terrain_check_radius: 6
+    # Margin around the building included in the snapshot, in blocks. The captured
+    # region is deliberately larger than the house — Bukkit does not specify which
+    # corner a structure rotation pivots around, so the box is sized to contain it
+    # whichever way it turns. A box of air costs almost nothing once compressed.
+    region_padding: 4
+    # Filled beneath the house so it never floats on a slope. Must be < region_padding
+    # or the fill would fall outside the snapshot and survive the restore.
+    foundation_depth: 3
+    # When the building comes down. NOT a timer: a clock can always run out while the
+    # player is standing in the doorway, which is exactly what it did — the field
+    # snapped back in the same breath as the payout. The rules, in order:
+    #   1. NEVER while a player is inside the footprint. Restoring logs into the space
+    #      someone occupies suffocates them. This one defers even past the backstop.
+    #   2. Not before `linger_seconds`, so it does not vanish as you are being paid.
+    #   3. Then once nobody is within `restore_distance` — it is out of sight, so it
+    #      simply is not there next time you look — or once `max_linger_seconds` has
+    #      passed, which covers somebody logging off on the doorstep.
+    linger_seconds: 8
+    restore_distance: 120
+    max_linger_seconds: 600
+    # Trees rooted where the house goes are cleared as WHOLE trees — a flood fill through
+    # connected logs and leaves — and the captured region grows to bound them. Cutting at
+    # a fixed height left canopy hanging in the sky, and orphaned leaves DECAY, which is a
+    # change no restore undoes. The caps stop one delivery in a dark forest asking to
+    # snapshot half a chunk; when they bite, whatever falls outside the region is left
+    # standing rather than cleared.
+    # Refuse a spot where somebody has already built — planks, a crafting table, a
+    # bed, a pane of glass. None of those fall out of terrain generation on their
+    # own, so finding one means the field is already someone's.
+    #
+    # This is the only check that catches an UNCLAIMED build. The waypoint refuses
+    # claimed land, but Towny only knows about claims, and the thing a player is
+    # most likely to have out in the wild is the base they never got round to
+    # claiming. To every other check, that base is empty ground.
+    #
+    # It also rejects near villages, shipwrecks, mineshafts and ruins, which use
+    # the same materials. That is deliberate: dropping a delivery house into the
+    # middle of a village is its own kind of wrong, and a reroll costs nothing.
+    reject_built_blocks: true
+    clear_trees: true
+    max_clear_blocks: 3000
+    max_region_side: 64
+    recipient_name: "Courier Recipient"
+    # A site refuses to be built over anything a block snapshot could not put back.
+    # Three kinds, all checked before the first block moves:
+    #   * blocks with contents  — a chest is not recoverable from its block data
+    #   * entities somebody placed — item frames, armour stands, chest minecarts,
+    #     boats, displays. These are not in the snapshot at all, so anything that
+    #     destroys one during the job destroys it for good. Wandering mobs are
+    #     ignored; refusing a field because a cow walked through it would refuse
+    #     most fields.
+    #   * anything HomeCraft already tracks here — a placed PC, Workbench, Pallet
+    #     or, worst of all, a placed Mini, which is a numbered and capped
+    #     collectible that cannot be re-minted if the window goes wrong.
+    # Below is the fourth kind: block types only the world knows about. A player
+    # head out in a field is either somebody's decoration or a death-storage grave
+    # (GravesX and similar), and neither should spend an hour behind a wall.
+    # Chest-based and armour-stand-based graves are already caught by the two
+    # checks above. Leave empty to get this default back.
+    avoid_blocks: [ PLAYER_HEAD, PLAYER_WALL_HEAD ]
+    # How far around a candidate waypoint to look for the two CHEAP refusals (the
+    # tracked-placement query and the entity sweep) while a job is still being
+    # rolled. Catching it here rerolls onto a different field; catching it later
+    # leaves a job the player still has to walk that arrives at nothing. The full
+    # block scan is thousands of reads, so it runs once at placement, not per
+    # candidate.
+    waypoint_scan_radius: 14
+  # The buildings that may be placed. LEAVE THIS EMPTY to use the shipped table of
+  # vanilla village houses — Mojang already maintains a correct-looking small house
+  # per biome and it costs nothing to ship. Every key is resolved once at startup and
+  # any that no longer exists is dropped with a warning naming it, because Mojang
+  # renames these between versions.
+  #
+  # A non-empty list REPLACES the shipped table rather than adding to it, so a server
+  # with commissioned builds gets only those.
+  #   key        a structure key, e.g. village/plains/houses/plains_small_house_2
+  #   file       an .nbt in plugins/HomeCraftManagement/buildings/ (use instead of key)
+  #   weight     relative pick chance within a biome group (default 1)
+  #   biomes     PLAINS | DESERT | SAVANNA | TAIGA | SNOWY — omit for "any"
+  # There is no footprint setting: the structure is loaded before it is placed and
+  # reports its own size, so a hand-written one could only ever be wrong.
+  # Example, once a build has been commissioned:
+  #   buildings:
+  #     - { file: cottage.nbt, weight: 3, biomes: [PLAINS, TAIGA] }
+  buildings: []
+
+# ---------------------------------------------------------------------
+#  Phase 2.5 — Finite, conserved commodities market (the storefront side
+#  ONLY; QuickShop player-shops set their own prices and are untouched).
+#
+#  The market holds a REAL, finite stock per commodity. Selling ADDS to
+#  stock; buying SUBTRACTS. Stock never goes negative. Price is a function
+#  of stock: empty (0) = ceiling price AND out of stock; full = floor price.
+# ---------------------------------------------------------------------
+market:
+  # Price curve shape. price = floor * (ceiling/floor)^((1 - stock/full_stock)^elasticity)
+  #   1.0 = an even glide from ceiling (empty) down to floor (full), by ratio rather than by $.
+  #   > 1 = stays cheap once decently stocked, spikes only near empty.
+  #   < 1 = stays pricey until nearly full. Range > 0.
+  elasticity: 1.0
+  # Glide smoothing: each trade the price moves (1 - inertia) of the way to
+  # the stock-implied target, so it eases in instead of snapping. Range [0, 1).
+  inertia: 0.2
+  # Bid/ask spread: the market SELLS to you slightly above, and BUYS from you
+  # slightly below, the mid price — kills round-trip arbitrage. 0.10 = ±5%.
+  spread: 0.10
+  # Stock level at which price reaches the floor, for items that don't set
+  # their own full_stock.
+  default_full_stock: 1024
+
+  # Daily per-player SELL limit (anti-whale): caps how much a player can sell
+  # to the market per UTC day. Resets daily; tracked in SQLite. Per-item
+  # `max_daily_sell` overrides in the catalog stack ON TOP of this (tighter wins).
+  sell_limits:
+    enabled: true
+    max_money_per_day: 5000     # 0 = unlimited money/day
+    max_units_per_day: 0        # 0 = unlimited units/day (counted per item)
+    bypass_permission: "hcm.market.limit.bypass"
+    # Optional higher ceilings per LuckPerms-managed permission node. The most
+    # generous node the player holds wins. Grant these via LuckPerms.
+    ranks:
+      - permission: "hcm.market.limit.vip"
+        max_money_per_day: 12500
+        max_units_per_day: 0
+
+  # Daily per-player BUY limit (anti-drain / anti-hoard): the sell-side mirror —
+  # caps how much a player can buy from the market per UTC day so no one drains a
+  # commodity's supply the moment it's stocked. Same shape and semantics as
+  # sell_limits; the shared bypass permission skips both. Per-item `max_daily_buy`
+  # overrides in the catalog stack ON TOP of this (tighter wins). Tracked separately
+  # in SQLite; resets at UTC midnight. Also applies to Crate store orders.
+  buy_limits:
+    enabled: true
+    max_money_per_day: 5000     # 0 = unlimited money/day
+    max_units_per_day: 0        # 0 = unlimited units/day (counted per item)
+    bypass_permission: "hcm.market.limit.bypass"
+    ranks:
+      - permission: "hcm.market.limit.vip"
+        max_money_per_day: 12500
+        max_units_per_day: 0
+
+  # Periodic price/stock snapshots (feed the Phase 5 web dashboard charts).
+  price_history:
+    interval_minutes: 30
+    # Snapshots older than this many days are deleted (a batch at a time, on each
+    # snapshot). The website's 30-day chart needs 30. 0 = keep everything.
+    keep_days: 30
+
+  # ---------------------------------------------------------------------
+  #  The live market (0.33) - Crate's prices move a little on their own.
+  #
+  #    price = balanced price  x  market mood     (then kept inside floor..ceiling)
+  #
+  #  The BALANCED price is the stock curve above, exactly as before: only player
+  #  trades (and /hcm market setstock / resetstock) move it. The live market never
+  #  changes stock. It only adds a small MOOD on top:
+  #    drift       a quiet wander, about 1-2% a day, never past 8%
+  #    HOT / DEAL  a couple of days up to +15% (HOT) or down to -15% (DEAL)
+  #    NEWS FLASH  a sudden jump of up to 25% that fades over the next day
+  #    seasons     small calendar nudges; real-world prices (off by default)
+  #  The whole mood is LOCKED IN CODE to 25% either way (0.75x to 1.25x): the
+  #  numbers below can make it calmer, never wilder. An item with no stock is
+  #  never moved by the mood (it stays at its balanced price, the ceiling once the
+  #  curve has caught up). Daily sell/buy limits and per-item caps still apply,
+  #  at the moved price. While an item is HOT or UP, its daily sell cap applies to
+  #  everyone; while it is on a DEAL or DOWN, "Limit N a day" applies to everyone -
+  #  including players with hcm.market.limit.bypass (ops).
+  #  enabled: false puts every price back exactly as it was in 0.32. A value that is
+  #  not true or false (a typo) turns it off too, with a warning in the log.
+  #  Everything here reloads with /hcm reload. See /hcm market sim status.
+  #  Optional keys for a market.catalog row (the admin GUI keeps them):
+  #    sim: false            this item never moves on its own
+  #    volatility: 1.0       x its drift size (0 = no drift, at most 1.5)
+  #    sim_weight: 1.0       how often it is picked for HOT/DEAL/news (0 = never)
+  #    news_name: "Diamonds" the name headlines use (at most 24 characters)
+  # ---------------------------------------------------------------------
+  sim:
+    enabled: true
+    tick_minutes: 5              # how often the mood moves (1-60)
+    max_catchup_hours: 48        # after the server was off, replay the quiet drift for at most this long
+    # If these two differ, the narrower is used both ways (with a warning), so the mood never leans.
+    max_up_percent: 25           # whole mood at most +25% ...   (locked in code: at most 25)
+    max_down_percent: 25         # ... and at most -25%          (locked in code: at most 25)
+    keep_days: 60                # market news older than this is deleted
+    drift:
+      max_percent: 8             # the wander alone never goes past this (locked in code: at most 8)
+      # calm_percent / lively_percent: the drift's speed is locked in code (at most 4.5,
+      # less with a half-life under 66 hours; a bigger value is held back with a warning).
+      calm_percent: 1.5          # typical size for cheap staples (about 1% a day)
+      lively_percent: 3.0        # typical size for dearer items (about 2% a day)
+      lively_from: 10.0          # "lively" when sqrt(floor x ceiling) is at least this many $
+      half_life_hours: 66        # half of any wander fades in this long (locked in code: at least 24)
+    hot:
+      enabled: true
+      percent: [8, 15]           # how much higher at full strength (locked in code: at most 15)
+      hold_hours: [30, 54]       # how long it stays at full strength
+      ramp_hours: 4              # rises quietly first; announced as HOT once it is at full strength
+      fade_hours: 10             # cools back down at the end
+      gap_hours: [48, 120]       # quiet time after one ends before the next can start
+      last_call_hours: 3         # "Last call!" this long before it starts cooling (0 = never)
+      sell_limit: true           # while HOT or UP (a news flash), the item's daily sell cap applies to everyone
+    deal:
+      enabled: true
+      percent: [8, 15]           # how much cheaper at full strength (locked in code: at most 15)
+      hold_hours: [30, 54]
+      ramp_hours: 4
+      fade_hours: 10
+      gap_hours: [48, 120]
+      last_call_hours: 3
+      min_stock_percent: 3       # only items holding this much of full_stock (and 16+); a DEAL ends if it sells out
+      buy_limit_share: 0.5       # "Limit N a day": this share of max_daily_buy (or of 4% of full_stock)
+    slots_per_items: 40          # 1 HOT + 1 DEAL at a time, one more of each per 40 items, 3 at most
+    cooldown_days: 7             # an item rests this long after a HOT or DEAL
+    popular_weight: 2.0          # items anyone traded in the last 14 days are this much likelier to be picked
+    news:
+      enabled: true
+      percent: [15, 25]          # jump size (locked in code: at most 25)
+      min_percent: 10            # a flash the limits would shrink below this is skipped
+      half_life_hours: 6         # a jump fades by half every 6 hours ...
+      lasts_hours: 30            # ... and is completely gone after 30
+      gap_hours: 10              # at least this long between flashes ...
+      extra_hours: 14            # ... plus a random wait averaging this long ...
+      max_gap_hours: 48          # ... but never longer than this (about 5 a week)
+      max_per_day: 2
+      hours: "07:00-21:00"       # local time (clock.time_zone) when anything is announced
+      wait_for_players: true     # hold a due flash until someone has been online a few minutes
+      join_delay_minutes: [2, 8]
+      # max_hold_hours counts hours the server is running; downtime does not count.
+      max_hold_hours: 14         # then it happens anyway; players see it in "while you were away"
+      item_cooldown_hours: 72
+      min_stock_percent: 5       # a DOWN flash needs at least this much stock to buy
+      buy_limit_share: 0.5       # the "Limit N a day" also applies while a price is DOWN
+      wanted_share: 0.15         # share of flashes that say "Crate is looking for X!" (sold-out items)
+      wanted_every_days: 7
+    announce:
+      chat: true
+      title: true                # big NEWS FLASH across the screen (Bedrock too)
+      action_bar: true
+      particles: true            # sparkles at that item's signs, holograms and TVs
+      min_gap_minutes: 20        # between any two market announcements
+      max_per_day: 6
+      endings: true              # one quiet line when a HOT or DEAL ends
+      intro: true                # one-time "The Crate Market is LIVE!"
+      # Sounds must be namespaced (minecraft:...): a plain BLOCK_NOTE_BLOCK_BELL
+      # name silently turns into the XP-orb sound.
+      sound_up: "minecraft:block.note_block.bell"
+      sound_down: "minecraft:block.note_block.bell"
+      sound_story: "minecraft:block.note_block.pling"
+      sound_other: "minecraft:block.note_block.chime"
+      volume: 0.8
+      pitch_up: 1.4
+      pitch_down: 0.8
+      catch_up: true             # "While you were away" a few seconds after joining
+      catch_up_lines: 3
+      catch_up_hours: 48
+    # {item} = the plural name ("Iron Ingots"), {Name} = one ("Iron Ingot"),
+    # {real} = the real-world thing ("gold"). Keep them short, happy and about
+    # people WANTING things - never about Crate's shelf, which does not move.
+    headlines:
+      up:
+        - "A giant castle is being built! Everyone wants {item}!"
+        - "The villagers are having a party and need {item}!"
+        - "A famous builder just ordered lots of {item}!"
+        - "Wandering traders are paying big for {item} today!"
+        - "Everybody on the server is talking about {item}!"
+        - "The big building contest needs lots of {item}!"
+        - "A mystery shopper wants to buy {item}!"
+        - "A brand new town needs {item} for its houses!"
+        - "Kids all over the land are collecting {item}!"
+        - "The mayor wants {item} for the new town hall!"
+        - "Llamas are packing {item} for a long trip!"
+        - "Hooray! Everyone is looking for {item} today!"
+      down:
+        - "A giant cart full of {item} just rolled into town!"
+        - "Miners found a huge pile of {item}!"
+        - "The villagers brought lots of {item} to town!"
+        - "A boat full of {item} just landed at the dock!"
+        - "Hardly anyone needs {item} this week!"
+        - "A wandering trader is selling {item} cheap!"
+        - "A lucky miner found a secret stash of {item}!"
+        - "Everyone already has enough {item} today."
+        - "Llamas carried in a mountain of {item}!"
+        - "The farms and mines made extra {item} this week!"
+        - "Lucky day! You can find {item} everywhere!"
+        - "Shopping time! Get {item} for less right now!"
+      hot:
+        - "Everybody wants {item} this week!"
+        - "Hot item alert! Everyone is looking for {item}!"
+        - "Everyone is talking about {item}!"
+        - "Builders all over the land need {item}!"
+        - "{Name} is the cool thing to have right now!"
+        - "Hot, hot, hot! Crate wants your {item}!"
+      deal:
+        - "{Name} is on sale at Crate!"
+        - "Sale time! Get {item} for less at Crate!"
+        - "Deal alert! Save on {item} for a couple of days!"
+        - "Grab some {item} while the sale is on!"
+        - "Crate's special this week: {item} for less!"
+        - "Psst! There is a great deal on {item} right now!"
+      wanted:
+        - "Crate is looking for {item}!"
+        - "Wanted: {item}! Crate would love some."
+        - "Who has {item}? Crate wants to buy some!"
+      real_up: "In the real world, {real} prices went up today!"
+      real_down: "In the real world, {real} prices went down today!"
+    # Names that stay the same for one or many (no "s" added in headlines).
+    same_plural: [cobblestone, stone, dirt, sand, red_sand, gravel, glass, wheat, coal, charcoal,
+                  redstone, lapis_lazuli, quartz, obsidian, netherrack, sugar, gunpowder, string,
+                  bone_meal, leather, kelp, bamboo, sugar_cane, cactus, glowstone_dust, snow, ice,
+                  clay, white_wool, cocoa_beans, andesite, diorite, granite, deepslate,
+                  cobbled_deepslate, tuff, calcite, basalt, blackstone, sandstone, mud]
+    seasons:
+      enabled: true
+      # Seasons (and real-world prices) are known ahead of time, so together they
+      # stay under half the buy/sell spread - nobody can buy before and sell after
+      # for a sure profit. The plugin enforces it: min(this, 45% of market.spread).
+      predictable_max_percent: 4.5
+      ramp_days: 2               # each season fades in and out over this many days
+      list:                      # local dates MM-DD (inclusive, may wrap the year); "*" = every item
+        - { id: new_year, name: "New Year", from: "01-01", to: "01-07", percent: { "*": -3 },
+            headline: "Happy New Year! Everything at Crate costs a little less this week." }
+        - { id: cozy_winter, name: "Cozy Winter", from: "12-01", to: "02-28", percent: { oak_log: 4 },
+            headline: "Brrr, it's cold! Everyone wants Oak Logs to keep warm." }
+        - { id: sparkle_week, name: "Sparkle Week", from: "02-07", to: "02-14", percent: { gold_ingot: 3, diamond: 3 },
+            headline: "Sparkle week! Everyone wants something shiny." }
+        - { id: spring_building, name: "Spring Building", from: "03-20", to: "05-20", percent: { cobblestone: 3, oak_log: 3 },
+            headline: "Spring is here! Time to build, build, build!" }
+        - { id: back_to_school, name: "Back to School", from: "08-15", to: "09-10", percent: { iron_ingot: 3 },
+            headline: "Back to school! Everyone is making new tools." }
+        - { id: harvest_time, name: "Harvest Time", from: "09-15", to: "10-31", percent: { wheat: -4 },
+            headline: "Harvest time! The farms are full of wheat." }
+        - { id: gift_season, name: "Gift Season", from: "12-10", to: "12-26", percent: { gold_ingot: 4, diamond: 4 },
+            headline: "Gift season! Shiny gold and diamonds make great presents." }
+    real_world:
+      # Real commodity prices nudge matching items once a trading day. OFF by default.
+      # Needs internet on the game server. If the source is down the market simply
+      # carries on. Try a symbol first: /hcm market sim real test gc.f
+      enabled: false
+      provider: stooq            # stooq | yahoo
+      url: ""                    # blank = the provider's default; must be https; {symbol} {from} {to}
+      fetch_time: "17:30"        # local, Monday-Friday, after the US commodity markets close
+      gain: 2.0                  # a real +1% day = +2% here ...
+      max_percent: 4             # ... never more than this (and seasons + real together stay under half the spread)
+      ignore_above_percent: 8    # a bigger real "move" is treated as bad data and skipped
+      # At most one news line per fetch: the biggest real move of at least
+      # announce_above_percent, and only if it moved Crate's price a whole percent or more.
+      announce_above_percent: 2  # real moves at least this big get a news line
+      half_life_hours: 24
+      lasts_hours: 96
+      timeout_seconds: 10
+      # One row per item: its Stooq and Yahoo symbols and the name headlines use.
+      # iron_ingot follows copper (hg.f / HG=F): there is no free daily iron-ore quote.
+      # Lumber for oak_log is Yahoo's LBR=F (no Stooq symbol) and is unverified: set
+      # provider: yahoo, /hcm reload, and try /hcm market sim real test LBR=F first.
+      # To use it, add a row:  - { item: oak_log, stooq: "", yahoo: "LBR=F", name: "lumber" }
+      symbols:                   # set a symbol to "" to turn it off (deleting a row also works)
+        - { item: gold_ingot, stooq: "gc.f", yahoo: "GC=F", name: "gold" }
+        - { item: wheat,      stooq: "zw.f", yahoo: "ZW=F", name: "wheat" }
+        - { item: iron_ingot, stooq: "hg.f", yahoo: "HG=F", name: "metal" }
+
+  # Admin-defined catalog. Each item:
+  #   id            unique key used in commands (lower-case)
+  #   material      a Bukkit Material (what is bought/sold)
+  #   display_name  optional pretty name (&-colour codes)
+  #   floor         lowest price (reached when stock is at/above full_stock)
+  #   ceiling       highest price (reached at zero stock; also = out of stock)
+  #   initial_stock starting units the market holds (sets the starting price)
+  #                 MUST be strictly LESS than full_stock — see the hard rule below
+  #   full_stock    units at which price hits the floor (default: default_full_stock)
+  #   max_daily_sell optional per-player, per-item, per-day SELL cap (0/omitted = none)
+  #   max_daily_buy  optional per-player, per-item, per-day BUY cap  (0/omitted = none)
+  #   sim, volatility, sim_weight, news_name  optional live-market keys (see market.sim above)
+  #   Ids starting with @ are reserved (@news is the Market News board) and are skipped.
+  # Per-item caps stack ON TOP of the global sell_limits/buy_limits (tighter wins) and
+  # are skipped by the bypass permission. Rule of thumb: max_daily_sell ~= 2% of
+  # full_stock, max_daily_buy ~= 4% of full_stock, so no single player can move a
+  # price more than a few percent per day. Set tight caps on rare items, high (or
+  # none) on commons.
+  # Staples seed with generous stock (cheap & available from day one); ores can
+  # start at 0 → pinned at ceiling and UNBUYABLE until players sell some in.
+  #
+  # HARD RULE — stock must never reach full_stock. full_stock is the DENOMINATOR of
+  # the price curve, not a target to hit: the market has to keep room for players to
+  # sell into, or an item lands on the floor with nowhere left to go. So:
+  #   * initial_stock >= full_stock is clamped to full_stock * 0.85 with a warning.
+  #   * /hcm market setstock refuses to seat stock at/above full_stock (caps at -1).
+  #   * A player CAN still sell stock up to full_stock — the item then sits at floor
+  #     price and further sells earn almost nothing. That's the market's own signal
+  #     saying "we're saturated, go sell something else."
+  #
+  # Edit + /hcm reload: existing stock/price is preserved on purpose, so changing
+  # initial_stock/full_stock alone will NOT move an item that already exists; new items
+  # seed fresh. To apply a NEW economy design to items already in the database, run
+  # `/hcm market resetstock all` (or `<item>`) — that reseeds stock from config AND
+  # snaps every price back onto the curve instead of letting inertia glide there.
+  catalog:
+    - id: cobblestone
+      material: COBBLESTONE
+      display_name: "&7Cobblestone"
+      floor: 0.10
+      ceiling: 5.0
+      initial_stock: 17000    # MUST stay < full_stock (85% here) — see the rule above
+      full_stock: 20000
+      max_daily_sell: 400     # common — high volume allowed (~2% of full_stock)
+      max_daily_buy: 800      # ~4% of full_stock
+    - id: oak_log
+      material: OAK_LOG
+      display_name: "&6Oak Log"
+      floor: 1.0
+      ceiling: 20.0
+      initial_stock: 4000
+      full_stock: 8000
+      max_daily_sell: 160     # ~2% of full_stock
+      max_daily_buy: 320      # ~4%
+    - id: wheat
+      material: WHEAT
+      display_name: "&eWheat"
+      floor: 1.0
+      ceiling: 12.0
+      initial_stock: 3000
+      full_stock: 6000
+      max_daily_sell: 120
+      max_daily_buy: 240
+    - id: iron_ingot
+      material: IRON_INGOT
+      display_name: "&fIron Ingot"
+      floor: 4.0
+      ceiling: 40.0
+      initial_stock: 512
+      full_stock: 2048
+      max_daily_sell: 40
+      max_daily_buy: 80
+    - id: gold_ingot
+      material: GOLD_INGOT
+      display_name: "&6Gold Ingot"
+      floor: 20.0
+      ceiling: 150.0
+      initial_stock: 0          # starts empty -> ceiling price, out of stock
+      full_stock: 1024
+      max_daily_sell: 20
+      max_daily_buy: 40
+    - id: diamond
+      material: DIAMOND
+      display_name: "&bDiamond"
+      floor: 60.0
+      ceiling: 400.0
+      initial_stock: 0          # starts empty -> ceiling price, out of stock
+      full_stock: 512
+      max_daily_sell: 10        # rare — tight cap protects supply (~2% of full_stock)
+      max_daily_buy: 20         # ~4% of full_stock — prevents hoarding
+
+# Phase 3 / 6 — Crate Ordering + Shipping
+# Tiers are FULLY config-driven: add / rename / re-time any number of them and
+# the checkout GUI renders them automatically (fastest → slowest). Each tier's
+# real-time delivery delay is `real_hours` + `real_minutes` combined — use
+# `real_minutes` alone for a sub-hour tier (Express delivers ~5 real minutes
+# after ordering). Both accept decimals. An optional `label:` overrides the
+# auto-generated display name.
+shipping:
+  # In PERCENTAGE mode every tier charges `percent` of the item total (faster =
+  # higher %). `flat`/`prime_flat` apply ONLY in FLAT mode. A slower tier is also
+  # clamped to never cost more than a faster one.
+  mode: PERCENTAGE     # PERCENTAGE | FLAT
+  tiers:
+    express:   { real_minutes: 5, percent: 20 }   # fastest / most expensive
+    one_day:   { real_hours: 1,   percent: 10 }
+    two_day:   { real_hours: 3,   percent: 5  }
+    three_day: { real_hours: 8,   percent: 0  }   # free
+  locker: { enabled: true }
+
+# ---------------------------------------------------------------------
+#  Phase 4 — Minis (collectible heads & armor stands)
+#  You assign each Mini a rarity + (optionally) a cap/price; the colour,
+#  glint, and smart defaults follow from the rarity palette below. Edit the
+#  palette once instead of styling every Mini. Everything reloads with
+#  /hcm reload. The catalog is hand-picked — add only what you want.
+# ---------------------------------------------------------------------
+minis:
+  pricing_mode: ESCALATING   # FIXED | ESCALATING (informational; per-entry price wins)
+
+  # Assign the tier; colour + glint + default cap/price come from here.
+  rarity_styles:
+    LEGENDARY: { pane: YELLOW,     name_color: gold,         glint: true,  default_cap: 5,   default_price: 50000 }
+    EPIC:      { pane: PURPLE,     name_color: light_purple, glint: true,  default_cap: 20,  default_price: 15000 }
+    RARE:      { pane: BLUE,       name_color: aqua,         glint: false, default_cap: 100, default_price: 4000 }
+    UNCOMMON:  { pane: GREEN,      name_color: green,        glint: false, default_cap: 500, default_price: 800 }
+    # WHITE, not LIGHT_GRAY: a light-grey pane is the colour of the slot behind it and reads
+    # as an empty tile. Same reason the Store's department tabs are items rather than panes.
+    COMMON:    { pane: WHITE,      name_color: gray,         glint: false, default_cap: -1,  default_price: 150 }
+
+  # Your "Type" list (the subject) — open/editable, used for browsing/filtering.
+  categories: [ ANIMAL, FOOD, LETTER, SYMBOL, CHARACTER, VEHICLE, HOLIDAY, MISC ]
+
+  # The catalog. Each entry inherits its series' rarity unless it sets its own;
+  # cap/price default from the rarity palette. `texture` is a Base64 head value
+  # (from minecraft-heads.com's "Value" field) — leave blank for a plain head.
+  # `id` is optional (auto-derived from the name if omitted). `tags: [mining, fish]`
+  # puts the Mini into those wild-drop tag pools (see loot: below) — an untagged Mini
+  # never drops from a tag pool. Optional per-entry `card:` sets card cap / grade odds
+  # (standard / graded / mint) / filament; otherwise they derive from the rarity.
+  series:
+    - name: "Starter Critters"
+      rarity: COMMON
+      entries:
+        - { name: "Piggy Mini",  category: ANIMAL, tags: [starter, mining, zombie], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTlhOTIxMmQzNmMwY2E3ZjA1MzczNzZmYWI1Yjg0ZWNiN2FmNjZjZjY3NTRlN2I4N2Q4YjFhMDhkOWQ1NDAyYiJ9fX0=" }
+        - { name: "Chick Mini",  category: ANIMAL, tags: [starter, mining, fish], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzAzMWE5ODI2NTUyOGMwNDAxMjEzNTJkNWRhYTc4ODFhMjI1YjIyNGQ3ZDVlYmRmNjUyNzliYTgzODQ2OTZmYSJ9fX0=" }
+    - name: "Legendary Relics"
+      rarity: LEGENDARY
+      entries:
+        - { name: "Golden Idol", category: SYMBOL, tags: [mining], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1YmY2MDM2Mzg2YjJlYjAwZmMyZTYzNWU1NzViNzRlMmI1YTBjNjljYmI1MzY5MWFlZGZkYjZhMGMzNjAwOSJ9fX0=", cap: 5 }
+
+  # ---- Grades (Phase 12). Rarity owns a Mini's colour + glint; the GRADE owns the
+  # stars: a star suffix on the name ("Chick Mini ★★") and a lore line, never a
+  # competing colour. Three grades, rolled at the Printer (and by wild drops / crates)
+  # from the Mini's card odds. Names, symbols and value multipliers are yours to edit.
+  # Old copies printed under the retired five-grade ladder migrate on sight:
+  # Gray/Green → STANDARD, Blue/Purple → GRADED, Gold → MINT.
+  grades:
+    STANDARD: { name: "Standard", symbol: "☆",   multiplier: 1.0 }
+    GRADED:   { name: "Graded",   symbol: "★★",  multiplier: 2.5 }
+    MINT:     { name: "Mint",     symbol: "★★★", multiplier: 6.0 }
+
+  # ---- World effects (Phase 12) for PLACED Minis — Display Case trophies, posed
+  # armor-stand Minis, and wild-hunt spawns (which also get minis.loot.natural.effects) — by rarity. One repeating task serves
+  # every placed Mini, skipping any with no player within `radius` blocks and any in
+  # an unloaded chunk. Everything is torn down on removal / chunk unload / disable and
+  # rebuilt from the datastore on load, so nothing leaks after a crash.
+  #   particle:  type (a Particle name or none), count, interval_ticks, offset
+  #   hologram:  a floating name (TextDisplay) in `color` (a named colour or #hex)
+  #   light:     a hidden LIGHT block in the nearest air neighbour at `level`
+  #   rotate:    a slowly turning ItemDisplay above a case (`degrees_per_second`);
+  #              armor-stand Minis turn in place instead
+  #   full_bright: the ItemDisplay ignores world light (Legendary)
+  #   place_sound / place_particle: played once when the Mini is placed
+  # Grade MINT copies play `mint_sound` on print and on place; Shiny copies add a ring
+  # of `shiny_particle` on top of their rarity effect.
+  # A WILD spawn's label is the exception to `radius`: it has its own, much tighter
+  # `wild_hologram_range`, and unlike every other effect it is REMOVED again when you walk
+  # away. A TextDisplay is legible from hundreds of blocks, so a label that stayed lit after
+  # one pass stopped saying "this head is the prize" and started saying "the prize is over
+  # here" — which is the one thing a timed hunt cannot have. Set it to 0 for no label at all.
+  effects:
+    radius: 16              # only Minis with a player this close get effects
+    tick_interval: 10       # task cadence in ticks (particles use their own interval)
+    mint_sound: BLOCK_AMETHYST_BLOCK_CHIME
+    shiny_particle: GLOW
+    wild_hologram_text: "&dA wild Mini!"
+    wild_hologram_range: 8  # how close you must be to read it; 0 = never show it
+    case_item_scale: 0.6    # size of the Mini floating above a Display Case
+    case_item_height: 0.9   # how high above the case block it floats
+    COMMON: {}
+    UNCOMMON: {}
+    RARE:
+      particle: { type: END_ROD, count: 2, interval_ticks: 40, offset: 0.3 }
+      hologram: { enabled: true, color: aqua }
+      light:    { enabled: true, level: 7 }
+      rotate:   { enabled: true, degrees_per_second: 20 }
+      full_bright: false
+    EPIC:
+      particle: { type: ENCHANT, count: 6, interval_ticks: 20, offset: 0.4 }
+      hologram: { enabled: true, color: light_purple }
+      light:    { enabled: true, level: 7 }
+      rotate:   { enabled: true, degrees_per_second: 20 }
+      full_bright: false
+    LEGENDARY:
+      particle: { type: SOUL_FIRE_FLAME, count: 3, interval_ticks: 30, offset: 0.4 }
+      hologram: { enabled: true, color: gold }
+      light:    { enabled: true, level: 12 }
+      rotate:   { enabled: true, degrees_per_second: 20 }
+      full_bright: true
+      place_sound: ITEM_TOTEM_USE
+      place_particle: TOTEM_OF_UNDYING
+
+  # ---- Announcements (Phase 12). One server-wide line when a Mini is FOUND (a wild
+  # drop, or caught in the wild hunt — never the Printer or a pack); the [name] is a
+  # hover card showing the item's full tooltip and click-runs /hcm museum <id>. The
+  # wild hunt's HINTS (spawn_hint gates them; their text lives under
+  # minis.loot.natural.hints) and a "The Rare Mini got away!" line when a hunt ends
+  # without a catch (slipped_away). Every broadcast plays `sound` to everyone.
+  # `min_rarity` and `per_rarity` silence chat for tiers you don't want announced.
+  announce:
+    enabled: true
+    found: true
+    spawn_hint: true
+    slipped_away: true
+    min_rarity: COMMON      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
+    sound: ENTITY_EXPERIENCE_ORB_PICKUP
+    per_rarity: { COMMON: true, UNCOMMON: true, RARE: true, EPIC: true, LEGENDARY: true }
+
+  # ---- Trading blocks (Phase 4c) — appearance of the placeable custom blocks.
+  # Obtain with /hcm give <vending|display|auction>. The Display Case should stay
+  # a PLAYER_HEAD so it can render the loaded Mini as a trophy.
+  blocks:
+    vending_machine: { material: BARREL,     name: "&dMini Vending Machine" }
+    display_case:    { material: PLAYER_HEAD, name: "&b{variant} Display Case" }   # {variant} = Plain / Royal
+    auction_house:   { material: LECTERN,    name: "&6Mini Auction House" }
+
+  # ---- Auction House tuning (Phase 4c).
+  auction:
+    min_increment: 1.0          # smallest raise over the current bid
+    anti_snipe_seconds: 15      # a bid within this window of the end extends the timer
+    max_duration_minutes: 10080 # 7 days
+
+  # ---- Wild Drops and the wild hunt (Phase 4c / 12). A source ties a trigger (BLOCK_BREAK | MOB_KILL |
+  # FISHING | NATURAL_SPAWN) + a match (material / entity, or * for any) to a POOL with
+  # a percentage chance — `chance_percent: 0.02` means 0.02% (about one per 5,000
+  # rolls). The pool is either `list: <id>` (a weighted bag of Mini ids, below) or
+  # `tag: <name>` (every catalog Mini carrying that tag, weighted by rarity via
+  # rarity_weights; untagged Minis never drop). A drop MINTS a finished Mini — grade
+  # rolled from the Mini's Printer odds (or the source's `grades:` override) and a
+  # Shiny roll at shiny_percent (or the source's `shiny_percent`) — so it respects the
+  # cap, counts toward circulation, and is announced. Block-break sources must name a
+  # material (anti-farm). NATURAL_SPAWN sources are the WILD HUNT: they roll every
+  # natural.interval_ticks for each online player and, on a hit, put a wild Mini's head
+  # on the ground min_distance–max_distance blocks away for everyone to hunt. It is NOT
+  # minted until somebody catches it — one that gets away burns no mint number. Empty by
+  # default — nothing drops until you configure it.
+  loot:
+    # Tag-pool odds by rarity (relative weights).
+    rarity_weights: { LEGENDARY: 1, EPIC: 4, RARE: 15, UNCOMMON: 40, COMMON: 100 }
+    # Chance (%) that a found Mini is Shiny; sources may override with shiny_percent.
+    shiny_percent: 5
+    # The wild hunt: cadence, the find window, and how far from a player a Mini lands.
+    # `chance_percent` on a NATURAL_SPAWN source is rolled once PER PLAYER PER TICK, so it
+    # is not a rate on its own — with several people online the Minis-per-hour climbs with
+    # the player count. The two throttles below say the thing you actually mean and hold
+    # whatever the chance is: player_cooldown_minutes is how often ONE player can be
+    # targeted, max_live is how many uncaught Minis may stand in the world at once (1 =
+    # one hunt at a time, so everybody chases the same Mini).
+    # A spot is real ground (never a treetop or a lake bed), never within 16 blocks of any
+    # player, and only in a LOADED chunk — so keep max_distance inside your view-distance
+    # (10 chunks = 160 blocks by default) or no Mini ever finds anywhere to stand.
+    natural:
+      interval_ticks: 24000          # 20 minutes
+      despawn_minutes: 5             # the find window, announced in the first hint
+      min_distance: 48
+      max_distance: 96
+      player_cooldown_minutes: 90    # 0 disables; forgotten on restart
+      max_live: 1                    # 0 = no ceiling
+      # How a wild Mini shows itself, for EVERY rarity, on top of its rarity's own effects
+      # (minis.effects): a sparkle seen from `radius` blocks and a light. Its own radius
+      # because minis.effects.radius (16) is set for a trophy on a shelf, not a hunt.
+      effects: { radius: 32, particle: END_ROD, count: 3, interval_ticks: 20, light: 10 }
+      # The light column the LAST hint turns on: rarity-coloured dust `height` blocks tall,
+      # drawn every `interval_ticks` and sent to players far outside normal particle range.
+      beam: { height: 24, interval_ticks: 10 }
+      # Escalating hints, sent to everyone as the hunt's time runs down (at_percent of the
+      # find window). Placeholders: {rarity} {player} (who it appeared near) {minutes}
+      # {biome} {direction} (8-way, from where {player} was standing). Never coordinates or
+      # distances. enabled: false keeps a stage silent; the last stage still lights the beam.
+      # Players who log in mid-hunt get the hints so far.
+      hints:
+        - { at_percent: 0,  enabled: true, text: "A {rarity} Mini appeared near {player}! You have {minutes} minutes to find it." }
+        - { at_percent: 30, enabled: true, text: "Hint: the {rarity} Mini is in a {biome} biome." }
+        - { at_percent: 60, enabled: true, text: "Hint: it's to the {direction} of where {player} was." }
+        - { at_percent: 85, enabled: true, text: "Look for the light beam!" }
+    lists: []
+    #  - id: common_blocks
+    #    entries:
+    #      - { mini: piggy_mini, weight: 10 }
+    sources: []
+    # Example sources (uncomment to enable — the shipped Minis carry these tags):
+    #  - { trigger: BLOCK_BREAK,   match: STONE,  tag: mining, chance_percent: 0.02 }   # ~1 per 5,000 stone
+    #  - { trigger: MOB_KILL,      match: ZOMBIE, tag: zombie, chance_percent: 1 }
+    #  - { trigger: FISHING,       match: "*",    tag: fish,   chance_percent: 0.5 }
+    #  - { trigger: NATURAL_SPAWN, match: "*",    tag: mining, chance_percent: 3 }      # 3% per 20-minute tick, PER PLAYER
+    # Per-source overrides: grades: { standard: 60, graded: 30, mint: 10 } and shiny_percent: 10
+
+  # ---- Posed armor-stand Minis (Phase 4d). Authored in-game: pose a real armor
+  # stand, then `/hcm mini capturestand <miniId>` while looking at it. Poses are in
+  # degrees; equipment is stored as Base64 items. Empty by default.
+  stands: []
+  #  - id: my_statue
+  #    small: false
+  #    arms: true
+  #    base_plate: true
+  #    invisible: false
+  #    pose: { head: [0,0,0], body: [0,0,0], left_arm: [0,0,0], right_arm: [0,0,0], left_leg: [0,0,0], right_leg: [0,0,0] }
+  #    equipment: { helmet: "", chest: "", legs: "", boots: "", main_hand: "", off_hand: "" }
+
+# ---------------------------------------------------------------------
+#  Phase 6 (Part B) — Block skins (custom head textures)
+#  Every custom block can wear a proper minecraft-heads.com texture instead of
+#  a default Steve head. Paste the head's Base64 `Value` string for a block and
+#  `/hcm reload`; it's applied to the item on give/craft AND to the block when
+#  placed (the placed head keeps the texture natively). A blank value is safe —
+#  the block keeps its normal appearance (no crash, no ugly default swap).
+#  When a value is set, the block is rendered as a PLAYER_HEAD wearing it.
+#
+#  Two-state / multi-part blocks:
+#    pallet_empty / pallet_used  — a placed Pallet wears `pallet_empty` with no
+#                                  listing and swaps to `pallet_used` the moment
+#                                  one is loaded (back again when it's cleared).
+#                                  The item in hand always uses pallet_empty.
+#    vending_lower / vending_upper — the Vending Machine is TWO blocks tall: the
+#                                  lower head is the real block; the upper head is
+#                                  placed automatically above it (needs air).
+#    mailbox.<variant>           — one texture per Mailbox colour variant
+#                                  (wood, light_blue, black, white, purple, blue,
+#                                  orange, yellow). /hcm give mailbox [variant].
+# ---------------------------------------------------------------------
+skins:
+  # The delivery crate, one texture per distance band — a parcel for a local hop,
+  # a crate for a long haul, so the item reads as the size of the trip. Blank is a
+  # plain head, which is perfectly serviceable until you have textures for these.
+  courier_package:
+    local:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjY4MjRjM2ZkMTZkNTljNDM5MzdiNTNmZTE0N2ViYWNiZjgxNzgyZjVmMjVkOTAzNTBlYWJhODYxNGU1ZDU3YiJ9fX0="
+    regional:  "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODcyZjUwZjlkMzYyMzMyMWE1NjQ5Y2E5NWU5ZTUzYTgyNDBjYzgxY2ZhZWI0MWEyODc2NjdkMWNjNWQ1MTM5NiJ9fX0="
+    long_haul: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzhjMTA3ZTA3YTJiNGQ0OWRiNWY5YTk4MmExY2VmOTJiM2MyOWVkZjMyOTdmYjQ3MTQyYjU1NzZjZmQ4OTYwYiJ9fX0="
+  pc:            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTQxZWFhNDA2NWUwYjVkMTVmOTA3OGEzZGMyZTZkMzQ0OWUxMjdkN2JjZjFhNmJiM2JmZGNlOGUzYjg4MjYzNiJ9fX0="   # computer / monitor head
+  printer:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzNhMjA4M2MwYTMwNjJiMzhiYjdjNWI1ZGJlYTk5NDgzNGRjYmEwZTQ1MDA5YTdmYzA1YTA4MzNjMjlhMzk3In19fQ=="   # 3D-printer head (Phase 9 Mini Printer)
+  workbench:     ""   # crafting-table head (retired block; legacy placements only)
+  vending_lower: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTE5MzQyZjZjYzk4NDFjNmIwYjU4ZGFmYTY0NzgxZTIwNjQxOGZiOGQyNTlmNmY0MjAwMDc1OTZhZDU5YzkwYiJ9fX0="   # vending-machine head (bottom half — the real block)
+  vending_upper: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjRhMzdlMGMxMjNmNGUxYTdlYjNjY2UxN2MxMjE0M2Y5M2MwYzdjZThjZTYyZDJmZjg2YTdjZTNhMDc5ZjQ3MyJ9fX0="   # vending-machine head (top half — auto-placed)
+  mailbox:
+    wood:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzQ1ZmQxNzRmMjUwMzdiN2Y5ZWNhNzMzY2ZkMDQ2YThiNjM1MTEyMDI2NDg1MzcwNWJjYWE1YjYzZTE3YzE3In19fQ=="
+    light_blue: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2ZhM2Y2ZjlmNTBhYzY3ZGI5OGI2OGExNWZkMDU5MDE1Mjg4MzZhMThjNzBmYjM5MmFhODlmNGI2MDgzNzY2YiJ9fX0="
+    black:      "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZWIxNTJhMDQ5MDU4YTliZGQ1NjJmNTQxNGIxMzhjZDUzNWJmMDEyZjdjYzRiMzg3MTIzMjhhOWZmMGJhOWQ2YiJ9fX0="
+    white:      "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGFmNTBmMTcyYTUxMGZhNjBiMmFmMGNiYjg0ZjM3MTUzNmM5NjVlYTU1MDg4MTI1M2Y3ZWNkMjY0MDc5NjllYiJ9fX0="
+    purple:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTU4NWU2ODg4YzE5OTE4ZWE3ZGUxYmY2Y2E4ZGRlYTVlYjgzM2E4M2U4NWM0NmQ0ZTdlZjc3MzllMmY2In19fQ=="
+    blue:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTVkOWI2ZDQ3ZTk3MzYyZjljNGJiY2Y5ZTJhN2FiMzEyMzgzZGU2ZTYzNTQ5Y2YwNWUyY2UzYjEzYmMxMTMyMCJ9fX0="
+    orange:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDk2MDEyNjI5ODgzOTI5MjdmOWU1ZWUxMmJlZGQ1YmE5ZjRjMDE3OTc2ODFmMTUzNTI5Y2Q0M2UyMzQ4OGU0In19fQ=="
+    yellow:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTI4MWMwMTUzOWM3YzgzYjc0MjdmYzBiMTgwYjNkYzg4NGExNDM4ZDZiZWU0OGNlY2NmYmVmNzkxZmNhYyJ9fX0="
+  pallet_empty:  "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzVkMTQ3ZGM4MmZjNTNkMzZjMjQwYjJkZmQyMmQ0NjE0NWYyY2M0NzlmNTEyZWM3ZTY1ZjJjNDdjMThmNWI3NyJ9fX0="   # pallet head — nothing loaded
+  pallet_used:   "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGM4OGJmMDVhOWE4N2YyZjJmNDNjYmZiNzgwMTQ3YTRhNDRjZjRkNTVjZTAxMWY3N2M4MWUwMDhlMmMwN2VmMCJ9fX0="   # pallet head — a listing is loaded
+  # Display Case pedestal styles (chosen by recipe / /hcm give display <style>). The
+  # case wears its style whether empty or loaded; the Mini floats above it.
+  display_case:
+    plain: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOGRmMGY3NjMyMTA2MjMxN2MxYmM0YjEzN2NlNjMwNTljNTM3Y2E0MmY3NjA4NjFmYTVhOTliMWNiOWY4MmY2MSJ9fX0="
+    royal: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDIxNmFmMjliMTlhNmZmNzUyNWQxODUzYjgxNDI3MGI4ZjA2ODU4MTBiMDg4NzBkY2UxNGJjOGYxZWE5NzQzZCJ9fX0="
+  auction:       ""   # auction-house head
+  arcade:        "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDA0NjRmYmNlMmE5NzEwY2Q0MGVlMzcxYWFjNmE4ZjIzNWMxYWY4MjI4YjQyMGIzMmQ0YzU5NmI0MDA2NWZlMiJ9fX0="   # arcade-machine head
+  crate_machine: ""   # crate-machine head
+  scratch_booth: ""   # scratch-ticket booth head
+  pity_kiosk:    ""   # pity-exchange kiosk head
+  token_counter: ""   # token-counter head
+  sound_muffler: ""   # blank = the plain block from sound_muffler.block (white wool)
+
+# ---------------------------------------------------------------------
+#  Recipes — every craftable HomeCraft block, data-driven and reloadable.
+#  All SHAPED 3x3, registered as normal (vanilla) recipes under the plugin's
+#  namespace, so they craft at any crafting table and show in the recipe book
+#  (unlocked for every player on join — click-to-fill works). `/hcm reload`
+#  re-registers them live. Symbols map to a Material, or to an item TAG with a
+#  leading `#` (e.g. `#planks`, `#wooden_slabs`, `#wooden_fences` = any of them).
+#  Space = empty cell. An empty `shape: []` disables that recipe.
+#  The Mini Workbench is retired and deliberately has no recipe.
+#  The PC recipe here is also what the Printer's craft grid matches.
+# ---------------------------------------------------------------------
+recipes:
+  pc:
+    shape: ["GGG", "CKC", "IQI"]
+    ingredients: { G: GLASS_PANE, C: COPPER_BLOCK, K: COMPARATOR, I: IRON_BLOCK, Q: QUARTZ_BLOCK }
+  printer:
+    shape: ["IHI", "CSC", "PAP"]
+    ingredients: { I: IRON_INGOT, H: HOPPER, C: COPPER_BLOCK, S: SMITHING_TABLE, P: PISTON, A: AMETHYST_BLOCK }
+  vending:
+    shape: ["IGI", "GEG", "IDI"]
+    ingredients: { I: IRON_INGOT, G: GLASS, E: EMERALD_BLOCK, D: DISPENSER }
+  pallet:
+    shape: ["SSS", "TBT", "SSS"]
+    ingredients: { S: "#wooden_slabs", T: STICK, B: BARREL }
+  arcade:
+    shape: ["GNG", "CJC", "RER"]
+    ingredients: { G: TINTED_GLASS, N: NOTE_BLOCK, C: COPPER_BLOCK, J: JUKEBOX, R: REDSTONE_BLOCK, E: EMERALD_BLOCK }
+  # Display Case pedestal styles: plain (polished deepslate) and royal (gold + red wool).
+  display_case:
+    plain:
+      shape: ["GGG", "G G", "XYX"]
+      ingredients: { G: GLASS_PANE, X: POLISHED_DEEPSLATE, Y: POLISHED_DEEPSLATE }
+    royal:
+      shape: ["GGG", "G G", "XYX"]
+      ingredients: { G: GLASS_PANE, X: GOLD_INGOT, Y: RED_WOOL }
+  # Filament: one recipe per dye colour (16, all in the recipe book). `<dye>` becomes
+  # that colour's dye; `output` filament of the colour per craft. enabled: false turns
+  # the whole set off.
+  filament:
+    enabled: true
+    shape: ["SDS", "SLS"]
+    ingredients: { S: STRING, D: "<dye>", L: SLIME_BALL }
+    output: 3
+  # One Mailbox recipe per colour variant: X = that colour's dye (wood = any planks).
+  mailbox:
+    wood:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: "#planks", I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    light_blue:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: LIGHT_BLUE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    black:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: BLACK_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    white:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: WHITE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    purple:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: PURPLE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    blue:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: BLUE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    orange:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: ORANGE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    yellow:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: YELLOW_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+  # The Sound Muffler: a note block wrapped in wool (any colour).
+  sound_muffler:
+    shape: ["WWW", "WNW", "WWW"]
+    ingredients: { W: "#wool", N: NOTE_BLOCK }
+
+# ---------------------------------------------------------------------
+#  The Sound Muffler — a block that hushes noisy things near it.
+#  Place one and its menu opens: pick what to hush (chickens, villagers,
+#  pistons, dispensers, doors… or any single sound, including ones it
+#  heard nearby) and how much — Quieter or Silent. Right-click it later to
+#  change things; break it and the item remembers its settings.
+#  It hushes sounds MADE inside its box (every block within the range, in
+#  each direction), for everyone who hears them, wherever they stand.
+#  Needs ProtocolLib. Without it mufflers still place and save, but hush
+#  nothing (the menu says so). It works in every world: quiet isn't part
+#  of the economy. Sounds each player's own game makes — rain, music,
+#  furnaces, portals, their own footsteps — can't be reached by any plugin.
+# ---------------------------------------------------------------------
+sound_muffler:
+  enabled: true                 # false: mufflers stay placed but hush nothing
+  block: { material: WHITE_WOOL, name: "&fSound Muffler" }   # wool muffles, even for the Warden
+  default_radius: 8             # blocks in each direction a new muffler reaches (a 17x17x17 box)
+  max_radius: 16                # the most a player can set (hard limit 32)
+  default_quiet_percent: 25     # the volume "Quieter" starts at; players pick 50/25/10%
+
+# ---------------------------------------------------------------------
+#  Phase 6 (Part C) — The Market Web Dashboard
+#  A live, read-only web page for the Crate market, served by the plugin on its
+#  own port (JDK built-in HTTP server — no extra deps). Tunnel the port with a
+#  second Playit tunnel for outside access.
+#  Read-only: it exposes market data and Minis counts only — never balances,
+#  player names or internals.
+#  Reloadable with /hcm reload (restarts the server, so a new feed token takes
+#  effect straight away).
+#
+#  The same port serves the website's JSON feeds (the LilahCraft site fetches
+#  them from its own server and caches them):
+#    /api/market  every commodity: price, buy/sell, stock, 24h change and its
+#                 price history (48 hours, 7 days and 30 days)
+#    /api/minis   every Mini in the catalog: rarity, category, series, cap,
+#                 how many were printed, sold out, and its head skin. Counts
+#                 only — never who owns them.
+#    /api/news    the live market's news: headlines, what is HOT, on sale, up
+#                 or down right now, and the season ("live": false and nothing
+#                 else while the live market is off or paused)
+#  All are gzipped for clients that ask for it, and a feed_token gates them all.
+# ---------------------------------------------------------------------
+web:
+  dashboard:
+    enabled: true
+    bind: 0.0.0.0
+    port: 8080
+    refresh_seconds: 30
+    title: "Crate Market"
+    # Shared secret for the website feeds. Blank = open: anyone who can reach
+    # the port can read /api/* (how it always worked). When set, /api/* needs
+    # the header "Authorization: Bearer <token>" and answers 401 without it.
+    # Put the same value in WordPress (Settings → LilahCraft → Feed token).
+    # Quote it, and pick something long and random in plain ASCII (letters,
+    # digits, punctuation), e.g. the output of `openssl rand -hex 32`: an
+    # accented letter or a symbol like € can't go in the dashboard page's
+    # header. It is never logged.
+    feed_token: ""
+    # With a token set, the dashboard page asks for it once (and the browser
+    # remembers it). Set this true to let requests from this PC or the home
+    # network (127.0.0.1, 10.x, 172.16-31.x, 192.168.x) skip the token instead.
+    # A proxied request (X-Forwarded-For, Forwarded, X-Real-IP,
+    # CF-Connecting-IP, ...) never counts as local.
+    # Leave it false if the website reaches this port through a Playit agent on
+    # this PC or any tunnel (ssh -R, WireGuard, frp, cloudflared...): their
+    # connections arrive from 127.0.0.1 or a LAN address, so with this on the
+    # internet would get in without the token.
+    lan_skips_token: false
+    # /api/arcade: true adds record holders' names to the website feed. Leave it
+    # false: the feed then publishes scores and times only, never who set them.
+    arcade_show_names: false
+
+# ---------------------------------------------------------------------
+#  Phase 7 — In-game economy displays (§3.8)
+#  Sign boards, holograms (text-display entities), and map-TVs bound to a
+#  commodity, re-rendered from the live market on this timer (never per-tick).
+#  Bind them in-game (GUI-first): look at a sign / block / framed map, then run
+#  the matching /hcm display … command and click the commodity from the picker.
+# ---------------------------------------------------------------------
+displays:
+  refresh_seconds: 20
+  # Holograms pair the floating price/trend text with a floating item, turning the
+  # ticker into a little market kiosk.
+  hologram:
+    item_display: true     # show the floating item alongside the text
+    position: above        # above | below the text
+    spin: true             # slow-spin the floating item
+    item: ""               # override Material (blank = the commodity's own item)
+    item_scale: 0.3        # size of the floating item (1.0 = full block; ~0.3 reads well)
+    text_scale: 1.0        # size of the price/trend text
+  # TV price panels: a flat, wall-mounted TextDisplay "screen" bound to a commodity via
+  # /hcm display tv <commodity> [scale]. Same content as a sign board (name / price /
+  # trend / stock) but big, dark-backed and crisp — no floating items, no maps. It
+  # live-updates on the refresh cadence above.
+  tv:
+    scale: 3.0             # panel size on the wall (the command's [scale] overrides per-panel)
+
+# ---------------------------------------------------------------------
+#  The Arcade (§3.9) — tokens buy fun.
+#  Dollars buy things you keep; tokens buy fun; Minis come from the hunt.
+#  Tokens are earned by PLAYING (login streak, playtime, quests, achievements, the wild
+#  hunt) and spent on games (crates, the Scratch Ticket) and the Prize Counter. They
+#  NEVER become dollars: no Arcade path takes or pays money, and everything bought or
+#  won with tokens is tagged so no shop, pallet, vending machine, auction or courier run
+#  will take it (§11 #9). All in-game currency — never real money. Reach it with
+#  /hcm arcade or a placed Arcade Machine (/hcm give arcade).
+# ---------------------------------------------------------------------
+arcade:
+  enabled: true
+  # The placeable Arcade hub block (skin it via skins.arcade).
+  block: { material: JUKEBOX, name: "&5Arcade Machine" }
+  # Individual machine blocks (crate/scratch/pity/counter) are RETIRED: the Arcade
+  # hub block is the only obtainable machine now. Any already-placed machines keep
+  # working (these entries still style them) but they are no longer given/crafted.
+  machines:
+    crate:   { material: CHEST,             name: "&6Crate Machine" }
+    scratch: { material: CARTOGRAPHY_TABLE, name: "&aScratch-Ticket Booth" }
+    pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
+    counter: { material: LECTERN,           name: "&eToken Counter" }
+  # Arcade button icons. A blank texture uses the plain material; Bedrock players always see the
+  # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
+  # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
+  # wild_none, packs, quests, achievements, guide, and the Prize Counter tabs (boosts, hunt,
+  # cosmetics, perks, trophies, minis).
+  icons:
+    wallet:       { texture: "", material: SUNFLOWER }
+    crate:        { texture: "", material: CHEST }
+    scratch:      { texture: "", material: FILLED_MAP }
+    wild:         { texture: "", material: SPYGLASS }
+    wild_none:    { texture: "", material: GRAY_DYE }
+    packs:        { texture: "", material: PAPER }
+    quests:       { texture: "", material: WRITABLE_BOOK }
+    achievements: { texture: "", material: TOTEM_OF_UNDYING }
+    guide:        { texture: "", material: KNOWLEDGE_BOOK }
+    boosts:       { texture: "", material: SUGAR }
+    hunt:         { texture: "", material: COMPASS }
+    cosmetics:    { texture: "", material: FIREWORK_ROCKET }
+    perks:        { texture: "", material: NAME_TAG }
+    trophies:     { texture: "", material: GOLD_BLOCK }
+    minis:        { texture: "", material: AMETHYST_SHARD }
+  # The crate spin: about spin_ticks long (20 = 1 second), in `frames` steps that slow down as it
+  # lands. Bedrock gets bedrock_frames steps — rapid inventory updates stutter through Geyser.
+  reveal:
+    spin_ticks: 60
+    frames: 24
+    bedrock_frames: 6
+  tokens:
+    login_streak:
+      enabled: true
+      # Escalating reward by consecutive-day streak (day1, day2, …); the last entry
+      # repeats for longer streaks. One claim per local day (clock.time_zone), paid on
+      # join or — for anyone online across midnight — within five minutes of it.
+      # (reward_per_day is a fallback only when this list is empty.)
+      rewards: [ 2, 2, 3, 3, 4, 4, 5 ]
+      reward_per_day: 1
+    playtime:
+      enabled: true
+      minutes_per_token: 60      # a token per hour played (0 = off)
+  # Loot crates: a token cost + a weighted reward table. A reward is one of:
+  #   card | mini   a Card (never a finished Mini): `mini: <id>`, `tag: <tag>` (rarity-
+  #                 weighted), or `tag: "*"` (every Mini — the crate's jackpot). Sold-out
+  #                 Cards drop out of the draw.
+  #   pack          a sealed pack (`pack: <id>`)
+  #   filament      `amount` filament, random colour unless `color:`
+  #   tokens        `amount` tokens (must be LESS than the crate costs)
+  #   prize         a Prize Counter row, free and ignoring its limit: `prize: <id>` or
+  #                 `prize: [id, id]` (one at random; ones that can't be given are skipped)
+  #   trail         a trail for `days` days: `trail: <id>` / [ids], or any trail if omitted
+  # `money` and `item` rewards are rejected: tokens never become money. Odds are shown in
+  # the crate screen; /hcm arcade odds prints each crate's value at counter prices.
+  crates:
+    arcade_crate:
+      display: "&6Arcade Crate"
+      cost_tokens: 15
+      rewards:
+        - { type: prize, prize: [speed_boost, mining_boost, night_vision, lucky_fishing], weight: 40 }
+        - { type: prize, prize: firework_show, weight: 15 }
+        - { type: prize, prize: mini_radar, weight: 12 }
+        - { type: filament, amount: 8, weight: 10 }
+        - { type: tokens, amount: 8, weight: 10 }
+        - { type: trail, days: 1, weight: 8 }
+        - { type: prize, prize: [hat_bunny, hat_panda, hat_fox, hat_penguin, hat_frog, hat_cake], weight: 3 }
+        - { type: card, tag: "*", weight: 2 }
+  # ---- The Prize Counter: KNOWN-OUTCOME token purchases, one screen per tab.
+  # A crate is a pull; a prize is a price. Rows:
+  #   id / tab (BOOSTS | HUNT | COSMETICS | PERKS | TROPHIES | MINIS) / display /
+  #   description (lines) / cost_tokens / icon { texture, material } / type / enabled /
+  #   limit { per: DAY | WEEK | LIFETIME, count }   (local days; optional)
+  # Types and their extra keys:
+  #   boost      effect (speed, haste, night_vision, water_breathing, luck …), amplifier
+  #              (0 = level I), minutes. An item; right-click to use; stacks up to 3× its time.
+  #   radar      the Mini Radar: right-click while a wild Mini is out — Cold/Warm/Hot/Burning!
+  #   lure       the Mini Lure: the next wild Mini that rolls for ANYONE lands near you.
+  #   firework   a harmless three-second firework show.
+  #   trail      particle, days — a particle trail while you walk (/hcm trail toggles it).
+  #   hat        texture — a head to wear. A hat with a blank texture is HIDDEN.
+  #   command    commands (console; %player% %uuid%), requires_plugins, owned_if_permission
+  #              (shows "Owned" and blocks rebuying), requires_prize. Hidden if a plugin is missing.
+  #   trophy     texture (blank = the Arcade machine's head) — a numbered, placeable trophy.
+  #   filament | block | pack    as before (filament: amount, color — omit to let them pick)
+  #   pity       the Rare-or-better Card (price and weekly limit from arcade.pity)
+  #   trade_in   opens Card trade-in (values in arcade.trade_in)
+  #   quest_reroll  swap one of today's quests for another
+  # Every physical prize is tagged hcm:token_prize: it can't be sold anywhere for money.
+  # Anything costing 100+ asks "are you sure?" first.
+  prizes:
+    # -- Boosts
+    - { id: speed_boost, tab: BOOSTS, display: "&bSpeed Boost", description: ["Run faster for 10 minutes."], cost_tokens: 8, icon: { texture: "", material: SUGAR }, type: boost, effect: speed, amplifier: 1, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: mining_boost, tab: BOOSTS, display: "&6Mining Boost", description: ["Mine faster for 10 minutes."], cost_tokens: 8, icon: { texture: "", material: GLOWSTONE_DUST }, type: boost, effect: haste, amplifier: 1, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: night_vision, tab: BOOSTS, display: "&9Night Vision", description: ["See in the dark for 20 minutes."], cost_tokens: 6, icon: { texture: "", material: PRISMARINE_CRYSTALS }, type: boost, effect: night_vision, amplifier: 0, minutes: 20, limit: { per: DAY, count: 5 } }
+    - { id: water_breathing, tab: BOOSTS, display: "&3Water Breathing", description: ["Breathe underwater for 10 minutes."], cost_tokens: 6, icon: { texture: "", material: NAUTILUS_SHELL }, type: boost, effect: water_breathing, amplifier: 0, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: lucky_fishing, tab: BOOSTS, display: "&aLucky Fishing", description: ["Better fishing luck for 10 minutes."], cost_tokens: 8, icon: { texture: "", material: RABBIT_FOOT }, type: boost, effect: luck, amplifier: 1, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: quest_reroll, tab: BOOSTS, display: "&eQuest Reroll", description: ["Swap one of today's quests", "for a different one."], cost_tokens: 10, icon: { texture: "", material: WRITABLE_BOOK }, type: quest_reroll, limit: { per: DAY, count: 1 } }
+    # -- Hunt gear
+    - { id: mini_radar, tab: HUNT, display: "&bMini Radar", description: ["Tells you if you're getting", "close to a wild Mini."], cost_tokens: 25, icon: { texture: "", material: COMPASS }, type: radar }
+    - { id: mini_lure, tab: HUNT, display: "&dMini Lure", description: ["The next wild Mini", "appears near you."], cost_tokens: 40, icon: { texture: "", material: HEART_OF_THE_SEA }, type: lure }
+    # -- Cosmetics
+    - { id: firework_show, tab: COSMETICS, display: "&cFirework Show", description: ["A big firework show", "all around you!"], cost_tokens: 15, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework }
+    - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 7 }
+    - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 7 }
+    - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 7 }
+    # Hats: paste a minecraft-heads.com "Value" into texture to show one (blank = hidden).
+    - { id: hat_bunny, tab: COSMETICS, display: "&fBunny Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: hat_panda, tab: COSMETICS, display: "&fPanda Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: hat_fox, tab: COSMETICS, display: "&6Fox Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: hat_penguin, tab: COSMETICS, display: "&fPenguin Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: hat_frog, tab: COSMETICS, display: "&aFrog Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: hat_cake, tab: COSMETICS, display: "&dCake Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    # Name colours need your chat format to show %luckperms_meta_hcm_name_color% — off until it does.
+    - { id: name_color_aqua, tab: COSMETICS, display: "&bAqua Name", description: ["Your name in aqua."], cost_tokens: 150, icon: { texture: "", material: LIGHT_BLUE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &b"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: name_color_gold, tab: COSMETICS, display: "&6Gold Name", description: ["Your name in gold."], cost_tokens: 150, icon: { texture: "", material: ORANGE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &6"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: name_color_pink, tab: COSMETICS, display: "&dPink Name", description: ["Your name in pink."], cost_tokens: 150, icon: { texture: "", material: PINK_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &d"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    # -- Perks (EssentialsX + LuckPerms).
+    # home_slot: +1 home on top of whatever the player already has (a mayor with 5 gets a 6th).
+    #   Essentials gives a player their HIGHEST sethome-multiple tier, never the sum, so the perk
+    #   works out the player's own limit, adds the slots bought, and grants one tier hcm_<total>
+    #   through LuckPerms. Each total needs its tier under sethome-multiple in
+    #   plugins/Essentials/config.yml — e.g. hcm_2: 2, hcm_3: 3 … up to your biggest base + 2.
+    #   A missing tier refuses the purchase (nothing charged) and logs the exact line to add.
+    #   costs: the price of the 1st, 2nd, … one. Hidden for unlimited players and bases of 20+.
+    - { id: home_slot, tab: PERKS, display: "&a+1 Home", description: ["One more /home, on top of", "the homes you already have."], costs: [400, 600], icon: { texture: "", material: RED_BED }, type: home_slot, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 2 } }
+    - { id: hat_command, tab: PERKS, display: "&e/hat", description: ["Wear the block in your hand", "on your head with /hat."], cost_tokens: 300, icon: { texture: "", material: CARVED_PUMPKIN }, type: command, commands: ["lp user %player% permission set essentials.hat true"], owned_if_permission: essentials.hat, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 1 } }
+    # Chat titles need your chat format / TAB to show %luckperms_meta_hcm_title% — off until they do.
+    - { id: title_explorer, tab: PERKS, display: "&aTitle: Explorer", description: ["Show [Explorer] in chat."], cost_tokens: 500, icon: { texture: "", material: MAP }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Explorer"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: title_miner, tab: PERKS, display: "&7Title: Miner", description: ["Show [Miner] in chat."], cost_tokens: 500, icon: { texture: "", material: IRON_PICKAXE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Miner"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: title_collector, tab: PERKS, display: "&dTitle: Collector", description: ["Show [Collector] in chat."], cost_tokens: 500, icon: { texture: "", material: ITEM_FRAME }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Collector"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: title_hunter, tab: PERKS, display: "&bTitle: Hunter", description: ["Show [Hunter] in chat."], cost_tokens: 500, icon: { texture: "", material: SPYGLASS }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Hunter"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    - { id: title_farmer, tab: PERKS, display: "&6Title: Farmer", description: ["Show [Farmer] in chat."], cost_tokens: 500, icon: { texture: "", material: WHEAT }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Farmer"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
+    # -- Trophies
+    - { id: arcade_trophy, tab: TROPHIES, display: "&6Arcade Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 750, icon: { texture: "", material: GOLD_BLOCK }, type: trophy, texture: "" }
+    # -- Minis
+    - { id: pity, tab: MINIS, display: "&bRare Card", description: ["A Rare-or-better Card.", "One a week."], icon: { texture: "", material: NETHER_STAR }, type: pity }
+    - { id: filament_bundle, tab: MINIS, display: "&fFilament Bundle", description: ["8 filament.", "You pick the colour."], cost_tokens: 3, icon: { texture: "", material: WHITE_DYE }, type: filament, amount: 8 }
+    - { id: display_case, tab: MINIS, display: "&bDisplay Case", description: ["Show off a Mini!"], cost_tokens: 10, icon: { texture: "", material: GLASS }, type: block, block: display_case }
+    - { id: trade_in, tab: MINIS, display: "&dTrade In Cards", description: ["Swap Cards you don't need", "for tokens."], icon: { texture: "", material: HOPPER }, type: trade_in }
+  # The Rare-or-better Card: a guaranteed Card at or above `guarantees_rarity`, weighted by
+  # rarity, cap-aware. `per_week` per player (local weeks).
+  pity:
+    tokens: 150
+    guarantees_rarity: RARE      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
+    per_week: 1
+  # Card trade-in: tokens per Card, by rarity. The only money→token path besides pack
+  # token prices — one way, and small.
+  trade_in: { COMMON: 3, UNCOMMON: 5, RARE: 12, EPIC: 25, LEGENDARY: 50 }
+  # One-time achievements, in the order the Achievements screen shows them. Types:
+  #   EVENT       a first-time moment (fired by the plugin where it happens)
+  #   STAT        `stat:` a lifetime vanilla statistic, or CATCH_FISH | TRAVEL_ON_FOOT |
+  #               KILL_HOSTILES | BREED_ANIMALS | TRADE_VILLAGER; `target`
+  #   COUNTER     `counter:` wild_finds | rare_wild_finds | quests_done | deliveries |
+  #               crates | jackpots | biomes; `target`. The skill games count
+  #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
+  #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
+  #               golf_under_par | fresh_sets | star_chart_tops | dropper_clean | race_nights |
+  #               race_night_wins | floors_minutes (nothing counts a game of chance)
+  #   COLLECTION  distinct Minis owned right now; `target`
+  #   GRADE       print a Mini of `grade:` (MINT)
+  #   FINISH      own a Mini with `finish:` (SHINY)
+  #   STREAK      a login streak of `target` days
+  #   BALANCE     have `target` dollars
+  # Keep ids stable — unlocks are stored by id.
+  achievements:
+    - { id: first_pc, group: "Getting Started", type: EVENT, reward: 10, display: "Build your first PC" }
+    - { id: first_sale, group: "Getting Started", type: EVENT, reward: 10, display: "Sell something to Crate" }
+    - { id: first_crate, group: "Getting Started", type: EVENT, reward: 5, display: "Open an Arcade Crate" }
+    - { id: first_pack, group: "Getting Started", type: EVENT, reward: 10, display: "Open a Card Pack" }
+    - { id: first_print, group: "Getting Started", type: EVENT, reward: 15, display: "Print your first Mini" }
+    - { id: first_mini, group: "Getting Started", type: EVENT, reward: 15, display: "Get your first Mini" }
+    - { id: wild_1, group: "Mini Hunter", type: COUNTER, counter: wild_finds, target: 1, reward: 25, display: "Catch a wild Mini" }
+    - { id: wild_5, group: "Mini Hunter", type: COUNTER, counter: wild_finds, target: 5, reward: 50, display: "Catch 5 wild Minis" }
+    - { id: wild_rare, group: "Mini Hunter", type: COUNTER, counter: rare_wild_finds, target: 1, reward: 50, display: "Catch a Rare-or-better wild Mini" }
+    - { id: collect_5, group: "Collector", type: COLLECTION, target: 5, reward: 20, display: "Own 5 different Minis" }
+    - { id: collect_15, group: "Collector", type: COLLECTION, target: 15, reward: 50, display: "Own 15 different Minis" }
+    - { id: shiny_1, group: "Collector", type: FINISH, finish: SHINY, reward: 40, display: "Own a Shiny Mini" }
+    - { id: mint_grade, group: "Collector", type: GRADE, grade: MINT, reward: 40, display: "Print a Mint-grade Mini" }
+    - { id: fish_100, group: "Adventure", type: STAT, stat: CATCH_FISH, target: 100, reward: 20, display: "Catch 100 fish" }
+    - { id: walk_10k, group: "Adventure", type: STAT, stat: TRAVEL_ON_FOOT, target: 10000, reward: 20, display: "Walk 10,000 blocks" }
+    - { id: hostiles_500, group: "Adventure", type: STAT, stat: KILL_HOSTILES, target: 500, reward: 30, display: "Defeat 500 hostile mobs" }
+    - { id: breed_50, group: "Adventure", type: STAT, stat: BREED_ANIMALS, target: 50, reward: 20, display: "Breed 50 animals" }
+    - { id: biomes_15, group: "Adventure", type: COUNTER, counter: biomes, target: 15, reward: 30, display: "Visit 15 different biomes" }
+    - { id: streak_7, group: "Dedication", type: STREAK, target: 7, reward: 25, display: "7-day login streak" }
+    - { id: streak_30, group: "Dedication", type: STREAK, target: 30, reward: 100, display: "30-day login streak" }
+    - { id: quests_25, group: "Dedication", type: COUNTER, counter: quests_done, target: 25, reward: 30, display: "Finish 25 quests" }
+    - { id: quests_100, group: "Dedication", type: COUNTER, counter: quests_done, target: 100, reward: 75, display: "Finish 100 quests" }
+    - { id: deliveries_10, group: "Work", type: COUNTER, counter: deliveries, target: 10, reward: 25, display: "Finish 10 Courier deliveries" }
+    - { id: balance_1k, group: "Money", type: BALANCE, target: 1000, reward: 10, display: "Have $1,000" }
+    - { id: rich_10k, group: "Money", type: BALANCE, target: 10000, reward: 50, display: "Have $10,000" }
+    - { id: jackpot, group: "Arcade", type: EVENT, reward: 25, display: "Win the Scratch Ticket jackpot" }
+    # The skill games (never a game of chance). Counters, so a course finished in the Games world
+    # (no tokens there) unlocks as soon as the player is back home.
+    - { id: game_first_cabinet, group: "Games", type: COUNTER, counter: cabinet_finishes, target: 1, reward: 10, display: "Finish an arcade cabinet game" }
+    - { id: game_gold, group: "Games", type: COUNTER, counter: cabinet_golds, target: 1, reward: 20, display: "Earn a gold medal in a cabinet" }
+    - { id: game_all_cabinets, group: "Games", type: COUNTER, counter: cabinets, target: 8, reward: 30, display: "Finish every arcade cabinet game" }
+    - { id: game_first_course, group: "Games", type: COUNTER, counter: course_finishes, target: 1, reward: 15, display: "Finish a course" }
+    - { id: game_hole_in_one, group: "Games", type: COUNTER, counter: holes_in_one, target: 1, reward: 25, display: "Get a hole-in-one" }
+    - { id: game_under_par, group: "Games", type: COUNTER, counter: golf_under_par, target: 1, reward: 25, display: "Finish a golf course under par" }
+    - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
+    - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
+    - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
+    - { id: game_dropper_clean, group: "Games", type: COUNTER, counter: dropper_clean, target: 1, reward: 20, display: "Reach the bottom of a Dropper with no bonks" }
+    - { id: game_race_first, group: "Games", type: COUNTER, counter: race_nights, target: 1, reward: 10, display: "Race at Race Night" }
+    - { id: game_race_win, group: "Games", type: COUNTER, counter: race_night_wins, target: 1, reward: 30, display: "Win a Race Night" }
+    - { id: game_floors_minute, group: "Games", type: COUNTER, counter: floors_minutes, target: 1, reward: 15, display: "Last a whole minute on Falling Floors" }
+  # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
+  # pools the first time they're needed in a day/week (local time) — no two of one type.
+  # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:
+  #   id, type, target, reward (tokens), display
+  # Types: PUSHED by gameplay — PLANT_CROPS, HARVEST_CROPS (grown crops), COOK_FOOD,
+  #   SMELT_ORE, MINE_BLOCKS (natural stone/deepslate/ore, not blocks you placed),
+  #   VISIT_BIOMES (distinct biomes this period), COMPLETE_DELIVERY (Courier),
+  #   FIND_WILD_MINI, SELL_MARKET (money), OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH.
+  #   PULLED from statistics (every 30s) — CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS,
+  #   TRADE_VILLAGER, TRAVEL_ON_FOOT (blocks; walking/sprinting/sneaking only).
+  #   PUSHED by the skill games (never a game of chance) — FINISH_CABINET (a finished cabinet
+  #   run, practice too), FINISH_COURSE (a counted course run or a golf round), EARN_STARS
+  #   (Fresh Courses stars). They are only dealt while those games are open.
+  # Nothing counts in a world the economy is disabled in. The game quests count where the games
+  # pay tokens (the Games world too, never in creative); their tokens come once the player is home.
+  quests:
+    enabled: true
+    # Which day a week rolls over on (local midnight).
+    week_starts: MONDAY
+    daily_draw: 3
+    weekly_draw: 2
+    daily_pool:
+      - { id: fish_daily,     type: CATCH_FISH,        target: 8,    reward: 5, display: "Catch 8 fish" }
+      - { id: walk_daily,     type: TRAVEL_ON_FOOT,    target: 1000, reward: 4, display: "Walk 1,000 blocks" }
+      - { id: hostiles_daily, type: KILL_HOSTILES,     target: 20,   reward: 5, display: "Defeat 20 hostile mobs" }
+      - { id: breed_daily,    type: BREED_ANIMALS,     target: 4,    reward: 4, display: "Breed 4 animals" }
+      - { id: trade_daily,    type: TRADE_VILLAGER,    target: 3,    reward: 4, display: "Trade with villagers 3 times" }
+      - { id: plant_daily,    type: PLANT_CROPS,       target: 32,   reward: 4, display: "Plant 32 crops" }
+      - { id: harvest_daily,  type: HARVEST_CROPS,     target: 48,   reward: 4, display: "Harvest 48 grown crops" }
+      - { id: cook_daily,     type: COOK_FOOD,         target: 16,   reward: 4, display: "Cook 16 food" }
+      - { id: smelt_daily,    type: SMELT_ORE,         target: 24,   reward: 4, display: "Smelt 24 ore" }
+      - { id: mine_daily,     type: MINE_BLOCKS,       target: 200,  reward: 5, display: "Mine 200 stone or ore" }
+      - { id: biome_daily,    type: VISIT_BIOMES,      target: 3,    reward: 5, display: "Visit 3 different biomes" }
+      - { id: delivery_daily, type: COMPLETE_DELIVERY, target: 1,    reward: 5, display: "Finish a Courier delivery" }
+      - { id: cabinet_daily,  type: FINISH_CABINET,    target: 3,    reward: 4, display: "Play 3 arcade cabinets" }
+      - { id: course_daily,   type: FINISH_COURSE,     target: 1,    reward: 5, display: "Finish a course or a round of golf" }
+    weekly_pool:
+      - { id: hostiles_weekly, type: KILL_HOSTILES,     target: 150,  reward: 25, display: "Defeat 150 hostile mobs" }
+      - { id: fish_weekly,     type: CATCH_FISH,        target: 40,   reward: 20, display: "Catch 40 fish" }
+      - { id: walk_weekly,     type: TRAVEL_ON_FOOT,    target: 6000, reward: 20, display: "Walk 6,000 blocks" }
+      - { id: breed_weekly,    type: BREED_ANIMALS,     target: 15,   reward: 20, display: "Breed 15 animals" }
+      - { id: trade_weekly,    type: TRADE_VILLAGER,    target: 15,   reward: 20, display: "Trade with villagers 15 times" }
+      - { id: smelt_weekly,    type: SMELT_ORE,         target: 128,  reward: 20, display: "Smelt 128 ore" }
+      - { id: biome_weekly,    type: VISIT_BIOMES,      target: 8,    reward: 25, display: "Visit 8 different biomes" }
+      - { id: delivery_weekly, type: COMPLETE_DELIVERY, target: 5,    reward: 25, display: "Finish 5 Courier deliveries" }
+      - { id: wild_weekly,     type: FIND_WILD_MINI,    target: 1,    reward: 30, display: "Catch a wild Mini" }
+      - { id: cabinet_weekly,  type: FINISH_CABINET,    target: 15,   reward: 20, display: "Play 15 arcade cabinets" }
+      - { id: course_weekly,   type: FINISH_COURSE,     target: 5,    reward: 20, display: "Finish 5 courses or golf rounds" }
+      - { id: stars_weekly,    type: EARN_STARS,        target: 6,    reward: 20, display: "Earn 6 Fresh Courses stars" }
+  # The Scratch Ticket: tokens in, tokens out, decided the moment you buy it. The pot
+  # starts at `seed`, grows `per_ticket` with every ticket, tops out at `cap`, and goes
+  # back to `seed` when someone wins it (with a shout to the whole server).
+  # The shipped table returns ~78% over time — /hcm arcade odds prints it.
+  lotto:
+    ticket_tokens: 10
+    payouts:
+      - { tokens: 0,  weight: 25 }
+      - { tokens: 3,  weight: 40 }     # near-miss: the most common result, not the dud
+      - { tokens: 8,  weight: 22 }
+      - { tokens: 20, weight: 9 }
+      - { tokens: 50, weight: 3 }
+      - { jackpot: true, weight: 1 }
+    jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
+
+# ---------------------------------------------------------------------
+#  Games — play games of chance and skill games for tokens (never dollars).
+#  Off until you turn it on. Games of chance give back less than they take
+#  (85-95 of every 100 tokens, worked out and published per stake); skill
+#  games pay small, capped rewards. Players' "Take a break" limits and pauses
+#  also cover Crates, Scratch Tickets and Card Packs bought with tokens.
+# ---------------------------------------------------------------------
+games:
+  # Master switch. false = the games are off and the rest of the plugin is unchanged.
+  enabled: false
+  # Worlds where time-trial and mini golf courses may be built (each its own
+  # Multiverse-Inventories group, Multiverse game mode adventure).
+  worlds: [games]
+  # Extra worlds (besides economy worlds and the ones above) where the Games screen works, e.g. your hub.
+  play_worlds: []
+  # Minimum time between two plays of a game of chance, in milliseconds (never below 250).
+  click_cooldown_ms: 600
+  # Most tokens a player can put into ALL games of chance per day (0 = off, at most 10000).
+  # Players and admins can set a lower limit of their own.
+  chance_daily_tokens: 100
+  # Most tokens any single play of a game of chance can pay (never below the largest stake).
+  max_payout: 250
+  # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day.
+  skill_daily_cap: 6
+  # Today's featured game: auto (a skill game or course picked each day) or a game/course id.
+  featured: auto
+  # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
+  featured_bonus: 1
+  # The website's leaderboards: how many of each game's and course's best scores /api/arcade
+  # lists ("top"; past Fresh Courses list up to 3). 0 = none. Names only with
+  # web.dashboard.arcade_show_names.
+  feed_top: 5
+  # When your host restarts the server each day: "HH:mm" 24-hour times in clock.time_zone
+  # (keep the quotes; midnight is "00:00"), the minute it actually stops, not when its warnings
+  # start. Just before each one, courses, golf, new card-game hands and the daily scored try
+  # don't start; the host's own chat warnings are left alone. [] = off.
+  restart_times: ["04:00", "16:00"]
+  # How many minutes before each restart nothing new starts (1-60).
+  restart_hold_minutes: 5
+  # "Take a break" (Wallet): the choices players get.
+  break:
+    # Daily token limits a player can pick for games of chance (they can also pick none).
+    daily_choices: [10, 25, 50, 100]
+    # How many days a player can pause games of chance for (a pause can't be shortened).
+    pause_days: [1, 7, 30]
+    # Days a raised or removed limit waits before it starts (never below 1).
+    raise_delay_days: 7
+  # ---- ore_slots ----
+  # Ore Slots: three reels, one line. Three the same pays that ore's multiple of
+  # the tokens put in (a Wild stands in for any ore), two the same pays `two`,
+  # Stone never pays. The game works out Stone's weight so it gives back `rtp`.
+  # Turn a symbol off with weight 0, never by deleting its key.
+  ore_slots:
+    # false = Ore Slots is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [1, 2, 5]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
+    rtp: 90
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Stone is worked out).
+    reels:
+      # Coal, the most common ore.
+      coal: 10
+      # Copper.
+      copper: 8
+      # Iron.
+      iron: 6
+      # Gold.
+      gold: 4
+      # Diamond, the rarest ore.
+      diamond: 2
+      # Wild: stands in for any ore.
+      wild: 2
+    # What a line pays, as a multiple of the tokens put in.
+    pays:
+      # Any two the same ore (a Wild counts).
+      two: 2
+      # Three coal.
+      coal: 4
+      # Three copper.
+      copper: 6
+      # Three iron.
+      iron: 10
+      # Three gold.
+      gold: 20
+      # Three diamonds.
+      diamond: 40
+      # Three wilds (5 in → 250, the max_payout).
+      wild: 50
+  # ---- twenty_one ----
+  # Twenty-One: beat the Arcade's hand without going over 21 (/hcm play blackjack
+  # works too). What a win adds is worked out per stake so the best play gives back `rtp`.
+  twenty_one:
+    # false = Twenty-One is closed.
+    enabled: true
+    # The tokens a player can put in per hand (a Double puts the same in again).
+    stakes: [5, 10, 20]
+    # Hands per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # A two-card 21 adds this many times what a normal win adds.
+    natural_bonus: 1.5
+  # ---- wheel ----
+  # The Wheel: 24 equally likely spaces around the screen. Each space's number is a
+  # base: 0 = nothing, 1 = your tokens back, above 1 = a win (scaled per stake so it
+  # gives back `rtp`). Bases between 0 and 1 aren't allowed.
+  wheel:
+    # false = the Wheel is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [5, 10, 20]
+    # Spins per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # 24 bases, clockwise from the top-left corner (slots 0-8, 17, 26, 35,
+    # 44-36, 27, 18, 9): 13 x 0, 5 x 1, 3 x 2, 2 x 4, 1 x 5. No three zeros in a row.
+    # 8 or 12 bases are repeated around the ring.
+    segments: [5, 0, 1, 0, 2, 0, 0, 1, 0, 4, 0, 1, 0, 2, 0, 1, 0, 4, 0, 0, 1, 0, 2, 0]
+  # ---- higher_lower ----
+  # Higher or Lower: guess whether the next card is higher or lower; each right
+  # guess grows what you'd get back, cash out any time. The same card loses.
+  higher_lower:
+    # false = Higher or Lower is closed.
+    enabled: true
+    # The tokens a player can put in per run.
+    stakes: [10, 20, 50]
+    # Runs per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # Cash out automatically at this many times the tokens put in (or max_payout, if lower).
+    max_multiplier: 20
+    # Cash out automatically after this many right guesses.
+    max_guesses: 10
+  # ---- coin_flip ----
+  # Coin Flip: two nearby players put in the same, one wins. The winner gets `rtp`
+  # of the tokens put in; the rest is gone. Players must turn Coin Flip invites on.
+  coin_flip:
+    # Off by default: the one game of chance between players.
+    enabled: false
+    # The tokens each player can put in.
+    stakes: [5, 10, 25]
+    # Flips per player per day.
+    daily_limit: 5
+    # Flips between the same two players per day.
+    pair_daily_limit: 2
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # How close the two players must be, in blocks (0 = anywhere in the same world).
+    max_distance: 32
+    # How long an invite stays open, in seconds.
+    invite_seconds: 60
+  # ---- creeper_sweeper ----
+  # Creeper Sweeper: dig every safe square without digging a creeper.
+  creeper_sweeper:
+    # false = Creeper Sweeper is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for clearing the daily board on your scored try.
+    daily_reward: 1
+    # Most tokens Creeper Sweeper pays a player per day.
+    daily_cap: 2
+    # Creepers on the 9x5 board per difficulty (the daily board uses normal's).
+    mines:
+      # Easy board.
+      easy: 6
+      # Normal board.
+      normal: 8
+      # Hard board.
+      hard: 10
+    # Bronze, silver, gold: clear times in seconds (at or under), per difficulty.
+    milestones:
+      # Easy board.
+      easy: [180, 90, 45]
+      # Normal board.
+      normal: [240, 120, 75]
+      # Hard board.
+      hard: [300, 180, 120]
+  # ---- ore_merge ----
+  # Ore Merge: slide and merge ores (2048) from coal up to a dragon egg.
+  ore_merge:
+    # false = Ore Merge is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for making a diamond on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Ore Merge pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the biggest tile made (256 diamond, 512 netherite, 1024 nether star).
+    milestones: [256, 512, 1024]
+  # ---- snake ----
+  # Snake: turn left or right to eat apples without hitting the wall or yourself.
+  snake:
+    # false = Snake is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 15 apples on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Snake pays a player per day.
+    daily_cap: 2
+    # Ticks between moves for Java players (20 = 1 second; it speeds up, never below 3).
+    tick_java: 6
+    # Ticks between moves for Bedrock players.
+    tick_bedrock: 10
+    # Bronze, silver, gold: apples in one run (32 fills the whole field).
+    milestones: [10, 20, 30]
+  # ---- mini_match ----
+  # Mini Match: find the 8 pairs of Minis in as few flips as you can.
+  mini_match:
+    # false = Mini Match is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for finishing the daily board in 24 flips or fewer on your scored try.
+    daily_reward: 1
+    # Most tokens Mini Match pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: finish in at most this many flips.
+    milestones: [30, 24, 20]
+  # ---- simon_says ----
+  # Simon Says: repeat the growing sequence of lights and notes.
+  simon_says:
+    # false = Simon Says is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for repeating 8 on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Simon Says pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the longest sequence repeated.
+    milestones: [5, 10, 15]
+  # ---- whack_a_zombie ----
+  # Whack-a-Zombie: bonk the zombies, not the villagers.
+  whack_a_zombie:
+    # false = Whack-a-Zombie is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 20 points on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Whack-a-Zombie pays a player per day.
+    daily_cap: 2
+    # How long a round lasts, in seconds.
+    seconds: 30
+    # Bronze, silver, gold: points in one round.
+    milestones: [15, 25, 35]
+  # ---- connect_four ----
+  # Connect Four: four in a row against the Arcade or a friend (friend games pay nothing).
+  connect_four:
+    # false = Connect Four is closed.
+    enabled: true
+    # Tokens for the first win of the day against the Arcade on normal or hard.
+    daily_reward: 1
+    # Most tokens Connect Four pays a player per day.
+    daily_cap: 1
+  # ---- tic_tac_toe ----
+  # Tic-Tac-Toe: against the Arcade or a friend (friend games pay nothing).
+  tic_tac_toe:
+    # false = Tic-Tac-Toe is closed.
+    enabled: true
+    # Tokens for the first win (easy) or draw-or-better (hard) of the day against the Arcade.
+    daily_reward: 1
+    # Most tokens Tic-Tac-Toe pays a player per day.
+    daily_cap: 1
+  # ---- trials ----
+  # Time trials: parkour, elytra and boat courses built with /hcm games course.
+  trials:
+    # false = every time-trial course is closed.
+    enabled: true
+    # Tokens for the first finish of a course, once ever per course, by tier.
+    first_clear:
+      # Easy courses.
+      easy: 5
+      # Medium courses.
+      medium: 10
+      # Hard courses.
+      hard: 20
+      # "Why did we build this?" courses.
+      extreme: 40
+    # Tokens for setting the week's best time on a course (once per course per week).
+    weekly_best_bonus: 5
+    # Tokens for finishing the course of the week (once a day).
+    course_of_week_bonus: 2
+    # Most tokens time trials pay a player per day (first clears don't count).
+    daily_cap: 4
+    # Parkour: blocks below the lower of the last and next checkpoint that count as a fall.
+    fall_depth: 6
+    # A run faster than this many seconds doesn't count (a course can set its own).
+    min_seconds: 5
+    # Starting a course offers "Warm up (3:00)" or "Go straight to the timed run": free laps first,
+    # never timed or rewarded (a Dropper offers one practice drop). Seconds; 0 = no warm-ups.
+    warmup_seconds: 180
+    # "Race with friends": the most racers in one party race on a course (2-12).
+    party_max: 8
+    # Ride along: a boat driver may take one passenger in the back seat. A passenger doesn't change a
+    # boat's speed, so a run with a rider counts as normal. false = runs with a rider are just for fun
+    # (no board, record, rewards or Cup time), and Race Night takes no riders.
+    rider_runs_count: true
+  # ---- golf ----
+  # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
+  golf:
+    # false = every mini golf course is closed.
+    enabled: true
+    # Tokens for finishing a course at par or better (once per course per day).
+    par_reward: 2
+    # Tokens for a hole-in-one on a course you finish (once per hole per day).
+    hole_in_one_reward: 1
+    # Tokens for the first finish of a course, once ever per course.
+    first_clear: 5
+    # Most tokens mini golf pays a player per day (first clears don't count).
+    daily_cap: 4
+    # Strokes over par before a hole is picked up.
+    max_over_par: 3
+  # ---- cup ----
+  # The Weekly Cup: on a time-trial course that runs one, a player pays a small entry once a week and
+  # their best counted time that week is their Cup time. At the week's rollover (the quests' week
+  # start at 04:00) the pool - every entry, plus the top-up - is shared by Cup time: 70/30 with 2 Cup
+  # times, 50/30/20 with 3 or more; no Cup time, no share. With fewer than 2 Cup times, or when the
+  # course is deleted, changed or closed mid-week, every entry comes back. The server keeps nothing.
+  # Fresh parkour, Sky Rings, Ice Boat and Dropper courses run one; a hand-built course only after
+  # /hcm games cup on <id>. Players hide it with /hcm play cup off. The youngest may pay into a pool
+  # the oldest win: false below switches it off.
+  cup:
+    # false = no new entries and no Cup on the screens. Cups already paid into still finish their
+    # week and pay out (or refund) at the rollover.
+    enabled: true
+    # Tokens to enter one course's Cup for one week (1-100).
+    entry: 5
+    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one.
+    server_topup: 10
+  # ---- fresh ----
+  # Fresh Courses: parkour, Sky Rings, Adventure Golf, droppers and the Ice Boat Mountain Run the plugin
+  # builds itself - a new set every week (or every day, or every few days: cadence), the same for
+  # everyone. Nothing to build by hand. Check with /hcm games gen status.
+  fresh:
+    # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
+    enabled: false
+    # The world they are built in: "" = the first of games.worlds (it must be listed there).
+    # Everything the games build stands far out and high up (x 1760-8191, z 4096-10367, y 128-303),
+    # each place 576 blocks (36 chunks) from the next, so from any course you can't see another one,
+    # or even the spare half where the next course is built, at any view distance. Keep the sky there
+    # free of your own builds, and a world border at least 21,000 across. A void world (nothing below
+    # the courses) is made with /mv create <name> normal -g HomeCraftManagement (README "A void world");
+    # it stays void after every restart, since this plugin starts before Multiverse-Core.
+    world: ""
+    # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
+    # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
+    # A change here keeps the courses that are up until the new setting's first change day (or
+    # their own end, if sooner). /hcm games gen status shows the date.
+    cadence: weekly
+    # The time a new set starts (clock.time_zone, 24-hour, in quotes). Keep it at a restart:
+    # the courses are rebuilt while nobody plays.
+    rebuild_at: "04:00"
+    # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
+    # Every other cadence counts its days from this day too. After a change the courses that are up
+    # stay until the new day. Moving the change day later keeps this set until the new day comes
+    # round: a new day that would still be the same numbered set (weekly: one before the next
+    # Monday) is not a change, so they stay until the one after. Status shows the date.
+    rebuild_day: ""
+    # Seconds after the server is up before the first build.
+    startup_delay_seconds: 60
+    # No build starts this many minutes before one of games.restart_times.
+    avoid_before_restart_minutes: 15
+    # A build that failed is tried again after this many minutes.
+    retry_minutes: 30
+    # Builds tried per course per day before it keeps the last course until the next day.
+    max_tries_per_day: 4
+    # Minutes someone still on a course the next build needs gets to finish (after an admin's
+    # second quick reroll only).
+    clear_wait_minutes: 20
+    # Course boards and star rows older than this many days are pruned (each course always keeps
+    # its last 8 sets).
+    keep_days: 35
+    # No mobs, fire, random ticks or weather in that world, and always noon.
+    world_rules: true
+    # "x y z" where people standing in a building area are moved; "" = the world's spawn.
+    safe_spot: ""
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). A goal is
+    # paid in full or not at all: one the day's caps can't pay whole waits for a finish another day
+    # that week. A week's goals are fixed the first time they are shown, even if a course is
+    # switched off later that week.
+    daily_cap: 2
+    # When a new set goes up, one chat line tells each player once ("New courses this week! Easy,
+    # Parkour, Hard, Sky Rings and Golf - /hcm play"): at login, or at once for anyone on (not while
+    # they play a world game, and after they close a screen). Players turn it off with
+    # /hcm play news off. false = no line for anyone.
+    announce: true
+    # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
+    # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
+    # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
+    # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4: one
+    # bigger than a whole day's cap pays that cap, once.
+    rewards:
+      clear_weekly:
+        fresh_parkour_easy: 2
+        fresh_parkour: 3
+        fresh_parkour_hard: 4
+        fresh_rings: 3
+        fresh_golf: 3
+        fresh_tiny_golf: 2
+        fresh_boat: 3
+        fresh_dropper_easy: 2
+        fresh_dropper: 3
+      clear_daily:
+        fresh_parkour_easy: 1
+        fresh_parkour: 2
+        fresh_parkour_hard: 3
+        fresh_rings: 2
+        fresh_golf: 2
+        fresh_tiny_golf: 1
+        fresh_boat: 2
+        fresh_dropper_easy: 1
+        fresh_dropper: 2
+    # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
+    # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
+    star_goals:
+      weekly: [6, 12]
+      weekly_tokens: [1, 2]
+      daily: [10, 25]
+      daily_tokens: [1, 1]
+    # How much building one server tick may do.
+    budget:
+      # Blocks per tick while anyone is online.
+      blocks_per_tick: 500
+      # Blocks per tick while nobody is.
+      blocks_per_tick_idle: 5000
+      # Milliseconds of building per tick.
+      max_ms_per_tick: 4
+      # Chunk snapshots per tick.
+      snapshots_per_tick: 4
+      # Chunks waiting to load at once.
+      chunk_loads_in_flight: 2
+      # Building pauses while the average tick takes longer than this (ms); it goes on below 3/4 of it.
+      pause_above_mspt: 40
+    # Star times, as a factor of each course's expert time: gold = 3 stars, silver = 2 stars.
+    # Finishing is always 1 star. Tune after the first week if they feel too hard or too easy.
+    stars:
+      gold: {easy: 2.0, medium: 1.5, hard: 1.25}
+      silver: {easy: 3.0, medium: 2.2, hard: 1.8}
+    # Each course: on or off, its difficulty (tier, or mix of golf holes or dropper levels: E easy,
+    # M medium, H hard) and where its area starts (origin: x y z, x and z a multiple of 16). A course
+    # has two halves along x, the one you play and a spare one for the next set, 576 blocks apart
+    # (half_gap: optional, 32-4096, a multiple of 16; a smaller gap lets players see the spare half).
+    # To move a course, empty it first (/hcm games gen clear <course> confirm), then change its origin.
+    # /hcm games gen on|off|tier|mix wins over these.
+    # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
+    # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
+    # with the next set (or /hcm games gen reroll).
+    # Golf is Adventure Golf: sand, trees, hills, and ponds in play on M and H holes only (never on
+    # Tiny Golf, whatever its mix). fresh_boat (Ice Boat) is the Mountain Run, a downhill race with 4-6
+    # drops; it ships OFF: ride the boat test strip and a preview first (README "Ice Boat: the
+    # Mountain Run"). /hcm games gen preview and test work on it while it is off.
+    slots:
+      fresh_parkour_easy: {enabled: true, tier: easy, origin: [6080, 160, 6592]}
+      fresh_parkour: {enabled: true, tier: medium, origin: [6080, 160, 7232]}
+      fresh_parkour_hard: {enabled: true, tier: hard, origin: [6080, 160, 7872]}
+      fresh_rings: {enabled: true, tier: easy, origin: [6080, 128, 4096]}
+      fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [7488, 160, 4096]}
+      fresh_tiny_golf: {enabled: true, mix: EEE, origin: [7488, 160, 5504]}
+      fresh_boat: {enabled: false, tier: medium, origin: [6080, 160, 5888]}
+      fresh_dropper_easy: {enabled: true, mix: EEE, origin: [7488, 160, 6768]}
+      fresh_dropper: {enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}
+    # Every set that was ever up is archived with its whole layout, so a past course can be brought
+    # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
+    # A course is a few KB (a Mountain Run about 50 KB): a year of weekly sets for every course is
+    # about 6 MB with Ice Boat on.
+    archive:
+      # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
+      # recalled course's set is never removed.
+      keep: 0
+    # The website's list of past courses (with their course codes and seeds): at most this many per course.
+    feed_history: 26
+    # The Classics: four empty courses an admin can bring an old course back into
+    # (/hcm games gen recall HARD-40). Its old records are the ones to beat.
+    classics:
+      # How long a recalled course stays up unless the recall says otherwise ("forever" keeps it).
+      days: 7
+      # Where each one is built (x y z, x and z a multiple of 16; two halves 576 blocks apart along x,
+      # half_gap optional as above), like the courses above. It must be 32 blocks from every other area
+      # to be built at all; 576 keeps it out of sight.
+      slots:
+        fresh_classic_parkour: {origin: [7488, 160, 6128]}
+        fresh_classic_rings: {origin: [6080, 128, 4992]}
+        fresh_classic_golf: {origin: [7488, 160, 4800]}
+        fresh_classic_dropper: {origin: [7488, 160, 7952]}
+    # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in
+    # its own plot of this area and never touched by the generator again.
+    keep:
+      # The first plot's corner (x y z). Plots are 144 x 176 x 336, six to a row along x, rows along z,
+      # 576 blocks apart (plot_gap: optional, 0-4096, a multiple of 16; 576 keeps kept courses out of
+      # sight of each other). It must stay at least 16 blocks from every Fresh Courses area; otherwise
+      # keeping is off. Each plot must be inside the world border (24 plots reach z 10367).
+      area: [1760, 128, 7296]
+      # How many plots there are.
+      max_plots: 24
+  # ---- race_night ----
+  # Race Night: boat races for everyone at once, at set times or when an admin starts one
+  # (/hcm games event start). Three short races on one track, points for everyone in every race.
+  # Free to enter. The server gives small token prizes (at most prize_events_per_week nights a week).
+  # Ships OFF: turn on the Ice Boat Fresh course (games.fresh.slots.fresh_boat) first - it is the
+  # default track and has a viewing stand built in.
+  race_night:
+    # false = no Race Night.
+    enabled: false
+    # When it runs: "<days> <HH:mm>" in clock.time_zone, like "FRI 19:00", "SAT,SUN 15:00",
+    # "DAILY 18:30", "WEEKDAYS 17:00" or "WEEKENDS 10:30". [] = only when an admin starts one.
+    schedule: ["FRI 19:00"]
+    # auto = take turns among the tracks it can race on; or a boat course's id.
+    course: auto
+    # Races a night, 1-5 (more than 1 needs a track with a viewing stand). The Ice Boat Mountain Run is
+    # a short downhill sprint ("3 downhill races"): 5, with finish_window_seconds: 90, suits family nights.
+    races: 3
+    # Laps a race: 0 = the course's own; 1-5 on a loop track. The Mountain Run is one run, no laps.
+    laps: 0
+    # The heads-up in chat this many minutes before the start (0 = none).
+    announce_minutes: 30
+    # Joining opens this many minutes before a scheduled start...
+    join_minutes: 10
+    # ... and before one an admin starts.
+    admin_join_minutes: 5
+    # Fewer racers than this at the start calls the night off.
+    min_racers: 2
+    # The most racers (2-12), also limited by the track's starting grid.
+    max_racers: 8
+    # A race ends this many seconds after its first finisher...
+    finish_window_seconds: 60
+    # ... or after this many minutes.
+    max_race_minutes: 4
+    # Seconds on the stand between races.
+    break_seconds: 20
+    # Free warm-up laps before the grid (warm-up runs from the top on the Mountain Run), in seconds
+    # (0 = none). Racers can tap Ready to skip it; the grid waits for the time to run out or for
+    # everyone to be ready.
+    warmup_seconds: 180
+    # Points by place in each race.
+    points: [10, 8, 6, 5, 4, 3, 2]
+    # Points for a finisher beyond that list.
+    finish_points: 2
+    # Points for anyone still racing when a race ends.
+    still_racing_points: 1
+    # Tokens for the night's 1st, 2nd and 3rd (each 0-10). 2nd needs 3 racers, 3rd needs 4.
+    prizes: [5, 3, 2]
+    # Tokens for everyone else who finished a race (0-2).
+    finisher_prize: 1
+    # Nights a week that pay tokens, server-wide (0-7). Later nights that week are just for fun.
+    prize_events_per_week: 3
+    # month = points also go on a monthly season board; off = no season board.
+    season: month
+    # Watchers who wander further than this from the viewing stand are put back.
+    stand_radius: 4
+    # true = on the Ice Boat Mountain Run, the heads-up and "join now" chat lines add how many drops
+    # it has ("This week: 5 drops down the mountain!"). Words only: it never changes a track.
+    hype: true
+  # ---- falling_floors ----
+  # Falling Floors: every block you step on falls away. Last one standing wins - or play solo.
+  # Three glass floors in a box of its own, with a new shape every week. No TNT, no explosions.
+  falling_floors:
+    # Ships OFF. true + /hcm reload to open it.
+    enabled: false
+    # The box's corner (x y z; x and z a multiple of 16). It is 48 x 40 x 48 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses and the Clubhouse, and 16 from hand-built
+    # courses. The shipped spot is 576 blocks from everything else, out of sight.
+    origin: [6688, 176, 8544]
+    # Ticks a stepped-on block stays red before it falls (6-20; 20 ticks is a second).
+    fade_ticks: 10
+    # Ready players that start a round at once.
+    min_players: 2
+    # The most players in the arena (2-16).
+    max_players: 12
+    # Whether a player alone can play a solo round ("how long can you last?").
+    solo: true
+    # After this many seconds the edges fall in, so every round ends.
+    round_seconds: 180
+    # Blocks the reset between rounds puts back each tick.
+    reset_blocks_per_tick: 400
+    # Tokens for the first full round of the day.
+    daily_reward: 1
+    # Solo seconds for the three milestones, and the tokens each pays (once ever).
+    milestones: [30, 60, 120]
+    milestone_rewards: [1, 2, 3]
+    # Most tokens Falling Floors pays a player per day.
+    daily_cap: 3
+  # ---- clubhouse ----
+  # The Clubhouse: one room in the Games world where racers wait before a race and hang out after it
+  # (/hcm play clubhouse). It builds itself in an empty box and is checked before anyone comes in;
+  # /hcm games clubhouse here uses a room you built instead. Nothing here moves tokens.
+  clubhouse:
+    # true = the room builds itself; nothing happens while games.enabled is false. false = every race
+    # and round works exactly as before.
+    enabled: true
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses and the Falling Floors arena, and 16 from
+    # hand-built courses. The shipped spot is 576 blocks from everything else, out of sight.
+    origin: [6080, 160, 8544]
+    # Minutes someone may stay with no race or party going before they are sent home (a warning
+    # comes a minute before).
+    max_minutes: 30
+    # Party racers come back here after the race, instead of going home.
+    party_after: true
+    # Everyone at the track comes here at the end of Race Night (the top three on the podium). On a
+    # track with no viewing stand, racers (and their riders) also wait here between races.
+    race_night_after: true
+    # A golf-together group comes here when its round ends.
+    golf_after: true

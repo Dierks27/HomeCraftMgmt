@@ -22,8 +22,9 @@ import java.util.List;
  *
  * <pre>
  *  4  CLOCK      "Race Night - Fri 7:00 PM"
- *  10 OAK_BOAT   "Ice Boat - 3 races, 2 laps" ("Ice Boat - 3 downhill races" on the Mountain Run)
- *  12 GOLD_INGOT "Prizes - 5, 3, 2 tokens" (or "Just for fun tonight"), the rules in lore
+ *  10 OAK_BOAT   "Ice Boat - 3 races, 2 laps" ("Ice Boat - 3 downhill races" on the Mountain Run, "... on the
+ *                Winding Road" on a Mountain Run v2)
+ *  12 GOLD_INGOT "Prizes - 20, 12, 8 tokens" (or "Just for fun tonight"), the rules in lore
  *  13 Join       LIME "Join Race Night - 3 of 8 in" / RED "Leave the race list" / GRAY "Joining opens at 6:50 PM"
  *  14 SPYGLASS   "Watch" (a bossbar with the leader, and the finishes in chat)
  *  16 OAK_SIGN   "Last Race Night - won by Sam" (its results)
@@ -83,14 +84,26 @@ public final class RaceNightMenu extends GameMenu {
      * @param seasonBoard   the season board, or {@code null}
      * @param downhill      the track is the Ice Boat Mountain Run, a sprint: "3 downhill races", no laps
      *                      (COURSE-VARIETY-SPEC §5.2)
+     * @param where         what the format ends with on a Mountain Run v2, " on the Winding Road"
+     *                      ({@code EventCopy.where}); {@code ""} on any other track
      */
     public record View(String when, String state, String track, int races, int laps, List<Integer> prizes,
                        int finisherPrize, boolean prizeNight, Join join, int racers, int maxRacers, String opensAt,
                        boolean watching, String lastWinner, String lastBoard, String seasonName, String seasonBoard,
-                       long seasonPoints, boolean newsOn, boolean downhill) {
+                       long seasonPoints, boolean newsOn, boolean downhill, String where) {
 
         public View {
             prizes = prizes == null ? List.of() : List.copyOf(prizes);
+            where = where == null ? "" : where;
+        }
+
+        /** A view of a track with no style to name (the shape before Mountain Run v2). */
+        public View(String when, String state, String track, int races, int laps, List<Integer> prizes,
+                    int finisherPrize, boolean prizeNight, Join join, int racers, int maxRacers, String opensAt,
+                    boolean watching, String lastWinner, String lastBoard, String seasonName, String seasonBoard,
+                    long seasonPoints, boolean newsOn, boolean downhill) {
+            this(when, state, track, races, laps, prizes, finisherPrize, prizeNight, join, racers, maxRacers, opensAt,
+                    watching, lastWinner, lastBoard, seasonName, seasonBoard, seasonPoints, newsOn, downhill, "");
         }
 
         /** A view of a track that isn't the Mountain Run (the shape before it). */
@@ -217,7 +230,8 @@ public final class RaceNightMenu extends GameMenu {
                 List.of("&7" + (v.state() == null ? "Boat races for everyone at once." : v.state()),
                         "&7Three short races: every race gives points."));
         out[TRACK] = new Tile(TRACK, Material.OAK_BOAT, v.track() == null ? "&bThe track &7- picked on the night"
-                : "&b" + v.track() + " &7- " + EventCopy.format(v.races(), Math.max(1, v.laps()), v.downhill()),
+                : "&b" + v.track() + " &7- " + EventCopy.format(v.races(), Math.max(1, v.laps()), v.downhill())
+                + v.where(),
                 List.of("&7Everyone starts together on a grid.", "&7Boats bump - give each other room!",
                         "&7Finishers watch the rest from the stand."));
         List<String> rules = new ArrayList<>();

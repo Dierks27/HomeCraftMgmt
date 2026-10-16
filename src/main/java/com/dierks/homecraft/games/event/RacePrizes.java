@@ -13,11 +13,11 @@ import java.util.UUID;
  *
  * <p><b>The rules</b> (all configurable, bounded here whatever config says):
  * <ul>
- *   <li>The night's 1st, 2nd and 3rd get {@code prizes} (5, 3, 2). Every other racer who
- *       <b>finished at least one race</b> gets {@code finisher_prize} (1).</li>
+ *   <li>The night's 1st, 2nd and 3rd get {@code prizes}. Every other racer who <b>finished at least one
+ *       race</b> gets {@code finisher_prize} (both shipped from {@code TokenBalance}).</li>
  *   <li><b>The podium rule:</b> place k pays its prize only when at least k + 1 racers started race
  *       1, so 2nd needs 3 racers and 3rd needs 4, and nobody wins a podium prize for coming last.
- *       Two racers get 5 and 1; three get 5, 3 and 1.</li>
+ *       Two racers get 1st's prize and the finisher's; three get 1st's, 2nd's and the finisher's.</li>
  *   <li><b>A podium needs a finish, and someone behind.</b> Only a racer who finished at least one
  *       race tonight can win a podium prize (still-racing points alone never do), and a place pays
  *       its podium prize only when someone is ranked strictly below it (distinct places: racers tied
@@ -117,7 +117,10 @@ public final class RacePrizes {
         return prizedThisWeek < Math.max(0, perWeek);
     }
 
-    /** The prize line on the screen and at Go: "Prizes: 5, 3, 2 tokens" or {@link #JUST_FOR_FUN}. */
+    /**
+     * The prize line on the screen and at Go: "Prizes: 20, 12, 8 tokens, 5 for every other finisher", or
+     * {@link #JUST_FOR_FUN}.
+     */
     public static String line(List<Integer> prizes, int finisherPrize, boolean prizeNight) {
         if (!prizeNight || prizes == null || prizes.stream().allMatch(p -> p <= 0)) {
             return JUST_FOR_FUN;

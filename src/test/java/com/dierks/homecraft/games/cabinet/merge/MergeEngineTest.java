@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.merge;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import org.junit.jupiter.api.Test;
 
@@ -241,7 +242,8 @@ class MergeEngineTest {
     void theShippedBlockParsesToTheDefaultsWithNoWarning() {
         List<String> warns = new ArrayList<>();
         OreMergeSettings parsed = OreMergeSettings.parse(new GamesConfig.Node("games.ore_merge", Map.of(
-                "enabled", true, "milestone_reward", 1, "daily_reward", 1, "daily_cap", 2,
+                "enabled", true, "milestone_reward", TokenBalance.CABINET_MILESTONE, "daily_reward",
+                TokenBalance.CABINET_DAILY, "daily_cap", TokenBalance.CABINET_DAILY_CAP,
                 "milestones", List.of(256, 512, 1024)), warns::add), OreMergeSettings.defaults());
         assertEquals(OreMergeSettings.defaults(), parsed, "the shipped values are the defaults");
         assertEquals(List.of(), warns, "and read quietly");

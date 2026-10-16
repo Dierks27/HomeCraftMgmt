@@ -519,4 +519,113 @@ class GamesCheckTest {
         assertTrue(new Good() instanceof GamesCheck.Facts f && f.raceNight() == null,
                 "a Facts without Race Night reports none (the default)");
     }
+
+    /**
+     * ENG04: config.yml couldn't be saved at the update (F10), so golf, Classic Golf and the boat are held where
+     * they were built. The check names the file, not an unreadable origin, and draws a held area at the sizes its
+     * claim recorded, never today's size at its old spot.
+     */
+    @Test
+    void anAreaHeldBecauseConfigCouldntBeSavedNamesTheFileAndIsDrawnAtTheSizeItWasBuilt() {
+        String why = "config.yml couldn't be saved at this update (it is still at config revision 19, and revision 21"
+                + " moves this area), so it stays where it was built, closed, and nothing is built or emptied there"
+                + " until the file can be written: fix that (the SEVERE at the start says why it wasn't) and restart";
+        Region held = GamesCheckLive.unplaced(com.dierks.homecraft.games.gen.api.Slots.DAILY_GOLF, "Golf of the Week",
+                why);
+        assertTrue(held.held(), "held");
+        Good g = new Good();
+        Fresh f = Good.fresh(null);
+        List<Region> regions = new ArrayList<>(f.regions());
+        regions.add(held);
+        g.fresh = new Fresh(true, "weekly", "New courses every Monday", "games", true, true, regions, f.slots(),
+                f.nextChange(), null, f.keepArea());
+        Line l = only(GamesCheck.run(g));
+        assertEquals("Golf of the Week: " + why, l.what(), "the engine's own reason, not 'its origin can't be read'");
+        assertEquals("make config.yml writable (the SEVERE at the start says why it couldn't be saved), then restart;"
+                + " nothing is built or emptied there meanwhile", l.fix(), "the fix is the file, never the origin");
+        Region typo = GamesCheckLive.unplaced(com.dierks.homecraft.games.gen.api.Slots.DAILY_GOLF, "Golf of the Week",
+                null);
+        assertEquals(List.of(com.dierks.homecraft.games.gen.engine.GenService.UNPLACED), typo.problems(),
+                "an origin config can't read still says so");
+        assertFalse(typo.held());
+
+        // the sight check: the owner's other courses at their spots, the boat held at its 0.36 claim
+        com.dierks.homecraft.games.gen.api.Slots.Def boat = com.dierks.homecraft.games.gen.api.Slots.ICE_BOAT;
+        String claim = "games,6080,160,5888,128,16,128,576";
+        List<com.dierks.homecraft.games.gen.api.Box> drawn = GamesCheckLive.claimedHalves(boat, claim, "games");
+        assertEquals(List.of(com.dierks.homecraft.games.gen.api.Box.sized(6080, 160, 5888, 128, 16, 128),
+                com.dierks.homecraft.games.gen.api.Box.sized(6784, 160, 5888, 128, 16, 128)), drawn,
+                "at the claim's recorded 128 x 16 x 128, half B 576 on");
+        assertEquals(List.of(), GamesCheckLive.claimedHalves(boat, claim, "other_world"), "only in its own world");
+        assertEquals(List.of(), GamesCheckLive.claimedHalves(boat, null, "games"), "nothing claimed, nothing drawn");
+        for (int view : new int[]{10, 12, 16}) {
+            List<Line> out = new ArrayList<>();
+            SightCheck.rows(new SightCheck.Facts("games", view, "test", ownersPlaces(drawn), List.of()), out);
+            assertTrue(out.stream().noneMatch(x -> x.what().contains("Ice Boat")), "view " + view + ": nothing can see"
+                    + " the held boat at its real size: " + out);
+            List<Line> before = new ArrayList<>();
+            SightCheck.rows(new SightCheck.Facts("games", view, "test", ownersPlaces(
+                    com.dierks.homecraft.games.gen.engine.Regions.halves(boat, new int[]{6080, 160, 5888}, 576)),
+                    List.of()), before);
+            assertTrue(before.stream().anyMatch(x -> x.status() == Status.WARN
+                    && x.what().contains("can see Ice Boat")), "(today's 480 x 176 x 640 at its old spot did warn: "
+                    + before + ")");
+        }
+    }
+
+    /**
+     * ENG-R3-01: Golf of the Week moving to the area this version gave it is said as what it is, an OK line while
+     * its new course is on its way and built (GOLF-V4-SPEC §5.2), never "is closed: its course couldn't be checked";
+     * a build that failed there still fails.
+     */
+    @Test
+    void aCourseMovingToItsNewAreaIsOnItsWayNotAFault() {
+        Region golf = new Region("fresh_golf", "Golf of the Week", false, true, List.of(), "x 8768..8895");
+        for (boolean building : new boolean[]{false, true}) {
+            SlotFact moving = new SlotFact("fresh_golf", "Golf of the Week", false, true, null, false, true, false,
+                    building, null, true, null, true);
+            List<Line> out = new ArrayList<>();
+            GamesCheck.fresh(new Fresh(true, "weekly", "s", "games", true, true, List.of(golf), List.of(moving), null,
+                    null, "k"), out);
+            Line l = out.stream().filter(x -> x.what().startsWith("Golf of the Week")).findFirst().orElseThrow();
+            assertEquals(Status.OK, l.status(), "expected, not a thing to fix: " + l);
+            assertEquals("Golf of the Week: area fits, moving to its new area, its new course "
+                    + (building ? "is being built" : "is on its way"), l.what());
+        }
+        SlotFact failed = new SlotFact("fresh_golf", "Golf of the Week", false, true, null, false, true, false, false,
+                "the plan failed its check", true, null, true);
+        List<Line> out = new ArrayList<>();
+        GamesCheck.fresh(new Fresh(true, "weekly", "s", "games", true, true, List.of(golf), List.of(failed), null,
+                null, "k"), out);
+        assertTrue(out.stream().anyMatch(x -> x.status() == Status.FAIL
+                && x.what().equals("Golf of the Week is closed: the plan failed its check")), "a failure still is: " + out);
+        SlotFact stuck = new SlotFact("fresh_golf", "Golf of the Week", false, true, null, false, true, false, false,
+                null, true, null);
+        out.clear();
+        GamesCheck.fresh(new Fresh(true, "weekly", "s", "games", true, true, List.of(golf), List.of(stuck), null,
+                null, "k"), out);
+        assertTrue(out.stream().anyMatch(x -> x.status() == Status.FAIL && x.what().equals("Golf of the Week is closed:"
+                + " its course couldn't be checked")), "and one that isn't moving is closed as before: " + out);
+    }
+
+    /** The owner's seven other courses at their shipped spots, and the held boat's halves as {@code boat}. */
+    private static List<SightCheck.Place> ownersPlaces(List<com.dierks.homecraft.games.gen.api.Box> boat) {
+        List<SightCheck.Place> out = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.api.Slots.Def d : List.of(
+                com.dierks.homecraft.games.gen.api.Slots.DAILY_PARKOUR_EASY,
+                com.dierks.homecraft.games.gen.api.Slots.DAILY_PARKOUR_MEDIUM,
+                com.dierks.homecraft.games.gen.api.Slots.DAILY_PARKOUR_HARD,
+                com.dierks.homecraft.games.gen.api.Slots.SKY_RINGS, com.dierks.homecraft.games.gen.api.Slots.TINY_GOLF,
+                com.dierks.homecraft.games.gen.api.Slots.EASY_DROPPER,
+                com.dierks.homecraft.games.gen.api.Slots.FRESH_DROPPER)) {
+            for (com.dierks.homecraft.games.gen.api.Box b : com.dierks.homecraft.games.gen.engine.Regions.halves(d,
+                    d.origin(), com.dierks.homecraft.games.gen.api.Slots.HALF_GAP)) {
+                out.add(new SightCheck.Place(SightCheck.Kind.SLOT, d.id(), d.name(), b));
+            }
+        }
+        for (com.dierks.homecraft.games.gen.api.Box b : boat) {
+            out.add(new SightCheck.Place(SightCheck.Kind.SLOT, "fresh_boat", "Ice Boat", b));
+        }
+        return out;
+    }
 }

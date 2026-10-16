@@ -1,22 +1,18 @@
 package com.dierks.homecraft.games.gen.engine;
 
-import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
-import com.dierks.homecraft.games.gen.api.SignText;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * "Make this half equal to the plan" (GEN-SPEC §0.2 R3, §3.3 steps 4-6 and 8), a few blocks a tick.
@@ -52,6 +48,19 @@ import java.util.UUID;
  *       {@link Phase#FAILED} naming the first five.</li>
  * </ol>
  * Every write goes through a {@link HalfWriter}, which refuses anything outside the half.
+ *
+ * <p><b>Leaving what isn't ours</b> (RETIRE, an old area emptied after a move): a job given a
+ * {@code leave} test never writes a block the plan doesn't name when the test says it isn't Fresh
+ * Courses' (a block no plan may use): it is counted and named ({@link #left}, {@link #leftAt}) and
+ * stays as it is, so the verify pass passes with it standing.
+ *
+ * <p><b>The plan, held small</b> (MOUNTAIN-V2-SPEC §13.6): what the half must hold is a
+ * {@link BuildIndex}, per chunk one sorted {@code long[]} with a block packed in each long (8 bytes
+ * a block, against ~120 for an object and a hash-set entry each: ~3 MB instead of 40-50 MB for a
+ * 350,000-block Mountain Run v2). Its cells sort bottom-up, then along x, then z, which is the
+ * order a chunk's scan walks, so "is this spot planned?" is a cursor that only moves forward.
+ * Writes are made only for blocks that differ, as before; every write, its order, each pass and
+ * the blocks a pass names are exactly what the object index gave.
  */
 public final class BuildJob {
 
@@ -86,7 +95,7 @@ public final class BuildJob {
     /** How many differing blocks a failure names. */
     public static final int NAMED = 5;
 
-    /** One write: a block (maybe air) and, for a sign, its text. */
+    /** One write: a block (maybe air) and, for a sign, its text. Made only for a block that differs. */
     private static final class Op {
         final int x;
         final int y;
@@ -108,19 +117,13 @@ public final class BuildJob {
         }
     }
 
-    /** The plan's writes inside one chunk. */
-    private static final class ChunkPlan {
-        final List<Op> blocks = new ArrayList<>();
-        final List<Op> signs = new ArrayList<>();
-        final Set<Long> at = new HashSet<>();
-    }
-
     private final WorldPort port;
     private final Box half;
     private final HalfWriter writer;
     private final Mode mode;
     private final List<int[]> chunks = new ArrayList<>();
-    private final Map<Long, ChunkPlan> plan = new HashMap<>();
+    /** What the half must hold, or {@code null} for nothing. */
+    private final BuildIndex index;
     private final Set<Long> ticketed = new LinkedHashSet<>();
     private final ArrayDeque<Op> pending = new ArrayDeque<>();
     private final List<Op> deferred = new ArrayList<>();
@@ -137,6 +140,11 @@ public final class BuildJob {
      */
     private boolean staged;
     private final List<String> named = new ArrayList<>();
+    /** Blocks the plan doesn't name that stay because they aren't Fresh Courses' ({@code leave}), or {@code null}. */
+    private final Predicate<String> leave;
+    /** This pass's blocks left as they are, and the first few, "x,y,z block". */
+    private long left;
+    private final List<String> leftAt = new ArrayList<>();
     private final Set<UUID> stuck = new LinkedHashSet<>();
     private Phase phase = Phase.LOAD;
     private int nextLoad;
@@ -165,6 +173,40 @@ public final class BuildJob {
      * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
      */
     public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater) {
+        this(port, half, plan, mode, mayHoldWater, null);
+    }
+
+    /**
+     * @param plan         what the half must hold, or {@code null} for nothing
+     * @param mayHoldWater as {@link #BuildJob(WorldPort, Box, Plan, Mode, boolean)}
+     * @param leave        whether a block (its block-data text) the plan doesn't name is someone else's and
+     *                     stays as it is, counted ({@link #left}); {@code null}: nothing is left
+     * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
+     */
+    public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater, Predicate<String> leave) {
+        this(plan == null ? null : BuildIndex.prepare(half, plan), port, half, mode, mayHoldWater, leave);
+    }
+
+    /**
+     * As {@link #BuildJob(WorldPort, Box, Plan, Mode, boolean, Predicate)}, with the plan's index already
+     * made off the main thread ({@link BuildIndex#prepare}, for {@code half}): only its palette and signs
+     * are looked at here, so a Mountain Run's 350,000 blocks cost the main thread nothing (F11).
+     *
+     * @param prepared the plan's index for {@code half}, or {@code null} for nothing
+     * @throws IllegalArgumentException as the plan's constructor, or when {@code prepared} is for another half
+     */
+    static BuildJob ready(WorldPort port, Box half, BuildIndex.Prepared prepared, Mode mode, boolean mayHoldWater,
+                          Predicate<String> leave) {
+        if (prepared != null && !prepared.half().equals(half)) {
+            throw new IllegalArgumentException("the plan was made ready for " + prepared.half().describe()
+                    + ", not " + half.describe());
+        }
+        return new BuildJob(prepared, port, half, mode, mayHoldWater, leave);
+    }
+
+    private BuildJob(BuildIndex.Prepared prepared, WorldPort port, Box half, Mode mode, boolean mayHoldWater,
+                     Predicate<String> leave) {
+        this.leave = leave;
         this.port = port;
         this.half = half;
         this.writer = new HalfWriter(port, half);
@@ -175,37 +217,26 @@ public final class BuildJob {
                 chunks.add(new int[]{cx, cz});
             }
         }
-        if (plan != null) {
-            index(plan);
+        this.index = prepared == null ? null : prepared.resolve(port::canonical);
+        if (index != null) {
+            staged |= index.water(); // a plan with water is written in stages over the whole half
         }
     }
 
-    private void index(Plan p) {
-        String[] states = new String[p.palette().size()];
-        for (int i = 0; i < states.length; i++) {
-            states[i] = port.canonical(p.palette().get(i));
+    /**
+     * Read only the chunks {@code keep} names (F12: a big half's check at a start, when it was saved right after
+     * its last full check): the others aren't loaded or read. A {@link Mode#SCAN} before its first tick; a
+     * converge always reads its whole half.
+     *
+     * @return this job
+     * @throws IllegalStateException for a converge, or a job that has started
+     */
+    public BuildJob only(java.util.function.BiPredicate<Integer, Integer> keep) {
+        if (mode != Mode.SCAN || nextLoad > 0 || phase != Phase.LOAD) {
+            throw new IllegalStateException("only a scan that hasn't started reads part of its half");
         }
-        for (BlockOp op : p.ops()) {
-            inside(op.x(), op.y(), op.z());
-            ChunkPlan cp = plan.computeIfAbsent(key(op.x() >> 4, op.z() >> 4), k -> new ChunkPlan());
-            String state = states[op.state()];
-            cp.blocks.add(new Op(op.x(), op.y(), op.z(), state, null));
-            cp.at.add(pos(op.x(), op.y(), op.z()));
-            staged |= fluid(state); // a plan with water is written in stages over the whole half
-        }
-        for (SignText s : p.signs()) {
-            inside(s.x(), s.y(), s.z());
-            ChunkPlan cp = plan.computeIfAbsent(key(s.x() >> 4, s.z() >> 4), k -> new ChunkPlan());
-            cp.signs.add(new Op(s.x(), s.y(), s.z(), port.canonical(s.blockData()), pad(s.lines())));
-            cp.at.add(pos(s.x(), s.y(), s.z()));
-        }
-    }
-
-    private void inside(int x, int y, int z) {
-        if (!half.contains(x, y, z)) {
-            throw new IllegalArgumentException("the plan has a block at " + x + "," + y + "," + z
-                    + ", outside its half (" + half.describe() + ")");
-        }
+        chunks.removeIf(c -> !keep.test(c[0], c[1]));
+        return this;
     }
 
     // ---- driving it ---------------------------------------------------------------------------
@@ -348,6 +379,8 @@ public final class BuildJob {
         chunkIndex = 0;
         passDiffs = 0;
         named.clear();
+        left = 0;
+        leftAt.clear();
         stage = Stage.DRAIN;
     }
 
@@ -413,41 +446,52 @@ public final class BuildJob {
      * planned block it holds (the port stops trusting those answers, and the chunk is read again).
      */
     private Diff diff(WorldPort.ChunkView v, int cx, int cz) {
-        ChunkPlan cp = plan.get(key(cx, cz));
+        BuildIndex.Chunk cp = index == null ? null : index.chunk(cx, cz);
         Diff d = new Diff();
         List<Op> out = new ArrayList<>();
         List<Op> signs = new ArrayList<>();
         if (cp != null) {
-            for (Op b : cp.blocks) {
-                boolean air = v.air(b.x, b.y, b.z);
-                if (!air && v.sectionEmpty(b.y)) {
+            // The cells come bottom-up; the first few that differ are named in plan order, as always.
+            FirstFew first = new FirstFew();
+            for (int i = 0, n = cp.size(); i < n; i++) {
+                int x = cp.x(i);
+                int y = index.floor() + cp.dy(i);
+                int z = cp.z(i);
+                boolean air = v.air(x, y, z);
+                if (!air && v.sectionEmpty(y)) {
                     port.distrustEmptySections();
                     return null;
                 }
-                String cur = air ? WorldPort.AIR : v.block(b.x, b.y, b.z);
-                if (!b.state.equals(cur)) {
-                    d.differs(b);
-                    if (fluid(b.state)) {
+                String state = index.state(cp.state(i));
+                String cur = air ? WorldPort.AIR : v.block(x, y, z);
+                if (!state.equals(cur)) {
+                    d.blocks++;
+                    first.offer(cp.ord(i), x, y, z);
+                    Op b = new Op(x, y, z, state, null);
+                    if (fluid(state)) {
                         d.fill.add(b);
                         continue;
                     }
                     if (fluid(cur)) {
-                        d.drain.add(new Op(b.x, b.y, b.z, WorldPort.AIR, null));
+                        d.drain.add(new Op(x, y, z, WorldPort.AIR, null));
                     }
                     out.add(b);
                 }
             }
-            for (Op s : cp.signs) {
-                String cur = v.air(s.x, s.y, s.z) ? WorldPort.AIR : v.block(s.x, s.y, s.z);
-                if (!s.state.equals(cur) || !s.sign.equals(pad(port.signLines(s.x, s.y, s.z)))) {
-                    d.differs(s);
+            first.into(d.at);
+            for (BuildIndex.Sign s : cp.signs()) {
+                String cur = v.air(s.x(), s.y(), s.z()) ? WorldPort.AIR : v.block(s.x(), s.y(), s.z());
+                if (!s.state().equals(cur) || !s.lines().equals(pad(port.signLines(s.x(), s.y(), s.z())))) {
+                    Op sign = new Op(s.x(), s.y(), s.z(), s.state(), s.lines());
+                    d.differs(sign);
                     if (fluid(cur)) {
-                        d.drain.add(new Op(s.x, s.y, s.z, WorldPort.AIR, null));
+                        d.drain.add(new Op(s.x(), s.y(), s.z(), WorldPort.AIR, null));
                     }
-                    signs.add(s);
+                    signs.add(sign);
                 }
             }
         }
+        BuildIndex.Cursor planned = cp == null ? null : cp.cursor();
         int x0 = Math.max(half.minX(), cx << 4);
         int x1 = Math.min(half.maxX(), (cx << 4) + 15);
         int z0 = Math.max(half.minZ(), cz << 4);
@@ -461,13 +505,21 @@ public final class BuildJob {
             for (int y = y0; y <= y1; y++) {
                 for (int x = x0; x <= x1; x++) {
                     for (int z = z0; z <= z1; z++) {
-                        if (cp != null && cp.at.contains(pos(x, y, z))) {
+                        if (planned != null && planned.names(y - half.minY(), x & 15, z & 15)) {
                             continue;
                         }
                         if (!v.air(x, y, z)) {
+                            String there = v.block(x, y, z);
+                            if (leave != null && leave.test(there)) {
+                                left++; // someone else's: it stays, and is named
+                                if (leftAt.size() < NAMED) {
+                                    leftAt.add(x + "," + y + "," + z + " " + there);
+                                }
+                                continue;
+                            }
                             Op clear = new Op(x, y, z, WorldPort.AIR, null);
                             d.differs(clear);
-                            (fluid(v.block(x, y, z)) ? d.drain : out).add(clear);
+                            (fluid(there) ? d.drain : out).add(clear);
                         }
                     }
                 }
@@ -478,6 +530,42 @@ public final class BuildJob {
         d.body.addAll(out);
         d.drain.sort(UP.reversed()); // a pool empties from the top
         return d;
+    }
+
+    /**
+     * The first {@value #NAMED} differing planned blocks of a chunk in plan order (their place among the
+     * chunk's blocks), though the cells are read bottom-up.
+     */
+    private static final class FirstFew {
+        private final int[] ord = new int[NAMED];
+        private final int[] xs = new int[NAMED];
+        private final int[] ys = new int[NAMED];
+        private final int[] zs = new int[NAMED];
+        private int n;
+
+        void offer(int o, int x, int y, int z) {
+            if (n == NAMED && o > ord[n - 1]) {
+                return;
+            }
+            int i = n < NAMED ? n++ : n - 1;
+            for (; i > 0 && ord[i - 1] > o; i--) {
+                ord[i] = ord[i - 1];
+                xs[i] = xs[i - 1];
+                ys[i] = ys[i - 1];
+                zs[i] = zs[i - 1];
+            }
+            ord[i] = o;
+            xs[i] = x;
+            ys[i] = y;
+            zs[i] = z;
+        }
+
+        /** Name them, "x,y,z", first in plan order first. */
+        void into(List<String> at) {
+            for (int i = 0; i < n && at.size() < NAMED; i++) {
+                at.add(xs[i] + "," + ys[i] + "," + zs[i]);
+            }
+        }
     }
 
     // ---- ending it ----------------------------------------------------------------------------
@@ -539,6 +627,33 @@ public final class BuildJob {
         return List.copyOf(named);
     }
 
+    /**
+     * The blocks the latest pass left as they are because they aren't Fresh Courses' ({@code leave}); 0
+     * without a {@code leave} test. Counted afresh each pass, so once it is done it is what stands there.
+     */
+    public long left() {
+        return left;
+    }
+
+    /** The first few of {@link #left}, "x,y,z block". */
+    public List<String> leftAt() {
+        return List.copyOf(leftAt);
+    }
+
+    /**
+     * How far it is, 0 to 1, for status: loading the chunks is the first quarter, reading them on the first
+     * pass the rest; a verify pass, or the end, is 1.
+     */
+    public double progress() {
+        if (phase == Phase.DONE || pass > 1) {
+            return 1.0;
+        }
+        if (phase == Phase.LOAD) {
+            return chunks.isEmpty() ? 0 : 0.25 * loaded / chunks.size();
+        }
+        return chunks.isEmpty() ? 1.0 : 0.25 + 0.75 * Math.min(chunkIndex, chunks.size()) / chunks.size();
+    }
+
     /** Which pass it is on (1 = the converge). */
     public int pass() {
         return pass;
@@ -583,10 +698,6 @@ public final class BuildJob {
 
     private static long key(int cx, int cz) {
         return ((long) cx << 32) | (cz & 0xFFFFFFFFL);
-    }
-
-    private static long pos(int x, int y, int z) {
-        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (y & 0xFFF);
     }
 
     /** Sign lines as the world shows them: exactly four, missing ones blank. */

@@ -65,7 +65,7 @@ class OffSlotPreviewTest {
     @BeforeEach
     void setUp() {
         host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000);
-        host.settings = GenKit.weekly(); // every slot off, as Ice Boat ships
+        host.settings = GenKit.fast(GenKit.weekly()); // every slot off, as Ice Boat ships (its v4 halves are big)
         planners = new LinkedHashMap<>();
         planners.put(Slots.PARKOUR, new FakePlanner(Slots.PARKOUR));
         planners.put(Slots.RINGS, new FakePlanner(Slots.RINGS));

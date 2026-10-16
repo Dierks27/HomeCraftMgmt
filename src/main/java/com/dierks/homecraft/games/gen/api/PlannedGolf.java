@@ -12,8 +12,10 @@ import java.util.List;
  * @param course   the holes (tee, sunken cup, par, bounds); its id is the slot
  * @param attempts each hole's winning attempt number ({@code rederive} rebuilds from these)
  * @param witness  each hole's expert line: it holes out in exactly {@code expert} strokes
- * @param expert   each hole's expert strokes E (par is E + 1)
- * @param kid      each hole's worst case K for the sloppy-player policy (at most par + 1)
+ * @param expert   each hole's expert strokes E (par is E + 1 up to Adventure Golf; on Golf v4, golf
+ *                 planner version 4, par is measured and E is at most par)
+ * @param kid      each hole's worst case K for the sloppy-player policy (at most par + 1; on Golf v4 at
+ *                 most par + 2, Tiny Golf's par + 1)
  */
 public record PlannedGolf(GolfCourse course, List<Integer> attempts, List<List<Putt>> witness,
                           List<Integer> expert, List<Integer> kid) implements PlannedCourse {

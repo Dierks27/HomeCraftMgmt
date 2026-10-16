@@ -180,7 +180,7 @@ public final class GolfGroupCardMenu extends GameMenu {
             out[STATUS] = new Tile(STATUS, Material.CLOCK, out1.isEmpty() ? "&aEveryone's done with this hole"
                     : "&7Still playing: " + String.join(", ", out1) + clock,
                     List.of("&7Everyone moves to the next tee", "&7together when all balls are in.",
-                            "&7The first ball in starts a " + GolfGroup.clockText(GolfGroup.HOLE_CLOCK_SECONDS),
+                            "&7The first ball in starts a " + GolfGroup.clockText(card.holeClock()),
                             "&7hole clock. Balls still out when", "&7it runs out are picked up."));
         }
         out[EXIT] = new Tile(EXIT, Material.BARRIER, "&cClose", List.of());

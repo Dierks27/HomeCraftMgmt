@@ -16,6 +16,14 @@ import java.util.List;
  * least 25.6 and the track at most 9 wide, so the stand is more than 12 blocks from any ice, and a
  * boat can't reach it. Only layouts from boat planner algo {@value #FIRST_ALGO} on have one: an
  * older layout's stored plan is kept as it was.
+ *
+ * <p><b>Mountain Run v2</b> (boat planner algo {@value #FIRST_V4_ALGO} on, MOUNTAIN-V2-SPEC §4.1, §7.4) puts
+ * the stand at the bottom, by the finish: its centre column is the half's middle x, {@value #STAND_BACK} in
+ * from the half's south (high-z) edge, and players stand {@value #ABOVE} above the FINISH ({@link #spotV4}).
+ * Racers park where they finish and look north ({@link #FACING_V4}) over the finish straight to the lower
+ * face of the mountain; the summit is 500+ blocks away, beyond any view distance, so nothing promises it.
+ * {@link #spotV4} is the proof's own spot ({@code MountainValidator.standSpot}), pinned equal by a test.
+ * Algo 2 and 3 keep the stand at the half's centre, 5 above the start, exactly as before.
  */
 public final class RaceStand {
 
@@ -31,6 +39,12 @@ public final class RaceStand {
     public static final double LANE_CLEARANCE = 12;
     /** Its sign, on the platform facing the middle: "RACE NIGHT / Watch from / here!". */
     public static final List<String> SIGN = List.of("RACE NIGHT", "Watch from", "here!");
+    /** The first boat planner version whose stand is at the bottom, by the finish (Mountain Run v2). */
+    public static final int FIRST_V4_ALGO = 4;
+    /** Mountain Run v2: the stand's centre row is this far in from the half's south (high-z) edge (§4.1). */
+    public static final int STAND_BACK = 40;
+    /** Mountain Run v2: the way a player on the stand faces, north, up the mountain (a Minecraft yaw). */
+    public static final float FACING_V4 = 180f;
     /** The platform's block (white concrete). */
     public static final String FLOOR = "minecraft:white_concrete";
     /** The rail's block (glass), two high round the platform's edge. */
@@ -69,15 +83,43 @@ public final class RaceStand {
         return new Point(centreX(half) + 0.5, startY + ABOVE, centreZ(half) + 0.5);
     }
 
+    /** Mountain Run v2: the stand's centre row, {@value #STAND_BACK} in from the half's south edge. */
+    public static int centreZV4(Box half) {
+        return half.minZ() + half.sizeZ() - STAND_BACK;
+    }
+
     /**
-     * The stand of course {@code c} in {@code half}: its spot for a Fresh boat layout of algo
-     * {@value #FIRST_ALGO} or later, else {@code null} (no stand: finishers go home at the line).
+     * Mountain Run v2: where a player stands on the stand of a half whose course finishes at height
+     * {@code finishY} (§4.1): the middle of the half across x, {@value #STAND_BACK} in from its south edge,
+     * {@value #ABOVE} above the finish. The same point as {@code MountainValidator.standSpot}, which proves it.
+     */
+    public static Point spotV4(Box half, double finishY) {
+        return new Point(centreX(half) + 0.5, finishY + ABOVE, centreZV4(half) + 0.5);
+    }
+
+    /**
+     * The stand of course {@code c} in {@code half}: for a Fresh boat layout of algo {@value #FIRST_V4_ALGO}
+     * or later the one at the bottom ({@link #spotV4}, by the finish), for algo {@value #FIRST_ALGO} or 3 the
+     * one at the half's centre over the start ({@link #spot}), else {@code null} (no stand: finishers go home
+     * at the line).
      */
     public static Point of(Course c, Box half) {
         if (c == null || half == null || c.start() == null || c.kind() != TrialKind.BOAT || !has(c.gen())) {
             return null;
         }
+        if (c.gen().algo() >= FIRST_V4_ALGO) {
+            return c.finish() == null ? null : spotV4(half, c.finish().y());
+        }
         return spot(half, c.start().y());
+    }
+
+    /**
+     * The way a racer parked on the stand of {@code c} faces: north up the mountain ({@link #FACING_V4}) on a
+     * Mountain Run v2, else {@code otherwise} (the way they were facing, as before).
+     */
+    public static float facing(Course c, float otherwise) {
+        return c != null && c.kind() == TrialKind.BOAT && c.gen() != null && has(c.gen())
+                && c.gen().algo() >= FIRST_V4_ALGO ? FACING_V4 : otherwise;
     }
 
     /**

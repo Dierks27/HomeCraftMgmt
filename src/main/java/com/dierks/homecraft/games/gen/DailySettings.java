@@ -2,11 +2,13 @@ package com.dierks.homecraft.games.gen;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.gen.engine.KeepArea;
 import com.dierks.homecraft.games.gen.engine.Regions;
 
@@ -80,6 +82,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
 
     /** The tiers a star factor is set for. */
     public static final List<String> TIERS = Slots.TIERS;
+    /** Ice Boat's {@code style} word for "whichever the week's seed makes" (shipped). */
+    public static final String RANDOM = "random";
 
     /** The leaves under {@code games.fresh}, in config order. */
     public static final List<String> KEYS = keys();
@@ -247,8 +251,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         /**
-         * The shipped tables (the addendum's: Easy 2/1, Parkour 3/2, Hard 5/3, Sky Rings 3/2, Golf 3/2, Tiny 2/1;
-         * and EVENTS-DROPPER-SPEC §B.1.8's Easy Dropper 2/1, Dropper 3/2).
+         * The shipped tables, weekly and daily, from each {@link Slots.Def}'s last two numbers, which are
+         * {@link TokenBalance}'s (about a token a minute of first-time play). Each is paid whole under its
+         * game's {@code daily_cap} and {@code skill_daily_cap}, so each must fit both
+         * ({@code RewardCeilings} warns when one doesn't).
          */
         public static Rewards shipped() {
             Map<String, Integer> weekly = new LinkedHashMap<>();
@@ -275,8 +281,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * The weekly Star Chart goals at both ends of the cadence ({@code star_goals.*}): the stars
      * and what each pays, smallest first.
      *
-     * @param weekly the goals when the cadence is weekly or longer (shipped 6★ +1, 12★ +2)
-     * @param daily  the goals when the cadence is daily (shipped 10★ +1, 25★ +1)
+     * @param weekly the goals when the cadence is weekly or longer (shipped 6★ and 12★, paying
+     *               {@link TokenBalance#STAR_WEEKLY_TOKENS})
+     * @param daily  the goals when the cadence is daily (shipped 10★ and 25★, paying
+     *               {@link TokenBalance#STAR_DAILY_TOKENS})
      */
     public record Goals(List<DailyStars.Goal> weekly, List<DailyStars.Goal> daily) {
 
@@ -286,8 +294,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public static Goals shipped() {
-            return new Goals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2)),
-                    List.of(new DailyStars.Goal(10, 1), new DailyStars.Goal(25, 1)));
+            List<Integer> w = TokenBalance.STAR_WEEKLY_TOKENS;
+            List<Integer> d = TokenBalance.STAR_DAILY_TOKENS;
+            return new Goals(List.of(new DailyStars.Goal(6, w.get(0)), new DailyStars.Goal(12, w.get(1))),
+                    List.of(new DailyStars.Goal(10, d.get(0)), new DailyStars.Goal(25, d.get(1))));
         }
 
         /** The goals for an N-day cadence, before the week's ceiling ({@link DailyStars#goals}). */
@@ -314,9 +324,19 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      *                   spot is never taken for it, since that isn't where a server that kept 0.35's
      *                   spots (or an owner who moved it) built it: the engine would call it moved,
      *                   reroll it there and leave the built one standing.
+     * @param held       why config's spot isn't used yet though it can be read ({@link #held(String)}), or
+     *                   {@code null}: config.yml is still below the revision that moves this area (the update
+     *                   couldn't save it), so the spot it holds is an older version's. Never {@code null} with
+     *                   {@code placed} true.
+     * @param style      Ice Boat only ({@code style}: {@code random}, {@code road} or {@code slalom}): the Mountain
+     *                   Run v2 style every week's course must have, or {@code null} for {@code random} (shipped:
+     *                   the week's own seed, or the Winding Road every week while Race Night is on,
+     *                   MOUNTAIN-V2-SPEC §5.1 with red-team F05). The engine picks the seed by it; the planner
+     *                   never reads it (the style is a function of the seed). Always {@code null} for every
+     *                   other slot.
      */
     public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear,
-                             int halfGap, boolean placed) {
+                             int halfGap, boolean placed, String held, BoatStyle style) {
 
         public SlotConfig {
             origin = origin == null ? new int[3] : origin.clone();
@@ -326,6 +346,21 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             if (halfGap < 0) {
                 throw new IllegalArgumentException("a half gap is 0 or more blocks: " + halfGap);
             }
+            if (placed) {
+                held = null;
+            }
+        }
+
+        /** A slot config with no style of its own ({@code random}: the shape before Mountain Run v2). */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear, int halfGap,
+                          boolean placed, String held) {
+            this(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, held, null);
+        }
+
+        /** A slot config places, or (not {@code placed}) can't read the place of. */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear, int halfGap,
+                          boolean placed) {
+            this(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, null);
         }
 
         /** A slot config places. */
@@ -350,23 +385,23 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public SlotConfig withEnabled(boolean on) {
-            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed);
+            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withOrigin(int[] o) {
-            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withTierOrMix(String t) {
-            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed);
+            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withDailyClear(int tokens) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed, held, style);
         }
 
         public SlotConfig withHalfGap(int gap) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed, held, style);
         }
 
         /**
@@ -374,7 +409,27 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
          * half_gap can't be read.
          */
         public SlotConfig unplaced() {
-            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false);
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, null, style);
+        }
+
+        /** The same slot with Ice Boat's {@code style} ({@code null}: random). */
+        public SlotConfig withStyle(BoatStyle s) {
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, held, s);
+        }
+
+        /** The style as config writes it: {@code random}, {@code road} or {@code slalom}. */
+        public String styleWord() {
+            return style == null ? RANDOM : style.id();
+        }
+
+        /**
+         * The same slot, off and not placed, for {@code why} (F10): config.yml holds a spot an older version
+         * shipped, because the update that moves this area couldn't save the file. The engine keeps it where
+         * it was claimed and does nothing there (no claim, build, reroll or emptying of its old area) until
+         * the file is saved at that revision.
+         */
+        public SlotConfig held(String why) {
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, why, style);
         }
 
         /** The shipped settings of a slot (at the shipped, weekly, cadence). */
@@ -387,19 +442,22 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         public boolean equals(Object o) {
             return o instanceof SlotConfig s && id.equals(s.id) && enabled == s.enabled
                     && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear
-                    && halfGap == s.halfGap && placed == s.placed;
+                    && halfGap == s.halfGap && placed == s.placed && java.util.Objects.equals(held, s.held)
+                    && style == s.style;
         }
 
         @Override
         public int hashCode() {
-            return (((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
-                    + (enabled ? 1 : 0)) * 31 + halfGap) * 2 + (placed ? 1 : 0);
+            return ((((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
+                    + (enabled ? 1 : 0)) * 31 + halfGap) * 2 + (placed ? 1 : 0)) * 3
+                    + (style == null ? 0 : style.ordinal() + 1);
         }
 
         @Override
         public String toString() {
             return "SlotConfig[" + id + ", " + (enabled ? "on" : "off") + ", " + tierOrMix + ", "
-                    + (placed ? Arrays.toString(origin) + ", gap " + halfGap : "not placed") + ", " + dailyClear + "]";
+                    + (placed ? Arrays.toString(origin) + ", gap " + halfGap : held != null ? "held: " + held
+                    : "not placed") + ", " + dailyClear + (style == null ? "" : ", " + style.id()) + "]";
         }
     }
 
@@ -410,7 +468,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             slots.add(SlotConfig.shipped(d));
         }
         return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
-                20, 35, true, null, 2, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
+                20, 35, true, null, TokenBalance.FRESH_DAILY_CAP, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
                 new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped(),
                 true);
     }
@@ -866,6 +924,37 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * course there and leave the built one standing.
      */
     private static SlotConfig slot(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
+        SlotConfig c = place(slots, def, d);
+        return Slots.BOAT.equals(def.generator()) ? c.withStyle(style(slots, def, d.style())) : c;
+    }
+
+    /**
+     * Ice Boat's {@code style} under {@code slots.<id>} (MOUNTAIN-V2-SPEC §5.1): {@code random} (shipped:
+     * {@code null}), {@code road} or {@code slalom}, any case. Anything else is read as {@code random} with
+     * one WARN naming the key: a style only picks which seed a week uses, so a typo never closes the course.
+     */
+    private static BoatStyle style(GamesConfig.Node slots, Slots.Def def, BoatStyle d) {
+        if (!(slots.raw(def.id()) instanceof Map<?, ?>)) {
+            return d;
+        }
+        GamesConfig.Node n = slots.child(def.id());
+        Object raw = n.raw("style");
+        if (raw == null) {
+            return d;
+        }
+        String word = raw instanceof Map<?, ?> || raw instanceof List<?> ? null : String.valueOf(raw).trim();
+        if (word != null && word.equalsIgnoreCase(RANDOM)) {
+            return null;
+        }
+        BoatStyle s = BoatStyle.byWord(word);
+        if (s == null) {
+            n.warn(n.key("style") + " should be random, road or slalom, not \"" + raw + "\" - using random");
+        }
+        return s;
+    }
+
+    /** {@link #slot}'s place, switch and tier or mix (everything but Ice Boat's style). */
+    private static SlotConfig place(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
         Object raw = slots.raw(def.id());
         String key = slots.key(def.id());
         if (raw == null) {
@@ -1004,6 +1093,9 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             String p = "slots." + d.id() + ".";
             out.add(p + "enabled");
             out.add(p + (d.mixed() ? "mix" : "tier"));
+            if (Slots.BOAT.equals(d.generator())) {
+                out.add(p + "style"); // Ice Boat's Mountain Run v2 style (random, road or slalom)
+            }
             out.add(p + "origin");
         }
         out.addAll(List.of("archive.keep", "feed_history", "classics.days"));

@@ -24,11 +24,18 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The independent check of a Mountain Run plan, Ice Boat algo 3 on (Course Variety §2.10, §4.1): it
+ * The independent check of a Mountain Run plan, Ice Boat algo 3 (Course Variety §2.10, §4.1): it
  * reads the plan's blocks alone and proves, before a single block is set, that the course is
  * finishable, that no boat can leave it, that its checkpoints can't be skipped, that 12 boats fit on
- * its grid and that the stand is out of reach. {@link BoatValidator} sends it every plan of algo 3
- * or later; the planner runs it on every try, and {@code PlanCheck.generator} again before a build.
+ * its grid and that the stand is out of reach. {@link BoatValidator} sends it every plan of algo
+ * {@value #FIRST_ALGO} (algo {@value MountainValidator#FIRST_ALGO} on, Mountain Run v2, goes to
+ * {@link MountainValidator}); the planner ran it on every try, and {@code PlanCheck.generator} again
+ * before a build.
+ *
+ * <p><b>Frozen</b> (MOUNTAIN-V2-SPEC §9.1, rule R5): an algo-3 layout (archived, kept in a plot, or a
+ * {@code keep <code>}) is judged by exactly these rules forever. Every number it shares with the
+ * runtime that v4 moves is a literal here ({@link #MAX_CHECKPOINTS}), and the algo-3 plans frozen
+ * under {@code src/test/resources/gen/v3/} must pass it. Change nothing here but its comments.
  *
  * <p><b>The proof rests on facts, not on driving.</b> F1: a boat never climbs, not even 0.125.
  * F2: nothing on the track lifts it (no slime, water, soul sand or honey). F3 and F4: it flies at
@@ -104,8 +111,12 @@ public final class DownhillValidator {
     public static final int MAX_OPS = 30_000;
     /** The most keep-clear boxes a plan may carry (V13). */
     public static final int MAX_BOXES = 64;
-    /** The most checkpoints a course may have. */
-    public static final int MAX_CHECKPOINTS = Course.MAX_CHECKPOINTS;
+    /**
+     * The most checkpoints a course may have: frozen at 64, the cap algo 3 was made under (a literal,
+     * not {@code Course.MAX_CHECKPOINTS}, which v4 raises to 128 for Mountain Run v2, MOUNTAIN-V2-SPEC
+     * §12; {@link MountainValidator#MAX_CHECKPOINTS} is v2's own).
+     */
+    public static final int MAX_CHECKPOINTS = 64;
     /** Blocks of air over every drive cell: ice + 1 to ice + 4 (V7). */
     public static final int HEADROOM = 4;
     /** A cave roof sits exactly this far over the ice, and a canopy at least (V7). */

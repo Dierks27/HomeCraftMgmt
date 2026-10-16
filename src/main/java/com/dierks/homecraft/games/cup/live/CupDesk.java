@@ -165,6 +165,14 @@ public final class CupDesk {
         return new CupKey(courseId, week());
     }
 
+    /**
+     * What this week's Cup on {@code courseId} costs: what its entrants paid, or {@code games.cup.entry} while
+     * nobody is in ({@link CupRules#fee}). Once a player is in, it is what they paid.
+     */
+    public int fee(String courseId) throws SQLException {
+        return CupRules.fee(dao.entries(key(courseId)), host.settings().entry());
+    }
+
     /** When this week's Cups are paid (epoch ms). */
     public long endsAt() {
         return CupRules.settlesAt(host.edition(), week());
@@ -239,9 +247,10 @@ public final class CupDesk {
         boolean in = mine != null || (viewer != null && on && settled == null
                 && dao.openCup(c.id(), viewer, CupRules.liveWeeks(host.edition(), host.now())) != null);
         boolean closing = CupRules.closing(host.now(), endsAt(key), host.restartHold()); // fx2-C #12
+        int fee = CupRules.fee(entries, s.entry()); // one fee a Cup: what its first entrant paid (ECON01)
         CupRefusal refusal = CupRules.refusal(s.enabled(), on, key, week, settled, in, closing, layoutUp(c, week),
-                s.entry(), balance);
-        return new View(key, on, s.enabled(), s.entry(), CupRules.livePool(entries, s.serverTopup()), mine, settled,
+                fee, balance);
+        return new View(key, on, s.enabled(), fee, CupRules.livePool(entries, s.serverTopup()), mine, settled,
                 endsAt(key), refusal);
     }
 

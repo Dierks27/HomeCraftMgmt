@@ -78,9 +78,15 @@ public final class GamesCheck {
      * @param enabled  switched on in config (a Classics slot: always checked)
      * @param problems why its area can't be used (the world, a hand-built course, another area)
      * @param area     where it is, for admins
+     * @param held     F10 (ENG04): config.yml couldn't be saved at the update, so it waits where it was built
+     *                 ({@code problems} says why); the fix is the file, never the origin
      */
     public record Region(String id, String name, boolean classic, boolean enabled, List<String> problems,
-                         String area) {
+                         String area, boolean held) {
+
+        public Region(String id, String name, boolean classic, boolean enabled, List<String> problems, String area) {
+            this(id, name, classic, enabled, problems, area, false);
+        }
     }
 
     /**
@@ -92,10 +98,18 @@ public final class GamesCheck {
      * @param current   that layout is vouched for and is the current set's (a Classics slot: holds its recall)
      * @param lastError why its last build failed, or {@code null}
      * @param holds     a Classics slot: what it holds, for admins, or {@code null}
+     * @param moving    ENG-R3-01: moving to the area this version gave it, its course rebuilt there (expected)
      */
     public record SlotFact(String id, String name, boolean classic, boolean wanted, String problem, boolean claimed,
                            boolean live, boolean current, boolean building, String lastError, boolean healFailed,
-                           String holds) {
+                           String holds, boolean moving) {
+
+        public SlotFact(String id, String name, boolean classic, boolean wanted, String problem, boolean claimed,
+                        boolean live, boolean current, boolean building, String lastError, boolean healFailed,
+                        String holds) {
+            this(id, name, classic, wanted, problem, claimed, live, current, building, lastError, healFailed, holds,
+                    false);
+        }
     }
 
     /**
@@ -112,10 +126,19 @@ public final class GamesCheck {
      */
     public record Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
                         boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
-                        String keepProblem, String keepArea, Map<Integer, String> keepPlots) {
+                        String keepProblem, String keepArea, Map<Integer, String> keepPlots, List<OldArea> oldAreas) {
 
         public Fresh {
             keepPlots = keepPlots == null ? Map.of() : Map.copyOf(keepPlots);
+            oldAreas = oldAreas == null ? List.of() : List.copyOf(oldAreas);
+        }
+
+        /** Fresh Courses with no old area to tell about. */
+        public Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
+                     boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
+                     String keepProblem, String keepArea, Map<Integer, String> keepPlots) {
+            this(enabled, cadence, schedule, world, worldLoaded, worldListed, regions, slots, nextChange, keepProblem,
+                    keepArea, keepPlots, List.of());
         }
 
         /** Fresh Courses with every plot fitting the world. */
@@ -125,6 +148,47 @@ public final class GamesCheck {
             this(enabled, cadence, schedule, world, worldLoaded, worldListed, regions, slots, nextChange, keepProblem,
                     keepArea, Map.of());
         }
+    }
+
+    /**
+     * An old area a Fresh course left behind when its area moved or grew with an update (V4-DECISIONS "One
+     * move mechanism"), or one emptied lately.
+     *
+     * @param id      the course (or Classics slot), for the fix's command
+     * @param name    what an owner reads
+     * @param state   where it is
+     * @param where   its halves ("half A x ..; half B ..")
+     * @param detail  what is in the way ({@link OldState#HELD}), the world it waits for, the first block left
+     *                ({@link OldState#EMPTIED}), or {@code null}
+     * @param percent how far a running one is
+     * @param removed blocks taken away ({@link OldState#EMPTIED})
+     * @param left    blocks left there because they weren't Fresh Courses' ({@link OldState#EMPTIED})
+     * @param guarded ENG-R3-02: an emptied one still guarded (F09: until the world has been saved, or the next
+     *                start finds it still empty), so what was left there can't be taken away by hand yet
+     */
+    public record OldArea(String id, String name, OldState state, String where, String detail, int percent,
+                          long removed, long left, boolean guarded) {
+
+        public OldArea(String id, String name, OldState state, String where, String detail, int percent, long removed,
+                       long left) {
+            this(id, name, state, where, detail, percent, removed, left, false);
+        }
+    }
+
+    /** Where an old area is. */
+    public enum OldState {
+        /** Emptied by itself once nothing else is being built (or being emptied now). */
+        WAITING,
+        /** Being emptied now. */
+        RUNNING,
+        /** Something is in the way: nothing there was changed, and it stays guarded. */
+        HELD,
+        /** An owner's move left it: guarded until {@code tidy}. */
+        MANUAL,
+        /** Its world isn't loaded. */
+        ELSEWHERE,
+        /** Emptied lately. */
+        EMPTIED
     }
 
     /**
@@ -462,6 +526,9 @@ public final class GamesCheck {
             }
             slot(r, s, fr.slots() != null, out);
         }
+        for (OldArea a : fr.oldAreas()) {
+            out.add(oldArea(a));
+        }
         if (fr.nextChange() != null) {
             out.add(Line.ok("Next change: " + fr.nextChange()));
         }
@@ -480,6 +547,33 @@ public final class GamesCheck {
                         + ") can't be used: " + fr.keepPlots().get(plots.get(0)), plotFix(e.getKey(), fr.world())));
             }
         }
+    }
+
+    /** One old area's line: news while it is emptied, a WARN with the one fix when it can't be. */
+    public static Line oldArea(OldArea a) {
+        String tidy = "/hcm games gen tidy " + a.id() + " confirm";
+        return switch (a.state()) {
+            case WAITING -> Line.ok(a.name() + " moved to its new area; its old area (" + a.where() + ") is emptied by"
+                    + " itself once nothing else is being built");
+            case RUNNING -> Line.ok(a.name() + " moved to its new area; its old area (" + a.where() + ") is being"
+                    + " emptied, " + a.percent() + "%");
+            case HELD -> Line.warn(a.name() + "'s old area (" + a.where() + ") can't be emptied: " + a.detail()
+                    + ". Nothing there was changed and it stays guarded", "move what is in the way, then " + tidy);
+            case MANUAL -> Line.warn(a.name() + "'s old area (" + a.where() + ") still stands, guarded",
+                    tidy + " empties it (only Fresh Courses' own blocks, water first)");
+            case ELSEWHERE -> Line.warn(a.name() + "'s old area (" + a.where() + ") is in " + a.detail() + ", which"
+                    + " isn't loaded, so it waits", "load " + a.detail() + " (Multiverse) and it is emptied by itself, or "
+                    + tidy + " once it is");
+            case EMPTIED -> a.left() > 0
+                    ? Line.warn(a.name() + "'s old area (" + a.where() + ") is empty of Fresh Courses' blocks ("
+                    + a.removed() + " taken away), but " + a.left() + " block" + (a.left() == 1 ? " that isn't" : "s that"
+                    + " aren't") + " Fresh Courses' " + (a.left() == 1 ? "was" : "were") + " left there (first at "
+                    + a.detail() + ")", a.guarded() ? "they are yours: remove them by hand once the area is let go (it"
+                    + " stays guarded until the world has been saved, or the next start finds it still empty)"
+                    : "they are yours: remove them by hand if you like; nothing guards that area now")
+                    : Line.ok(a.name() + " moved to its new area; its old area is empty (" + a.removed() + " blocks"
+                    + " taken away)");
+        };
     }
 
     /** The fix for kept plots with problem {@code kind} in {@code world}. */
@@ -517,9 +611,11 @@ public final class GamesCheck {
         if (!r.problems().isEmpty()) {
             // a spot config can't read isn't one to move away from: fixing the value is the whole fix
             boolean typo = com.dierks.homecraft.games.gen.engine.GenService.UNPLACED.equals(r.problems().get(0));
-            problems.add(Line.fail(r.name() + ": " + r.problems().get(0), typo ? "write " + origin + " (or its"
-                    + " half_gap) as the console's WARN says, then /hcm reload; nothing moves meanwhile"
-                    : "move it with " + origin));
+            // nor is one held because config.yml couldn't be saved (ENG04): the file is the whole fix
+            problems.add(Line.fail(r.name() + ": " + r.problems().get(0), r.held() ? "make config.yml writable (the"
+                    + " SEVERE at the start says why it couldn't be saved), then restart; nothing is built or emptied"
+                    + " there meanwhile" : typo ? "write " + origin + " (or its half_gap) as the console's WARN says,"
+                    + " then /hcm reload; nothing moves meanwhile" : "move it with " + origin));
         }
         List<String> state = new ArrayList<>();
         if (running && s != null) {
@@ -531,7 +627,7 @@ public final class GamesCheck {
                 problems.add(Line.fail(r.name() + " is off: " + s.problem(), "see /hcm games gen status " + r.id()));
             } else if (s.claimed()) {
                 state.add("claimed");
-            } else {
+            } else if (!(s.moving() && !r.classic())) {
                 state.add("empty (claimed at its first build)");
             }
             if (r.classic()) {
@@ -546,7 +642,11 @@ public final class GamesCheck {
                     state.add("empty - /hcm games gen recall brings an old course back");
                 }
             } else if (s.problem() == null) {
-                if (s.healFailed()) {
+                if (s.moving() && s.lastError() == null) {
+                    // ENG-R3-01: the move this version makes, as GOLF-V4-SPEC §5.2 promises the owner sees it
+                    state.add("moving to its new area, its new course " + (s.building() ? "is being built"
+                            : "is on its way"));
+                } else if (s.healFailed()) {
                     problems.add(Line.fail(r.name() + " is closed: " + orWhy(s.lastError(), "its course couldn't be checked"),
                             "a new one is built for this set; see /hcm games gen status " + r.id()));
                 } else if (s.building()) {

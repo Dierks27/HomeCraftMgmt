@@ -74,9 +74,10 @@ class ArcadeFeedTest {
     // ---- fixtures -----------------------------------------------------------------------
 
     /** The Scratch Ticket exactly as config.yml ships it (10 tokens; 1 in 100 is the jackpot). */
+    /** The shipped Scratch Ticket (the 2 Oct token balance's 10/25/60 prizes, 89.5%). */
     private static Lotto shippedLotto() {
         return new Lotto(10, List.of(new LottoPayout(0, false, 25), new LottoPayout(3, false, 40),
-                new LottoPayout(8, false, 22), new LottoPayout(20, false, 9), new LottoPayout(50, false, 3),
+                new LottoPayout(10, false, 22), new LottoPayout(25, false, 9), new LottoPayout(60, false, 3),
                 new LottoPayout(0, true, 1)), new Jackpot(50, 1, 1000));
     }
 
@@ -216,11 +217,11 @@ class ArcadeFeedTest {
     void aFullFeedMatchesItsGoldenString() {
         assertEquals("{\"generatedAt\":1790000000000,\"games\":["
                 + "{\"id\":\"scratch_ticket\",\"name\":\"Scratch Ticket\",\"kind\":\"chance\",\"stakes\":[10],"
-                + "\"rtp\":77.6,\"rtpByStake\":{\"10\":77.6},\"paytable\":["
+                + "\"rtp\":89.5,\"rtpByStake\":{\"10\":89.5},\"paytable\":["
                 + "{\"stake\":10,\"combo\":\"3 tokens\",\"pays\":3,\"chance\":0.4,\"oneIn\":3},"
-                + "{\"stake\":10,\"combo\":\"8 tokens\",\"pays\":8,\"chance\":0.22,\"oneIn\":5},"
-                + "{\"stake\":10,\"combo\":\"20 tokens\",\"pays\":20,\"chance\":0.09,\"oneIn\":11},"
-                + "{\"stake\":10,\"combo\":\"50 tokens\",\"pays\":50,\"chance\":0.03,\"oneIn\":33},"
+                + "{\"stake\":10,\"combo\":\"10 tokens\",\"pays\":10,\"chance\":0.22,\"oneIn\":5},"
+                + "{\"stake\":10,\"combo\":\"25 tokens\",\"pays\":25,\"chance\":0.09,\"oneIn\":11},"
+                + "{\"stake\":10,\"combo\":\"60 tokens\",\"pays\":60,\"chance\":0.03,\"oneIn\":33},"
                 + "{\"stake\":10,\"combo\":\"the jackpot\",\"pays\":137,\"chance\":0.01,\"oneIn\":100}]},"
                 + "{\"id\":\"ore_slots\",\"name\":\"Ore Slots\",\"kind\":\"chance\",\"stakes\":[1,2,5],\"rtp\":89.7,"
                 + "\"rtpByStake\":{\"1\":89.7,\"2\":89.7,\"5\":90.0},\"dailyLimit\":50,\"paytable\":["
@@ -536,8 +537,8 @@ class ArcadeFeedTest {
         assertEquals(ArcadeService.rtp(shipped), s.rtp(), 0.0, "the same math /hcm arcade odds prints");
         assertEquals(10, s.ticketTokens());
         assertEquals(137, s.pot(), "the pot now, not its steady state");
-        assertEquals("77.6", games(new ArcadeFeed(false).json(T, null, s, null, null, null)).get("scratch_ticket")
-                .get("rtp").getAsString(), "(3·40 + 8·22 + 20·9 + 50·3 + 150·1) / 100 / 10 = 77.6%");
+        assertEquals("89.5", games(new ArcadeFeed(false).json(T, null, s, null, null, null)).get("scratch_ticket")
+                .get("rtp").getAsString(), "(3·40 + 10·22 + 25·9 + 60·3 + 150·1) / 100 / 10 = 89.5%");
         double sum = 0;
         for (PayRow row : s.paytable()) {
             sum += row.chance();

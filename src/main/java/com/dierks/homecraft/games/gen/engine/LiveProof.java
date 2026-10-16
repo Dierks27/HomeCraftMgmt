@@ -3,8 +3,7 @@ package com.dierks.homecraft.games.gen.engine;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.dropper.DropMarks;
-import com.dierks.homecraft.games.gen.golf.GolfPlanner;
-import com.dierks.homecraft.games.gen.golf.HoleTemplate;
+import com.dierks.homecraft.games.gen.golf.PlotGrid;
 import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfShot;
@@ -139,14 +138,17 @@ public final class LiveProof {
      * bounds), and any water in it must be sealed ({@link #pools}). Without {@code water} (or
      * {@code seals}) only the tees and cups are checked.
      *
-     * @param half  the half the course stands in, whose plots its holes take in order
-     *              ({@code GolfPlanner.plot}), or {@code null} to scan only round each hole's bounds
+     * @param half  the half the course stands in, whose plots its holes take in order (on the grid
+     *              its own tag's slot and version give, {@link PlotGrid#of(GolfCourse)}: Golf v4's
+     *              40 x 64, or Adventure Golf's 20 x 40), or {@code null} to scan only round each
+     *              hole's bounds
      * @param seals whether block (x, y, z) seals a pond: a full block ({@code Pools.seals} on the real
      *              block), not a slab, a sign, leaves or air
      * @param water whether block (x, y, z) is water, or {@code null}
      */
     public static List<String> structure(GolfCourse g, Box half, Solid solid, Solid seals, Solid water) {
         List<String> out = new ArrayList<>();
+        PlotGrid geometry = PlotGrid.of(g);
         int i = 0;
         for (GolfCourse.Hole h : g.holes()) {
             i++;
@@ -156,7 +158,7 @@ public final class LiveProof {
             if (h.cup() == null || !solid.at(h.cup().x(), h.cup().y(), h.cup().z())) {
                 out.add("hole " + i + "'s cup block is missing");
             }
-            Box plot = scanBox(h, i - 1, half);
+            Box plot = scanBox(h, i - 1, half, geometry);
             if (water != null && seals != null && plot != null) {
                 for (String p : pools(plot, seals, water)) {
                     out.add("hole " + i + ": " + p);
@@ -230,23 +232,32 @@ public final class LiveProof {
     }
 
     /**
-     * What {@link #structure(GolfCourse, Box, Solid, Solid, Solid)} scans for hole {@code i} (from 0)
-     * of a course in {@code half}: its {@link #plotBox}, spread over the whole plot the golf planner
-     * gave it ({@code GolfPlanner.plot}: {@value HoleTemplate#PLOT_X} x {@value HoleTemplate#PLOT_Z},
-     * clipped to the half) at the plot box's heights — so an Easy hole's decorative pond, two or more
-     * columns outside its bounds, is scanned too (Course Variety §3.8 rule 13). Just the plot box
-     * without a half; {@code null} for a hole without bounds.
+     * {@link #scanBox(GolfCourse.Hole, int, Box, PlotGrid)} on Adventure Golf's 20 x 40 plots
+     * ({@link PlotGrid#V3}).
      */
     static Box scanBox(GolfCourse.Hole h, int i, Box half) {
+        return scanBox(h, i, half, PlotGrid.V3);
+    }
+
+    /**
+     * What {@link #structure(GolfCourse, Box, Solid, Solid, Solid)} scans for hole {@code i} (from 0)
+     * of a course in {@code half}: its {@link #plotBox}, spread over the whole plot the golf planner
+     * gave it on {@code grid} (the course's own: {@link PlotGrid#of(GolfCourse)}; Adventure Golf's
+     * 20 x 40, Golf v4's 40 x 64), clipped to the half, at the plot box's heights — so an Easy hole's
+     * decorative pond, two or more columns outside its bounds, is scanned too (Course Variety §3.8
+     * rule 13). Just the plot box without a half; {@code null} for a hole without bounds.
+     */
+    static Box scanBox(GolfCourse.Hole h, int i, Box half, PlotGrid grid) {
         Box b = plotBox(h);
         if (b == null || half == null) {
             return b;
         }
-        int[] p = GolfPlanner.plot(half, i);
+        PlotGrid g = grid == null ? PlotGrid.V3 : grid;
+        int[] p = g.plot(half, i);
         int minX = Math.max(half.minX(), p[0]);
         int minZ = Math.max(half.minZ(), p[1]);
-        int maxX = Math.min(half.maxX(), p[0] + HoleTemplate.PLOT_X - 1);
-        int maxZ = Math.min(half.maxZ(), p[1] + HoleTemplate.PLOT_Z - 1);
+        int maxX = Math.min(half.maxX(), p[0] + g.plotX() - 1);
+        int maxZ = Math.min(half.maxZ(), p[1] + g.plotZ() - 1);
         if (minX > maxX || minZ > maxZ) {
             return b;
         }

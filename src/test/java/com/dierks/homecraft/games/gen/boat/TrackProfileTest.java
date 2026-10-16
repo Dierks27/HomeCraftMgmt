@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.boat;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.RaceStand;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TrackProfileTest {
 
-    private static final Box HALF = Slots.ICE_BOAT.half('A');
+    private static final Box HALF = LegacyBoxes.v036(Slots.ICE_BOAT, 'A');
     private static final int SX = RaceStand.centreX(HALF) - HALF.minX();
     private static final int SZ = RaceStand.centreZ(HALF) - HALF.minZ();
     private static final int TOP = HALF.minY() + BoatPlanner.TOP_ABOVE;

@@ -1,0 +1,4 @@
+# The algo-3 golf plans frozen before Golf v4 (GOLF-V4-SPEC §7): name slot mix half seed day hash
+golf-9-a fresh_golf EEEMMMMHH A 0000000000000001 20725 cf984e43e170
+golf-9-b fresh_golf EEEMMMMHH A 3f2a91c07d1e55b0 20725 e4eb31cf3859
+golf-3 fresh_tiny_golf EEE A 0000000000000001 20725 a61b98fd5199

@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
@@ -41,7 +42,7 @@ import java.util.Map;
 public final class AdventureKit {
 
     /** Golf of the Week's half A at the shipped origin, T and the first plot. */
-    public static final Box HALF = Slots.DAILY_GOLF.half('A');
+    public static final Box HALF = LegacyBoxes.v036(Slots.DAILY_GOLF, 'A');
     public static final int TURF = HALF.minY() + GolfPlanner.TURF_ABOVE_FLOOR;
 
     private AdventureKit() {

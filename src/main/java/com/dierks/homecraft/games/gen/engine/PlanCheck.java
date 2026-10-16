@@ -42,13 +42,42 @@ import java.util.Set;
 public final class PlanCheck {
 
     /**
-     * The most blocks a plan may place. The largest are the Mountain Run boat track (typically
-     * 10,000-18,000; its own validator caps it at 30,000) and a golf course with its scenery (under
-     * 30,000); each generator's validator has its own, lower cap.
+     * The most blocks a plan may place, for every generator but the Mountain Run v2
+     * ({@link #maxOps(String, int)}). The largest are a golf course with its scenery (v3 under 30,000, v4
+     * about 8,000-16,000; its own validator caps it at 40,000) and the v3 Mountain Run track (typically
+     * 10,000-18,000; its validator caps it at 30,000); each generator's validator has its own, lower cap.
      */
     public static final int MAX_OPS = 100_000;
+    /**
+     * The most blocks a Mountain Run v2 plan (boat algo 4 and later) may place (MOUNTAIN-V2-SPEC §3.6,
+     * §10.3 item 4): its whole mountain, about 350,000 for a medium road, terrain skin and trees included.
+     * Its own validator caps it at 400,000 too.
+     */
+    public static final int BOAT_V4_MAX_OPS = 400_000;
+    /** The boat planner version from which a plan is a Mountain Run v2 (a whole mountain, not a track). */
+    public static final int BOAT_MOUNTAIN_ALGO = 4;
 
     private PlanCheck() {
+    }
+
+    /**
+     * The most blocks a plan of {@code generator} at planner version {@code algo} may place: the Mountain
+     * Run v2 (boat, algo {@value #BOAT_MOUNTAIN_ALGO} or later) {@value #BOAT_V4_MAX_OPS}, which is a whole
+     * mountain; golf its own validator's cap if that is ever above {@value #MAX_OPS} (golf sets its own:
+     * {@link GolfValidator#MAX_OPS}); every other generator, and an older boat plan, {@value #MAX_OPS}. Each
+     * validator still holds its plans to its own, lower cap. Per plan, so a recall or a keep of an older
+     * plan is held to the cap it was made under.
+     */
+    public static int maxOps(String generator, int algo) {
+        if (Slots.BOAT.equals(generator) && algo >= BOAT_MOUNTAIN_ALGO) {
+            return BOAT_V4_MAX_OPS;
+        }
+        return Slots.GOLF.equals(generator) ? Math.max(MAX_OPS, GolfValidator.MAX_OPS) : MAX_OPS;
+    }
+
+    /** {@link #maxOps(String, int)} for a plan of {@code def}'s generator ({@link #MAX_OPS} when either is missing). */
+    public static int maxOps(Slots.Def def, Plan plan) {
+        return def == null || plan == null ? MAX_OPS : maxOps(def.generator(), plan.algo());
     }
 
     /** Everything wrong with {@code plan} as a plan for {@code def}'s half {@code half}; empty = fine. */
@@ -71,8 +100,9 @@ public final class PlanCheck {
         for (String bad : Palette.stateProblems(plan.palette())) {
             out.add("the palette's " + bad);
         }
-        if (plan.ops().size() > MAX_OPS) {
-            out.add("the plan places " + plan.ops().size() + " blocks, more than " + MAX_OPS);
+        int cap = maxOps(def.generator(), plan.algo());
+        if (plan.ops().size() > cap) {
+            out.add("the plan places " + plan.ops().size() + " blocks, more than " + cap);
         }
         Set<Long> seen = new HashSet<>();
         int outside = 0;

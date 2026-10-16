@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The laps of a race (EVENTS-DROPPER-SPEC §A.4.4): a course stores no lap count, so the natural lap
- * is read off its checkpoints; a loop may be raced for more laps (up to 5 and 64 targets), and a
+ * is read off its checkpoints; a loop may be raced for more laps (up to 5 and 128 targets), and a
  * point-to-point course is always one lap.
  */
 class LapsTest {
@@ -93,12 +93,13 @@ class LapsTest {
     }
 
     @Test
-    void aRaceStaysWithinSixtyFourTargetsAndFiveLaps() {
-        Course big = loop(15, 2);
-        assertNotNull(Laps.raced(big, null, 4).course(), "4 laps of 15 is 60 marks and the finish: 61 targets");
-        Laps.Raced tooMany = Laps.raced(loop(16, 2), null, 4);
-        assertNull(tooMany.course(), "4 laps of 16 would be 65 targets");
-        assertTrue(tooMany.problem().contains("65 targets"), "and it says so: " + tooMany.problem());
+    void aRaceStaysWithin128TargetsAndFiveLaps() {
+        Course big = loop(31, 2);
+        assertNotNull(Laps.raced(big, null, 4).course(), "4 laps of 31 is 124 marks and the finish: 125 targets");
+        assertNotNull(Laps.raced(loop(16, 2), null, 4).course(), "4 laps of 16 (65 targets) fit since Mountain Run v2");
+        Laps.Raced tooMany = Laps.raced(loop(32, 2), null, 4);
+        assertNull(tooMany.course(), "4 laps of 32 would be 129 targets: Course.MAX_CHECKPOINTS is 128");
+        assertTrue(tooMany.problem().contains("129 targets"), "and it says so: " + tooMany.problem());
         Laps.Raced six = Laps.raced(loop(4, 2), null, 6);
         assertNull(six.course(), "a race is at most 5 laps");
         assertTrue(six.problem().contains("at most 5"), six.problem());

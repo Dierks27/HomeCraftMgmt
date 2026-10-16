@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.cabinet.connect;
 
+import com.dierks.homecraft.games.TokenBalance;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -91,8 +92,8 @@ class ConnectFourMatchTest {
         ConnectFourSettings s = ConnectFourSettings.defaults();
         assertEquals(0, s.milestoneReward(), "Connect Four has no milestones (spec §10b)");
         assertTrue(s.milestonesFor(ConnectFour.BOARD).isEmpty(), "not even on the hard board");
-        assertEquals(1, s.dailyReward(), "the day's first normal-or-hard win pays one token");
-        assertEquals(1, s.dailyCap(), "and that's all it pays in a day");
+        assertEquals(TokenBalance.DUEL_DAILY, s.dailyReward(), "the day's first normal-or-hard win pays the token balance's");
+        assertEquals(s.dailyReward(), s.dailyCap(), "and that's all it pays in a day");
     }
 
     @Test

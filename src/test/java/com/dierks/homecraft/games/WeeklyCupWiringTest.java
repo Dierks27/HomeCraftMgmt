@@ -61,7 +61,8 @@ class WeeklyCupWiringTest {
     @BeforeEach
     void setUp() throws Exception {
         host = new Host(GamesKit.at(2026, 9, 29, 12, 0)); // a Tuesday noon, in the week of 28 September
-        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "cup", CupSettings.defaults());
+        // the wiring at 0.36's 5 to enter and 10 on top; the shipped 10/20 is pinned in CupSettingsTest
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "cup", new CupSettings(true, 5, 10));
         // Not start(): the Cup's minute task goes through the Bukkit scheduler, which a test has none of.
         // Its tick is the desk's, called by hand below exactly as the task calls it.
         games = GamesKit.service(host, List.of(WeeklyCup.SPEC));
@@ -124,7 +125,7 @@ class WeeklyCupWiringTest {
         assertEquals(List.of(), cup.tiles(alex.player), "it lives on the course screens and tiles");
         assertFalse(cup.featurable(), "a week-long contest is never today's pick");
         assertTrue(games.enabled(cup), "open while the games are: " + games.closedReason(cup));
-        assertEquals(CupSettings.defaults(), cup.settings(), "games.cup as shipped: on, 5 to enter, top-up 10");
+        assertEquals(new CupSettings(true, 5, 10), cup.settings(), "games.cup as this test sets it: on, 5 to enter, top-up 10");
     }
 
     @Test

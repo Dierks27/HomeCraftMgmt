@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * real in-memory database.
  *
  * <p>Pinned here: a Dropper slot whose origin moves keeps its old region guarded (every change
- * refused, nothing flowing out), remembered in {@code gen.<slot>.wet} before a claim at the new place
+ * refused, nothing flowing out), remembered in {@code gen.<slot>.old} before a claim at the new place
  * can overwrite the old one, across a restart, until the slot is claimed there again (so a clear
  * drains it); its admin is told to drain first, and the status says so; any other slot that moves is
  * left as before. A kept Dropper's plot, and a plot job the server stopped halfway, keep their water
@@ -96,16 +96,17 @@ class DropperGuardTest {
         claimAt(DEF, here);
         boot();
         assertTrue(guarded(oldA) && guarded(oldB), "claimed: both halves guarded, as before");
-        assertNull(host.store.meta(GenAdminKeys.wet(SLOT)), "nothing old to remember yet");
+        assertNull(host.store.meta(GenAdminKeys.old(SLOT)), "nothing old to remember yet");
 
         moveTo(SLOT, there);
         gen.check();
         assertTrue(guarded(oldA) && guarded(oldB), "moved away: the old halves (maybe full of water) stay guarded");
-        assertEquals(Regions.claim(DEF, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.wet(SLOT)),
+        assertEquals(Regions.claim(DEF, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.old(SLOT)),
                 "remembered before a claim at the new place can overwrite the old one");
-        assertTrue(host.logged(Level.WARNING, "drain first - move it back and use /hcm games gen clear " + SLOT) > 0,
-                "and the admin is told to drain first");
-        assertTrue(gen.summary().stream().anyMatch(l -> l.startsWith(SLOT + ": its old area") && l.contains("drain first")),
+        assertTrue(host.logged(Level.WARNING, "drain first - empty it with /hcm games gen tidy " + SLOT + " confirm") > 0,
+                "and the admin is told to drain first, with the one command that does it");
+        assertTrue(gen.summary().stream().anyMatch(l -> l.startsWith(SLOT + ": its old area")
+                        && l.contains("/hcm games gen tidy " + SLOT + " confirm")),
                 "the status says so too: " + gen.summary());
 
         claimAt(DEF, there); // the new place is claimed: the claim key names it now
@@ -121,12 +122,12 @@ class DropperGuardTest {
         assertTrue(guarded(Regions.half(DEF, there, Slots.HALF_GAP, 'B')),
                 "and now the place it left is remembered as well");
         assertEquals(List.of(Regions.claim(DEF, W, here, Slots.HALF_GAP), Regions.claim(DEF, W, there, Slots.HALF_GAP)),
-                Regions.wetClaims(host.store.meta(GenAdminKeys.wet(SLOT))), "both old regions");
+                Regions.oldClaims(host.store.meta(GenAdminKeys.old(SLOT))), "both old regions");
 
         claimAt(DEF, here); // a claim confirm cleared it (drains first) and claimed it
         gen.check();
         assertEquals(List.of(Regions.claim(DEF, W, there, Slots.HALF_GAP)),
-                Regions.wetClaims(host.store.meta(GenAdminKeys.wet(SLOT))),
+                Regions.oldClaims(host.store.meta(GenAdminKeys.old(SLOT))),
                 "claimed here again: the claim guards it now, and a clear drains it");
         assertTrue(guarded(oldA), "(guarded as the claimed region)");
     }
@@ -141,7 +142,7 @@ class DropperGuardTest {
         gen.check();
         Box old = Regions.half(parkour, here, Slots.HALF_GAP, 'A');
         assertFalse(gen.inArea(W, old.minX(), old.minY(), old.minZ()), "a parkour's old region isn't guarded (no water)");
-        assertNull(host.store.meta(GenAdminKeys.wet(parkour.id())), "nor remembered");
+        assertNull(host.store.meta(GenAdminKeys.old(parkour.id())), "nor remembered");
         assertTrue(host.logged(Level.WARNING, "clear them by hand") > 0, "its copy is the old one");
     }
 

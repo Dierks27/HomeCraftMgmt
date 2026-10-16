@@ -238,7 +238,8 @@ public final class GuideMenu extends Menu {
                     "&7It " + RtpLimits.playerLine(back) + ",", "&7over lots of plays.");
         }
         var lotto = plugin.config().arcade().lotto();
-        if (i < CHANCE_SLOTS.length && plugin.arcade() != null && !lotto.payouts().isEmpty()) {
+        if (i < CHANCE_SLOTS.length && plugin.arcade() != null && !lotto.payouts().isEmpty()
+                && !ArcadeService.ticketClosed(lotto)) { // a closed ticket isn't open to explain
             double back = ArcadeService.rtp(lotto);
             step(CHANCE_SLOTS[i++], Material.FILLED_MAP, "&6Scratch Ticket &7- about "
                             + RtpLimits.wholePercent(back) + " of every 100 back",

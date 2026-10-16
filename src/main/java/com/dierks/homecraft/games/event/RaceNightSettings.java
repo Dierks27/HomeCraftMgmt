@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 
 import java.util.List;
 import java.util.Locale;
@@ -36,8 +37,9 @@ import java.util.Locale;
  * @param points              points by place in each race
  * @param finishPoints        points for a finisher beyond the list
  * @param stillRacingPoints   points for anyone still going when a race ends
- * @param prizes              tokens for the night's 1st, 2nd and 3rd (each 0-10)
- * @param finisherPrize       tokens for everyone else who finished a race (0-2)
+ * @param prizes              tokens for the night's 1st, 2nd and 3rd (each 0 to {@link #MAX_PRIZE}, and never
+ *                            more than {@link NightRules#MAX_PRIZE_PER_NIGHT} a player a night)
+ * @param finisherPrize       tokens for everyone else who finished a race (0 to {@link #MAX_FINISHER_PRIZE})
  * @param prizeEventsPerWeek  nights a week that pay tokens, server-wide (0-7)
  * @param season              {@code month} (a monthly season board) or {@code off}
  * @param standRadius         how far from the stand a watcher may wander before being put back
@@ -67,6 +69,10 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
     public static final String AUTO = "auto";
     /** The most racers a night, whatever config says. */
     public static final int MAX_RACERS = 12;
+    /** The most one {@code prizes} entry may be: {@link NightRules#MAX_PRIZE_PER_NIGHT}. */
+    public static final int MAX_PRIZE = NightRules.MAX_PRIZE_PER_NIGHT;
+    /** The most {@code finisher_prize} may be. */
+    public static final int MAX_FINISHER_PRIZE = TokenBalance.RACE_MAX_FINISHER_PRIZE;
 
     public RaceNightSettings {
         schedule = List.copyOf(schedule == null ? List.of() : schedule);
@@ -90,8 +96,8 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
     }
 
     /**
-     * The shipped settings (§A.10): off; Fridays at 7:00 PM; 3 races; prizes 5, 3, 2 and 1; the drop
-     * hype on (COURSE-VARIETY-SPEC §6).
+     * The shipped settings (§A.10): off; Fridays at 7:00 PM; 3 races; {@link TokenBalance}'s prizes (for
+     * three races of 2-3 minutes); the drop hype on (COURSE-VARIETY-SPEC §6).
      */
     public static RaceNightSettings defaults() {
         return new RaceNightSettings(
@@ -112,8 +118,8 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
                 List.of(10, 8, 6, 5, 4, 3, 2),
                 2,
                 1,
-                List.of(5, 3, 2),
-                1,
+                TokenBalance.RACE_PRIZES,
+                TokenBalance.RACE_FINISHER_PRIZE,
                 3,
                 SEASON_MONTH,
                 4,
@@ -147,8 +153,8 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
         }
         int finishPoints = n.whole("finish_points", d.finishPoints(), 0, 100);
         int stillRacingPoints = n.whole("still_racing_points", d.stillRacingPoints(), 0, 100);
-        List<Integer> prizes = n.intList("prizes", d.prizes(), 0, 10, 3);
-        int finisherPrize = n.whole("finisher_prize", d.finisherPrize(), 0, 2);
+        List<Integer> prizes = n.intList("prizes", d.prizes(), 0, MAX_PRIZE, 3);
+        int finisherPrize = n.whole("finisher_prize", d.finisherPrize(), 0, MAX_FINISHER_PRIZE);
         int prizeEventsPerWeek = n.whole("prize_events_per_week", d.prizeEventsPerWeek(), 0, 7);
         String season = n.text("season", d.season()).toLowerCase(Locale.ROOT);
         if (!SEASON_MONTH.equals(season) && !SEASON_OFF.equals(season)) {

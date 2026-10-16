@@ -65,6 +65,11 @@ final class TrialRun {
     final List<FairPlay.Stall> stalls = new ArrayList<>();
     /** Sky Rings: the "open your wings" tip was shown (once per run, at the first fall-reset). */
     boolean wingsTip;
+    /**
+     * Mountain Run v2's quiet checkpoints: the clock line leaves the action bar alone until {@link #ticks}
+     * reaches this, so the "Checkpoint 37/74 · 1:12.4" line can be read ({@code TimeTrials.QUIET_HOLD}).
+     */
+    int barHold;
 
     // ---- the warm-up (owner decision D3; C1 contract, WP-R1 and WP-D play it) ------------------
 

@@ -111,6 +111,18 @@ public final class GamesBench {
     }
 
     /**
+     * {@code games.skill_daily_cap} set to {@code cap} (the bench starts at 6, the cap the older tests
+     * count against; a journey "as shipped" sets {@code GamesConfig.Common.defaults().skillDailyCap()}).
+     */
+    public void skillCap(int cap) {
+        com.dierks.homecraft.config.GamesConfig.Common c = host.config.common();
+        host.config = new com.dierks.homecraft.config.GamesConfig.Parsed(new com.dierks.homecraft.config.GamesConfig.Common(
+                c.enabled(), c.worlds(), c.playWorlds(), c.clickCooldownMs(), c.chanceDailyTokens(), c.maxPayout(), cap,
+                c.featured(), c.featuredBonus(), c.restartTimes(), c.restartHoldMinutes(), c.breakDailyChoices(),
+                c.breakPauseDays(), c.breakRaiseDelayDays(), c.feedTop()), host.config.settings(), host.config.unreadable());
+    }
+
+    /**
      * {@code games.enabled} switched (the whole module on or off, as a config edit before a reload):
      * the framework reads it on every call, so the next {@code games().reload()} acts on it.
      */

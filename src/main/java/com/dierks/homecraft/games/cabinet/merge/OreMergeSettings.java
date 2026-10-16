@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.merge;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -41,9 +42,9 @@ public record OreMergeSettings(boolean enabled, int milestoneReward, int dailyRe
     public static OreMergeSettings defaults() {
         return new OreMergeSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 List.of(256, 512, 1024));
     }
 

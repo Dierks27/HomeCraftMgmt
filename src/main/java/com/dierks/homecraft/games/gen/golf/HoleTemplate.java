@@ -633,23 +633,28 @@ public enum HoleTemplate {
         static final byte SAND = 3;
         /** How high a trunk's top stands above T: logs from T - 1 to T + 2. */
         static final int TRUNK_TOP = 3;
+        /** A pond is at least this many across, every way ({@link GolfValidatorV3#SKIM}). */
+        static final int SKIM = GolfValidatorV3.SKIM;
         private static final double EPS = 1e-6;
         private static final int[][] FOUR = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
         private static final int[][] EIGHT = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
+        /** The plot's size in blocks (x, z): 20 x 40 for Adventure Golf, 40 x 64 for Golf v4 ({@link PlotGrid}). */
+        final int sx;
+        final int sz;
         /** Lane heights in half blocks above T (-1 to 4), where {@link #lane} is set. */
-        private final int[][] level = new int[PLOT_X][PLOT_Z];
-        private final boolean[][] lane = new boolean[PLOT_X][PLOT_Z];
-        private final byte[][] floor = new byte[PLOT_X][PLOT_Z];
-        private final boolean[][] rock = new boolean[PLOT_X][PLOT_Z];
-        private final boolean[][] slime = new boolean[PLOT_X][PLOT_Z];
-        private final boolean[][] water = new boolean[PLOT_X][PLOT_Z];
+        private final int[][] level;
+        private final boolean[][] lane;
+        private final byte[][] floor;
+        private final boolean[][] rock;
+        private final boolean[][] slime;
+        private final boolean[][] water;
         /** A moss obstacle: a tree island's ground. */
-        private final boolean[][] island = new boolean[PLOT_X][PLOT_Z];
+        private final boolean[][] island;
         /** A log trunk's wood, or null. */
-        private final String[][] trunk = new String[PLOT_X][PLOT_Z];
+        private final String[][] trunk;
         /** A lane cell whose exposed edge (above the lane below it) is blue glass. */
-        private final boolean[][] glass = new boolean[PLOT_X][PLOT_Z];
+        private final boolean[][] glass;
         /** Leaves: {x, y above T, z} and their wood. */
         private final List<int[]> leaves = new ArrayList<>();
         private final List<String> leafWood = new ArrayList<>();
@@ -665,7 +670,30 @@ public enum HoleTemplate {
         int cupX = -1;
         int cupZ = -1;
 
+        /** A sketch of an Adventure Golf plot, {@value #PLOT_X} x {@value #PLOT_Z}. */
         Sketch() {
+            this(PLOT_X, PLOT_Z);
+        }
+
+        /**
+         * A sketch of a plot {@code sx} x {@code sz} (GOLF-V4-SPEC §3.6: the same rules on any plot;
+         * a 20 x 40 one draws exactly what Adventure Golf always drew).
+         */
+        Sketch(int sx, int sz) {
+            if (sx < 3 || sz < 3) {
+                throw new IllegalArgumentException("a plot of " + sx + " x " + sz);
+            }
+            this.sx = sx;
+            this.sz = sz;
+            level = new int[sx][sz];
+            lane = new boolean[sx][sz];
+            floor = new byte[sx][sz];
+            rock = new boolean[sx][sz];
+            slime = new boolean[sx][sz];
+            water = new boolean[sx][sz];
+            island = new boolean[sx][sz];
+            trunk = new String[sx][sz];
+            glass = new boolean[sx][sz];
         }
 
         /** Give each wall column the least height the Adventure Golf rules allow (the new templates). */
@@ -784,8 +812,8 @@ public enum HoleTemplate {
                     || Math.max(Math.abs(x - cupX), Math.abs(z - cupZ)) < 5) {
                 return false;
             }
-            for (int ox = 0; ox < PLOT_X; ox++) {
-                for (int oz = 0; oz < PLOT_Z; oz++) {
+            for (int ox = 0; ox < sx; ox++) {
+                for (int oz = 0; oz < sz; oz++) {
                     if (trunk[ox][oz] != null && Math.max(Math.abs(x - ox), Math.abs(z - oz)) < 3) {
                         return false;
                     }
@@ -802,7 +830,7 @@ public enum HoleTemplate {
         void decorativePond(int x0, int x1, int z0, int z1) {
             for (int x = x0 - 1; x <= x1 + 1; x++) {
                 for (int z = z0 - 1; z <= z1 + 1; z++) {
-                    if (x < 0 || x >= PLOT_X || z < 0 || z >= PLOT_Z) {
+                    if (x < 0 || x >= sx || z < 0 || z >= sz) {
                         throw new IllegalStateException("a pond drawn outside its plot: " + x + "," + z);
                     }
                     if (x >= x0 && x <= x1 && z >= z0 && z <= z1) {
@@ -822,7 +850,7 @@ public enum HoleTemplate {
 
         /** Whether a rock may go here: a turf lane cell, clear of the tee, the cup ring and other rocks. */
         boolean canRock(int x, int z) {
-            if (x < 0 || x >= PLOT_X || z < 0 || z >= PLOT_Z || !lane[x][z] || level[x][z] != 0) {
+            if (x < 0 || x >= sx || z < 0 || z >= sz || !lane[x][z] || level[x][z] != 0) {
                 return false;
             }
             boolean nearCup = Math.abs(x - cupX) <= 2 && Math.abs(z - cupZ) <= 2;
@@ -834,7 +862,7 @@ public enum HoleTemplate {
                 for (int dz = -2; dz <= 2; dz++) {
                     int nx = x + dx;
                     int nz = z + dz;
-                    if (nx >= 0 && nx < PLOT_X && nz >= 0 && nz < PLOT_Z && rock[nx][nz]) {
+                    if (nx >= 0 && nx < sx && nz >= 0 && nz < sz && rock[nx][nz]) {
                         return false;
                     }
                 }
@@ -852,8 +880,8 @@ public enum HoleTemplate {
 
         /** Make the walls in x0..x1, z0..z1 slime (cells that turn out not to be walls stay empty). */
         void slimeWalls(int x0, int x1, int z0, int z1) {
-            for (int x = Math.max(0, x0); x <= Math.min(PLOT_X - 1, x1); x++) {
-                for (int z = Math.max(0, z0); z <= Math.min(PLOT_Z - 1, z1); z++) {
+            for (int x = Math.max(0, x0); x <= Math.min(sx - 1, x1); x++) {
+                for (int z = Math.max(0, z0); z <= Math.min(sz - 1, z1); z++) {
                     if (!lane[x][z]) {
                         slime[x][z] = true;
                     }
@@ -873,18 +901,18 @@ public enum HoleTemplate {
             cupZ = z;
         }
 
-        private static void check(int x, int z) {
-            if (x < 1 || x >= PLOT_X - 1 || z < 1 || z >= PLOT_Z - 1) {
+        private void check(int x, int z) {
+            if (x < 1 || x >= sx - 1 || z < 1 || z >= sz - 1) {
                 throw new IllegalStateException("a hole drawn outside its plot: " + x + "," + z);
             }
         }
 
         private boolean lane(int x, int z) {
-            return x >= 0 && x < PLOT_X && z >= 0 && z < PLOT_Z && lane[x][z];
+            return x >= 0 && x < sx && z >= 0 && z < sz && lane[x][z];
         }
 
         private boolean water(int x, int z) {
-            return x >= 0 && x < PLOT_X && z >= 0 && z < PLOT_Z && water[x][z];
+            return x >= 0 && x < sx && z >= 0 && z < sz && water[x][z];
         }
 
         /** An obstacle standing in the lane: a rock, a tree island's moss or a trunk. */
@@ -918,8 +946,8 @@ public enum HoleTemplate {
          */
         private int wallHeight() {
             int highest = 0;
-            for (int x = 0; x < PLOT_X; x++) {
-                for (int z = 0; z < PLOT_Z; z++) {
+            for (int x = 0; x < sx; x++) {
+                for (int z = 0; z < sz; z++) {
                     if (lane[x][z]) {
                         highest = Math.max(highest, level[x][z]);
                     }
@@ -936,11 +964,11 @@ public enum HoleTemplate {
          * off some lip could fly onto it ({@link LaneMap#flightReach}). A ring wall that would stand
          * more than two blocks above the lowest lane beside it is a template's bug.
          */
-        private int[][] columnHeights(HoleTemplate template) {
-            int[][] k = new int[PLOT_X][PLOT_Z];
+        private int[][] columnHeights(String template) {
+            int[][] k = new int[sx][sz];
             List<int[]> lips = new ArrayList<>();
-            for (int x = 0; x < PLOT_X; x++) {
-                for (int z = 0; z < PLOT_Z; z++) {
+            for (int x = 0; x < sx; x++) {
+                for (int z = 0; z < sz; z++) {
                     if (!lane[x][z]) {
                         continue;
                     }
@@ -958,8 +986,8 @@ public enum HoleTemplate {
             }
             Map<Double, Double> reach = new HashMap<>();
             int rail = railLevel();
-            for (int x = 0; x < PLOT_X; x++) {
-                for (int z = 0; z < PLOT_Z; z++) {
+            for (int x = 0; x < sx; x++) {
+                for (int z = 0; z < sz; z++) {
                     if (lane[x][z] || water[x][z]) {
                         continue;
                     }
@@ -1036,8 +1064,8 @@ public enum HoleTemplate {
          */
         private int railLevel() {
             int rail = -1;
-            for (int qx = 0; qx < PLOT_X; qx++) {
-                for (int qz = 0; qz < PLOT_Z; qz++) {
+            for (int qx = 0; qx < sx; qx++) {
+                for (int qz = 0; qz < sz; qz++) {
                     if (!lane[qx][qz] && !water[qx][qz]) {
                         continue; // the column under the ball's centre
                     }
@@ -1076,7 +1104,7 @@ public enum HoleTemplate {
                 int wz = pz + j * m[1];
                 int nx = qx + j * m[0];
                 int nz = qz + j * m[1];
-                boolean wall = wx >= 0 && wz >= 0 && wx < PLOT_X && wz < PLOT_Z && !lane[wx][wz] && !water[wx][wz]
+                boolean wall = wx >= 0 && wz >= 0 && wx < sx && wz < sz && !lane[wx][wz] && !water[wx][wz]
                         && (obstacle(wx, wz) || walled(wx, wz));
                 if (!wall) {
                     return false; // its edge is back over lane or a pond: the ball's own footing again
@@ -1091,6 +1119,18 @@ public enum HoleTemplate {
         }
 
         HoleLayout render(HoleTemplate template, boolean mirror, int plotX, int plotZ, int turfY, String describe) {
+            return render(template, String.valueOf(template), mirror, plotX, plotZ, turfY, describe,
+                    template.features(tier), template.teeFeature(tier));
+        }
+
+        /**
+         * The hole as blocks: {@link #render(HoleTemplate, boolean, int, int, int, String)} for a hole
+         * that isn't one template's (a Golf v4 routing and its pieces: {@code template} {@code null}),
+         * named {@code template} in a bug's message, with the quota's {@code features} and the tee
+         * sign's {@code teeFeature} given.
+         */
+        HoleLayout render(HoleTemplate shape, String template, boolean mirror, int plotX, int plotZ, int turfY,
+                          String describe, Set<Quota.Feature> features, GenCopy.TeeFeature teeFeature) {
             if (teeX < 0 || cupX < 0 || !lane[teeX][teeZ] || !lane[cupX][cupZ]) {
                 throw new IllegalStateException(template + " has no tee or cup on its lane");
             }
@@ -1120,9 +1160,9 @@ public enum HoleTemplate {
             int minZ = Integer.MAX_VALUE;
             int maxX = Integer.MIN_VALUE;
             int maxZ = Integer.MIN_VALUE;
-            for (int lx = 0; lx < PLOT_X; lx++) {
-                for (int lz = 0; lz < PLOT_Z; lz++) {
-                    int wx = plotX + (mirror ? PLOT_X - 1 - lx : lx);
+            for (int lx = 0; lx < sx; lx++) {
+                for (int lz = 0; lz < sz; lz++) {
+                    int wx = plotX + (mirror ? sx - 1 - lx : lx);
                     int wz = plotZ + lz;
                     if (lane[lx][lz] || water[lx][lz]) {
                         minX = Math.min(minX, wx);
@@ -1178,7 +1218,7 @@ public enum HoleTemplate {
                 }
             }
             leaves(out, logs, mirror, plotX, plotZ, turfY);
-            int cupWX = plotX + (mirror ? PLOT_X - 1 - cupX : cupX);
+            int cupWX = plotX + (mirror ? sx - 1 - cupX : cupX);
             int cupWZ = plotZ + cupZ;
             int cupTop = turfY + cupLevel / 2;
             int flagY = cupTop + 3;
@@ -1194,16 +1234,16 @@ public enum HoleTemplate {
             if (signY > boundsTop) {
                 throw new IllegalStateException(template + "'s tee sign would stand above its bounds");
             }
-            int teeWX = plotX + (mirror ? PLOT_X - 1 - teeX : teeX);
+            int teeWX = plotX + (mirror ? sx - 1 - teeX : teeX);
             List<HoleLayout.Placed> view = new ArrayList<>();
             for (int i = 0; i < scenery.size(); i++) {
                 int[] p = scenery.get(i);
-                view.add(new HoleLayout.Placed(plotX + (mirror ? PLOT_X - 1 - p[0] : p[0]), turfY + p[1],
+                view.add(new HoleLayout.Placed(plotX + (mirror ? sx - 1 - p[0] : p[0]), turfY + p[1],
                         plotZ + p[2], sceneryBlock.get(i)));
             }
-            return new HoleLayout(template, mirror, turfY, teeWX, turfY + teeLevel / 2.0, plotZ + teeZ, cupWX, cupWZ,
+            return new HoleLayout(shape, mirror, turfY, teeWX, turfY + teeLevel / 2.0, plotZ + teeZ, cupWX, cupWZ,
                     cupTop, minX, minZ, maxX, maxZ, boundsTop, teeWX, signY, plotZ + signLZ, out, view,
-                    template.features(tier), template.teeFeature(tier), describe);
+                    features, teeFeature, describe);
         }
 
         /**
@@ -1273,9 +1313,9 @@ public enum HoleTemplate {
          * it, diagonals too — slabs sit in the middle of a lane, flanked by full steps, never beside
          * a wall or a pond.
          */
-        private void slabRule(HoleTemplate template) {
-            for (int x = 0; x < PLOT_X; x++) {
-                for (int z = 0; z < PLOT_Z; z++) {
+        private void slabRule(String template) {
+            for (int x = 0; x < sx; x++) {
+                for (int z = 0; z < sz; z++) {
                     if (!lane[x][z] || level[x][z] != 1 && level[x][z] != 3) {
                         continue;
                     }
@@ -1302,7 +1342,7 @@ public enum HoleTemplate {
             Map<Long, String> wood = new HashMap<>();
             for (int i = 0; i < leaves.size(); i++) {
                 int[] l = leaves.get(i);
-                int[] w = {plotX + (mirror ? PLOT_X - 1 - l[0] : l[0]), turfY + l[1], plotZ + l[2]};
+                int[] w = {plotX + (mirror ? sx - 1 - l[0] : l[0]), turfY + l[1], plotZ + l[2]};
                 if (wood.putIfAbsent(Palette.blockKey(w[0], w[1], w[2]), leafWood.get(i)) == null) {
                     at.add(w);
                 }

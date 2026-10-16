@@ -32,9 +32,14 @@ import java.util.regex.Pattern;
  *                {@link GolfShot.Rules}): a course kept from a golf layout of version 3 or later,
  *                whose par and proofs were worked out that way (Course Variety). Never for a
  *                hand-built course; a generated one's own tag says ({@link LiveBlocks#sandPlays})
+ * @param keptAlgo the golf planner version a course kept from a plan was planned at (Course Variety's
+ *                keep), so it keeps what goes with that version: a Golf v4 course (4 or later) its
+ *                hole clock by par ({@link GolfGroup#clocks}). 0 for a course that wasn't kept — a
+ *                hand-built one, or a generated one, whose own tag says — and for one kept before the
+ *                version was recorded (an Adventure Golf layout, which keeps the 2:00 clock anyway)
  */
 public record GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes,
-                         GenTag gen, boolean adventure) {
+                         GenTag gen, boolean adventure, int keptAlgo) {
 
     /** A course has at most this many holes (a scorecard fits 18). */
     public static final int MAX_HOLES = 18;
@@ -46,6 +51,16 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
 
     public GolfCourse {
         holes = List.copyOf(holes);
+        keptAlgo = Math.max(0, keptAlgo);
+    }
+
+    /**
+     * A course with Fresh Courses' tag ({@code null}: hand-built) that wasn't kept from a plan, or was
+     * kept before Golf v4 recorded the version ({@link #keptAlgo} 0).
+     */
+    public GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes, GenTag gen,
+                      boolean adventure) {
+        this(id, name, world, enabled, rev, holes, gen, adventure, 0);
     }
 
     /** A hand-built course (no {@code gen} tag): the constructor every course had before Fresh Courses. */
@@ -207,46 +222,51 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
     // ---- edits ------------------------------------------------------------------------------------
 
     public GolfCourse withName(String n) {
-        return new GolfCourse(id, n, world, enabled, rev, holes, gen, adventure);
+        return new GolfCourse(id, n, world, enabled, rev, holes, gen, adventure, keptAlgo);
     }
 
     public GolfCourse withEnabled(boolean on) {
-        return new GolfCourse(id, name, world, on, rev, holes, gen, adventure);
+        return new GolfCourse(id, name, world, on, rev, holes, gen, adventure, keptAlgo);
     }
 
     public GolfCourse withRev(int r) {
-        return new GolfCourse(id, name, world, enabled, r, holes, gen, adventure);
+        return new GolfCourse(id, name, world, enabled, r, holes, gen, adventure, keptAlgo);
     }
 
     /** The same course with Fresh Courses' tag ({@code null}: hand-built). */
     public GolfCourse withGen(GenTag g) {
-        return new GolfCourse(id, name, world, enabled, rev, holes, g, adventure);
+        return new GolfCourse(id, name, world, enabled, rev, holes, g, adventure, keptAlgo);
     }
 
     /** The same course, playing Adventure Golf's rules or not ({@link #adventure}: a kept Adventure course). */
     public GolfCourse withAdventure(boolean a) {
-        return new GolfCourse(id, name, world, enabled, rev, holes, gen, a);
+        return new GolfCourse(id, name, world, enabled, rev, holes, gen, a, keptAlgo);
+    }
+
+    /** The same course, kept from a plan of golf planner version {@code algo} ({@link #keptAlgo}; 0: none). */
+    public GolfCourse withKeptAlgo(int algo) {
+        return new GolfCourse(id, name, world, enabled, rev, holes, gen, adventure, algo);
     }
 
     /** Add a hole at the end. */
     public GolfCourse addHole(Hole h) {
         List<Hole> list = new ArrayList<>(holes);
         list.add(h);
-        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure, keptAlgo);
     }
 
     /** Replace hole {@code n} (1-based). */
     public GolfCourse withHole(int n, Hole h) {
         List<Hole> list = new ArrayList<>(holes);
         list.set(n - 1, h);
-        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure, keptAlgo);
     }
 
     /** Remove hole {@code n} (1-based); the ones after it move up. */
     public GolfCourse removeHole(int n) {
         List<Hole> list = new ArrayList<>(holes);
         list.remove(n - 1);
-        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen, adventure, keptAlgo);
     }
 
     /** Hole {@code n} (1-based), or {@code null} if there is none. */

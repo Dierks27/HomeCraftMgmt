@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.event;
 import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GameProgress;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.Tier;
@@ -168,7 +169,7 @@ class RaceNightRecoverTest {
         assertEquals(EventDao.CALLED_OFF, dao.event(id).state(), "called off, settled on race 1");
         EventDao.EntryRow ava = dao.entries(id).stream().filter(e -> e.player().equals(A)).findFirst().orElseThrow();
         assertEquals(1, ava.place(), "race 1's points stand: Ava 1st");
-        assertEquals(5, ava.prize(), "and her prize is kept");
+        assertEquals((int) TokenBalance.RACE_PRIZES.get(0), ava.prize(), "and her prize (the shipped 1st) is kept");
         assertEquals(1, dao.owed(A).size(), "owed until she is online where tokens can be earned");
         assertTrue(dao.event(id).prized(), "a night with a race stored keeps its prize slot");
     }

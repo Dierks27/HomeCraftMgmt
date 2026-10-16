@@ -53,7 +53,11 @@ public final class LoopValidatorV2 {
     public static final int LAST_ALGO = 2;
     /** The most blocks an Ice Boat plan may place, and checkpoints a course may have. */
     public static final int MAX_OPS = 20_000;
-    public static final int MAX_CHECKPOINTS = Course.MAX_CHECKPOINTS;
+    /**
+     * Frozen at 64, the cap the loop was made under: a literal, not {@code Course.MAX_CHECKPOINTS},
+     * which v4 raises to 128 for Mountain Run v2 (MOUNTAIN-V2-SPEC §12).
+     */
+    public static final int MAX_CHECKPOINTS = 64;
     /** The lane is read round the hole in this many slices. */
     static final int BINS = 180;
     /** Read off whole blocks, a bend may look this much tighter than it is. */

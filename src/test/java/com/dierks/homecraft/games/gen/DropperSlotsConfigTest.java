@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
@@ -81,10 +82,11 @@ class DropperSlotsConfigTest {
         assertEquals("EEMMH", drop.tierOrMix(), "the Dropper: five, easy to hard");
         assertArrayEquals(new int[]{7488, 160, 6768}, easy.origin(), "Easy Dropper's area (the east column)");
         assertArrayEquals(new int[]{7488, 160, 7360}, drop.origin(), "the Dropper's, a row further along z");
-        assertEquals(2, s.dailyClear("fresh_dropper_easy", 7), "Easy Dropper's first finish in a week pays 2");
-        assertEquals(1, s.dailyClear("fresh_dropper_easy", 1), "and 1 a day");
-        assertEquals(3, s.dailyClear("fresh_dropper", 7), "the Dropper's 3");
-        assertEquals(2, s.dailyClear("fresh_dropper", 1), "and 2 a day");
+        assertEquals(TokenBalance.FRESH_DROPPER_EASY_WEEKLY, s.dailyClear("fresh_dropper_easy", 7),
+                "Easy Dropper's first finish in a week pays the token balance's");
+        assertEquals(TokenBalance.FRESH_DROPPER_EASY_DAILY, s.dailyClear("fresh_dropper_easy", 1), "and its daily amount a day");
+        assertEquals(TokenBalance.FRESH_DROPPER_WEEKLY, s.dailyClear("fresh_dropper", 7), "the Dropper's");
+        assertEquals(TokenBalance.FRESH_DROPPER_DAILY, s.dailyClear("fresh_dropper", 1), "and its daily amount a day");
         assertTrue(DailySettings.KEYS.contains("slots.fresh_dropper.mix"), "a dropper's difficulty is a mix");
         assertFalse(DailySettings.KEYS.contains("slots.fresh_dropper.tier"), "not a tier");
         assertTrue(DailySettings.KEYS.contains("rewards.clear_weekly.fresh_dropper_easy"), "its weekly tokens are a key");

@@ -19,9 +19,10 @@ import java.util.List;
  * <ul>
  *   <li><b>SCHEDULED</b>: the heads-up in chat at T − {@code announce_minutes}; the window opens at
  *       {@code joinAt}.</li>
- *   <li><b>OPEN</b>: joining. At T − 2 min the last call and the track is reserved (no new solo
- *       runs); at T − 1 min solo runs still on it end. At T − 15 s racers are taken to the track, or
- *       the night is called off when fewer than {@code min_racers} joined.</li>
+ *   <li><b>OPEN</b>: joining. At T − 2 min (on a Mountain Run v2, earlier: {@link #reserveMs}) the last
+ *       call and the track is reserved (no new solo runs); at T − 1 min solo runs still on it end, and a
+ *       run started before the hold, even at a young rider's pace, is in by then. At T − 15 s racers are
+ *       taken to the track, or the night is called off when fewer than {@code min_racers} joined.</li>
  *   <li><b>WARMUP</b> (D3, {@code warmup_seconds} &gt; 0): free laps, never timed. Anyone not seated yet
  *       is tried again every second. It ends when the window runs out, when every joined racer who is
  *       online is at the track and tapped Ready, or at once when a restart is minutes away (the
@@ -39,10 +40,29 @@ import java.util.List;
  */
 public final class EventMachine {
 
-    /** The track is reserved and the last call goes out this long before the start. */
+    /**
+     * The track is reserved and the last call goes out this long before the start, on a track whose run is
+     * short (a hand-built track, an algo-2 or -3 boat); a Mountain Run v2's is longer ({@link #reserveMs}).
+     */
     public static final long RESERVE_MS = 2 * 60_000L;
     /** Solo runs still on the track end this long before the start. */
     public static final long SOLO_END_MS = 60_000L;
+    /** The earliest the track is reserved, however long its run: the house's 15 minutes (NightRules' cap). */
+    public static final long MAX_RESERVE_MS = NightRules.MAX_RACE_MINUTES * 60_000L;
+
+    /**
+     * How long before the start the track is reserved (no new solo runs or party races on it) on a track of
+     * model time {@code modelMs} (audit M06, scaled the way red-team F03 scaled the finish window): long enough
+     * that a run started just before it, at 0.45 of model speed (a young rider: 2.22 T_m, so ⌈2.25 T_m⌉), is in
+     * before solo runs end at {@link #SOLO_END_MS}; never under {@link #RESERVE_MS} (what a short run always
+     * had, so a track with no T_m keeps it exactly) nor over {@link #MAX_RESERVE_MS}. 5:30 on a two-minute run.
+     */
+    public static long reserveMs(long modelMs) {
+        if (modelMs <= 0) {
+            return RESERVE_MS;
+        }
+        return Math.min(MAX_RESERVE_MS, Math.max(RESERVE_MS, SOLO_END_MS + Math.ceilDiv(modelMs * 9, 4)));
+    }
     /** Racers are taken to the track this long before the start. */
     public static final long GRID_LEAD_MS = 15_000L;
     /** Racers who couldn't be seated are tried again until this long before Go. */
@@ -123,16 +143,35 @@ public final class EventMachine {
      * A night's timings.
      *
      * @param announceMs the heads-up this long before the start (0 = none)
+     * @param reserveMs  the last call and the track's hold this long before the start ({@link EventMachine#reserveMs})
      */
     public record Timing(long joinAt, long startsAt, long announceMs, int races, int minRacers, long warmupMs,
-                         long finishWindowMs, long maxRaceMs, long breakMs) {
+                         long finishWindowMs, long maxRaceMs, long breakMs, long reserveMs) {
 
-        /** A plan's timings. */
+        /** A night's timings on a track whose run is short: the track held {@link #RESERVE_MS} before the start. */
+        public Timing(long joinAt, long startsAt, long announceMs, int races, int minRacers, long warmupMs,
+                      long finishWindowMs, long maxRaceMs, long breakMs) {
+            this(joinAt, startsAt, announceMs, races, minRacers, warmupMs, finishWindowMs, maxRaceMs, breakMs,
+                    RESERVE_MS);
+        }
+
+        /** A plan's timings on a track whose run is short ({@link #of(EventPlan, int, long)} with no T_m). */
         public static Timing of(EventPlan plan, int announceMinutes) {
+            return of(plan, announceMinutes, 0);
+        }
+
+        /** A plan's timings on a track of model time {@code modelMs} (its hold: {@link EventMachine#reserveMs}). */
+        public static Timing of(EventPlan plan, int announceMinutes, long modelMs) {
             NightRules r = plan.rules();
             return new Timing(plan.joinAt(), plan.startsAt(), announceMinutes * 60_000L, r.races(), r.minRacers(),
                     r.warmupSeconds() * 1000L, r.finishWindowSeconds() * 1000L, r.maxRaceMinutes() * 60_000L,
-                    r.breakSeconds() * 1000L);
+                    r.breakSeconds() * 1000L, EventMachine.reserveMs(modelMs));
+        }
+
+        /** These timings with the start moved ({@code go}: an admin started the night early). */
+        public Timing moved(long joinAt, long startsAt) {
+            return new Timing(joinAt, startsAt, announceMs, races, minRacers, warmupMs, finishWindowMs, maxRaceMs,
+                    breakMs, reserveMs);
         }
     }
 
@@ -222,7 +261,7 @@ public final class EventMachine {
                 }
             }
             case OPEN -> {
-                if (!n.has(LAST_CALL_DONE) && now >= t.startsAt() - RESERVE_MS) {
+                if (!n.has(LAST_CALL_DONE) && now >= t.startsAt() - t.reserveMs()) {
                     out.add(Action.of(Do.LAST_CALL));
                     n = n.with(LAST_CALL_DONE);
                 }

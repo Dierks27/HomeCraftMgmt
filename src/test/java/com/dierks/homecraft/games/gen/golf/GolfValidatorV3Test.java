@@ -297,7 +297,7 @@ class GolfValidatorV3Test {
             assertEquals(List.of(), GolfValidator.problems(as(f.plan(), 3)),
                     f + ": the whole course passes Adventure Golf's full check too, kid tree and rest spots included");
         }
-        Plan fresh = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, 5));
+        Plan fresh = GolfPlanner.v3().plan(GolfKit.input(Slots.TINY_GOLF, 5));
         assertEquals(List.of(), GolfValidator.problems(as(fresh, 3)), "and so does a fresh Tiny Golf");
     }
 

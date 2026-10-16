@@ -19,6 +19,7 @@ import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
 import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
+import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
@@ -264,6 +265,9 @@ public final class DailyCourses implements Game {
         g.generated(engine);
         GenService running = engine;
         GenRegionGuard.register(g, this, running::guardArea, running::wetArea, log());
+        // F09/F12: when what the engine emptied or checked is known to be on disk
+        g.on(this, org.bukkit.event.world.WorldSaveEvent.class, org.bukkit.event.EventPriority.MONITOR, false,
+                e -> running.worldSaved(e.getWorld().getName()));
         g.every(this, 1, 1, running::tick);
         g.every(this, 20, 20, running::check);
         g.later(this, 1, running::worldsReady);
@@ -276,6 +280,31 @@ public final class DailyCourses implements Game {
     @Override
     public void stop() {
         stopEngine();
+    }
+
+    /** ENG03: how long after a join the engine looks (the saved-state recovery's own look is one tick after it). */
+    static final long JOIN_LOOK_TICKS = 3;
+
+    /**
+     * ENG03: a moment after a join (after the saved-state recovery has had its turn, which sends anyone with a row
+     * home), the engine is asked about the player: if they logged out where Fresh Courses has emptied since, with
+     * nothing under them now, it moves them to safety before they fall ({@link GenService#joined}). Not for anyone
+     * flying or watching, or in a game or on the way home from one.
+     */
+    @Override
+    public void onJoin(Player player) {
+        UUID id = player.getUniqueId();
+        games().later(this, JOIN_LOOK_TICKS, () -> {
+            Player p = Bukkit.getPlayer(id);
+            GenService e = engine;
+            if (e == null || p == null || !p.isOnline() || p.isFlying()
+                    || p.getGameMode() == org.bukkit.GameMode.SPECTATOR || !games().sessions().home(p)) {
+                return;
+            }
+            Location l = p.getLocation();
+            e.joined(new Person(id, p.getName(), l.getWorld() == null ? "" : l.getWorld().getName(), l.getX(),
+                    l.getY(), l.getZ(), null, null));
+        });
     }
 
     private void stopEngine() {
@@ -479,6 +508,12 @@ public final class DailyCourses implements Game {
             return games().clock().nowMillis();
         }
 
+        /** ENG-R3-00: the JVM's start, which a plugin or {@code /hcm} reload doesn't move (the clock is the system's). */
+        @Override
+        public long bootedAt() {
+            return java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
+        }
+
         @Override
         public long nanoTime() {
             return System.nanoTime();
@@ -502,6 +537,12 @@ public final class DailyCourses implements Game {
         @Override
         public RestartHold restartHold() {
             return games().restartHold();
+        }
+
+        @Override
+        public boolean raceNightOn() {
+            // a random Ice Boat week is the Winding Road while Race Night is on (MOUNTAIN-V2-SPEC §5.1, F05)
+            return games().settings(RaceNight.SPEC).enabled();
         }
 
         @Override

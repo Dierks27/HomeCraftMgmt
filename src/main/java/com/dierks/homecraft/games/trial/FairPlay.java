@@ -332,6 +332,77 @@ public final class FairPlay {
         return floor - fallDepth;
     }
 
+    /** Mountain Run v2: a boat this far under the lower of a leg's two marks is off the track (§12). */
+    public static final double BOAT_FLOOR_DEPTH = 4;
+
+    /**
+     * Below this height a boat run goes back to its last checkpoint, or {@code NaN} for no such rule
+     * (MOUNTAIN-V2-SPEC §12). On a Mountain Run v2 it is the leg's own floor: {@value #BOAT_FLOOR_DEPTH} under
+     * the lower of the last mark reached (the start before the first checkpoint) and the next target (the
+     * finish after the last checkpoint). A v2 leg holds at most one drop and every mark sits on the ice, so
+     * the ice never goes under the next mark and a boat that left the track is caught within about 4 blocks,
+     * not 70. Never under the course's own fall height. Any other course: its fall height, or none.
+     *
+     * @param lastCheckpoint the last checkpoint reached, 0-based, or -1 for none
+     */
+    public static double boatFloor(Course course, int lastCheckpoint) {
+        double own = course.fallY() == null ? Double.NaN : course.fallY();
+        if (!BoatHype.mountainV2(course) || course.start() == null) {
+            return own;
+        }
+        List<Course.Mark> targets = course.targets();
+        double lastY = lastCheckpoint >= 0 && lastCheckpoint < course.checkpoints().size()
+                ? course.checkpoints().get(lastCheckpoint).y() : course.start().y();
+        int next = lastCheckpoint + 1;
+        double floor = (next >= 0 && next < targets.size() ? Math.min(lastY, targets.get(next).y()) : lastY)
+                - BOAT_FLOOR_DEPTH;
+        return Double.isNaN(own) ? floor : Math.max(floor, own);
+    }
+
+    /**
+     * The fastest leg of a run, in blocks a second (MOUNTAIN-V2-SPEC §12, §14 R1: the admin's test-run readout),
+     * for a run that saw no stall: {@link #topLegSpeed(Course, long, long[], int, List)} with none.
+     */
+    public static double topLegSpeed(Course course, long startNanos, long[] times, int reached) {
+        return topLegSpeed(course, startNanos, times, reached, List.of());
+    }
+
+    /**
+     * The fastest leg of a run, in blocks a second (MOUNTAIN-V2-SPEC §12, §14 R1: the admin's test-run readout):
+     * over every leg reached (the start to the first target, then target to target), the distance from where
+     * the boat entered one sphere to where it entered the next, on the straight line between their middles
+     * ({@code d + rPrev - rCur}; the start is a point), over the time the leg took. A leg whose time overlaps a
+     * server stall isn't counted, as in {@link #tooFast(Course, long, long[], int, List)}: its time is when the
+     * server caught up, so it would read far too fast (audit M01). 0 when no leg was reached or none counts.
+     *
+     * @param startNanos when the run started
+     * @param times      when each target was reached ({@link Progress#times()})
+     * @param reached    how many targets were reached
+     * @param stalls     the stalls seen while the run ran
+     */
+    public static double topLegSpeed(Course course, long startNanos, long[] times, int reached, List<Stall> stalls) {
+        if (course == null || course.start() == null || times == null) {
+            return 0;
+        }
+        List<Course.Mark> targets = course.targets();
+        Point prev = course.start().point();
+        double prevRadius = 0; // the run leaves from the start point itself
+        long prevAt = startNanos;
+        double top = 0;
+        for (int i = 0; i < Math.min(reached, Math.min(times.length, targets.size())); i++) {
+            Course.Mark cur = targets.get(i);
+            long nanos = times[i] - prevAt;
+            if (nanos > 0 && !stalled(stalls, prevAt, times[i])) {
+                double d = Math.max(0, prev.distance(cur.center()) + prevRadius - cur.radius());
+                top = Math.max(top, d / (nanos / 1e9));
+            }
+            prev = cur.center();
+            prevRadius = cur.radius();
+            prevAt = times[i];
+        }
+        return top;
+    }
+
     /**
      * Whether {@code p} is somewhere a landing is fine: inside any checkpoint, the finish, or near
      * the start. An elytra run that lands anywhere else goes back to its last checkpoint.

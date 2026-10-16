@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.admin;
 
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.Course;
 
 import java.util.List;
@@ -28,6 +29,14 @@ public interface GenOps {
 
     /** Build into the idle half without flipping. */
     void preview(String slot, String seed, Consumer<String> report);
+
+    /**
+     * {@link #preview(String, String, Consumer)} of a Mountain Run v2 style ({@code style:road|slalom}, Ice Boat
+     * only; {@code null}: the style a build would pick). A typed seed is used as given.
+     */
+    default void preview(String slot, String seed, BoatStyle style, Consumer<String> report) {
+        preview(slot, seed, report);
+    }
 
     /** The preview becomes the current edition's layout. */
     void promote(String slot, boolean confirm, Consumer<String> report);
@@ -83,6 +92,16 @@ public interface GenOps {
 
     /** Empty both halves and switch the slot off (decommission, or before moving it). */
     void clear(String slot, Consumer<String> report);
+
+    /**
+     * The old areas a course (or Classics slot) left behind when its area moved or grew: list them, and with
+     * {@code confirm} empty them (RETIRE: only Fresh Courses' own blocks, water first; anything else stays and
+     * is listed). Each is emptied by itself when this version changed the course's size; this is the fallback,
+     * and the way to empty one an owner's own move left.
+     */
+    default void tidy(String slot, boolean confirm, Consumer<String> report) {
+        report.accept("&cThat isn't available.");
+    }
 
     // ---- picking a good course (WP-ADM) --------------------------------------------------------------
 
@@ -147,6 +166,14 @@ public interface GenOps {
         report.accept("&cThat isn't available.");
     }
 
+    /**
+     * {@link #previewNext(String, String, Consumer)} of a Mountain Run v2 style ({@code style:road|slalom}, Ice
+     * Boat only; {@code null}: the style a build would pick). A typed seed is used as given.
+     */
+    default void previewNext(String slot, String seed, BoatStyle style, Consumer<String> report) {
+        previewNext(slot, seed, report);
+    }
+
     /** The preview's seed becomes the course of exactly the next set (a one-set pin). */
     default void choose(String slot, boolean confirm, Consumer<String> report) {
         report.accept("&cThat isn't available.");
@@ -186,6 +213,14 @@ public interface GenOps {
     /** One past course's details, with its top 5. */
     default List<String> historyOf(String slot, GenArgs.Which which) {
         return List.of("&cThe archive isn't available.");
+    }
+
+    /**
+     * {@link #historyOf(String, GenArgs.Which)} told to {@code report}: the engine may read a big stored plan
+     * (a Mountain Run v2's) off the main thread and answer a tick or so later (MOUNTAIN-V2-SPEC F11).
+     */
+    default void historyOf(String slot, GenArgs.Which which, Consumer<String> report) {
+        historyOf(slot, which).forEach(report);
     }
 
     /**

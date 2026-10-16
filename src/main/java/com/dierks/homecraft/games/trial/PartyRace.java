@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.event.NightRules;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,8 +22,9 @@ import java.util.function.LongSupplier;
  * optional shared warm-up ({@link State#WARMUP}: free laps from the course's start, "Ready" to be
  * done early), then everyone to the grid and one go tick for all ({@link State#GRID}), then
  * {@link State#RACING} until everyone is in (finished, left or voided), or
- * {@value #FINISH_WINDOW_SECONDS} seconds after the first finisher, or
- * {@value #MAX_RACE_MINUTES} minutes after Go; then {@link State#DONE} and the group's results.
+ * {@value #FINISH_WINDOW_SECONDS} seconds after the first finisher (on a Mountain Run v2, at least 1.25 of its
+ * model time: {@link #finishWindowSeconds}, red-team F03), or {@value #MAX_RACE_MINUTES} minutes after Go;
+ * then {@link State#DONE} and the group's results.
  *
  * <p><b>Fair and free.</b> Everyone starts on the same tick with the same clock (race mode's shared
  * Go). Positions are {@link RaceStandings}'. Each racer's finish is ALSO a normal counted run on the
@@ -63,8 +65,8 @@ public final class PartyRace implements RaceLink {
     static final long GRID_SETTLE = 40;
     /** From the grid to Go: 5 seconds, the last 3 counted down. */
     static final long GO_DELAY = 100;
-    /** The race ends this long after the first finisher. */
-    static final int FINISH_WINDOW_SECONDS = 120;
+    /** The race ends this long after the first finisher (a Mountain Run v2's may be longer). */
+    static final int FINISH_WINDOW_SECONDS = NightRules.PARTY_WINDOW_SECONDS;
     /** ...or this long after Go. */
     static final int MAX_RACE_MINUTES = 10;
 
@@ -111,6 +113,8 @@ public final class PartyRace implements RaceLink {
     private final Consumer<String> say;
     private final Map<UUID, Entry> entries = new LinkedHashMap<>();
     private final int warmupSeconds;
+    /** This race's finish window ({@link #finishWindowSeconds} of its course). */
+    private final int windowSeconds;
     private State state = State.SEATING;
     private long goTick = Long.MAX_VALUE;
     private long warmupUntil;
@@ -137,10 +141,20 @@ public final class PartyRace implements RaceLink {
             entries.putIfAbsent(r.id(), new Entry(r.id(), r.name(), i++));
         }
         this.warmupSeconds = Math.max(0, warmupSeconds);
+        this.windowSeconds = finishWindowSeconds(base);
         if (this.warmupSeconds > 0) {
             // counted from after the seating, so the last racer in gets it all too
             warmupUntil = ticks.getAsLong() + seatingTicks(entries.size()) + this.warmupSeconds * 20L;
         }
+    }
+
+    /**
+     * The finish window of a party race on {@code c}, in seconds: {@value #FINISH_WINDOW_SECONDS}, or on a
+     * Mountain Run v2 max({@value #FINISH_WINDOW_SECONDS}, ⌈1.25 T_m⌉) ({@link NightRules#partyWindow}), so a
+     * slow young rider still finishes a 2-3 minute run behind a fast one.
+     */
+    static int finishWindowSeconds(Course c) {
+        return NightRules.partyWindow(BoatHype.modelMs(c));
     }
 
     /** How long seating {@code n} racers two a tick takes, with a little room. */
@@ -259,7 +273,7 @@ public final class PartyRace implements RaceLink {
                 }
             }
             case RACING -> {
-                boolean window = firstFinish >= 0 && now >= firstFinish + FINISH_WINDOW_SECONDS * 20L;
+                boolean window = firstFinish >= 0 && now >= firstFinish + windowSeconds * 20L;
                 if (in() == 0 || window || now >= goTick + MAX_RACE_MINUTES * 60L * 20L) {
                     end();
                     return Step.END;

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.36.0-course-variety'
+version = '0.37.0-mountain-golf'
 description = 'HomeCraft Management — Paper plugin (market with a live, bounded price mood and Market News, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade, Sound Mufflers)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also

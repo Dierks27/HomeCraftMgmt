@@ -62,7 +62,7 @@ class CrossFeatureJourneyFreshAdminTest {
     @BeforeEach
     void setUp() throws Exception {
         j = new JourneyBench(T0, List.of(TimeTrials.SPEC, WeeklyCup.SPEC), "trials", TimeTrialsSettings.defaults(),
-                "cup", CupSettings.defaults());
+                "cup", new CupSettings(true, 5, 10) /* 0.36's Cup: 5 in, 10 on top */);
         ava = j.player("Ava", "SURVIVAL", "red");
         ben = j.player("Ben", "SURVIVAL", "blue");
         admin = j.player("Admin", "SURVIVAL", "red");

@@ -41,8 +41,13 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
     /** Radii are kept in this range whatever the builder types. */
     public static final double MIN_RADIUS = 0.5;
     public static final double MAX_RADIUS = 16;
-    /** The most checkpoints a course may have. */
-    public static final int MAX_CHECKPOINTS = 64;
+    /**
+     * The most checkpoints a course may have: 128 since Mountain Run v2 (MOUNTAIN-V2-SPEC §3.5, §12), whose
+     * 2,000-4,400-block runs need a checkpoint at most 60 blocks apart. The frozen boat validators of older
+     * layouts ({@code LoopValidatorV2}, {@code DownhillValidator}) keep their own literal 64, so what they
+     * proved stays proven; CourseAdmin, Laps, RaceTrack and PlanCheck read this.
+     */
+    public static final int MAX_CHECKPOINTS = 128;
 
     /** A place and the way to face there: a course's start. */
     public record Spot(double x, double y, double z, float yaw, float pitch) {

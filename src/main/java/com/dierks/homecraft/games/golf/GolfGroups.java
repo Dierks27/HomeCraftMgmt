@@ -27,7 +27,8 @@ import java.util.UUID;
  * player is still listed in a group: they leave it first, so it never waits for them.
  *
  * <p><b>Nobody is waited for forever.</b> The first ball of a hole in starts the hole clock
- * ({@value GolfGroup#HOLE_CLOCK_SECONDS} seconds, on the action bar of anyone still out and on the
+ * ({@value GolfGroup#HOLE_CLOCK_SECONDS} seconds, longer on a long Golf v4 hole:
+ * {@link GolfGroup#clocks}; on the action bar of anyone still out and on the
  * shared card); when it runs out, every ball still out is picked up at the course's pick-up score
  * (par + {@code max_over_par}), exactly as if the strokes had reached it.
  */
@@ -103,7 +104,8 @@ final class GolfGroups {
      * @return whether anyone went (false: the group is over already and its party open again)
      */
     boolean start(long partyId, GolfCourse course, Map<UUID, String> players) {
-        GolfGroup g = new GolfGroup(partyId, course.id(), course.name(), course.pars(), players);
+        GolfGroup g = new GolfGroup(partyId, course.id(), course.name(), course.pars(), GolfGroup.clocks(course),
+                players);
         for (UUID id : players.keySet()) {
             GolfGroup old = groups.get(id);
             if (old != null && old != g) {

@@ -875,17 +875,18 @@ final class GolfValidatorV3 {
      * wading rules; scenery (every block outside every hole's bounds) stands 2 columns clear of every
      * hole, inside a plot, never above T + 6; and every canopy is 2 columns inside the half.
      */
-    private static List<String> outsideProblems(Plan plan, List<BlockOp> ops, PlanBlocks grid, List<Box> areas) {
+    static List<String> outsideProblems(Plan plan, List<BlockOp> ops, PlanBlocks grid, List<Box> areas) {
         List<String> out = new ArrayList<>();
         Box half = plan.half();
+        PlotGrid geometry = PlotGrid.of(plan.slot(), plan.algo()); // the plan's own plots (GOLF-V4-SPEC §4.1)
         List<Box> plots = new ArrayList<>();
         List<Integer> turfs = new ArrayList<>();
         for (int i = 0; i < areas.size(); i++) {
-            int[] p = GolfPlanner.plot(half, i);
+            int[] p = geometry.plot(half, i);
             int turf = areas.get(i).minY() + LaneMap.BASE_ABOVE_FLOOR;
             turfs.add(turf);
-            plots.add(new Box(p[0], turf - 1, p[1], p[0] + HoleTemplate.PLOT_X - 1, turf - 1,
-                    p[1] + HoleTemplate.PLOT_Z - 1));
+            plots.add(new Box(p[0], turf - 1, p[1], p[0] + geometry.plotX() - 1, turf - 1,
+                    p[1] + geometry.plotZ() - 1));
         }
         for (String p : Pools.problems(plan.palette(), ops, plots, Pools.GOLF_DEPTH)) {
             out.add("ponds: " + p);

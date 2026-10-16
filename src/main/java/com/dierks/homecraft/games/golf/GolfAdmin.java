@@ -244,14 +244,35 @@ final class GolfAdmin implements GameAdmin {
                     + (gen.reroll() > 0 ? " (reroll " + gen.reroll() + ")" : "") + ", half " + gen.half()
                     + (golf.games().generated().live(c.id(), gen) ? ", &aopen" : ", &cclosed right now")
                     + " &7- &e/hcm games gen status");
-        } else if (c.adventure()) {
-            tell(sender, "&dKept from Adventure Golf: &7its smooth sandstone plays as sand, and a ball that stops"
-                    + " over water falls in (+1, back to its spot), as when it was made.");
+        } else {
+            String kept = keptLine(c);
+            if (kept != null) {
+                tell(sender, kept);
+            }
         }
         List<UUID> playing = golf.playing().getOrDefault(c.id(), List.of());
         if (!playing.isEmpty()) {
             tell(sender, "&7Playing it now: " + playing.size());
         }
+    }
+
+    /**
+     * What {@code info} says about a course kept from a Fresh Courses plan that plays Adventure Golf's rules
+     * ({@link GolfCourse#adventure}), named by the golf planner version it was kept from
+     * ({@link GolfCourse#keptAlgo}): Golf v4 (version {@value GolfGroup#FIRST_LONG_CLOCK_ALGO} on), whose group
+     * hole clock also grows with par, or Adventure Golf (version 3, and a course kept before the version was
+     * recorded, which only 0.36's Adventure Golf could be). {@code null} for any other course.
+     */
+    static String keptLine(GolfCourse c) {
+        if (c == null || c.generated() || !c.adventure()) {
+            return null;
+        }
+        if (c.keptAlgo() >= GolfGroup.FIRST_LONG_CLOCK_ALGO) {
+            return "&dKept from Golf v4: &7its smooth sandstone plays as sand, a ball that stops over water falls in"
+                    + " (+1, back to its spot), and a group's hole clock grows with par, as when it was made.";
+        }
+        return "&dKept from Adventure Golf: &7its smooth sandstone plays as sand, and a ball that stops"
+                + " over water falls in (+1, back to its spot), as when it was made.";
     }
 
     private void tp(CommandSender sender, GolfCourse c, String[] args) {

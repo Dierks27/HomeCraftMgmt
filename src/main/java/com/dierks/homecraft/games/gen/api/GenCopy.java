@@ -195,6 +195,16 @@ public final class GenCopy {
         return List.of("SAND PIT!", "Stay on the ice", "to go fast!");
     }
 
+    /** Before a bend with a snow run-off on its outside (Mountain Run v2, algo 5). */
+    public static List<String> boatSnowyBend() {
+        return List.of("SNOWY BEND", "Snow is slow,", "ice is fast!");
+    }
+
+    /** Before a snow drift with its two ice ways round (Mountain Run v2, algo 5). */
+    public static List<String> boatSnowDrift() {
+        return List.of("SNOW DRIFT!", "Stay on the ice", "to go fast!");
+    }
+
     /** Before a split round a tree island. */
     public static List<String> boatSplit() {
         return List.of("PICK A PATH!", "Left or right?");
@@ -740,7 +750,8 @@ public final class GenCopy {
     public static List<List<String>> everySign() {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
                 parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
-                boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
+                boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSnowyBend(),
+                boatSnowDrift(), boatSplit(),
                 boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
                 boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
                 boatChicane(true), boatChicane(false), boatCliffs(2, true), boatCliffs(3, true),

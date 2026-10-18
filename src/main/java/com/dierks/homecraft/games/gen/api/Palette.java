@@ -121,9 +121,10 @@ public final class Palette {
     // ---- Mountain Run v2 (MOUNTAIN-V2-SPEC §8): the mountain's rock and snow, its gate fences ------
 
     /**
-     * Snow that never melts or falls: the full block, on tops above the snowline. Never
-     * {@code powder_snow} (it traps players) and never the thin {@code snow} layer (it melts and
-     * breaks).
+     * Snow that never melts or falls: the full block, on tops above the snowline, and from boat planner
+     * algo 5 (0.37.1) a Mountain Run's slow ground (its run-offs, snow drifts and paddock; as slow as
+     * {@link #SAND}). Never {@code powder_snow} (it traps players) and never the thin {@code snow} layer
+     * (it melts and breaks).
      */
     public static final String SNOW = "minecraft:snow_block";
     /** Plain stone: cliff faces, outcrops, the summit, a tunnel's roof. */

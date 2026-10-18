@@ -303,16 +303,18 @@ class MountainPlannerTest {
 
     @Test
     void aTightBendWithRunOffSandHasASandyBendSign() {
-        // audit MTN-R3-02: v3 signed every run-off bend; v2 signed only hairpins and chicanes
+        // audit MTN-R3-02: v3 signed every run-off bend; v2 signed only hairpins and chicanes. The wide road's
+        // run-offs are snow, and its sign is SNOWY BEND (algo 4's SANDY BEND)
         int bends = 0;
         for (String tier : List.of("easy", "medium", "hard")) {
             for (long seed : ROADS) {
                 MountainPlanner.Made m = made(HALF_A, seed, tier);
                 Skeleton sk = m.cand.sk();
                 String name = "road " + tier + " seed " + seed;
+                List<String> bendSign = m.tier.wide() ? GenCopy.boatSnowyBend() : GenCopy.boatSandyBend();
                 List<Double> sandy = new ArrayList<>();
                 for (SignText t : m.finished().signs()) {
-                    if (t.lines().equals(GenCopy.boatSandyBend())) {
+                    if (t.lines().equals(bendSign)) {
                         sandy.add(along(m, t));
                     }
                 }
@@ -329,11 +331,12 @@ class MountainPlannerTest {
                 }
                 for (double w : want) {
                     assertTrue(sandy.stream().anyMatch(u -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
-                            name + ": a SANDY BEND sign before the tight bend at " + Math.round(w));
+                            name + ": a " + bendSign.get(0) + " sign before the tight bend at " + Math.round(w));
                 }
                 for (double u : sandy) {
                     assertTrue(want.stream().anyMatch(w -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
-                            name + ": the SANDY BEND sign at " + Math.round(u) + " stands before a tight bend");
+                            name + ": the " + bendSign.get(0) + " sign at " + Math.round(u)
+                                    + " stands before a tight bend");
                 }
                 bends += want.size();
             }

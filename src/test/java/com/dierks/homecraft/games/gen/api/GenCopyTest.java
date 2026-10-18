@@ -44,6 +44,10 @@ class GenCopyTest {
         assertEquals(List.of("FINAL DROP!", "Then the gold", "finish line!"), GenCopy.boatFinalDrop(), "the Final Drop");
         assertEquals(List.of("SANDY BEND", "Sand is slow,", "ice is fast!"), GenCopy.boatSandyBend(), "a sandy bend");
         assertEquals(List.of("SAND PIT!", "Stay on the ice", "to go fast!"), GenCopy.boatSandPit(), "the sand pit");
+        // the wide road's slow ground is snow (MOUNTAIN-V21-SPEC D9, §2.6)
+        assertEquals(List.of("SNOWY BEND", "Snow is slow,", "ice is fast!"), GenCopy.boatSnowyBend(), "a snowy bend");
+        assertEquals(List.of("SNOW DRIFT!", "Stay on the ice", "to go fast!"), GenCopy.boatSnowDrift(),
+                "a snow drift");
         assertEquals(List.of("PICK A PATH!", "Left or right?"), GenCopy.boatSplit(), "a split");
         assertEquals(List.of("ICE CAVE", "Lights on!"), GenCopy.boatIceCave(), "the Ice Cave");
         assertEquals(List.of("FOREST", "Weave through", "the trees!"), GenCopy.boatForest(), "the forest");
@@ -72,6 +76,7 @@ class GenCopyTest {
         assertNull(GenCopy.golfTeeFeature(List.of("HOLE 1", "Par 2", "Mind the pond!"), 1, 2), "nor a line short");
         assertNull(GenCopy.golfTeeFeature(null, 1, 2), "nor nothing");
         for (List<String> sign : List.of(GenCopy.boatRun(), GenCopy.boatFinalDrop(), GenCopy.boatSandPit(),
+                GenCopy.boatSnowyBend(), GenCopy.boatSnowDrift(),
                 GenCopy.golfTee(18, 6, GenCopy.TeeFeature.TERRACES))) {
             assertTrue(GenCopy.everySign().contains(sign), "every new sign is in the copy test's list: " + sign);
         }

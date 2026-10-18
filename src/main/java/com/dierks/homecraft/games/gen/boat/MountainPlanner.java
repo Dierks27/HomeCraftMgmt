@@ -677,8 +677,9 @@ final class MountainPlanner {
 
     /**
      * The signs (§7.1): the start's, before every lip (the Final Drop's its own, a staircase's THE CLIFFS),
-     * piece, hairpin, chicane, bend with run-off sand and gate set, and HALFWAY by the checkpoint nearest half
-     * way down ({@link #halfwaySign}).
+     * piece, hairpin, chicane, bend with a run-off and gate set, and HALFWAY by the checkpoint nearest half
+     * way down ({@link #halfwaySign}). The wide road's slow ground is snow, and its signs say so (SNOW DRIFT!,
+     * SNOWY BEND); algo 4's say sand.
      */
     static void signs(RasterV4 t, List<RasterV4.Spot> cps, PiecesV4 pieces) {
         Skeleton sk = t.sk;
@@ -708,7 +709,7 @@ final class MountainPlanner {
         }
         for (PiecesV4.Piece p : pieces.list) {
             List<String> lines = switch (p.kind) {
-                case SAND_PIT -> GenCopy.boatSandPit();
+                case SAND_PIT -> sk.tier.wide() ? GenCopy.boatSnowDrift() : GenCopy.boatSandPit();
                 case SPLIT -> GenCopy.boatSplit();
                 case CAVE -> GenCopy.boatIceCave();
                 case TUNNEL -> GenCopy.boatTunnel();
@@ -739,7 +740,8 @@ final class MountainPlanner {
             } else if (sandy && e.s0 - tight > RasterV4.SIGN_BEFORE && e.s0 > sk.start && e.s0 < sk.finish) {
                 // any other bend with run-off sand (an elbow, a bend: R under 40), as v3 signed them (audit
                 // MTN-R3-02); a second one straight after the first is the same turn
-                t.sign(e.s0 - RasterV4.SIGN_BEFORE, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatSandyBend(), used);
+                t.sign(e.s0 - RasterV4.SIGN_BEFORE, e.s0 - RasterV4.SIGN_NEAR,
+                        sk.tier.wide() ? GenCopy.boatSnowyBend() : GenCopy.boatSandyBend(), used);
             }
             tight = sandy ? e.s1() : tight;
         }

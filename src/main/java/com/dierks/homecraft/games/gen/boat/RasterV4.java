@@ -28,18 +28,28 @@ import java.util.List;
  * where it looks and the checkpoints kept where it allows: flat, ice round the reset, the open sky over
  * them, 3 from every lip and zone, no other ring within reach, a cut of the lane ({@link #cuts}); laid by
  * a fewest-checkpoints chain ({@link #chain}) whose legs keep the rules (60 across, one drop, 60 along with
- * none, a reset facing within 60 degrees of the lane) and whose last leg holds the Final Drop.
+ * none, a reset facing within 60 degrees of the lane) and whose last leg holds the Final Drop. On the wide
+ * road ({@link MountainTier#wide}, algo 5) a leg across a Big Drop may be 66 (MOUNTAIN-V21-SPEC D2), and the
+ * lane keeps the tier's width from the pit to the finish, with no neck at any drop ({@link #narrowAt}).
  *
  * <p><b>Walls</b> stand in every column beside the track from the lowest ice beside it to 2 over the
  * highest (stripped spruce, glass on top), raised to 2 over the lip round every flight zone; a slalom's
  * gate fences are red or blue concrete with a lantern pole at the opening. Risers fill under every
- * 2-block edge. Pure: no Bukkit.
+ * 2-block edge.
+ *
+ * <p><b>The wide road's look</b> (algo 5; algo 4 keeps 0.37.0's blocks). The slow ground (the run-offs, the
+ * snow drifts, the paddock) is laid as snow ({@code Palette.SNOW}, D9). The wall arrows point the way on the
+ * faces a rider sees ({@link #wallArrow}: a glazed terracotta shows its arrow flat only on its front and back
+ * faces), each on a wall block whose one open face onto the lane is such a face, with a wood cap over it (D7).
+ * A forest's trees have round crowns, on its trunks and on wall trees in both walls, and a split's island
+ * tree is a ball (D10). Pure: no Bukkit.
  */
 final class RasterV4 {
 
     static final int NONE = DeckGraph.NONE;
     static final byte PACKED = 1;
     static final byte BLUE = 2;
+    /** The slow ground (run-offs, pits or drifts, the paddock): laid as snow on the wide road, algo 4's sandstone. */
     static final byte SAND = 3;
     /** The finish ice stands this far over the half's floor (§4.1). */
     static final int FINISH_LY = 14;
@@ -49,6 +59,8 @@ final class RasterV4 {
     static final double SPACING = 45;
     /** A leg's bounds with a margin: across, and along with no drop. */
     static final double LEG_MAX = DownhillValidator.MAX_LEG - 0.01; // the marks are kept on a 1/4096 grid
+    /** The wide road's bound across a leg holding a Big Drop (D2), with the same margin. */
+    static final double BIG_LEG_MAX = MountainValidator.MAX_LEG_BIG_DROP - 0.01;
     static final double FLAT_LEG = 58.5;
     /** A reset faces within this of the lane (§7.3). */
     static final double FACING = 60;
@@ -56,6 +68,8 @@ final class RasterV4 {
     static final double ARC_SPOT = 1.5;
     /** Arrows in the walls this often (§7.1), and signs this far before what they announce. */
     static final double ARROW_EVERY = 40;
+    /** The wide road's clean arrow rule tries the spot and up to this far either way along, a block at a time. */
+    static final int ARROW_SHIFT = 3;
     static final int SIGN_BEFORE = 10;
     static final int SIGN_NEAR = 3;
     static final int SIGN_APART = 6;
@@ -370,6 +384,55 @@ final class RasterV4 {
         return m;
     }
 
+    /**
+     * The width invariant (MOUNTAIN-V21-SPEC §5.3), for tests: every block s along from {@link Frame#PIT} to the
+     * finish, and every 2-block lip, where it fails. At s, the raster row or column through the centreline
+     * point's cell, whichever lies nearer the lane's normal, holds a run of at least the tier's width of cells
+     * that are track (snow too) or an obstacle (a trunk, an island, a gate fence), the cell itself among them;
+     * at a 2-block lip that run is all track. It reads {@code h}, {@code obstacle} and the centreline only.
+     */
+    List<Double> narrowAt() {
+        List<Double> out = new ArrayList<>();
+        for (double s = Frame.PIT; s <= sk.finish; s += 1) {
+            if (!wideAt(s, false)) {
+                out.add(s);
+            }
+        }
+        for (DropPlan.Drop d : dp.drops) {
+            if (d.drop() >= 2 && !wideAt(d.s(), true)) {
+                out.add(d.s());
+            }
+        }
+        return out;
+    }
+
+    /** Whether the lane across {@code s} is the tier's width ({@link #narrowAt}), with no obstacle if {@code clear}. */
+    private boolean wideAt(double s, boolean clear) {
+        double[] p = sk.line.at(s);
+        double hd = sk.line.heading(s);
+        boolean alongX = Math.abs(Math.sin(hd)) >= Math.abs(Math.cos(hd)); // the normal (-sin, cos) is nearer x
+        int dx = alongX ? 1 : 0;
+        int dz = alongX ? 0 : 1;
+        int cx = (int) Math.floor(p[0]);
+        int cz = (int) Math.floor(p[1]);
+        if (!laneOrObstacle(cx, cz)) {
+            return false;
+        }
+        int run = 1;
+        boolean blocked = obstacle[idx(cx, cz)];
+        for (int dir = -1; dir <= 1; dir += 2) {
+            for (int k = 1; laneOrObstacle(cx + dir * k * dx, cz + dir * k * dz); k++) {
+                run++;
+                blocked |= obstacle[idx(cx + dir * k * dx, cz + dir * k * dz)];
+            }
+        }
+        return run >= tier.width && !(clear && blocked);
+    }
+
+    private boolean laneOrObstacle(int x, int z) {
+        return inside(x, z) && (h[idx(x, z)] != NONE || obstacle[idx(x, z)]);
+    }
+
     // ---- the proof's view: lips and zones -----------------------------------------------------------------
 
     private void lips() {
@@ -474,7 +537,10 @@ final class RasterV4 {
     record Spot(double s, double x, double z, double r, int ice, double lx, double lz, boolean gate) {
     }
 
-    /** A checkpoint spans the widest of the lane this far either side of it (a neck's taper). */
+    /**
+     * A checkpoint spans the widest of the lane this far either side of it (algo 4: a neck's taper; the wide road
+     * is one width from the pit on, so there it is that width).
+     */
     static final double SPOT_LOOK = 8;
 
     /** The radius a checkpoint {@code s} along needs to span the lane (a gate opening's aside). */
@@ -824,7 +890,8 @@ final class RasterV4 {
 
     /**
      * The checkpoints from the start to the finish through {@code spots}: legs at most {@value #LEG_MAX}
-     * across with at most one drop each, at most {@value #FLAT_LEG} along with none, every reset facing the
+     * across ({@link #legMax}: on the wide road {@value #BIG_LEG_MAX} across a Big Drop) with at most one drop
+     * each, at most {@value #FLAT_LEG} along with none, every reset facing the
      * next target within {@value #FACING} degrees of the lane, the finish's own leg holding the Final Drop;
      * the fewest checkpoints that keep a checkpoint about every {@value #SPACING} along. {@code null} when
      * no chain keeps the rules.
@@ -885,9 +952,17 @@ final class RasterV4 {
     private long missed(Spot a, Spot b) {
         double along = b.s() - a.s();
         if (dp.lipsBetween(a.s(), b.s()) > 0) {
-            along -= LEG_MAX;
+            along -= legMax(a.s(), b.s());
         }
         return along <= SPACING ? 0 : (long) Math.ceil(along / SPACING) - 1;
+    }
+
+    /**
+     * The most a leg from {@code a} to {@code b} along may be across: {@value #BIG_LEG_MAX} on the wide road when a
+     * 2-block lip lies between (D2, the proof's {@code MAX_LEG_BIG_DROP} less the margin), else {@value #LEG_MAX}.
+     */
+    double legMax(double a, double b) {
+        return tier.wide() && dp.bigBetween(a, b) ? BIG_LEG_MAX : LEG_MAX;
     }
 
     /** Whether leg a-b keeps the rules (a the start when {@code fromStart}, b the finish when {@code toFinish}). */
@@ -896,7 +971,7 @@ final class RasterV4 {
             return false;
         }
         double across = Math.hypot(b.x() - a.x(), b.z() - a.z());
-        if (across > LEG_MAX) {
+        if (across > LEG_MAX && across > legMax(a.s(), b.s())) { // the cheap bound first: legMax is never less
             return false;
         }
         if (fromStart) {
@@ -935,9 +1010,10 @@ final class RasterV4 {
 
     // ---- the blocks ----------------------------------------------------------------------------------------
 
-    /** Start the blocks: the drive cells. */
+    /** Start the blocks: the drive cells, the slow ground laid as snow on the wide road (D9; algo 4 sandstone). */
     void blocks() {
         vox = new Voxels(sx, sy, sz, y0);
+        String slow = tier.wide() ? Palette.SNOW : Palette.SAND;
         for (int x = 0; x < sx; x++) {
             row(x);
             for (int z = 0; z < sz; z++) {
@@ -945,7 +1021,7 @@ final class RasterV4 {
                 if (h[i] == NONE) {
                     continue;
                 }
-                vox.put(x, h[i], z, mat[i] == SAND ? Palette.SAND : mat[i] == BLUE ? Palette.TRACK_FAST : Palette.TRACK);
+                vox.put(x, h[i], z, mat[i] == SAND ? slow : mat[i] == BLUE ? Palette.TRACK_FAST : Palette.TRACK);
             }
         }
     }
@@ -954,9 +1030,13 @@ final class RasterV4 {
      * Every column beside the track: solid from the lowest ice beside it to 2 over the highest, raised to 2
      * over the lip round flight zones; stripped spruce to the ice + 1, glass on top (and glass on the
      * stand's side of the finish straight, so watchers see the finish); gate fences in their colour with a
-     * lantern pole; islands with a spruce rim, trunks of logs. Risers under every 2-block edge.
+     * lantern pole; islands with a spruce rim, trunks of logs, and on the wide road a forest's wall trees
+     * ({@link #planWallTrees}), logs in place of spruce and glass. Risers under every 2-block edge.
      */
     void walls() {
+        if (tier.wide()) {
+            planWallTrees();
+        }
         for (int x = 0; x < sx; x++) {
             row(x);
             for (int z = 0; z < sz; z++) {
@@ -995,8 +1075,15 @@ final class RasterV4 {
                 }
                 PiecesV4.Piece p = near[i] && obstacle[i] ? pieces.at(sAt[i]) : null;
                 if (p != null && p.kind == PiecesV4.Kind.FOREST) {
-                    String log = Palette.log(Palette.WOODS.get(Math.floorMod((int) Math.floor(p.s1), 3)));
-                    for (int y = lo; y <= Math.max(need, hi + TRUNK_TOP); y++) {
+                    String log = Palette.log(forestWood(p));
+                    for (int y = lo; y <= Math.max(need, hi + (tier.wide() ? TRUNK_TOP : TRUNK_TOP_V4)); y++) {
+                        vox.put(x, y, z, log);
+                    }
+                    continue;
+                }
+                if (wallTree != null && wallTree[i] != 0) {
+                    String log = Palette.log(Palette.WOODS.get(wallTree[i] - 1));
+                    for (int y = lo; y <= Math.max(need, hi + WALL_TRUNK_TOP); y++) {
                         vox.put(x, y, z, log);
                     }
                     continue;
@@ -1027,14 +1114,75 @@ final class RasterV4 {
         }
     }
 
-    /** A trunk's logs reach this far over the ice (its canopy 5 and 6 up). */
-    static final int TRUNK_TOP = 6;
+    /** A forest trunk's logs reach this far over the ice, inside its crown (the wide road; was 6, algo 4's). */
+    static final int TRUNK_TOP = 8;
+    /** Algo 4's forest trunk: its logs to here, flush with its canopy 5 and 6 up. */
+    static final int TRUNK_TOP_V4 = 6;
+    /** A wall tree's logs, and the split's island tree's (the wide road; algo 4's island tree stops at ice + 5). */
+    static final int WALL_TRUNK_TOP = 7;
+    static final int ISLAND_TRUNK_TOP = 7;
+    /**
+     * Crown radii by height over the forest's ice (the wide road, D10), a layer a block: the trunk tree's from
+     * {@link #TRUNK_CROWN_FROM} up, the wall tree's from {@link #WALL_CROWN_FROM}, the island's from
+     * {@link #ISLAND_CROWN_FROM}.
+     */
+    static final double[] TRUNK_CROWN = {5.0, 6.0, 6.5, 6.5, 5.5, 4.0, 2.0};
+    static final int TRUNK_CROWN_FROM = 5;
+    static final double[] WALL_CROWN = {3.0, 4.5, 5.5, 5.5, 4.5, 3.0, 1.5};
+    static final int WALL_CROWN_FROM = 4;
+    static final double[] ISLAND_CROWN = {1.5, 2.3, 2.3, 1.5, 0.0};
+    static final int ISLAND_CROWN_FROM = 5;
+    /** Wall trees stand every this along a forest, from a1 - WALL_TREE_EVERY / 2 to a2 + WALL_TREE_EVERY / 2. */
+    static final double WALL_TREE_EVERY = 6;
     static final String GATE_LEFT = Palette.GATE_LEFT;
     static final String GATE_RIGHT = Palette.GATE_RIGHT;
 
     /** Whether wall column (x, z) is on the stand's side of the finish straight, in front of it: glass, for the view. */
     boolean standSide(int x, int z) {
         return Math.abs(x - standX) <= 4 && z > standZ - 40 && z < standZ - RaceStand.SIZE / 2;
+    }
+
+    /** A forest's wood: oak, birch or cherry by where it starts. */
+    static String forestWood(PiecesV4.Piece p) {
+        return Palette.WOODS.get(Math.floorMod((int) Math.floor(p.s1), 3));
+    }
+
+    /** The wide road's wall trees by column: the index of its wood in {@code Palette.WOODS} + 1, 0 for none. */
+    byte[] wallTree;
+
+    /** Lay out the wall trees' columns before {@link #walls} builds them: every forest's {@link #wallTreesOf}. */
+    void planWallTrees() {
+        wallTree = new byte[sx * sz];
+        for (PiecesV4.Piece p : pieces.list) {
+            if (p.kind != PiecesV4.Kind.FOREST) {
+                continue;
+            }
+            byte wood = (byte) (Palette.WOODS.indexOf(forestWood(p)) + 1);
+            for (int[] w : wallTreesOf(p)) {
+                wallTree[idx(w[0], w[1])] = wood;
+            }
+        }
+    }
+
+    /**
+     * Forest {@code p}'s wall trees (the wide road, D10): in both walls ({@link #wallAt}) every
+     * {@value #WALL_TREE_EVERY} from half that before its first trunk row to half that past its last, so midway
+     * between the rows; never in a gate fence.
+     */
+    List<int[]> wallTreesOf(PiecesV4.Piece p) {
+        List<int[]> out = new ArrayList<>();
+        for (int k = 0; ; k++) {
+            double s = p.a1 - WALL_TREE_EVERY / 2 + k * WALL_TREE_EVERY;
+            if (s > p.a2 + WALL_TREE_EVERY / 2 + EPS) {
+                return out;
+            }
+            for (int side = -1; side <= 1; side += 2) {
+                int[] w = wallAt(s, side);
+                if (w != null && fence[idx(w[0], w[1])] == 0) {
+                    out.add(w);
+                }
+            }
+        }
     }
 
     /** The caves' glass roofs, the tunnels' rock, the islands' moss and trees, the forests' canopies. */
@@ -1068,7 +1216,7 @@ final class RasterV4 {
                 break;
             }
         }
-        double reach = tier.width / 2.0 + PiecesV4.WIDEN + 3;
+        double reach = tier.width / 2.0 + PiecesV4.SEARCH_WIDEN + 3;
         int x0 = Math.max(0, (int) Math.floor(minX - reach));
         int x1 = Math.min(sx - 1, (int) Math.ceil(maxX + reach));
         int z0 = Math.max(0, (int) Math.floor(minZ - reach));
@@ -1114,7 +1262,7 @@ final class RasterV4 {
         }
     }
 
-    /** A split's island: moss inside a spruce rim, a tree in the middle. */
+    /** A split's island: moss inside a spruce rim, a tree in the middle (on the wide road a ball of leaves, D10). */
     private void island(GenRandom r, PiecesV4.Piece p) {
         int ice = level((p.s1 + p.s2) / 2);
         List<int[]> inner = new ArrayList<>();
@@ -1142,6 +1290,13 @@ final class RasterV4 {
                 trunk = c;
             }
         }
+        if (tier.wide()) {
+            for (int y = ice + 3; y <= ice + ISLAND_TRUNK_TOP; y++) {
+                vox.put(trunk[0], y, trunk[1], Palette.log(wood));
+            }
+            crown(trunk[0] + 0.5, trunk[1] + 0.5, ice, ISLAND_CROWN, ISLAND_CROWN_FROM, wood);
+            return;
+        }
         for (int y = ice + 3; y <= ice + DownhillValidator.ROOF; y++) {
             vox.put(trunk[0], y, trunk[1], Palette.log(wood));
         }
@@ -1157,10 +1312,24 @@ final class RasterV4 {
         canopy(trunk[0], y + 1, trunk[1], wood);
     }
 
-    /** A forest's canopy: leaves 5 and 6 over the lane and its walls. */
+    /**
+     * A forest's canopy: on the wide road round crowns (D10), one on every 2 x 2 trunk, centred on the square's
+     * middle, and one on every wall tree ({@link #wallTreesOf}); algo 4's a slab of leaves 5 and 6 over the lane
+     * and its walls.
+     */
     private void forest(PiecesV4.Piece p) {
         int ice = level((p.s1 + p.s2) / 2);
-        String wood = Palette.WOODS.get(Math.floorMod((int) Math.floor(p.s1), 3));
+        String wood = forestWood(p);
+        if (tier.wide()) {
+            for (double[] t : p.trunks) {
+                double[] c = trunkCentre(t);
+                crown(c[0], c[1], ice, TRUNK_CROWN, TRUNK_CROWN_FROM, wood);
+            }
+            for (int[] w : wallTreesOf(p)) {
+                crown(w[0] + 0.5, w[1] + 0.5, ice, WALL_CROWN, WALL_CROWN_FROM, wood);
+            }
+            return;
+        }
         for (int[] c : columnsOf(p, p.a1, p.a2)) {
             int i = idx(c[0], c[1]);
             if (obstacle[i]) {
@@ -1171,6 +1340,38 @@ final class RasterV4 {
             }
             for (int y = ice + DownhillValidator.ROOF; y <= ice + DownhillValidator.ROOF + 1; y++) {
                 canopy(c[0], y, c[1], wood);
+            }
+        }
+    }
+
+    /**
+     * The middle of forest trunk {@code t} ({s of its first row, v of its left column}), half-local: the centreline
+     * point 1 past its first row, 1 right of its left column (v right of the line positive, as {@link #vAt}).
+     */
+    double[] trunkCentre(double[] t) {
+        double s = t[0] + 1;
+        double v = t[1] + 1;
+        double[] p = sk.line.at(s);
+        double hd = sk.line.heading(s);
+        return new double[]{p[0] - Math.sin(hd) * v, p[1] + Math.cos(hd) * v};
+    }
+
+    /**
+     * A round crown of {@code wood} on (cx, cz), half-local: at ice + from + k, a leaf in every column whose middle
+     * is within {@code r[k]} of it, each through {@link #canopy} and off the stand's clear ring.
+     */
+    void crown(double cx, double cz, int ice, double[] r, int from, String wood) {
+        int x0 = (int) Math.floor(cx);
+        int z0 = (int) Math.floor(cz);
+        for (int k = 0; k < r.length; k++) {
+            int y = ice + from + k;
+            int reach = (int) Math.ceil(r[k]);
+            for (int x = x0 - reach; x <= x0 + reach; x++) {
+                for (int z = z0 - reach; z <= z0 + reach; z++) {
+                    if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) <= r[k] + EPS && !nearStand(x, z)) {
+                        canopy(x, y, z, wood);
+                    }
+                }
             }
         }
     }
@@ -1214,7 +1415,8 @@ final class RasterV4 {
     /**
      * The wall's colour language (§7.1): the pit's lime back wall and grid rows, yellow caps and lanterns
      * at every lip, light blue beside every checkpoint, gold at the finish and the end wall, magenta
-     * arrows every {@value #ARROW_EVERY} and at every bend's entry.
+     * arrows every {@value #ARROW_EVERY} and at every bend's entry (on the wide road by the clean rule,
+     * {@link #wallArrowNear}).
      */
     void markers(List<Spot> checkpoints) {
         for (int x = 0; x < sx; x++) {
@@ -1263,6 +1465,12 @@ final class RasterV4 {
             if (inGates(s, 1)) {
                 continue;
             }
+            if (tier.wide()) {
+                for (int side = -1; side <= 1; side += 2) {
+                    wallArrowNear(s, side);
+                }
+                continue;
+            }
             double[] t = sk.line.tangent(s);
             String arrow = TrackRaster.arrowToward(t[0], t[1]);
             int ice = level(s);
@@ -1273,6 +1481,59 @@ final class RasterV4 {
                 }
             }
         }
+    }
+
+    /**
+     * The magenta arrow whose faces onto the lane point the way (dx, dz): a glazed terracotta's front and back
+     * faces show its arrow flat, 90 degrees clockwise of its facing (template_glazed_terracotta: north 90,
+     * south 270), so the facing is the way turned anticlockwise; x wins ties. (TrackRaster.arrowToward is the
+     * top face's rule, kept for algo 3, and for algo 4's walls here.)
+     */
+    static String wallArrow(double dx, double dz) {
+        if (Math.abs(dx) >= Math.abs(dz)) {
+            return Palette.arrow(dx > 0 ? "north" : "south");
+        }
+        return Palette.arrow(dz > 0 ? "east" : "west");
+    }
+
+    /**
+     * The wide road's wall arrow on {@code side} of the spot {@code s} along (D7, the clean rule): at the first of
+     * s, s + 1, s - 1, ... s - {@value #ARROW_SHIFT} whose wall block at ice + 1 is plain wall, faces the lane
+     * only on the faces that show its arrow flat (north or south on a way along x, east or west along z) and on
+     * none of the other two, so a rider sees it point the way and never up or down; with the glass over it made
+     * wood, so its top face (which points across the road) is hidden. None on that side when no block fits.
+     */
+    private void wallArrowNear(double s, int side) {
+        for (int k = 0; k <= 2 * ARROW_SHIFT; k++) {
+            double q = s + (k % 2 == 1 ? (k + 1) / 2 : -(k / 2)); // 0, +1, -1, +2, -2, ...
+            if (q <= sk.start || q >= sk.finish - 8 || inGates(q, 1)) {
+                continue;
+            }
+            int ice = level(q);
+            int[] w = wallAt(q, side);
+            if (w == null || !Palette.TRACK_WALL.equals(vox.at(w[0], ice + 1, w[1]))) {
+                continue;
+            }
+            double[] t = sk.line.tangent(q);
+            boolean xWay = Math.abs(t[0]) >= Math.abs(t[1]);
+            boolean flatOpen = xWay ? open(w[0], w[1] + 1, ice) || open(w[0], w[1] - 1, ice)
+                    : open(w[0] + 1, w[1], ice) || open(w[0] - 1, w[1], ice);
+            boolean otherOpen = xWay ? open(w[0] + 1, w[1], ice) || open(w[0] - 1, w[1], ice)
+                    : open(w[0], w[1] + 1, ice) || open(w[0], w[1] - 1, ice);
+            if (!flatOpen || otherOpen) {
+                continue;
+            }
+            vox.put(w[0], ice + 1, w[1], wallArrow(t[0], t[1]));
+            if (Palette.GLASS.equals(vox.at(w[0], ice + 2, w[1]))) {
+                vox.put(w[0], ice + 2, w[1], Palette.TRACK_WALL); // the cap: hide the top face (D7)
+            }
+            return;
+        }
+    }
+
+    /** Whether a wall block at ice + 1 beside column (x, z) faces the lane there: track with air at that height. */
+    private boolean open(int x, int z, int ice) {
+        return drive(x, z) && vox.empty(x, ice + 1, z);
     }
 
     /** {@code block} from y0 to y1 in both walls beside the lane {@code s} along (only over wall blocks). */

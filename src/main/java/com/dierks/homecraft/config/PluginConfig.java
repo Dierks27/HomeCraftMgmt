@@ -435,6 +435,18 @@ public final class PluginConfig {
     public record PrizeLimit(LimitPer per, int count) {
     }
 
+    /** A collector's season (local dates, inclusive) and look. {@code look} is null for a trail. */
+    public record Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
+                            CapLook look) {
+        public boolean inSeason(java.time.LocalDate today) {
+            return today != null && !today.isBefore(from) && !today.isAfter(to);
+        }
+    }
+
+    /** A collector cap: a dyed leather helmet with an optional vanilla trim (keys such as "wild", "emerald"; null = none). */
+    public record CapLook(int rgb, String trimPattern, String trimMaterial) {
+    }
+
     /**
      * A GUI icon: a head texture, and the plain material every Bedrock player sees instead (and
      * every Java player too, while the texture is blank).
@@ -467,13 +479,16 @@ public final class PluginConfig {
      *   <li>FILAMENT: {@code amount}, {@code color} (null = the buyer picks)</li>
      *   <li>BLOCK: {@code blockKey}; PACK: {@code packId}</li>
      * </ul>
+     *
+     * <p>{@code collector} is set only on the plugin's own collectors ({@code arcade.Collectors}),
+     * and null for every config row.
      */
     public record Prize(String id, PrizeTab tab, String display, List<String> description, int costTokens,
                         Icon icon, PrizeType type, boolean enabled, PrizeLimit limit,
                         int amount, org.bukkit.DyeColor color, String blockKey, String packId,
                         String effect, int amplifier, int minutes, String particle, int days, String texture,
                         List<String> commands, List<String> requiresPlugins, String ownedIfPermission,
-                        String requiresPrize, List<Integer> costs) {
+                        String requiresPrize, List<Integer> costs, Collector collector) {
         /** True if the buyer picks the filament colour at purchase time. */
         public boolean choosesColor() {
             return type == PrizeType.FILAMENT && color == null;
@@ -497,7 +512,8 @@ public final class PluginConfig {
                          Map<String, Crate> crates, List<Prize> prizes,
                          int pityTokens, Rarity pityRarity, int pityPerWeek, Lotto lotto,
                          Map<Rarity, Integer> tradeIn,
-                         BlockDef block, Map<String, BlockDef> machines) {
+                         BlockDef block, Map<String, BlockDef> machines,
+                         boolean collectorsOnSale, boolean collectorsGifting) {
 
         /** Every prize on one tab, in config order. */
         public List<Prize> prizes(PrizeTab tab) {
@@ -1541,6 +1557,9 @@ public final class PluginConfig {
             }
             prizes.add(prize);
         }
+        prizes = mergeCollectors(prizes, log::warning);
+        boolean collectorsOnSale = c.getBoolean("arcade.collectors.on_sale", true);
+        boolean collectorsGifting = c.getBoolean("arcade.collectors.gifting", true);
 
         Lotto lotto = lotto(c, log::warning);
         // The ticket isn't clamped like the games of chance (RtpLimits): say so when its return is outside
@@ -1566,7 +1585,7 @@ public final class PluginConfig {
 
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
                 crates, prizes, pityTokens, pityRarity, pityPerWeek,
-                lotto, tradeIn, block, machines);
+                lotto, tradeIn, block, machines, collectorsOnSale, collectorsGifting);
     }
 
     /**
@@ -1621,6 +1640,26 @@ public final class PluginConfig {
             out.put(key.toLowerCase(Locale.ROOT), new Icon(texture == null ? "" : texture.trim(), m));
         }
         return out;
+    }
+
+    /**
+     * The Prize Counter's rows: the plugin's own collectors ({@code arcade.Collectors}) first, so they
+     * are the first tiles on the Cosmetics tab, then the config rows, minus any that takes a collector's
+     * id (or a candy one) — one warning each. The collectors are always merged, whatever
+     * {@code arcade.collectors.on_sale} says, so an owned collector trail always resolves.
+     */
+    public static List<Prize> mergeCollectors(List<Prize> configRows, java.util.function.Consumer<String> warn) {
+        List<Prize> merged = new ArrayList<>(com.dierks.homecraft.arcade.Collectors.ROWS);
+        for (Prize p : configRows) {
+            if (com.dierks.homecraft.arcade.Collectors.reserved(p.id())) {
+                if (warn != null) {
+                    warn.accept(com.dierks.homecraft.arcade.Collectors.skipWarning(p.id()));
+                }
+                continue;
+            }
+            merged.add(p);
+        }
+        return List.copyOf(merged);
     }
 
     /**
@@ -1783,7 +1822,7 @@ public final class PluginConfig {
         return new Prize(id, tab, display, description, Math.max(0, cost), icon, type, enabled, limit,
                 amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
                 headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize,
-                List.copyOf(costs));
+                List.copyOf(costs), null);
     }
 
     private static PrizeTab defaultTab(PrizeType type) {

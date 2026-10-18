@@ -84,7 +84,7 @@ class ArcadeFeedTest {
     private static Prize prize(String id, PrizeTab tab, String display, List<String> description, int cost,
                                PrizeType type, boolean enabled, List<Integer> costs) {
         return new Prize(id, tab, display, description, cost, new PluginConfig.Icon("", Material.SUGAR), type, enabled,
-                null, 0, null, null, null, null, 0, 0, null, 0, "", List.of(), List.of(), null, null, costs);
+                null, 0, null, null, null, null, 0, 0, null, 0, "", List.of(), List.of(), null, null, costs, null);
     }
 
     /** A +1 Home priced 400 then 600, as shipped. */
@@ -106,7 +106,7 @@ class ArcadeFeedTest {
                 300, new PluginConfig.Icon("eyJ0ZXh0dXJlcyI6e30=", Material.CARVED_PUMPKIN), PrizeType.COMMAND, true,
                 null, 0, null, null, null, null, 0, 0, null, 0, "eyJ0ZXh0dXJlcyI6e30=",
                 List.of("lp user %player% permission set essentials.hat true"), List.of("LuckPerms", "Essentials"),
-                "essentials.hat", null, List.of());
+                "essentials.hat", null, List.of(), null);
     }
 
     private static Pack.PackDef starter() {

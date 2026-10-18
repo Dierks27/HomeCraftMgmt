@@ -97,6 +97,30 @@ class RasterV4Test {
         }
     }
 
+    /**
+     * Every leg of {@code m}'s course from the start to the finish, through its checkpoints' middles: {from s,
+     * to s, across, the most it may be (66 holding a 2-block drop, else 60)}. MountainSoakTest reads it too.
+     */
+    static List<double[]> legs(MountainPlanner.Made m) {
+        RasterV4 r = m.raster;
+        List<double[]> marks = new ArrayList<>();
+        double[] st = r.sk.line.at(r.sk.start);
+        marks.add(new double[]{r.sk.start, st[0], st[1]});
+        for (RasterV4.Spot c : m.checkpoints) {
+            marks.add(new double[]{c.s(), c.x(), c.z()});
+        }
+        double[] fp = r.sk.line.at(r.sk.finish);
+        marks.add(new double[]{r.sk.finish, fp[0], fp[1]});
+        List<double[]> out = new ArrayList<>();
+        for (int k = 1; k < marks.size(); k++) {
+            double[] a = marks.get(k - 1);
+            double[] b = marks.get(k);
+            double most = r.dp.bigBetween(a[0], b[0]) ? MountainValidator.MAX_LEG_BIG_DROP : DownhillValidator.MAX_LEG;
+            out.add(new double[]{a[0], b[0], Math.hypot(b[1] - a[1], b[2] - a[2]), most});
+        }
+        return out;
+    }
+
     @Test
     void everyLegKeepsSixtyOrSixtySixAcrossABigDrop() {
         int over = 0;
@@ -104,27 +128,11 @@ class RasterV4Test {
             for (String tier : List.of("easy", "medium", "hard")) {
                 for (long seed : style == BoatStyle.ROAD ? MountainPlannerTest.ROADS : MountainPlannerTest.SLALOMS) {
                     MountainPlanner.Made m = made(seed, style.id(), tier);
-                    RasterV4 r = m.raster;
-                    List<double[]> marks = new ArrayList<>();
-                    double[] st = r.sk.line.at(r.sk.start);
-                    marks.add(new double[]{r.sk.start, st[0], st[1]});
-                    for (RasterV4.Spot c : m.checkpoints) {
-                        marks.add(new double[]{c.s(), c.x(), c.z()});
+                    for (double[] leg : legs(m)) {
+                        assertTrue(leg[2] <= leg[3], name(m) + ": the leg from " + Math.round(leg[0]) + " is "
+                                + leg[2] + " across; at most " + leg[3]);
+                        over += leg[3] > DownhillValidator.MAX_LEG && leg[2] > DownhillValidator.MAX_LEG ? 1 : 0;
                     }
-                    double[] fp = r.sk.line.at(r.sk.finish);
-                    marks.add(new double[]{r.sk.finish, fp[0], fp[1]});
-                    int big = 0;
-                    for (int k = 1; k < marks.size(); k++) {
-                        double[] a = marks.get(k - 1);
-                        double[] b = marks.get(k);
-                        boolean holdsBig = r.dp.bigBetween(a[0], b[0]);
-                        double across = Math.hypot(b[1] - a[1], b[2] - a[2]);
-                        double most = holdsBig ? MountainValidator.MAX_LEG_BIG_DROP : DownhillValidator.MAX_LEG;
-                        assertTrue(across <= most, name(m) + ": the leg from " + Math.round(a[0]) + " is "
-                                + across + " across; at most " + most);
-                        big += holdsBig && across > DownhillValidator.MAX_LEG ? 1 : 0;
-                    }
-                    over += big;
                 }
             }
         }
@@ -133,39 +141,54 @@ class RasterV4Test {
 
     // ---- the arrows ---------------------------------------------------------------------------------------
 
+    /**
+     * Where {@code m}'s wall arrows break §5.4's rule, none when it holds: every face of an arrow whose neighbour
+     * is a drive column with air at the arrow's height shows it flat, pointing within cos 0.7 of the way there;
+     * every arrow faces the lane; a road plan has at least 100. MountainSoakTest reads it too.
+     */
+    static List<String> arrowProblems(MountainPlanner.Made m) {
+        RasterV4 r = m.raster;
+        List<String> out = new ArrayList<>();
+        List<Object[]> arrows = arrows(m);
+        for (Object[] a : arrows) {
+            int[] p = (int[]) a[0];
+            String facing = WallArrowTest.facing((String) a[1]);
+            int seen = 0;
+            for (String face : FACES) {
+                int[] d = WallArrowTest.dir(face);
+                int nx = p[0] + d[0];
+                int nz = p[2] + d[2];
+                if (!r.drive(nx, nz) || !r.vox.empty(nx, p[1], nz)) {
+                    continue;
+                }
+                seen++;
+                String way = WallArrowTest.shown(facing, face);
+                int[] w = WallArrowTest.dir(way);
+                String where = name(m) + ": the arrow at " + p[0] + " " + p[1] + " " + p[2] + " (facing " + facing
+                        + ") on its " + face + " face";
+                double[] t = r.sk.line.tangent(r.sAt[r.idx(nx, nz)]);
+                double cos = w[0] * t[0] + w[2] * t[1];
+                if (w[1] != 0) {
+                    out.add(where + " points " + way + ", not flat");
+                } else if (!(cos > 0.7)) {
+                    out.add(where + " points " + way + ", not along the way (cos " + cos + ")");
+                }
+            }
+            if (seen < 1) {
+                out.add(name(m) + ": the arrow at " + p[0] + " " + p[1] + " " + p[2] + " doesn't face the lane");
+            }
+        }
+        if (m.tier.road() && arrows.size() < 100) {
+            out.add(name(m) + ": only " + arrows.size() + " arrows");
+        }
+        return out;
+    }
+
     @Test
     void everyArrowFaceOntoTheLanePointsTheWay() {
         for (MountainPlanner.Made m : arrowPlans()) {
-            RasterV4 r = m.raster;
-            List<Object[]> arrows = arrows(m);
-            int faces = 0;
-            for (Object[] a : arrows) {
-                int[] p = (int[]) a[0];
-                String facing = WallArrowTest.facing((String) a[1]);
-                int seen = 0;
-                for (String face : FACES) {
-                    int[] d = WallArrowTest.dir(face);
-                    int nx = p[0] + d[0];
-                    int nz = p[2] + d[2];
-                    if (!r.drive(nx, nz) || !r.vox.empty(nx, p[1], nz)) {
-                        continue;
-                    }
-                    seen++;
-                    String way = WallArrowTest.shown(facing, face);
-                    int[] w = WallArrowTest.dir(way);
-                    String where = name(m) + ": the arrow at " + p[0] + " " + p[1] + " " + p[2] + " (facing " + facing
-                            + ") on its " + face + " face";
-                    assertEquals(0, w[1], where + " lies flat, not " + way);
-                    double[] t = r.sk.line.tangent(r.sAt[r.idx(nx, nz)]);
-                    double cos = w[0] * t[0] + w[2] * t[1];
-                    assertTrue(cos > 0.7, where + " points " + way + " along the way (cos " + cos + ")");
-                }
-                assertTrue(seen >= 1, name(m) + ": the arrow at " + p[0] + " " + p[1] + " " + p[2]
-                        + " faces the lane");
-                faces += seen;
-            }
-            assertTrue(!m.tier.road() || arrows.size() >= 100, name(m) + ": " + arrows.size() + " arrows");
-            assertTrue(faces >= arrows.size(), name(m) + ": " + faces + " faces seen");
+            assertEquals(List.of(), arrowProblems(m), name(m) + ": every arrow face a rider sees points the way ("
+                    + arrows(m).size() + " arrows)");
         }
     }
 

@@ -20,6 +20,7 @@ import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.SoftReference;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -49,20 +51,30 @@ class MountainPlannerTest {
     static final long[] ROADS = {2, 4, 5};
     static final long[] SLALOMS = {1, 3, 8};
 
-    private static final Map<String, MountainPlanner.Made> MADE = new ConcurrentHashMap<>();
+    /**
+     * The plans made so far, kept while memory allows: a plan with its raster is tens of MB, and the pinned ones
+     * with the other classes' (RasterV4Test, MountainSoakTest) would fill the test JVM's heap before the engine's
+     * suites plan theirs. One the JVM drops is made again when asked, the same block for block.
+     */
+    private static final Map<String, SoftReference<MountainPlanner.Made>> MADE = new ConcurrentHashMap<>();
 
     static PlanInput input(Box half, long seed, String tier) {
         return new PlanInput(Slots.ICE_BOAT, half, half == HALF_B ? 'B' : 'A', 20725, 0, seed, tier, 6, 0, null);
     }
 
     static MountainPlanner.Made made(Box half, long seed, String tier) {
-        return MADE.computeIfAbsent(half.minX() + ":" + half.minZ() + ":" + seed + ":" + tier, k -> {
+        String key = half.minX() + ":" + half.minZ() + ":" + seed + ":" + tier;
+        SoftReference<MountainPlanner.Made> kept = MADE.get(key);
+        MountainPlanner.Made m = kept == null ? null : kept.get();
+        if (m == null) {
             try {
-                return MountainPlanner.made(input(half, seed, tier));
+                m = MountainPlanner.made(input(half, seed, tier));
             } catch (GenFailed e) {
                 throw new AssertionError(tier + " seed " + seed + ": " + e.getMessage(), e);
             }
-        });
+            MADE.put(key, new SoftReference<>(m));
+        }
+        return m;
     }
 
     // ---- the pinned layouts --------------------------------------------------------------------------------
@@ -130,9 +142,35 @@ class MountainPlannerTest {
                     assertTrue(ref >= c.minSeconds() * 1000L + 1000, name + ": over the shortest time");
                     assertEquals(MountainPlanner.modelMs(m.seconds), ref * 5 / 4, name + ": T_m back from it exactly");
                     assertTrue(p.work() > 0 && p.work() <= MountainPlanner.BUDGET, name + ": work " + p.work());
+                    // the wide road (MOUNTAIN-V21-SPEC §5.3): the lane keeps its width, Big Drops stand on the
+                    // axis, and every leg keeps 60 or 66 across a Big Drop
+                    assertEquals(List.of(), m.raster.narrowAt(), name + ": the lane is " + mt.width + " wide from the"
+                            + " pit to the finish, every Big Drop's lip clear");
+                    assertEquals(List.of(), bigLipsOffTheAxis(m), name + ": every 2-block lip, and the checkpoint"
+                            + " before it, on an axis-aligned straight");
+                    for (double[] leg : RasterV4Test.legs(m)) {
+                        assertTrue(leg[2] <= leg[3], name + ": the leg from " + Math.round(leg[0]) + " is " + leg[2]
+                                + " across; at most " + leg[3]);
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * {@code m}'s 2-block lips off an axis-aligned straight, or whose checkpoint before them is (D2: a Big Drop
+     * stands only where its checkpoint is the smallest), as s along; none on a wide road.
+     */
+    static List<Double> bigLipsOffTheAxis(MountainPlanner.Made m) {
+        DropPlan dp = m.cand.drops();
+        DropPlan.Planner at = new DropPlan.Planner(new GenRandom(0), dp.sk);
+        List<Double> out = new ArrayList<>();
+        for (DropPlan.Drop d : dp.drops) {
+            if (d.drop() >= 2 && !(at.axis(d.s()) && at.axis(d.s() - at.before(d.s(), d.drop())))) {
+                out.add(d.s());
+            }
+        }
+        return out;
     }
 
     @Test
@@ -247,7 +285,10 @@ class MountainPlannerTest {
         // audit MTN-R3-00: most of the §5.3 deck went unplaced (only the lips' straights were free, the free list
         // never shrank, pits and boosts were dealt last); now wide bends take pieces too, the deck is dealt the
         // scarcest first, a card takes the tightest stretch it fits and, failing that, its shortest length. The
-        // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's
+        // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's. What a deck
+        // places is gathered and asserted at the end, every tier's at once (the wide road's are tuned by
+        // MOUNTAIN-V21-SPEC §6.4's steps D and F)
+        List<String> missed = new ArrayList<>();
         for (String tier : List.of("easy", "medium", "hard")) {
             List<Long> seeds = new ArrayList<>();
             for (long seed : ROADS) {
@@ -273,32 +314,73 @@ class MountainPlannerTest {
                     here += p.count(k);
                     deck += p.dealt(k);
                 }
-                assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (pits "
+                assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (snow drifts "
                         + p.count(PiecesV4.Kind.SAND_PIT) + "/" + p.dealt(PiecesV4.Kind.SAND_PIT) + ", "),
                         name + ": the summary says what was placed of what was dealt: "
                                 + m.finished().summary().get(2));
-                assertTrue(deck > 0 && here * 2 >= deck, name + ": " + here + " of a deck of " + deck);
-                assertTrue(p.count(PiecesV4.Kind.SAND_PIT) >= 1, name + ": a sand pit");
-                assertTrue(p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) >= 1,
-                        name + ": a cave or a tunnel");
-                if (!tier.equals("easy")) {
-                    assertTrue(p.count(PiecesV4.Kind.FOREST) >= 1, name + ": a forest");
-                    assertTrue(p.count(PiecesV4.Kind.SPLIT) >= 1, name + ": a split");
+                assertTrue(deck > 0, name + ": a deck");
+                StringBuilder of = new StringBuilder();
+                for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                    if (p.dealt(k) > 0) {
+                        of.append(of.isEmpty() ? " (" : ", ").append(k.word).append(' ').append(p.count(k)).append('/')
+                                .append(p.dealt(k));
+                    }
                 }
-                if (tier.equals("medium")) {
-                    assertTrue(p.count(PiecesV4.Kind.BOOST) >= 1, name + ": a boost strip");
+                String placedOf = of.append(')').toString();
+                if (here * 2 < deck) {
+                    missed.add(name + ": " + here + " of a deck of " + deck + placedOf);
+                }
+                if (p.count(PiecesV4.Kind.SAND_PIT) < 1) {
+                    missed.add(name + ": no snow drift" + placedOf);
+                }
+                if (p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) < 1) {
+                    missed.add(name + ": no cave or tunnel" + placedOf);
+                }
+                if (!tier.equals("easy")) {
+                    // a forest and a split on every medium and hard seed (§5.3; if §6.4's step F can't bring the
+                    // forests back, "on most seeds")
+                    if (p.count(PiecesV4.Kind.FOREST) < 1) {
+                        missed.add(name + ": no forest" + placedOf);
+                    }
+                    if (p.count(PiecesV4.Kind.SPLIT) < 1) {
+                        missed.add(name + ": no split" + placedOf);
+                    }
+                }
+                // a medium boost strip (0-1 on the wide road, D8) stands on straights only, ends 40 or more
+                // before the next arc and never within 30 before a lip
+                Skeleton sk = m.cand.sk();
+                for (PiecesV4.Piece b : p.list) {
+                    if (b.kind != PiecesV4.Kind.BOOST) {
+                        continue;
+                    }
+                    for (double s = b.s1; s <= b.s2; s += 0.5) {
+                        assertTrue(!sk.line.elementAt(s).arc(), name + ": the boost " + b.s1 + "-" + b.s2
+                                + " is on a straight at " + s);
+                    }
+                    double arc = PiecesV4.nextArcStart(sk, b.s2);
+                    assertTrue(arc - b.s2 >= PiecesV4.BOOST_ARC_GAP, name + ": the boost ends " + (arc - b.s2)
+                            + " before the next arc, at least " + PiecesV4.BOOST_ARC_GAP);
+                    for (DropPlan.Drop d : m.cand.drops().drops) {
+                        assertTrue(!(b.s2 > d.s() - 30 && b.s1 < d.s()), name + ": the boost " + b.s1 + "-" + b.s2
+                                + " ends 30 or more before the lip at " + d.s());
+                    }
                 }
                 placed += here;
                 dealt += deck;
                 twoPits += p.count(PiecesV4.Kind.SAND_PIT) >= 2 ? 1 : 0;
                 twoSplits += p.count(PiecesV4.Kind.SPLIT) >= 2 ? 1 : 0;
             }
-            assertTrue(placed * 4 >= dealt * 3, "road " + tier + ": " + placed + " pieces of " + dealt + " dealt");
-            if (tier.equals("hard")) {
-                assertTrue(twoPits * 2 > seeds.size(), "hard: two sand pits or more in most: " + twoPits);
-                assertTrue(twoSplits * 2 > seeds.size(), "hard: two splits in most: " + twoSplits);
+            if (placed * 4 < dealt * 3) {
+                missed.add("road " + tier + ": " + placed + " pieces of " + dealt + " dealt, under three in four");
+            }
+            if (tier.equals("hard") && twoPits * 2 <= seeds.size()) {
+                missed.add("road hard: two snow drifts or more in only " + twoPits + " of " + seeds.size());
+            }
+            if (tier.equals("hard") && twoSplits * 2 <= seeds.size()) {
+                missed.add("road hard: two splits in only " + twoSplits + " of " + seeds.size());
             }
         }
+        assertEquals(List.of(), missed, "every road tier's deck placed as §5.3 asks");
     }
 
     @Test
@@ -345,11 +427,16 @@ class MountainPlannerTest {
     }
 
     @Test
-    void aRefusedBuildLeavesOutOnlyThePiecesNearWhereItFailed() {
+    void aRefusedBuildLeavesOutOnlyThePiecesNearWhereItFailed() throws GenFailed {
         // hard road 9046: the best-fit sand pit at 2536-2564 pushed checkpoint 58 up against a 1-block lip and the
         // proof refused the run ("no way along the track at one level from checkpoint 58 to checkpoint 59"); the
-        // fewer-pieces build put the pit in the same place, so the road shipped with no pieces at all
-        MountainPlanner.Made m = made(HALF_A, 9046, "hard");
+        // fewer-pieces build put the pit in the same place, so the road shipped with no pieces at all. The wide
+        // road (algo 5) gave no such case in hard roads 1-799 and easy roads 1-999: its first builds were refused
+        // only for side pockets no piece made (easy) or had no checkpoint chain. The leave-out (attempt, near,
+        // PiecesV4.without) is the same code for every algo, so it is pinned on algo 4's 9046, which the same
+        // code still makes block for block (V4FixturesTest)
+        MountainPlanner.Made m = MountainPlanner.made(input(HALF_A, 9046, "hard"), MountainValidator.FIRST_ALGO);
+        assertFalse(m.tier.wide(), "fixture: algo 4's road");
         Plan p = m.finished();
         assertEquals(List.of(), MountainValidator.problems(p, "hard"), "proven");
         assertTrue(m.how.contains("build 1 (1 piece left out for the proof)"),
@@ -360,7 +447,7 @@ class MountainPlannerTest {
             dealt += m.pieces.dealt(k);
         }
         assertEquals(dealt - 1, m.pieces.list.size(), "the rest of the deck kept: " + p.summary().get(2));
-        MountainTier mt = MountainTier.of(BoatStyle.ROAD, "hard");
+        MountainTier mt = m.tier;
         assertTrue(m.seconds >= mt.tMin && m.seconds <= mt.tMax, "T_m " + m.seconds + " in the window");
         // where a problem points: between the checkpoints it names, or round the blocks it names, a leg either way
         RasterV4.Spot a = m.checkpoints.get(57);
@@ -437,8 +524,8 @@ class MountainPlannerTest {
         assertTrue(s.get(0).startsWith("Ice Boat v4 medium: Winding Road, "), "style and tier: " + s.get(0));
         assertTrue(s.get(0).contains(" bands (") && s.get(0).contains("hairpins"), "its bands and links: " + s.get(0));
         assertTrue(s.get(1).startsWith("flow 0.") && s.get(1).contains("model T_m "), "the flow line: " + s.get(1));
-        assertTrue(s.get(2).startsWith("drops ") && s.get(2).contains("Final Drop") && s.get(2).contains("pits "),
-                "drops and pieces: " + s.get(2));
+        assertTrue(s.get(2).startsWith("drops ") && s.get(2).contains("Final Drop")
+                && s.get(2).contains("snow drifts "), "drops and pieces: " + s.get(2));
         assertTrue(s.get(3).contains("checkpoints") && s.get(3).contains("stand at the bottom"), "the course: " + s.get(3));
         assertTrue(s.get(4).startsWith("reference ") && s.get(4).contains("0.8 of T_m"), "the times: " + s.get(4));
         List<String> slalom = made(HALF_A, 1, "medium").finished().summary();
@@ -611,10 +698,13 @@ class MountainPlannerTest {
     @Test
     void everyStaircaseHasItsOwnCliffsSignWithItsOwnCountAndHeight() {
         // hard road 7 (two staircases of 3) and 41 (two of 2) had theirs next to each other in the drop list:
-        // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01)
+        // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01). On
+        // the wide road every drop may be a Big Drop (MOUNTAIN-V21-SPEC D3), so a staircase is nearly always all
+        // 2s: hard road 10 has one of hops (beside one of Big Drops)
         assertEquals(List.of("THE CLIFFS!", "3 big drops!"), GenCopy.boatCliffs(3, true), "every step a 2-block drop");
         assertEquals(List.of("THE CLIFFS!", "2 drops ahead!"), GenCopy.boatCliffs(2, false), "a hop among them");
-        List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L}));
+        List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L},
+                new Object[]{"hard", 10L}));
         for (BoatStyle style : BoatStyle.values()) {
             for (String tier : List.of("easy", "medium", "hard")) {
                 for (long seed : style == BoatStyle.ROAD ? ROADS : SLALOMS) {
@@ -713,6 +803,10 @@ class MountainPlannerTest {
         GenTag v3 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 3, 20725, 0, 2, 'A', live.hash(), 18_100, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(18_100, BoatPlanner.modelMs(v3), "an older tag's reference is its time");
+        GenTag v5 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, MountainValidator.WIDE_ALGO, 20725, 0, 2, 'A',
+                live.hash(), ref, 2, 3, List.of(), List.of(), 0);
+        assertEquals(MountainPlanner.modelMs(made(HALF_A, 2, "medium").seconds), BoatPlanner.modelMs(v5),
+                "the wide road's tag (this plan's own) gets its T_m back the same way");
         assertEquals(0, BoatPlanner.modelMs(null), "no tag, no time");
     }
 }

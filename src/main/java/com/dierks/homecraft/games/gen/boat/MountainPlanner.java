@@ -116,6 +116,13 @@ final class MountainPlanner {
         String how;
         /** Pieces a failed proof's retry left out (the ones nearest where it failed), 0 for none. */
         int leftOut;
+        /** The blocks of its raster (ice, walls, pieces, markers, the stand) before the mountain's (the soak's). */
+        int rasterBlocks;
+        /**
+         * Why each Stage B build before it fell through, in order (the soak's tally, MOUNTAIN-V21-SPEC §6.1):
+         * the first line of a refused proof, or what didn't come together; never part of the plan.
+         */
+        List<String> refused = List.of();
 
         Made(PlanInput in, MountainTier tier, Candidate cand, PiecesV4 pieces, RasterV4 raster,
              List<RasterV4.Spot> checkpoints, Plan plan, int trees, double seconds) {
@@ -278,6 +285,7 @@ final class MountainPlanner {
         int[][] steps = {{FULL, Math.min(KEPT, kept.size())}, {REDUCED, Math.min(2, kept.size())},
                 {BASIC, Math.min(1, kept.size())}};
         int tries = 0;
+        List<String> refused = new ArrayList<>();
         for (int[] step : steps) {
             for (int k = 0; k < step[1]; k++) {
                 in.checkCancelled();
@@ -288,8 +296,9 @@ final class MountainPlanner {
                 tries++;
                 Candidate c = kept.get(k);
                 Made m = attempt(in, tier, c, root.fork("pieces:" + c.index() + ":" + step[0]),
-                        root.fork("scenery:" + c.index()), step[0]);
+                        root.fork("scenery:" + c.index()), step[0], refused);
                 if (m != null) {
+                    m.refused = List.copyOf(refused);
                     m.work = work;
                     m.how = "candidate " + (c.index() + 1) + " (" + kept.size() + " kept), build " + tries
                             + (step[0] == FULL ? "" : step[0] == REDUCED ? " (fewer pieces)" : " (no pieces)")
@@ -304,6 +313,7 @@ final class MountainPlanner {
         if (safe == null) {
             throw new GenFailed("no " + tier + " Mountain Run found for seed " + GenSeed.shortHex(in.seed()));
         }
+        safe.refused = List.copyOf(refused);
         safe.work = work + SAFE_RESERVE;
         safe.how = "the safe " + (tier.slalom() ? "slalom" : "road") + " after " + kept.size() + " candidates and "
                 + tries + " builds";
@@ -389,18 +399,29 @@ final class MountainPlanner {
      */
     static Made attempt(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
                         int richness) throws GenFailed {
+        return attempt(in, tier, c, pieceStream, scenery, richness, new ArrayList<>());
+    }
+
+    /** {@link #attempt}, adding to {@code refused} why each of its builds fell through ({@link Made#refused}). */
+    static Made attempt(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
+                        int richness, List<String> refused) throws GenFailed {
         try {
             Base base = base(in, c);
             if (base == null) {
+                refused.add("no base: its raster or its checkpoint chain");
                 return null;
             }
             Made m = build(in, tier, c, base, pieces(in, c, base, pieceStream, richness), scenery);
             if (m == null) {
+                refused.add("the build didn't come together");
                 return null;
             }
             cancel(in);
             List<String> problems = proof(m.plan, tier.id, in);
             cancel(in);
+            if (!problems.isEmpty()) {
+                refused.add(problems.get(0));
+            }
             // a refused plan with pieces is built again without those nearest where the proof failed, so a piece
             // that upsets a checkpoint costs that piece, not the whole deck (the fewer-pieces build that follows
             // would put it in the same place)
@@ -411,6 +432,7 @@ final class MountainPlanner {
                 }
                 Made again = build(in, tier, c, base, fewer, scenery);
                 if (again == null) {
+                    refused.add("the build didn't come together");
                     break;
                 }
                 again.leftOut = m.leftOut + m.pieces.list.size() - fewer.list.size();
@@ -418,11 +440,15 @@ final class MountainPlanner {
                 cancel(in);
                 problems = proof(m.plan, tier.id, in);
                 cancel(in);
+                if (!problems.isEmpty()) {
+                    refused.add(problems.get(0));
+                }
             }
             return problems.isEmpty() ? m : null;
         } catch (Cancelled e) {
             throw new GenFailed("cancelled");
         } catch (RuntimeException e) {
+            refused.add("an error: " + e);
             return null;
         }
     }
@@ -551,6 +577,7 @@ final class MountainPlanner {
         raster.stand();
         signs(raster, cps, pieces);
         cancel(in);
+        int rasterBlocks = raster.vox.size();
         int trees = MountainScenery.draw(scenery, raster);
         cancel(in);
         List<String> palette = new ArrayList<>();
@@ -583,7 +610,9 @@ final class MountainPlanner {
         cancel(in);
         Plan plan = Plan.of(slot.id(), tier.algo, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
                 new PlannedTrial(course, refMs), List.of(), 0);
-        return new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
+        Made m = new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
+        m.rasterBlocks = rasterBlocks;
+        return m;
     }
 
     private static void cancel(PlanInput in) {

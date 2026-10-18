@@ -750,9 +750,9 @@ public final class GenCopy {
     public static List<List<String>> everySign() {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
                 parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
-                boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSnowyBend(),
-                boatSnowDrift(), boatSplit(),
-                boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
+                boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(),
+                boatSnowyBend(), boatSnowDrift(), boatSplit(), boatIceCave(), boatForest(), boatRoadStart("easy"),
+                boatRoadStart("medium"), boatRoadStart("hard"),
                 boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
                 boatChicane(true), boatChicane(false), boatCliffs(2, true), boatCliffs(3, true),
                 boatCliffs(2, false), boatCliffs(3, false), boatGates(4), boatGates(11),

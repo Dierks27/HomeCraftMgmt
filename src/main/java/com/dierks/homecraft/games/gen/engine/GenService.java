@@ -30,6 +30,7 @@ import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.gen.boat.BoatLine;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.gen.boat.MountainValidator;
 import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
@@ -4438,7 +4439,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         DailySettings.SlotConfig c = host.settings().slot(s.def.id());
         BoatStyle config = c == null ? null : c.style();
         BoatStyle want = style(s);
-        BoatStyle got = s.live == null || s.live.algo() < BoatPlanner.ALGO ? null : BoatStyle.of(s.live.seed());
+        BoatStyle got = s.live == null || s.live.algo() < MountainValidator.FIRST_ALGO ? null
+                : BoatStyle.of(s.live.seed());
         String live = got == null ? "" : "; this set's is " + StyleSeed.words(got);
         if (got != null && want != null && got != want) {
             // audit M10: made before the rule applied (Race Night or the style switched on after the set was built,

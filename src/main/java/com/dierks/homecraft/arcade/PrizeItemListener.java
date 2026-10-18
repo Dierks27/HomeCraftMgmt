@@ -217,15 +217,26 @@ public final class PrizeItemListener implements Listener {
         }
     }
 
-    /** Put a hat on, handing back whatever was on the player's head. */
+    /**
+     * Put a hat on, handing back whatever was on the player's head. A collector coming off the head
+     * needs a place in the bag: it is never dropped on the ground, where anyone could take it, so with
+     * no room the hat stays in the hand and the head is left as it was.
+     */
     private static void wear(Player player, EquipmentSlot hand) {
         ItemStack held = player.getInventory().getItem(hand);
         if (held == null) {
             return;
         }
+        ItemStack old = player.getInventory().getHelmet();
+        if (old != null && !old.getType().isAir()
+                && keepsOldOn(PrizeSafety.ownerBound(TokenPrizes.prizeId(old)),
+                player.getInventory().firstEmpty() != -1, hand == EquipmentSlot.HAND && held.getAmount() == 1)) {
+            player.sendMessage(Text.of("&7Make room in your bag first: what's on your head goes there."));
+            Sounds.refused(player);
+            return;
+        }
         ItemStack hat = held.clone();
         hat.setAmount(1);
-        ItemStack old = player.getInventory().getHelmet();
         player.getInventory().setHelmet(hat);
         held.setAmount(held.getAmount() - 1);
         if (old != null && !old.getType().isAir()) {
@@ -233,6 +244,15 @@ public final class PrizeItemListener implements Listener {
                     .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
         }
         Sounds.received(player);
+    }
+
+    /**
+     * A swap that would drop the old helmet is refused when the old one is a collector (review R1).
+     * The old helmet goes to the bag; it fits when there is a free bag slot, or when the held stack is
+     * the last one in the main hand, whose slot it then takes (the off-hand isn't part of the bag).
+     */
+    static boolean keepsOldOn(boolean oldIsCollector, boolean bagHasRoom, boolean heldSlotFrees) {
+        return oldIsCollector && !bagHasRoom && !heldSlotFrees;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

@@ -2,11 +2,13 @@ package com.dierks.homecraft.util;
 
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
+import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -29,10 +31,15 @@ public final class Fireworks {
         spawn(at, -1);
     }
 
+    /** How far in front of the eyes {@link #burstInView} bursts, in the open. */
+    static final double BURST_AHEAD = 4.0;
+
     /**
      * One harmless firework that bursts right in front of the player: 4 blocks along where they look
      * (flattened, so never into the floor or the sky), at eye height, after 4 ticks. {@link #spawn}'s
-     * rocket bursts overhead, out of a first-person view; this one is in it, on Java and Bedrock.
+     * rocket bursts overhead, out of a first-person view; this one is in it, on Java and Bedrock. A
+     * wall nearer than that brings it closer ({@link #burstDistance}), so indoors it still bursts on
+     * this side of the wall rather than inside it or behind it.
      */
     public static void burstInView(Player player) {
         if (player == null || !player.isOnline()) {
@@ -40,8 +47,29 @@ public final class Fireworks {
         }
         Location eye = player.getEyeLocation();
         double yaw = Math.toRadians(eye.getYaw());
-        Vector flat = new Vector(-Math.sin(yaw), 0, Math.cos(yaw)).multiply(4);
-        spawn(eye.clone().add(flat), 4);
+        Vector flat = new Vector(-Math.sin(yaw), 0, Math.cos(yaw));
+        double wall = -1;
+        try {
+            RayTraceResult hit = eye.getWorld().rayTraceBlocks(eye, flat, BURST_AHEAD, FluidCollisionMode.NEVER, true);
+            if (hit != null) {
+                wall = hit.getHitPosition().distance(eye.toVector());
+            }
+        } catch (RuntimeException ignored) {
+            // no ray, the open-field distance
+        }
+        spawn(eye.clone().add(flat.multiply(burstDistance(wall))), 4);
+    }
+
+    /**
+     * Where the burst goes along the look: {@link #BURST_AHEAD} with nothing in the way ({@code wall}
+     * below 0), else 0.7 short of the wall. Never nearer than 1.5, which would be in the player's
+     * face, so a player nose to a wall (closer than 2.2) gets it 1.5 ahead, at the wall.
+     */
+    static double burstDistance(double wall) {
+        if (wall < 0 || wall >= BURST_AHEAD) {
+            return BURST_AHEAD;
+        }
+        return Math.max(1.5, wall - 0.7);
     }
 
     /** {@code ticksToDetonate} below 0 keeps the rocket's own flight. */

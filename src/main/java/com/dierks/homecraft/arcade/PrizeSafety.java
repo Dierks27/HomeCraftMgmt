@@ -18,7 +18,8 @@ import java.util.function.Predicate;
  *       candy itself, which is meant to go.</li>
  *   <li><b>Owner-bound when dropped:</b> a collector (the Trick-or-Treat Bag included). With one of
  *       each for good, a lost one could never be bought again, so only the one who dropped it can
- *       pick it back up. Other prizes are handed over by dropping them, so they are left alone.</li>
+ *       pick it back up, and no hopper takes it. Other prizes are handed over by dropping them, so they
+ *       are left alone.</li>
  * </ul>
  */
 public final class PrizeSafety {
@@ -56,6 +57,16 @@ public final class PrizeSafety {
         }
         return Collectors.isCollectorId(prizeId)
                 || prizeId.trim().toLowerCase(Locale.ROOT).startsWith("bag_trick_or_treat_");
+    }
+
+    /**
+     * A hopper (or a hopper minecart) leaves a dropped collector where it is. The game checks the
+     * owner a drop was given only when a player walks over it, so without this a hopper would take it
+     * and anyone could then open the hopper or the chest below it. A collector nobody owns on the
+     * ground (one spilled from a broken chest, say) is left to vanilla: anyone could pick it up anyway.
+     */
+    static boolean hopperRefuses(String prizeId, boolean hasOwner) {
+        return hasOwner && ownerBound(prizeId);
     }
 
     /**

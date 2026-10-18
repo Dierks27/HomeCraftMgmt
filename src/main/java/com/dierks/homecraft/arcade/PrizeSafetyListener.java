@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareGrindstoneEvent;
 import org.bukkit.event.inventory.PrepareSmithingEvent;
@@ -35,8 +36,8 @@ import java.util.List;
 /**
  * Prizes are safe (HALLOWEEN-SPEC D9, on for everyone): kept when you die, never despawning, burning
  * or taken by a mob on the ground, and never changed by a workstation. A collector someone drops can be
- * picked back up only by them. Without this, a child's first creeper would take the cap she was given,
- * and with one of each for good it could never be bought again.
+ * picked back up only by them, and no hopper takes it. Without this, a child's first creeper would take
+ * the cap she was given, and with one of each for good it could never be bought again.
  *
  * <p>What counts is decided in {@link PrizeSafety}: a prize ({@code hcm:token_prize}) that holds
  * nothing but candy, and, on the ground, is not candy itself. The spawn, despawn and damage handlers
@@ -196,6 +197,19 @@ public final class PrizeSafetyListener implements Listener {
         Item item = event.getItemDrop();
         if (PrizeSafety.ownerBound(prizeId(item.getItemStack()))) {
             item.setOwner(event.getPlayer().getUniqueId());
+        }
+    }
+
+    /**
+     * A hopper doesn't take a dropped collector: the owner set on the drop is checked only when a
+     * player walks over it, so a hopper under it would otherwise hand it to whoever opens the chest.
+     * HIGH, after the Games' kit delete (LOWEST); the data view only, as this runs every hopper tick.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHopper(InventoryPickupItemEvent event) {
+        Item item = event.getItem();
+        if (PrizeSafety.hopperRefuses(prizeId(item.getItemStack()), item.getOwner() != null)) {
+            event.setCancelled(true);
         }
     }
 

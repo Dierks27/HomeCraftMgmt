@@ -7,6 +7,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,21 @@ class PrizeSafetyTest {
         assertFalse(PrizeSafety.ownerBound("speed"));
         assertFalse(PrizeSafety.ownerBound("candy_apple_2026"), "candy isn't a collector");
         assertFalse(PrizeSafety.ownerBound(null), "not a prize at all");
+    }
+
+    /**
+     * E21: the owner set on a drop is checked only when a player walks over it, so a hopper (or a hopper
+     * minecart) under a dropped collector would take it, and anyone could open the chest. HW1-ECON-2.
+     */
+    @Test
+    void aHopperLeavesADroppedCollectorWhereItIs() {
+        assertTrue(PrizeSafety.hopperRefuses("cap_pumpkin_2026", true));
+        assertTrue(PrizeSafety.hopperRefuses("trail_leaves_2026", true));
+        assertTrue(PrizeSafety.hopperRefuses("bag_trick_or_treat_2026", true), "the bag included");
+        assertFalse(PrizeSafety.hopperRefuses("cap_pumpkin_2026", false),
+                "nobody owns it (spilled from a broken chest): anyone could pick it up anyway");
+        assertFalse(PrizeSafety.hopperRefuses("hat_creeper", true), "other prizes go into hoppers as before");
+        assertFalse(PrizeSafety.hopperRefuses(null, true), "not a prize at all");
     }
 
     @Test
@@ -159,6 +175,12 @@ class PrizeSafetyTest {
         EventHandler drop = handler(PrizeSafetyListener.class, "onDrop", PlayerDropItemEvent.class);
         assertEquals(EventPriority.MONITOR, drop.priority());
         assertTrue(drop.ignoreCancelled(), "a cancelled drop stays in the bag");
+
+        EventHandler hopper = handler(PrizeSafetyListener.class, "onHopper", InventoryPickupItemEvent.class);
+        EventHandler kitDelete = handler(KitGuardListener.class, "onHopper", InventoryPickupItemEvent.class);
+        assertTrue(hopper.priority().getSlot() > kitDelete.priority().getSlot(),
+                "after KitGuard deletes a stray kit item (" + kitDelete.priority() + ")");
+        assertTrue(hopper.ignoreCancelled());
 
         EventHandler damage = handler(PrizeSafetyListener.class, "onItemDamage", EntityDamageEvent.class);
         EventHandler retire = handler(MiniDestructionListener.class, "onItemDamaged", EntityDamageEvent.class);

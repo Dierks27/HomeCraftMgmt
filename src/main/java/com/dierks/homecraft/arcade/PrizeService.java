@@ -656,6 +656,7 @@ public final class PrizeService {
             return Outcome.fail(refusedLate);
         }
         saveSerial(p, serial);
+        closeOurMenu(r);
         if (cap == null) {
             plugin.trails().select(r, p.id());
         }
@@ -773,6 +774,9 @@ public final class PrizeService {
                 }
                 return Outcome.fail(NO_TRAIL);
             }
+            if (present) {
+                closeOurMenu(target);
+            }
             plugin.trails().select(target, p.id());
         }
         if (present) {
@@ -831,9 +835,11 @@ public final class PrizeService {
     /**
      * The receiver's moment, where a first-person camera can see it: the title, a fanfare, a harmless
      * firework bursting right in front of them, hearts for a cap (a trail shows itself), and a line
-     * saying where it went.
+     * saying where it went. One of our menus left open on their screen is closed first: on a Bedrock
+     * window a chest screen covers the whole view, and the moment would play behind it.
      */
     private void presentMoment(Player r, String fromName, Prize p, CapPlacement placed) {
+        closeOurMenu(r);
         String item = Text.plain(p.display());
         try {
             r.showTitle(Title.title(Text.of("&6A present!"), Text.of("&e" + fromName + " gave you the " + item),
@@ -849,6 +855,26 @@ public final class PrizeService {
             // cosmetic
         }
         r.sendMessage(Text.of("&6✦ &e" + fromName + " gave you the " + item + "! &a" + where(placed)));
+    }
+
+    /**
+     * Close the receiver's screen before their present's moment (review BK-1) when it is one of our
+     * menus, which holds nothing of theirs. Any other screen (a chest, another plugin's) is left open.
+     * A trail present calls this before its select, whose "trail is on" burst is part of the moment.
+     */
+    private static void closeOurMenu(Player r) {
+        try {
+            if (hidesTheMoment(r.getOpenInventory().getTopInventory().getHolder(false))) {
+                r.closeInventory();
+            }
+        } catch (RuntimeException ignored) {
+            // cosmetic: the moment still plays
+        }
+    }
+
+    /** True for a screen of ours ({@link com.dierks.homecraft.gui.Menu}), which a present may close. */
+    static boolean hidesTheMoment(org.bukkit.inventory.InventoryHolder holder) {
+        return holder instanceof com.dierks.homecraft.gui.Menu;
     }
 
     /** "It's on your head!" and the rest, for the chat line after a collector is handed over. */

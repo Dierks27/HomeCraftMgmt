@@ -77,9 +77,12 @@ Tokens are **earned by playing and never become dollars**.
     off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
   Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
-  LuckPerms and EssentialsX), and a numbered Arcade Trophy.
+  LuckPerms and EssentialsX), and a numbered Arcade Trophy; Halloween collectors you keep for good
+  and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
   money path.
+- **Prizes are safe:** kept when you die, never despawn or burn, and can't be washed, renamed,
+  re-trimmed or enchanted.
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -161,6 +164,10 @@ rolling back is a two-part procedure and **both halves are required**:
    Without this you are pointing an old jar at a newer schema.
 2. **Run the jar that matches that schema** — the release you are rolling back
    *to*, not the one you are rolling back *from*.
+
+**Back to 0.37.0 from 0.37.1:** the Halloween collectors are hidden (and owned collector trails stop
+showing) until you upgrade again, and prizes drop on death again. Nothing is deleted. See
+[Halloween 2026](#halloween-2026-0371-0372).
 
 Check which you have before trusting a downloaded jar:
 
@@ -425,6 +432,7 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm tokens give\|set\|take <player> <n>` | admin | Adjust tokens (ledger source `ADMIN`) |
 | `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
 | `/hcm tokens history <player> [n]` | admin | A player's last n token changes |
+| `/hcm give prize <id> [player]` | admin | Give back a lost prize, free (works out of season) |
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
 | `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
@@ -437,6 +445,142 @@ midnight (`clock.time_zone`).
 **+1 Home** (Prize Counter › Perks) adds to the homes a player already has. It needs a tier
 per total under `sethome-multiple` in `plugins/Essentials/config.yml` (`hcm_2: 2`, `hcm_3: 3`,
 … up to your biggest base + 2); a missing one refuses the purchase and logs the line to add.
+
+---
+
+## Halloween 2026 (0.37.1, 0.37.2)
+
+0.37.1 adds the first **collectors**: holiday looks you keep for good, sold only in their season,
+with the year in the name. They can be bought for yourself or given as a present to someone online.
+It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
+
+### Collectors
+
+| Collector | Price | On sale (local dates, `clock.time_zone`) | What it is |
+|---|---|---|---|
+| **Pumpkin Cap 2026** (`cap_pumpkin_2026`) | 250 tokens | 1 to 31 Oct 2026 | An orange leather cap with a green vine trim. No armour, and it never wears out. Right-click the air to wear it; on Bedrock a tap on a plain block works too |
+| **Autumn Leaves 2026** (`trail_leaves_2026`) | 400 tokens | 1 Oct to 30 Nov 2026 | A trail of orange leaves that fall from your shoulders as you walk |
+
+- **Yours for good.** One of each per player, ever. They never run out, and no crate hands one
+  out. Each cap carries its number ("No. 3"), and the cap and its tile say "Halloween 2026
+  collector" and "Yours for good!".
+- **On the counter** they are the first two tiles of the Cosmetics tab, with "On sale until 31 Oct".
+  The cap leaves the shop at midnight going into 1 November (Chicago time on the shipped clock),
+  the trail on 1 December. Out of season a collector is off the counter and the website feed, and
+  can't be bought or given. What players own keeps working: the cap is the item itself, and an owned trail
+  still switches on.
+- **Buying one for yourself** is the tile's own tap, with a confirm (both cost over 100). The cap
+  goes on your head if nothing is there, otherwise into your bag: a buy never takes your helmet off.
+  With no free slot: "Make room in your bag first — nothing charged." A bought trail switches on.
+- **The Wallet's trail tile** goes to the next trail you own, then off ("Click for the next trail"
+  once you have two). A collector trail reads "Yours for good" there instead of an end date.
+- **Built into the plugin,** not rows in `arcade.prizes`, so there is no config revision and no
+  edit or `/hcm config reset arcade` can take one away. A row of your own with a collector's id, or
+  an id starting `candy_` or `bag_trick_or_treat_`, is skipped with a WARN. The prices and dates
+  are fixed. Next year's are new ids (`cap_pumpkin_2027`), and a shipped id is never removed or
+  renamed, because an owned trail shows only while its row exists.
+- **One claim, written first.** The receiver's lifetime row in `prize_purchases` is written before
+  any token moves, so a double tap on Confirm, a second giver or a failed database write can't sell
+  a second one. If the charge or the hand-over then fails, the claim is undone and nothing is
+  charged.
+- At startup a self-test builds the cap and checks its look, its zero armour and its tag, and that
+  the leaves particle needs no data. Each problem is one WARN. So is a clock on UTC (a blank or
+  unknown `clock.time_zone`), which would end Halloween at 7 PM in Chicago.
+
+### Give a present
+
+- **The Give a present tile** (a cake, top right of the Cosmetics tab) shows while a collector is
+  on sale and `arcade.collectors.gifting` is true. Tapping a collector's own tile only ever buys it
+  for yourself, so a child looking at her cap can't give it away by accident.
+- **Three screens, every one Bedrock-safe:**
+  1. **Which present?** Each collector on sale, with its price. One you can't afford says "You need
+     N more tokens."
+  2. **Who is it for?** Everyone else online that you can see, by name: paper on Bedrock, their
+     head on Java. Only green names can be picked. The others say why: "has it", "bag full" or
+     "not here" (another world, the Games world, or in a game).
+  3. **The confirm,** "Give Pumpkin Cap 2026 to <name>?", whose middle tile is **the person**, not
+     the item, so it never looks like a buy.
+- **Checked before any token moves, in this order;** the first failure is the message, and nothing
+  is charged:
+  1. the economy runs in the giver's world;
+  2. gifting is on, and the collector is on sale;
+  3. the receiver is online, the giver can see them (a vanished admin is "not online"), and it
+     isn't the giver;
+  4. the receiver is in an economy world, not the Games world, and not in a game (a game's
+     inventory restore would wipe a present);
+  5. they don't have it yet;
+  6. for a cap, there is room for it (an empty head, or a free bag slot);
+  7. the giver can pay.
+- **The receiver's moment:** "A present!" on screen, a fanfare, a harmless firework bursting right
+  in front of them (nearer when a wall is close), hearts, and the cap goes straight onto their
+  head. A helmet they were wearing goes into their bag; one with Curse of Binding stays on, and the
+  cap goes into the bag. A trail present switches on with a puff of leaves in front of them. If one
+  of the plugin's menus is open on their screen, it is closed first, so nothing plays behind it.
+- **The giver's menu closes** (so it doesn't hide the moment) with "✔ You gave the … to …!".
+- Every present costs the giver the full price, and it is one of each per receiver for good. A
+  present never goes on the ground, to someone offline or into a game. It can't be undone:
+  `/hcm tokens give` is the remedy for a mistake, and `gifting: false` turns presents off.
+
+### On Bedrock
+
+- The cap is a dyed leather helmet with a vanilla trim, not a player head (Bedrock can't draw head
+  textures reliably), so it looks the same on a Bedrock screen. Whether Bedrock draws the trim on
+  someone else's helmet is not proven; the orange shows either way.
+- **Bedrock's armour bar may show 1 point** while the cap is worn. That is only a picture: the
+  server counts 0 armour.
+- The trail's particle, `ORANGE_POPLAR_LEAVES`, is mapped by current Geyser. If the leaves don't
+  show on a Bedrock screen, update Geyser.
+- Bedrock shows lore only on a long press, so the year is in the name as well.
+
+### Prizes are safe (every prize, for everyone)
+
+- **Kept when you die.** Every prize stack goes from your drops to what you keep (when
+  `keepInventory` is off). A grave plugin such as GravesX builds its grave from the drops, so a
+  prize is never in a grave and never copied; a last check before the grave plugin takes out any
+  prize another plugin put back, with one WARN. A prize bundle holding anything but candy drops like
+  any other item.
+- **On the ground** a dropped prize never despawns, burns or blows up, and no mob picks it up. **The
+  void can't be saved.**
+- **A dropped collector** can be picked up again only by the player who dropped it, and no hopper
+  takes it. Other prizes can still be handed over by dropping them, as before.
+- **Taking a worn collector off** by right-clicking with another hat needs room in the bag, or it
+  is refused: a collector is never dropped on the ground.
+- **Workstations:** a cauldron won't wash a prize ("That's a prize - it stays just as it is."), and
+  an anvil, a smithing table, a grindstone or an enchanting table won't change one. Crafting,
+  crafters, brewing and villager trades already refused prizes.
+
+### Owner knobs (`arcade.collectors`)
+
+| Key | Default | What it does |
+|---|---|---|
+| `on_sale` | `true` | `false` takes this season's collectors off the counter and out of presents. Owned ones keep working |
+| `gifting` | `true` | `false` hides Give a present and refuses presents. Buying for yourself still works, and `/hcm give prize` ignores it |
+
+Both keys are new: the first start of 0.37.1 writes them, with their comment, into your
+config.yml. `config_revision` stays 21.
+
+### Giving back a lost prize: `/hcm give prize <id> [player]` (admin)
+
+- Gives a Prize Counter row or a collector, free, to you or the named online player. It works out
+  of season and ignores the limits and "you have this", because giving it back is the point. A
+  collector's claim is written if it is missing, so a restore never counts twice. Tab completion
+  offers the ids.
+- The player must be home from every game ("<name> is in a game. Try again when they're back."),
+  and an item needs room in their bag: nothing goes on the ground. A +1 Home isn't an item:
+  `/hcm homes refresh <player>` gives back the homes they bought.
+- **Typed by you for someone else, a collector is a present:** "A gift from <you>" on the cap, and
+  the whole moment above. To yourself or from the console it is a plain give-back ("… is yours
+  again!"). Each one is logged as `Admin <sender> gave <id> to <player>`.
+
+### If you roll back to 0.37.0
+
+The collectors are hidden (nothing is sold or given), and owned collector trails stop showing until
+you upgrade again. Their rows stay in the database, so nothing is lost. Caps already handed out stay
+in players' bags, and prizes drop on death again.
+
+### The Candy Apple shower (0.37.2)
+
+Comes with 0.37.2, and this section gains it then.
 
 ---
 

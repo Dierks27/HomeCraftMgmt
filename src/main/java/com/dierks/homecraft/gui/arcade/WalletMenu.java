@@ -74,7 +74,8 @@ public final class WalletMenu extends Menu {
         set(16, Menus.glint(Menus.icon(trail != null ? Material.BLAZE_POWDER : Material.GRAY_DYE,
                 trail != null ? "&dTrail: &f" + Text.plain(trail.prize().display()) + " &aon"
                         : hasAny ? "&dTrail: &7off" : "&7No trail yet",
-                trail != null ? "&7Ends in " + Menus.duration(trail.expiresAt() - System.currentTimeMillis()) : "",
+                trail == null ? "" : trail.prize().collector() != null ? "&aYours for good" // a collector never ends
+                        : "&7Ends in " + Menus.duration(trail.expiresAt() - System.currentTimeMillis()),
                 hasAny ? "&eClick to turn it " + (trail != null ? "off" : "on") : "&7Get one at the Prize Counter."),
                 trail != null), hasAny ? e -> {
                     player.sendMessage(Text.of(plugin.trails().toggle(player)));

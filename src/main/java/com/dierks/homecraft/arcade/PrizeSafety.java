@@ -1,0 +1,77 @@
+package com.dierks.homecraft.arcade;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Predicate;
+
+/**
+ * Which prizes are kept safe, as plain rules over what an item is (HALLOWEEN-SPEC D9). The listener
+ * that applies them, {@link PrizeSafetyListener}, reads the facts off the item; this decides.
+ *
+ * <ul>
+ *   <li><b>Kept on death:</b> a prize ({@code hcm:token_prize}) that holds nothing but candy. A prize
+ *       bundle holding anything else drops like any other item, or protecting it would make a
+ *       keep-inventory, fireproof bag for whatever was put in it.</li>
+ *   <li><b>Safe on the ground</b> (never despawns, never burns, no mob takes it): the same, except
+ *       candy itself, which is meant to go.</li>
+ *   <li><b>Owner-bound when dropped:</b> a collector (the Trick-or-Treat Bag included). With one of
+ *       each for good, a lost one could never be bought again, so only the one who dropped it can
+ *       pick it back up. Other prizes are handed over by dropping them, so they are left alone.</li>
+ * </ul>
+ */
+public final class PrizeSafety {
+
+    private PrizeSafety() {
+    }
+
+    /** The contents rule: true when everything inside is candy. An empty bag holds nothing but candy. */
+    static boolean holdsOnlyCandy(List<Boolean> contentsAreCandy) {
+        if (contentsAreCandy == null) {
+            return true;
+        }
+        for (Boolean candy : contentsAreCandy) {
+            if (!Boolean.TRUE.equals(candy)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Kept on death: a prize that holds nothing but candy. */
+    static boolean keepOnDeath(boolean prize, List<Boolean> contentsAreCandy) {
+        return prize && holdsOnlyCandy(contentsAreCandy);
+    }
+
+    /** Safe on the ground: kept on death, and not candy (shower candy is meant to go). */
+    static boolean keepOnGround(boolean prize, boolean candy, List<Boolean> contentsAreCandy) {
+        return keepOnDeath(prize, contentsAreCandy) && !candy;
+    }
+
+    /** True for a prize id whose drop only the one who dropped it may pick up: a collector, or the bag. */
+    static boolean ownerBound(String prizeId) {
+        if (prizeId == null) {
+            return false;
+        }
+        return Collectors.isCollectorId(prizeId)
+                || prizeId.trim().toLowerCase(Locale.ROOT).startsWith("bag_trick_or_treat_");
+    }
+
+    /**
+     * Move every element of {@code from} that matches into {@code to}, in order, and return how many
+     * moved. A moved element is no longer in {@code from}, so a second call moves nothing: an item is
+     * never both dropped (where a grave plugin would copy it) and kept.
+     */
+    static <T> int moveIf(List<T> from, List<T> to, Predicate<? super T> matches) {
+        int moved = 0;
+        for (Iterator<T> it = from.iterator(); it.hasNext(); ) {
+            T t = it.next();
+            if (matches.test(t)) {
+                it.remove();
+                to.add(t);
+                moved++;
+            }
+        }
+        return moved;
+    }
+}

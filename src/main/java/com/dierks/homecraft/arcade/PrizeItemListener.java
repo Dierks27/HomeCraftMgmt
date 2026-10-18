@@ -2,6 +2,7 @@ package com.dierks.homecraft.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
+import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Sounds;
@@ -49,7 +50,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>Mini Lure</b>: right-click to set it — the next wild Mini that rolls for anyone lands
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
- *   <li><b>Hats</b>: right-click the air to put one on.</li>
+ *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too).</li>
  *   <li><b>Placed hats and trophies</b> remember exactly what they were, so breaking one (or
  *       blowing it up, pushing it, washing it away) gives the same prize back — never a plain head
  *       that has lost its tag and could be sold.</li>
@@ -128,16 +129,29 @@ public final class PrizeItemListener implements Listener {
                 show(player);
             }
             case HAT -> {
-                if (a == Action.RIGHT_CLICK_AIR) {
+                Block clicked = event.getClickedBlock();
+                boolean tap = clicked != null && wearsOnBlockTap(Bedrock.is(player), player.isSneaking(),
+                        clicked.getType().isInteractable(), item.getType() == Material.PLAYER_HEAD);
+                if (a == Action.RIGHT_CLICK_AIR || tap) {
                     cancel(event);
                     wear(player, hand);
                 }
-                // on a block: let it be placed as a head (onPlace remembers it)
+                // otherwise, on a block: let it be placed as a head (onPlace remembers it)
             }
             default -> {
                 // a trophy is placed like any head
             }
         }
+    }
+
+    /**
+     * A Bedrock tap on a block wears a hat too (HALLOWEEN-SPEC D2). Geyser turns a tap on a block into a
+     * use-on-block only, so "right-click the air" never fires for a child looking at the ground. Not a
+     * head (heads are still placed), not while sneaking, and not on a block that does something when
+     * tapped (a chest or a door still opens). Java keeps the right-click in the air.
+     */
+    static boolean wearsOnBlockTap(boolean bedrock, boolean sneaking, boolean interactable, boolean head) {
+        return bedrock && !sneaking && !interactable && !head;
     }
 
     private static void cancel(PlayerInteractEvent event) {

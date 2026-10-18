@@ -25,16 +25,32 @@ import java.util.UUID;
 
 /**
  * Particle trails bought from the Prize Counter: time-limited, one switched on at a time, and
- * quiet — a couple of particles at the feet, only while the player is actually walking, so a
- * trail is something you notice following a friend and not a cloud around everybody standing
- * at the Mall. Toggled with {@code /hcm trail} (and from the Wallet).
+ * quiet — a couple of particles at the feet (leaves fall from the shoulders), only while the
+ * player is actually walking, so a trail is something you notice following a friend and not a
+ * cloud around everybody standing at the Mall. Toggled with {@code /hcm trail} (and from the
+ * Wallet).
  */
 public final class TrailService implements Listener {
 
     /** At most one puff per this many milliseconds per player. */
     private static final long PUFF_MS = 150;
 
-    private record Active(String prizeId, Particle particle, long expiresAt) {
+    private record Active(String prizeId, Particle particle, long expiresAt, Puff puff) {
+    }
+
+    /** One puff of a trail: how far above the feet, how many particles, and their spread. */
+    record Puff(double y, int count, double dx, double dy, double dz) {
+    }
+
+    /** Every trail but leaves: a couple of particles just above the feet. */
+    private static final Puff AT_FEET = new Puff(0.15, 2, 0.15, 0.05, 0.15);
+    /** Leaves fall from the shoulders: at the feet they would land at once (kid-bedrock #3). */
+    private static final Puff FROM_SHOULDERS = new Puff(1.3, 1, 0.3, 0.1, 0.3);
+
+    /** How a trail of this particle puffs: from shoulder height for any particle ending in _LEAVES. */
+    static Puff puff(String particle) {
+        return particle != null && particle.trim().toUpperCase(Locale.ROOT).endsWith("_LEAVES")
+                ? FROM_SHOULDERS : AT_FEET;
     }
 
     private final HomeCraftManagement plugin;
@@ -150,7 +166,7 @@ public final class TrailService implements Listener {
             active.remove(player.getUniqueId());
             return;
         }
-        active.put(player.getUniqueId(), new Active(on.prize().id(), particle, on.expiresAt()));
+        active.put(player.getUniqueId(), new Active(on.prize().id(), particle, on.expiresAt(), puff(particle.name())));
     }
 
     private Particle particle(String name) {
@@ -203,7 +219,9 @@ public final class TrailService implements Listener {
         }
         lastPuff.put(player.getUniqueId(), now);
         try {
-            player.getWorld().spawnParticle(a.particle(), from.clone().add(0, 0.15, 0), 2, 0.15, 0.05, 0.15, 0.0);
+            Puff puff = a.puff();
+            player.getWorld().spawnParticle(a.particle(), from.clone().add(0, puff.y(), 0), puff.count(),
+                    puff.dx(), puff.dy(), puff.dz(), 0.0);
         } catch (RuntimeException e) {
             active.remove(player.getUniqueId()); // a particle that needs data we do not give — stop trying
         }

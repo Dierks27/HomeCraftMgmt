@@ -33,6 +33,8 @@ import com.dierks.homecraft.gui.games.trial.CourseListMenu;
 import com.dierks.homecraft.gui.games.trial.CourseMenu;
 import com.dierks.homecraft.gui.games.trial.ResultMenu;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.storage.GenMetaDao;
+import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import net.kyori.adventure.title.Title;
@@ -194,11 +196,14 @@ public final class TimeTrials implements Game {
 
     /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
     private final PreviewTests previews = new PreviewTests();
+    /** MOUNTAIN-V21-SPEC D17: how far Ice Boats really fly off a Mountain Run's drops (it measures, nothing more). */
+    private final FlightRecorder flights;
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
         this.store = new CourseStore(() -> ctx.games().dao(), line -> log().warning(line));
         this.admin = new CourseAdmin(this);
+        this.flights = new FlightRecorder(new FlightStore());
     }
 
     /**
@@ -454,6 +459,7 @@ public final class TimeTrials implements Game {
         riders.stop(); // WP-CH
         for (TrialRun run : new ArrayList<>(runs.values())) {
             Player p = online(run.player); // guarded: never a throw out of a stop (and no server in a test)
+            flightsEnd(run, false);
             removeBoat(run, p);
             drops.end(run, p);
         }
@@ -1124,6 +1130,7 @@ public final class TimeTrials implements Game {
             Session s = p == null ? null : sessions().session(p);
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
+                flightsEnd(run, false); // D17
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
                 drops.end(run, p);
@@ -1317,6 +1324,7 @@ public final class TimeTrials implements Game {
             return;
         }
         Location to = e.getTo();
+        flight(p, run, e.getFrom(), to); // D17: before the move can end the run at the finish
         if (!advance(p, run, to)) {
             return;
         }
@@ -1325,6 +1333,88 @@ public final class TimeTrials implements Game {
         double floor = FairPlay.boatFloor(run.course, run.progress.lastCheckpoint());
         if (!Double.isNaN(floor) && to.getY() < floor) {
             run.backDue = true;
+        }
+    }
+
+    /**
+     * The flight recorder (MOUNTAIN-V21-SPEC D17): a boat's move on a Mountain Run v2 (boat planner algo 4 on,
+     * {@link FlightRecorder#records}), the record begun at the run's first move with the clock running. A few
+     * doubles of arithmetic and nothing allocated; it changes nothing about the ride.
+     */
+    private void flight(Player p, TrialRun run, Location from, Location to) {
+        if (run.flight == null) {
+            if (!FlightRecorder.records(run.course)) {
+                return;
+            }
+            run.flight = flights.start(Bedrock.is(p), run.course);
+        }
+        run.flight.move(from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ(),
+                Bukkit.getCurrentTick());
+    }
+
+    /**
+     * The run's flight record ends ({@code finished}: at the finish; else it left, was replaced or the game
+     * stopped): one INFO line for the console, the edition and the course, never the player's name. Once.
+     */
+    void flightsEnd(TrialRun run, boolean finished) {
+        FlightRecorder.Run f = run.flight;
+        if (f == null) {
+            return;
+        }
+        run.flight = null;
+        log().info(flights.close(f, finished).line());
+    }
+
+    /** The flight recorder's lines for {@code /hcm games boat flights} (D17). */
+    List<String> flightLines() {
+        return flights.lines();
+    }
+
+    /**
+     * {@code /hcm games boat flights} (MOUNTAIN-V21-SPEC D17): the Ice Boat jumps measured on Mountain Run rides,
+     * inside Time Trials' guard; a plain line when Time Trials isn't there.
+     */
+    public static List<String> flightLines(GamesService games) {
+        TimeTrials t = games != null && games.game(SPEC.id()) instanceof TimeTrials tt ? tt : null;
+        if (t == null) {
+            return List.of("&7Time Trials isn't running, so no Ice Boat jumps have been measured.");
+        }
+        return games.guard(t, t::flightLines, List.of("&cThe flight recorder couldn't be read - check the console."));
+    }
+
+    /**
+     * Where the flight recorder keeps the all-time longest jumps: {@code hcm_meta} under
+     * {@value FlightRecorder#KEY}, on the main thread like every DAO. No database (a test), or one that fails:
+     * nothing is read or written, and a failed write is a warning.
+     */
+    private final class FlightStore implements FlightRecorder.Store {
+
+        private GenMetaDao meta() {
+            HomeCraftManagement plugin = ctx.plugin();
+            return plugin == null || plugin.database() == null ? null : new GenMetaDao(plugin.database());
+        }
+
+        @Override
+        public String get(String key) {
+            try {
+                GenMetaDao meta = meta();
+                return meta == null ? null : meta.get(key);
+            } catch (SQLException | RuntimeException e) {
+                log().warning("Ice Boat flights: could not read " + key + ": " + e.getMessage());
+                return null;
+            }
+        }
+
+        @Override
+        public void set(String key, String value) {
+            try {
+                GenMetaDao meta = meta();
+                if (meta != null) {
+                    meta.set(key, value);
+                }
+            } catch (SQLException | RuntimeException e) {
+                log().warning("Ice Boat flights: could not keep " + key + ": " + e.getMessage());
+            }
         }
     }
 
@@ -1413,6 +1503,9 @@ public final class TimeTrials implements Game {
         if (run.running() && e.getCause() != PlayerTeleportEvent.TeleportCause.DISMOUNT) {
             run.suspended = true; // nothing counts from where they were put; the run sends them back
             run.lastReset = Bukkit.getCurrentTick();
+            if (run.flight != null) {
+                run.flight.drop(); // D17: a flight in the air when they were moved is no flight
+            }
         }
     }
 
@@ -1514,6 +1607,9 @@ public final class TimeTrials implements Game {
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */
     boolean move(Player p, TrialRun run, Location at) {
+        if (run.flight != null) {
+            run.flight.drop(); // D17: a reset (or back to the start) ends no flight
+        }
         run.expect = at;
         run.suspended = true;
         boolean ok = run.course.kind() == TrialKind.BOAT ? reseat(p, run, at) : sessions().teleport(p, at);
@@ -1603,6 +1699,9 @@ public final class TimeTrials implements Game {
         }
         run.boat = null;
         boats.remove(b.getUniqueId());
+        if (run.flight != null) {
+            run.flight.drop(); // D17: out of the boat, the open flight is dropped
+        }
         Runnable boatGone = () -> {
             b.eject();
             b.remove();
@@ -1625,6 +1724,7 @@ public final class TimeTrials implements Game {
                 return;
             }
             case RACE -> {
+                flightsEnd(run, true); // D17
                 race.finish(p, run, nanos);
                 return;
             }
@@ -1632,6 +1732,7 @@ public final class TimeTrials implements Game {
                 // a solo run: as it always was
             }
         }
+        flightsEnd(run, true); // D17
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
@@ -1894,6 +1995,7 @@ public final class TimeTrials implements Game {
     void end(Player player) {
         TrialRun run = runs.remove(player.getUniqueId());
         if (run != null) {
+            flightsEnd(run, false); // D17: a no-op after the finish wrote its line
             removeBoat(run, player);
             drops.end(run, player);
         }
@@ -1972,7 +2074,10 @@ public final class TimeTrials implements Game {
 
     /** Replace the player's run (race mode's re-grid: a new course from a new spot, the same race). */
     void replaceRun(TrialRun run) {
-        runs.put(run.player, run);
+        TrialRun old = runs.put(run.player, run);
+        if (old != null && old != run) {
+            flightsEnd(old, false); // D17: the old run's record ends with it
+        }
     }
 
     /** Every live run. */

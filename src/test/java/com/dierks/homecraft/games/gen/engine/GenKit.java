@@ -655,6 +655,8 @@ final class GenKit {
          * server run; a test sets it to have engines started again inside one process (ENG-R3-00).
          */
         long bootedAt = Long.MAX_VALUE;
+        /** The server's ice values ({@link GenHost#iceFacts}): none by default, as a host that can't read them. */
+        float[] ice;
 
         /** Another bench's clock (the cross-feature journeys: one clock for both), or {@code null}: {@link #now}. */
         java.util.function.LongSupplier clock;
@@ -761,6 +763,11 @@ final class GenKit {
         @Override
         public long bootedAt() {
             return bootedAt;
+        }
+
+        @Override
+        public float[] iceFacts() {
+            return ice;
         }
 
         @Override

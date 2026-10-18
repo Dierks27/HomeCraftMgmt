@@ -662,5 +662,17 @@ public final class DailyCourses implements Game {
         public String playerName(UUID player) {
             return holder(player);
         }
+
+        /** MOUNTAIN-V21-SPEC D14: the server's own slipperiness of the boat planner's blocks; null on any throw. */
+        @Override
+        public float[] iceFacts() {
+            try {
+                return new float[]{Material.PACKED_ICE.getSlipperiness(), Material.ICE.getSlipperiness(),
+                        Material.BLUE_ICE.getSlipperiness(), Material.SNOW_BLOCK.getSlipperiness(),
+                        Material.SMOOTH_SANDSTONE.getSlipperiness()};
+            } catch (RuntimeException | LinkageError e) {
+                return null;
+            }
+        }
     }
 }

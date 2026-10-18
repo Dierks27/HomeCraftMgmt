@@ -72,6 +72,13 @@ class GamesCommandTest {
     }
 
     @Test
+    void boatFlightsIsAnAdminVerbWithItsHelpLine() {
+        assertTrue(GamesCommand.VERBS.contains("boat"), "/hcm games boat flights is offered to admins (D17)");
+        assertEquals(List.of("flights"), GamesCommand.BOAT_VERBS, "Tab offers flights after boat");
+        assertTrue(GamesCommand.BOAT_HELP.startsWith("&e/hcm games boat flights &7- "), GamesCommand.BOAT_HELP);
+    }
+
+    @Test
     void adminNumbersAreWholeAndInRange() {
         assertEquals(7, GamesCommand.parse("7", 1, 365), "a pause of 7 days");
         assertEquals(-2, GamesCommand.parse("0", 1, 365), "below the range");

@@ -159,6 +159,25 @@ public final class PrizeSafetyListener implements Listener {
         PrizeSafety.moveIf(event.getDrops(), event.getItemsToKeep(), PrizeSafetyListener::keepOnDeath);
     }
 
+    /**
+     * The guard: a prize that is kept AND back in the drops (another plugin put it there after LOW)
+     * would be copied into a grave. HIGHEST runs before a grave plugin's MONITOR, so it leaves the
+     * drops here, with one warning naming the case.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onDeathGuard(PlayerDeathEvent event) {
+        if (event.getKeepInventory()) {
+            return;
+        }
+        int removed = PrizeSafety.dropKeptTwice(event.getDrops(), event.getItemsToKeep(),
+                PrizeSafetyListener::keepOnDeath);
+        if (removed > 0) {
+            plugin.getLogger().warning("Prize safety: " + removed + " prize stack(s) at " + event.getEntity().getName()
+                    + "'s death were both kept and back in the drops (another plugin put them there) - taken out "
+                    + "of the drops, so no grave copies them.");
+        }
+    }
+
     // ---- on the ground ---------------------------------------------------------------------
 
     /** After the Games' kit cancel (LOWEST), so only an item that is really spawning is touched. */

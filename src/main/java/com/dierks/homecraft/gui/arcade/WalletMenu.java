@@ -16,10 +16,10 @@ import java.util.List;
  * The Wallet: your tokens, how you're earning them, and where they went.
  *
  * <p>Balance on top; the login streak (with tomorrow's reward), playtime progress, an armed Mini
- * Lure and your trail (click to switch it) in the next row; the ways to earn in the row after; and
- * the last ten token moves at the bottom, one per tile, in plain words — "+5 Quest: Catch 8 fish",
- * "−25 Mini Radar" — with the words in each tile's NAME so they read on Bedrock too. Replaces the
- * old Token Counter.
+ * Lure and your trail (click for the next one you own, then off) in the next row; the ways to earn
+ * in the row after; and the last ten token moves at the bottom, one per tile, in plain words —
+ * "+5 Quest: Catch 8 fish", "−25 Mini Radar" — with the words in each tile's NAME so they read on
+ * Bedrock too. Replaces the old Token Counter.
  *
  * <p>Slot 51 is Take a break (a blue bed, spec §4.3): the player's own daily limit and pause for
  * games of chance, its state in the name ("Take a break - limit 25 a day", "Paused until Tue 12
@@ -70,15 +70,18 @@ public final class WalletMenu extends Menu {
                 lure), null);
 
         var trail = plugin.trails() == null ? null : plugin.trails().current(player);
-        boolean hasAny = plugin.trails() != null && !plugin.trails().owned(player).isEmpty();
+        int trails = plugin.trails() == null ? 0 : plugin.trails().owned(player).size();
+        boolean hasAny = trails > 0;
         set(16, Menus.glint(Menus.icon(trail != null ? Material.BLAZE_POWDER : Material.GRAY_DYE,
                 trail != null ? "&dTrail: &f" + Text.plain(trail.prize().display()) + " &aon"
                         : hasAny ? "&dTrail: &7off" : "&7No trail yet",
                 trail == null ? "" : trail.prize().collector() != null ? "&aYours for good" // a collector never ends
                         : "&7Ends in " + Menus.duration(trail.expiresAt() - System.currentTimeMillis()),
-                hasAny ? "&eClick to turn it " + (trail != null ? "off" : "on") : "&7Get one at the Prize Counter."),
+                trails >= 2 ? "&eClick for the next trail"
+                        : hasAny ? "&eClick to turn it " + (trail != null ? "off" : "on") : "&7Get one at the Prize Counter."),
                 trail != null), hasAny ? e -> {
-                    player.sendMessage(Text.of(plugin.trails().toggle(player)));
+                    // Off, then each trail you own in turn, then off again (with one trail: on and off).
+                    player.sendMessage(Text.of(plugin.trails().cycle(player)));
                     refresh();
                 } : null);
 

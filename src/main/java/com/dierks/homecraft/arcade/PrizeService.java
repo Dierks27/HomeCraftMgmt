@@ -488,8 +488,10 @@ public final class PrizeService {
     private Outcome buyCollector(Player player, Prize p, int cost) {
         UUID id = player.getUniqueId();
         ItemStack cap = null;
+        long serial = 0;
         if (p.type() == PrizeType.HAT) {
-            cap = PrizeItems.collectorCap(plugin, p, null);
+            serial = nextSerial(p);
+            cap = PrizeItems.collectorCap(plugin, p, null, serial);
             if (cap == null) {
                 return Outcome.fail(NOTHING_MADE);
             }
@@ -513,6 +515,7 @@ public final class PrizeService {
         if (refused != null) {
             return Outcome.fail(refused);
         }
+        saveSerial(p, serial);
         if (cap == null) {
             plugin.trails().select(player, p.id());
         }
@@ -534,7 +537,8 @@ public final class PrizeService {
      * @param self              the receiver is the giver
      * @param receiverEconomyWorld the economy runs in the receiver's world
      * @param receiverGamesWorld   the receiver is in a Games world
-     * @param receiverInGame    the receiver is in a game, or not yet home from one
+     * @param receiverInGame    the receiver is in a game, or not yet home from one (or on the death
+     *                          screen: a present is never handed to someone respawning)
      * @param receiverHasIt     the receiver already has it (owned, or the lifetime limit used)
      * @param cap               the present is a cap (a trail needs no room)
      * @param headEmpty         the receiver's helmet slot is empty
@@ -595,7 +599,7 @@ public final class PrizeService {
         return new GiftFacts(giverMaySpend, plugin.config().arcade().collectorsGifting(), giftable, visible(p),
                 online, online && giver.canSee(r), receiverId != null && receiverId.equals(giver.getUniqueId()),
                 online && plugin.sandbox().allowed(r.getWorld()), online && gamesWorld(r.getWorld()),
-                online && !homeFromGames(r), online && (owned(r, p) || left(r.getUniqueId(), p) <= 0),
+                online && (!homeFromGames(r) || r.isDead()), online && (owned(r, p) || left(r.getUniqueId(), p) <= 0),
                 p.type() == PrizeType.HAT, helmet == null || helmet.getType().isAir(),
                 inv != null && inv.firstEmpty() != -1,
                 plugin.tokens().balance(giver.getUniqueId()), price(giver.getUniqueId(), p), name,
@@ -627,8 +631,10 @@ public final class PrizeService {
         String item = f.item();
         int cost = f.cost();
         ItemStack cap = null;
+        long serial = 0;
         if (p.type() == PrizeType.HAT) {
-            cap = PrizeItems.collectorCap(plugin, p, giver.getName());
+            serial = nextSerial(p);
+            cap = PrizeItems.collectorCap(plugin, p, giver.getName(), serial);
             if (cap == null) {
                 return Outcome.fail(NOTHING_MADE);
             }
@@ -649,6 +655,7 @@ public final class PrizeService {
         if (refusedLate != null) {
             return Outcome.fail(refusedLate);
         }
+        saveSerial(p, serial);
         if (cap == null) {
             plugin.trails().select(r, p.id());
         }
@@ -723,10 +730,15 @@ public final class PrizeService {
         if (!homeFromGames(target)) {
             return Outcome.fail(target.getName() + " is in a game. Try again when they're back.");
         }
+        if (target.isDead()) {
+            return Outcome.fail(target.getName() + " is respawning. Try again in a moment.");
+        }
         boolean present = fromName != null && !fromName.isBlank() && !fromName.equalsIgnoreCase(target.getName());
         ItemStack cap = null;
+        long serial = 0;
         if (p.type() == PrizeType.HAT) {
-            cap = PrizeItems.collectorCap(plugin, p, present ? fromName : null);
+            serial = nextSerial(p);
+            cap = PrizeItems.collectorCap(plugin, p, present ? fromName : null, serial);
             if (cap == null) {
                 return Outcome.fail(NOTHING_MADE);
             }
@@ -753,6 +765,7 @@ public final class PrizeService {
                 }
                 return Outcome.fail(target.getName() + "'s bag is full.");
             }
+            saveSerial(p, serial);
         } else {
             if (!plugin.trails().grant(target, p, p.days())) {
                 if (claimed) {
@@ -765,7 +778,8 @@ public final class PrizeService {
         if (present) {
             presentMoment(target, fromName, p, placed);
         } else {
-            target.sendMessage(Text.of("&a✔ " + p.display() + " &ais yours again! &7" + where(placed)));
+            target.sendMessage(Text.of("&a✔ " + p.display() + " &ais yours" + (claimed ? "! &7" : " again! &7")
+                    + where(placed)));
             Sounds.received(target);
         }
         return cap != null ? Outcome.won(cap.clone(), p.display())
@@ -881,6 +895,41 @@ public final class PrizeService {
             plugin.getLogger().severe("Could not undo the claim on collector '" + p.id() + "' for " + player
                     + " — nothing was charged, but it now reads as theirs; /hcm give prize " + p.id()
                     + " gives it to them: " + e.getMessage());
+        }
+    }
+
+    /** The {@code arcade_state} key of a collector cap's serial number ("No. n", D7). */
+    static String serialKey(String prizeId) {
+        return "collector:" + prizeId;
+    }
+
+    /**
+     * The next serial number for a collector cap, read before the build so the cap carries it (D7, the
+     * trophy's pattern), or 0 for none: a trail has no item to carry one, and a number that can't be
+     * read is left off rather than refusing the cap. {@link #saveSerial} writes it after the hand-over,
+     * so a refusal uses up no number.
+     */
+    private long nextSerial(Prize p) {
+        if (p.type() != PrizeType.HAT) {
+            return 0;
+        }
+        try {
+            return dao.state(serialKey(p.id()), 0) + 1;
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not read the serial of collector '" + p.id()
+                    + "' (the cap is made without one): " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private void saveSerial(Prize p, long serial) {
+        if (serial <= 0) {
+            return;
+        }
+        try {
+            dao.setState(serialKey(p.id()), serial);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not save the serial of collector '" + p.id() + "': " + e.getMessage());
         }
     }
 

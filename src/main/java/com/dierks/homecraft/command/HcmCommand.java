@@ -696,7 +696,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
      * written, or found already there, so a restore never counts twice; a cap needs room by the
      * present's placement rule and never goes on the ground; and given by a player to someone else it
      * is a present, with "A gift from" on the cap and the whole moment. Any other row is handed out as
-     * a crate would ({@code grant}).
+     * a crate would ({@code grant}), and an item only into a free bag slot, never onto the ground.
      */
     private void handleGivePrize(CommandSender sender, String[] args) {
         String id = givePrizeId(args);
@@ -721,6 +721,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         if (!homeFromGames(target)) {
             sender.sendMessage(Text.of("&c" + target.getName() + " is in a game. Try again when they're back."));
+            return;
+        }
+        if (target.isDead()) {
+            sender.sendMessage(Text.of("&c" + target.getName() + " is respawning. Try again in a moment."));
+            return;
+        }
+        if (p.collector() == null && givesAnItem(p.type()) && target.getInventory().firstEmpty() == -1) {
+            // A crate's hand-over drops what doesn't fit; a give-back never goes on the ground.
+            sender.sendMessage(Text.of("&c" + target.getName() + "'s bag is full."));
             return;
         }
         String from = sender instanceof Player sp ? presentFrom(sp.getName(), sp.getUniqueId(), target.getUniqueId()) : null;
@@ -770,6 +779,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return "A +1 Home isn't an item: /hcm homes refresh <player> gives back the homes they bought.";
         }
         return null;
+    }
+
+    /**
+     * Whether a (non-collector) row is handed over as an item, which needs a free bag slot: a give-back
+     * never drops one on the ground. A trail, a command row and the rest are not items.
+     */
+    static boolean givesAnItem(com.dierks.homecraft.config.PluginConfig.PrizeType type) {
+        return switch (type) {
+            case BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY, FILAMENT, BLOCK, PACK -> true;
+            default -> false;
+        };
     }
 
     /** Home from every game: no session, nothing on the way back, no saved-state row sending them back. */

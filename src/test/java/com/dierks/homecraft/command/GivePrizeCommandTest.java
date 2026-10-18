@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,6 +57,18 @@ class GivePrizeCommandTest {
         for (PrizeType t : new PrizeType[] {PrizeType.HAT, PrizeType.TRAIL, PrizeType.BOOST, PrizeType.TROPHY,
                 PrizeType.FIREWORK, PrizeType.COMMAND}) {
             assertNull(HcmCommand.notGivenBack(t), t + " is given back");
+        }
+    }
+
+    /** A give-back never goes on the ground: an item row needs a free bag slot, a trail or a perk doesn't. */
+    @Test
+    void anItemNeedsRoomInTheBag() {
+        for (PrizeType t : new PrizeType[] {PrizeType.BOOST, PrizeType.RADAR, PrizeType.LURE, PrizeType.FIREWORK,
+                PrizeType.HAT, PrizeType.TROPHY, PrizeType.FILAMENT, PrizeType.BLOCK, PrizeType.PACK}) {
+            assertTrue(HcmCommand.givesAnItem(t), t + " is an item");
+        }
+        for (PrizeType t : new PrizeType[] {PrizeType.TRAIL, PrizeType.COMMAND, PrizeType.HOME_SLOT}) {
+            assertFalse(HcmCommand.givesAnItem(t), t + " is not an item");
         }
     }
 

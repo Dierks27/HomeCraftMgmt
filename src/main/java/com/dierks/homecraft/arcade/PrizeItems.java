@@ -75,12 +75,18 @@ public final class PrizeItems {
         };
     }
 
+    /** {@link #collectorCap(HomeCraftManagement, Prize, String, long)} with no serial number. */
+    public static ItemStack collectorCap(HomeCraftManagement plugin, Prize p, String giver) {
+        return collectorCap(plugin, p, giver, 0);
+    }
+
     /**
      * A collector cap, tagged like every prize (unsellable everywhere; right-click to wear it). The
      * look is {@link #capLook}'s; {@code giver} adds "A gift from" to the lore, and is null for one
-     * bought (or given back) for yourself. Null when the row is not a collector cap.
+     * bought (or given back) for yourself; {@code serial} above 0 adds "No. n". Null when the row is
+     * not a collector cap.
      */
-    public static ItemStack collectorCap(HomeCraftManagement plugin, Prize p, String giver) {
+    public static ItemStack collectorCap(HomeCraftManagement plugin, Prize p, String giver, long serial) {
         if (p == null || p.collector() == null || p.collector().look() == null) {
             return null;
         }
@@ -91,7 +97,7 @@ public final class PrizeItems {
         }
         meta.displayName(Text.of(p.display()));
         List<Component> lore = new ArrayList<>();
-        for (String line : collectorLore(p, giver)) {
+        for (String line : collectorLore(p, giver, serial)) {
             lore.add(Text.of(line));
         }
         meta.lore(lore);
@@ -104,12 +110,17 @@ public final class PrizeItems {
         return cap;
     }
 
+    /** {@link #collectorLore(Prize, String, long)} with no serial number. */
+    static List<String> collectorLore(Prize p, String giver) {
+        return collectorLore(p, giver, 0);
+    }
+
     /**
      * A collector cap's lore, in order: the row's description, the year's collector line, "Yours for
-     * good!", the giver for a present, then how to wear it. The year is in the name too, because a
-     * Bedrock player sees lore only on a long press.
+     * good!", the giver for a present, its serial number (above 0), then how to wear it. The year is
+     * in the name too, because a Bedrock player sees lore only on a long press.
      */
-    static List<String> collectorLore(Prize p, String giver) {
+    static List<String> collectorLore(Prize p, String giver, long serial) {
         List<String> out = new ArrayList<>();
         for (String line : p.description()) {
             out.add("&7" + line);
@@ -119,6 +130,9 @@ public final class PrizeItems {
         out.add("&aYours for good!");
         if (giver != null && !giver.isBlank()) {
             out.add("&7A gift from &f" + giver);
+        }
+        if (serial > 0) {
+            out.add("&7No. " + serial);
         }
         out.add("&7Wear it! Right-click to put it on.");
         out.add("&8Arcade prize");

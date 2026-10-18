@@ -1,5 +1,6 @@
 package com.dierks.homecraft.arcade;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -73,5 +74,23 @@ public final class PrizeSafety {
             }
         }
         return moved;
+    }
+
+    /**
+     * The death guard: take out of {@code drops} each guarded element that is also in {@code kept}
+     * (equal, one drop for each kept copy), and return how many went. Such a stack would be kept AND
+     * dropped, where a grave plugin would copy it: another plugin put it back after it was moved.
+     */
+    static <T> int dropKeptTwice(List<T> drops, List<T> kept, Predicate<? super T> guarded) {
+        List<T> unmatched = new ArrayList<>(kept);
+        int removed = 0;
+        for (Iterator<T> it = drops.iterator(); it.hasNext(); ) {
+            T t = it.next();
+            if (guarded.test(t) && unmatched.remove(t)) {
+                it.remove();
+                removed++;
+            }
+        }
+        return removed;
     }
 }

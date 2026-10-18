@@ -115,6 +115,41 @@ class PrizeSafetyTest {
                 "before a grave plugin's MONITOR, which builds the grave from the drops");
     }
 
+    /**
+     * The HIGHEST guard (§3.1 #22): another plugin puts a kept prize back in the drops after LOW. The
+     * guard takes out one drop for each kept copy, so the grave at MONITOR holds no prize and nothing
+     * is both kept and dropped; anything else in the drops, and a prize kept only once, is untouched.
+     */
+    @Test
+    void theGuardTakesAPrizeThatIsKeptAndDroppedOutOfTheDrops() {
+        List<String> drops = new ArrayList<>(List.of("prize:cap", "dirt", "prize:speed", "bundle:diamond"));
+        List<String> keep = new ArrayList<>();
+        PrizeSafety.moveIf(drops, keep, s -> s.startsWith("prize:"));       // our LOW handler
+        drops.add("prize:cap");                                              // another plugin, at NORMAL
+        drops.add("dirt");
+        assertEquals(1, PrizeSafety.dropKeptTwice(drops, keep, s -> s.startsWith("prize:")));
+        assertEquals(List.of("dirt", "bundle:diamond", "dirt"), drops, "only the prize copy goes, not other items");
+        assertEquals(List.of("prize:cap", "prize:speed"), keep, "the kept list is never changed");
+
+        assertEquals(0, PrizeSafety.dropKeptTwice(drops, keep, s -> s.startsWith("prize:")), "nothing left to take");
+        List<String> twice = new ArrayList<>(List.of("prize:speed", "prize:speed"));
+        assertEquals(1, PrizeSafety.dropKeptTwice(twice, List.of("prize:speed"), s -> s.startsWith("prize:")),
+                "one drop for each kept copy: a second, real stack still drops");
+        assertEquals(List.of("prize:speed"), twice);
+        List<String> notGuarded = new ArrayList<>(List.of("dirt"));
+        assertEquals(0, PrizeSafety.dropKeptTwice(notGuarded, List.of("dirt"), s -> s.startsWith("prize:")),
+                "a stack that isn't a kept prize is another plugin's business");
+    }
+
+    @Test
+    void theGuardRunsAfterOurMoveAndBeforeAGravePlugin() throws Exception {
+        EventHandler guard = handler(PrizeSafetyListener.class, "onDeathGuard", PlayerDeathEvent.class);
+        assertEquals(EventPriority.HIGHEST, guard.priority());
+        assertTrue(guard.ignoreCancelled(), "a death the Games cancelled is left alone");
+        assertTrue(guard.priority().getSlot() < EventPriority.MONITOR.getSlot(),
+                "before a grave plugin's MONITOR, which builds the grave from the drops");
+    }
+
     @Test
     void theGroundHandlersRunWhereTheyMust() throws Exception {
         EventHandler spawn = handler(PrizeSafetyListener.class, "onItemSpawn", ItemSpawnEvent.class);

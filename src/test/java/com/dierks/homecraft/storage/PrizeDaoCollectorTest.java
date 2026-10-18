@@ -84,6 +84,18 @@ class PrizeDaoCollectorTest {
         assertTrue(twice > again, "a second hundred years (a give-back) is still positive");
     }
 
+    /** D7: each cap's serial is its own counter, next to the trophy's, read before and written after. */
+    @Test
+    void aCapSerialCountsOnItsOwn() throws Exception {
+        String key = "collector:" + CAP;
+        assertEquals(0, dao.state(key, 0), "none handed out yet: the first is No. 1");
+        dao.setState(key, dao.state(key, 0) + 1);
+        dao.setState(key, dao.state(key, 0) + 1);
+        assertEquals(2, dao.state(key, 0));
+        assertEquals(0, dao.state("trophy_serial", 0), "the trophy's number is untouched");
+        assertEquals(0, dao.state("collector:cap_pumpkin_2027", 0), "next year's cap starts again");
+    }
+
     @Test
     void enableOnlyLeavesOneTrailOn() throws Exception {
         long now = 1_793_000_000_000L;

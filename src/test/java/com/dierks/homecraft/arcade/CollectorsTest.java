@@ -66,6 +66,22 @@ class CollectorsTest {
         assertEquals(PrizeItems.collectorLore(cap, null), PrizeItems.collectorLore(cap, " "), "a blank giver is none");
     }
 
+    /** D7 (SHOULD): the serial number goes after the giver and before how to wear it; 0 is none. */
+    @Test
+    void theCapLoreCarriesItsSerialNumber() {
+        Prize cap = row("cap_pumpkin_2026");
+        assertEquals(List.of("&7A pumpkin cap for Halloween!", "&6Halloween 2026 collector", "&aYours for good!",
+                        "&7A gift from &fA Parent", "&7No. 3", "&7Wear it! Right-click to put it on.", "&8Arcade prize"),
+                PrizeItems.collectorLore(cap, "A Parent", 3));
+        assertEquals(List.of("&7A pumpkin cap for Halloween!", "&6Halloween 2026 collector", "&aYours for good!",
+                        "&7No. 1", "&7Wear it! Right-click to put it on.", "&8Arcade prize"),
+                PrizeItems.collectorLore(cap, null, 1));
+        assertEquals(PrizeItems.collectorLore(cap, null), PrizeItems.collectorLore(cap, null, 0),
+                "no number when it couldn't be read");
+        assertEquals("collector:cap_pumpkin_2026", PrizeService.serialKey("cap_pumpkin_2026"),
+                "its own counter in arcade_state, apart from the trophy's");
+    }
+
     @Test
     void thePumpkinCap() {
         Prize cap = row("cap_pumpkin_2026");

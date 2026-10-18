@@ -36,7 +36,7 @@ import java.util.Map;
  *   <li><b>F-F features:</b> the tier's S-curves, chicanes (its least to its most), long straights (≥ 120),
  *       hairpins (1 to its most on a road), staircases (straight runs with two STAIR lips or more), and at
  *       least 80% of the lips brake drops (a link, or an arc slower than the landing speed + 4 b/s, within 60
- *       after the landing strip) or on a straight of 100 or more.</li>
+ *       after the landing strip) or on a straight of {@value #LIP_RUN} or more (algo 4: {@value #LIP_RUN_V4}).</li>
  * </ul>
  * The score is 0.15 B + 0.10 (1 - K/km) + 0.20 C + 0.15 (1 - P) + 0.20 V + 0.10 min(1, CV) + 0.10 F, in
  * [0, 1]; a candidate passes when every gate holds and the score is at least {@value #PASS}. Pure and
@@ -59,6 +59,10 @@ public final class FlowScore {
     /** F-F: a lip is a brake drop when a link or a slow arc comes within this after its landing strip. */
     static final double BRAKE_AFTER = 60;
     static final double SLOW = 4;
+    /** A lip on a straight run at least this long counts as braking for F-F (0.37.1: was 100). */
+    static final double LIP_RUN = 60;
+    /** Algo 4's (0.37.0) {@link #LIP_RUN}. */
+    static final double LIP_RUN_V4 = 100;
 
     /** The beats of F-V. */
     public enum Beat {
@@ -159,7 +163,7 @@ public final class FlowScore {
         boolean[] out = new boolean[line.lips.size()];
         for (int k = 0; k < out.length; k++) {
             RideLine.Lip l = line.lips.get(k);
-            out[k] = onLongStraight(line.parts, l.s()) || brakes(line, res, marks, l, k, drops);
+            out[k] = onLongStraight(line.parts, l.s(), lipRun(sk.tier)) || brakes(line, res, marks, l, k, drops);
         }
         return out;
     }
@@ -592,7 +596,7 @@ public final class FlowScore {
         int braking = 0;
         for (int k = 0; k < line.lips.size(); k++) {
             RideLine.Lip l = line.lips.get(k);
-            if (onLongStraight(parts, l.s()) || brakes(line, res, marks, l, k, drops)) {
+            if (onLongStraight(parts, l.s(), lipRun(tier)) || brakes(line, res, marks, l, k, drops)) {
                 braking++;
             }
         }
@@ -623,14 +627,19 @@ public final class FlowScore {
         return stairs + (onRun >= 2 ? 1 : 0);
     }
 
-    /** Whether the lip at line position {@code s} stands on a straight of 100 or more. */
-    static boolean onLongStraight(List<RideLine.Part> parts, double s) {
+    /** The straight a lip must stand on to count as braking for F-F on {@code tier}'s road (algo 4: 100). */
+    static double lipRun(MountainTier tier) {
+        return tier.wide() ? LIP_RUN : LIP_RUN_V4;
+    }
+
+    /** Whether the lip at line position {@code s} stands on a straight of {@code run} ({@link #lipRun}) or more. */
+    static boolean onLongStraight(List<RideLine.Part> parts, double s, double run) {
         double from = -1;
         double len = 0;
         boolean has = false;
         for (RideLine.Part p : parts) {
             if (p.arc()) {
-                if (has && len >= 100) {
+                if (has && len >= run) {
                     return true;
                 }
                 has = false;
@@ -641,7 +650,7 @@ public final class FlowScore {
             has |= s >= p.s0() && s < p.s1();
             from = p.s0();
         }
-        return has && len >= 100 && from >= 0;
+        return has && len >= run && from >= 0;
     }
 
     /** Whether lip {@code k} brakes for a link or a slow arc within {@value #BRAKE_AFTER} after its landing strip. */

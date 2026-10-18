@@ -308,7 +308,7 @@ public final class Skeleton {
         return switch (l.kind()) {
             case HAIRPIN -> new double[]{2 * tier.hairRMin, 2 * tier.hairRMax};
             case ELBOWS -> {
-                double lip = MountainTier.runUp(tier.width) + MountainTier.landing(2, false) + 2;
+                double lip = tier.lipPlunge();
                 double least = l.plunge() >= lip - 1e-9 ? lip : 0;
                 yield new double[]{l.r1() + l.r2() + least, l.r1() + l.r2() + Math.max(least, l.plunge()) + 24};
             }

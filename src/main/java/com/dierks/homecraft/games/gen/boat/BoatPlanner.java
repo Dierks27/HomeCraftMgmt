@@ -26,12 +26,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The planner for Ice Boat (the slot ships switched off). <b>Algo 4, Mountain Run v2</b>
- * (MOUNTAIN-V2-SPEC): in the 480 x 176 x 640 half, {@link MountainPlanner}'s two-stage search lays a
- * serpentine down a mountain, a Winding Road or a Slalom ({@link BoatStyle#of} from the seed), timed by
- * the boat-line model ({@link BoatLine}) at two to three minutes, scored for flow ({@link FlowScore})
- * and proven by {@link MountainValidator}. The rest of this class is <b>algo 3</b>, which a half of any
- * other size still gets and an algo-3 tag is made again by (V4-DECISIONS keeps its classes):
+ * The planner for Ice Boat (the slot ships switched off). <b>Algo 5, Mountain Run v2's wide road</b>
+ * (MOUNTAIN-V2-SPEC, MOUNTAIN-V21-SPEC): in the 480 x 176 x 640 half, {@link MountainPlanner}'s two-stage
+ * search lays a serpentine down a mountain, a Winding Road 14-18 wide or a Slalom 11-15 wide
+ * ({@link BoatStyle#of} from the seed), with 8-40 drops, timed by the boat-line model ({@link BoatLine}) at
+ * two to three minutes, scored for flow ({@link FlowScore}) and proven by {@link MountainValidator} (algo 4,
+ * 0.37.0's 7-9 wide road, is judged by its own frozen rules, never made again here). The rest of this class is
+ * <b>algo 3</b>, which a half of any other size still gets and an algo-3 tag is made again by (V4-DECISIONS
+ * keeps its classes):
  *
  * <p>Ice Boat's "Mountain Run" (Course Variety §2): a
  * downhill sprint on a rounded-square spiral that winds from the rim of the half down round the
@@ -70,7 +72,8 @@ public final class BoatPlanner implements Planner {
      * Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds
      * a tier and style). 2 added the viewing stand; 3 is the Mountain Run (a layout of algo 2 keeps its
      * stored plan, judged by {@link LoopValidatorV2}, until its set ends); 4 is Mountain Run v2
-     * ({@link MountainPlanner}, MOUNTAIN-V2-SPEC), made in a 480 x 176 x 640 half.
+     * ({@link MountainPlanner}, MOUNTAIN-V2-SPEC, 0.37.0, the 7-9 wide road), made in a 480 x 176 x 640 half;
+     * 5 the wide road, more drops, snow (0.37.1, MOUNTAIN-V21-SPEC).
      */
     public static final int ALGO = MountainPlanner.ALGO;
     /**
@@ -387,7 +390,7 @@ public final class BoatPlanner implements Planner {
     /** Tries before {@code SAFE_SPIRAL}; after ten, fewer pieces, after fifteen only the basics. */
     public static final int TRIES = 20;
     /**
-     * The work one plan may take (§5.2): algo 4 counts a Stage A candidate 1 and a Stage B build
+     * The work one plan may take (§5.2): Mountain Run v2 counts a Stage A candidate 1 and a Stage B build
      * {@value MountainPlanner#UNIT_B}; the spiral counts one per try. {@link #SAFE_RESERVE} of it is kept
      * for the safe layout ({@code SAFE_ROAD} / {@code SAFE_SLALOM}, or {@code SAFE_SPIRAL}).
      */
@@ -407,7 +410,7 @@ public final class BoatPlanner implements Planner {
     }
 
     /**
-     * Mountain Run v2 (algo 4) in a 480 x 176 x 640 half; in a half of any other size, the algo-3
+     * Mountain Run v2 (algo {@value #ALGO}) in a 480 x 176 x 640 half; in a half of any other size, the algo-3
      * spiral it has always made there (so a layout comes only from its inputs, rule R6).
      */
     @Override
@@ -421,14 +424,15 @@ public final class BoatPlanner implements Planner {
 
     /**
      * The model time T_m, in milliseconds, of the boat layout a tag names: what F-T and Race Night's
-     * windows read (red-team F04). An algo-4 tag's {@code refMs} is the star reference, 4/5 of T_m rounded
-     * up to 100 ms, so T_m is {@code refMs * 5 / 4} exactly; an older tag's reference is its own time.
+     * windows read (red-team F04). A Mountain Run v2 tag's (algo {@value MountainValidator#FIRST_ALGO} on, whatever
+     * today's planner is: D12) {@code refMs} is the star reference, 4/5 of T_m rounded up to 100 ms, so T_m is
+     * {@code refMs * 5 / 4} exactly; an older tag's reference is its own time.
      */
     public static long modelMs(GenTag tag) {
         if (tag == null) {
             return 0;
         }
-        return tag.algo() >= ALGO ? tag.refMs() * 5 / 4 : tag.refMs();
+        return tag.algo() >= MountainValidator.FIRST_ALGO ? tag.refMs() * 5 / 4 : tag.refMs();
     }
 
     /** Whether {@code half} is Mountain Run v2's (§4.1): exactly 480 x 176 x 640. */
@@ -483,7 +487,8 @@ public final class BoatPlanner implements Planner {
 
     /**
      * The layout the tag names, made again from its seed (the tier in {@code in} first, then the
-     * others): an algo-4 tag by Mountain Run v2, an algo-3 tag by the spiral; any other is refused.
+     * others): an algo-{@value #ALGO} tag by Mountain Run v2, an algo-3 tag by the spiral; any other is refused
+     * (an algo-4 tag too: the engine keeps such a course by the structure check until its set ends, D12).
      */
     @Override
     public Plan rederive(PlanInput in, GenTag tag) throws GenFailed {

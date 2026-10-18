@@ -15,14 +15,15 @@ import java.util.List;
  * <ol>
  *   <li>the <b>Final Drop</b>, mandatory, on the finish straight in front of the stand, 43-70 before the
  *       finish and at least Z(d) + 3 from it, in the finish's own leg (no checkpoint between);</li>
- *   <li>the <b>blue straights</b> (hard): long straights all blue, each ending in a brake drop or a
- *       sweeper R ≥ 150 (their landing strips are the blue 33/41);</li>
+ *   <li>the <b>blue straights</b> (hard): long straights all blue, each ending in a 1-block brake drop
+ *       (algo 4: or a sweeper R ≥ 150; their landing strips are the blue 33/41);</li>
  *   <li><b>staircases</b> ("THE CLIFFS"): 2-3 lips on one long straight;</li>
  *   <li><b>brake drops</b>: the line is ridden ({@link RideLine}, {@link BoatLine}); the arc entered
  *       hardest over its v_c (with no lip in the 40 before it) gets a lip in that 40, landing strip and
  *       all, and the line is ridden again;</li>
  *   <li><b>spread</b>: no 500 blocks without a lip outside the links;</li>
- *   <li><b>fill</b> to the tier's count by brake value and spread, seeded ties;</li>
+ *   <li><b>fill</b> to the tier's count by brake value and spread, seeded ties, on any straight (algo 4:
+ *       only where a lip brakes or on a long straight);</li>
  *   <li>then <b>2-block drops</b> (the Final Drop first) within the tier's 2-count and descent cap.</li>
  * </ol>
  *
@@ -31,9 +32,17 @@ import java.util.List;
  * stands past the earlier one's flight zone as the validator floods it (a disc of Z(d) round the lip,
  * walked along the line until the whole lane is out of it) with room for a checkpoint after it; and the
  * leg across a drop, from the checkpoint just before its lip to the first one past its zone, stays within
- * 60 (with {@value #ROUNDING} for whole blocks). With a checkpoint radius of W / 2 + 0.5 that leg is too long
- * for a 2-block drop on a lane wider than 7, so such a drop stands in a {@value MountainTier#NECK}-wide neck
- * ({@link #necks}). Pure.
+ * 60, or {@value #BIG_LEG} across a Big Drop (MOUNTAIN-V21-SPEC D2; with {@value #ROUNDING} for whole blocks,
+ * and the raster's GROW budgeted at the Final Drop and wherever one checkpoint serves the legs either side
+ * of it). The lane keeps its width at every lip: there are no necks, and a Big Drop stands only on an
+ * axis-aligned straight, where its checkpoint is the smallest. A gate field and a piece leave
+ * {@link MountainTier#clearBefore} before a lip, room for the checkpoint there.
+ *
+ * <p><b>Algo 4</b> ({@link MountainTier#wide} false: 0.37.0, kept block for block) holds every leg to 60. With
+ * a checkpoint radius of W / 2 + 0.5 that leg is too long for a 2-block drop on a lane wider than 7, so such
+ * a drop stands in a {@value MountainTier#NECK}-wide neck ({@link #necks}); every run-up is
+ * {@link MountainTier#clearBefore} of the lane there, fill lays a lip only where it brakes or on a long
+ * straight, and a blue straight may end in a sweeper. Pure.
  */
 public final class DropPlan {
 
@@ -51,21 +60,35 @@ public final class DropPlan {
      * spacing the flight zones need.
      */
     static final int SHORT_BY = 3;
-    /** Fill only lays a lip where it brakes: before a link or an arc slower than this (b/s), or on a long straight. */
+    /**
+     * Algo 4's fill lays a lip only where it brakes: before a link or an arc slower than this (b/s), or on a long
+     * straight.
+     */
     static final double BRAKE_VC = 26;
-    /** A long straight (F-F: its lips count as brake drops). */
+    /** Algo 4's long straight (fill and F-F: its lips count as brake drops). */
     static final double LONG_RUN = 100;
     /** A checkpoint's centre keeps this far from a lip cell and a zone cell (V6), and the legs' bound with a margin. */
     static final double CLEAR = 3;
-    static final double LEG = DownhillValidator.MAX_LEG;
+    /** A leg with a hop, or none, stays within this across (§2.6); algo 4's every leg. */
+    static final double LEG = DownhillValidator.MAX_LEG;              // 60
+    /** A leg across a Big Drop may be this long (0.37.1, D2). */
+    static final double BIG_LEG = MountainValidator.MAX_LEG_BIG_DROP; // 66
     /** An upgrade to a 2-block drop may move its lip this far along its straight. */
     static final double UPGRADE_SHIFT = 6;
     /** What whole blocks and half-block checkpoint places add to a leg across a drop. */
     static final double ROUNDING = 0.25;
-    /** A neck: from this far before a lip to this far after it, with tapers of {@link #NECK_TAPER} either side. */
+    /**
+     * Algo 4's neck: from this far before a lip to this far after it, with tapers of {@link #NECK_TAPER} either
+     * side.
+     */
     static final double NECK_BEFORE = 16;
     static final double NECK_AFTER = 4;
     static final double NECK_TAPER = 6;
+
+    /** The most a leg holding a drop of {@code d} may be across on the wide road: 66 over a Big Drop, else 60. */
+    static double legFor(int d) {
+        return d >= 2 ? BIG_LEG : LEG;
+    }
 
     /** Why a lip is where it is. */
     public enum Kind {
@@ -163,6 +186,16 @@ public final class DropPlan {
         return n;
     }
 
+    /** Whether a 2-block lip lies in (a, b]: the leg holding it may be {@value #BIG_LEG} on the wide road. */
+    public boolean bigBetween(double a, double b) {
+        for (Drop x : drops) {
+            if (x.drop() >= 2 && x.s() > a && x.s() <= b) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Fast ice for the line model: {from, to, f} along the centreline. */
     public List<double[]> fast() {
         List<double[]> out = new ArrayList<>();
@@ -182,9 +215,15 @@ public final class DropPlan {
         return false;
     }
 
-    /** The necks (2-block drops on a lane wider than {@value MountainTier#NECK}): {from, to} along the centreline, tapers outside. */
+    /**
+     * Algo 4's necks (2-block drops on a lane wider than {@value MountainTier#NECK}): {from, to} along the
+     * centreline, tapers outside; none on the wide road.
+     */
     public List<double[]> necks() {
         List<double[]> out = new ArrayList<>();
+        if (tier.wide()) {
+            return out;
+        }
         for (Drop d : drops) {
             if (d.drop() >= 2 && sk.width(d.s()) > MountainTier.NECK) {
                 out.add(new double[]{d.s() - NECK_BEFORE, d.s() + NECK_AFTER});
@@ -193,9 +232,12 @@ public final class DropPlan {
         return out;
     }
 
-    /** The lane's width {@code s} along, necks and their tapers included. */
+    /** The lane's width {@code s} along: the skeleton's, on the wide road everywhere; algo 4's necks and tapers in. */
     public double width(double s) {
         double w = sk.width(s);
+        if (tier.wide()) {
+            return w;
+        }
         for (double[] n : necks()) {
             if (s >= n[0] - NECK_TAPER && s <= n[1] + NECK_TAPER) {
                 double into = s < n[0] ? (s - (n[0] - NECK_TAPER)) / NECK_TAPER
@@ -230,6 +272,8 @@ public final class DropPlan {
         final GenRandom r;
         final Skeleton sk;
         final MountainTier tier;
+        /** The wide road's rules ({@link MountainTier#wide}), else algo 4's. */
+        final boolean wide;
         final List<Run> runs = new ArrayList<>();
         final List<Drop> lips = new ArrayList<>();
         final List<double[]> blue = new ArrayList<>();
@@ -243,6 +287,7 @@ public final class DropPlan {
             this.r = r;
             this.sk = sk;
             this.tier = sk.tier;
+            this.wide = tier.wide();
             Run open = null;
             for (Centreline.Element e : sk.line.elements()) {
                 if (!e.arc()) {
@@ -296,20 +341,44 @@ public final class DropPlan {
             return null;
         }
 
+        /** The lane's width at a lip of {@code d} at {@code s}: the skeleton's (algo 4: a neck's for a necked drop). */
         double width(double s, int d) {
             double w = sk.width(s);
             return necked(s, d) ? MountainTier.NECK : w;
         }
 
-        /** Whether a {@code d}-block drop {@code s} along stands in a neck. */
+        /** Whether a {@code d}-block drop {@code s} along stands in a neck (algo 4 only). */
         boolean necked(double s, int d) {
-            return d >= 2 && sk.width(s) > MountainTier.NECK;
+            return !wide && d >= 2 && sk.width(s) > MountainTier.NECK;
         }
 
-        /** How far before its lip the checkpoint ahead of a drop sits: past its sphere's flat, 3 from the lip. */
+        /**
+         * How far before its lip the checkpoint ahead of a drop sits: past its sphere's flat, 3 from the lip
+         * ({@link MountainTier#setBack} of the lane there).
+         */
         double before(double s, int d) {
-            double rad = MountainTier.spot(width(s, d)) + (axis(s) ? 0 : RasterV4.ARC_SPOT);
-            return Math.max(rad, CLEAR + 0.5) + 0.25;
+            return MountainTier.setBack(width(s, d), axis(s));
+        }
+
+        /** The most the leg holding a drop of {@code d} may be across: {@link #legFor} (algo 4: 60 for every one). */
+        double leg(int d) {
+            return wide ? legFor(d) : LEG;
+        }
+
+        /**
+         * How far the raster may grow a checkpoint ({@code RasterV4.GROW}), budgeted where one serves two legs and
+         * at the Final Drop (0.37.1, D2); algo 4 budgets none.
+         */
+        double grow() {
+            return wide ? RasterV4.GROW : 0;
+        }
+
+        /**
+         * A lip's straight run-up: {@link MountainTier#runUp} of the checkpoint's set-back {@code c} before it
+         * (algo 4: {@link MountainTier#clearBefore} of the lane there, a neck's for a necked drop).
+         */
+        int runUp(double s, int d, double c) {
+            return wide ? tier.runUp(c) : MountainTier.clearBefore(width(s, d));
         }
 
         /** Whether the line {@code s} along is a straight along x or z (its checkpoints the smallest). */
@@ -364,7 +433,9 @@ public final class DropPlan {
 
         /** Whether a lip of {@code d} at {@code s} keeps every rule against the lips already placed. */
         boolean ok(double s, int d) {
-            if (s < sk.start + FIRST_LIP || s > sk.finish - BoatEnvelope.zone(d) - 2) {
+            // the wide road keeps V11's Z(d) + 3 from the finish here too: upgrade() moves a hop of a Final Drop
+            // into a Big one through this (algo 4: Z(d) + 2)
+            if (s < sk.start + FIRST_LIP || s > sk.finish - BoatEnvelope.zone(d) - (wide ? CLEAR : 2)) {
                 return false;
             }
             Run run = runAt(s);
@@ -372,16 +443,21 @@ public final class DropPlan {
                 return false;
             }
             double w = width(s, d);
+            double c = before(s, d);
             boolean blueHere = inBlue(s - 1);
-            if (s - run.s0() < MountainTier.runUp(w) || run.s1() - s < MountainTier.landing(d, blueHere)) {
+            if (s - run.s0() < runUp(s, d, c) || run.s1() - s < MountainTier.landing(d, blueHere)) {
                 return false;
             }
-            double c = before(s, d);
-            if (c + BoatEnvelope.zone(d) + CLEAR + ROUNDING > LEG) {
-                return false; // the leg across it would be longer than 60
+            if (wide && d >= 2 && !(axis(s) && axis(s - c))) {
+                return false; // a Big Drop and the checkpoint before it stand on an axis-aligned straight (D2)
+            }
+            if (c + BoatEnvelope.zone(d) + CLEAR + ROUNDING > leg(d)) {
+                return false; // the leg across it would be longer than 60 (66 across a Big Drop)
             }
             double end = zoneEnd(s, d);
-            double back = MountainTier.runUp(w) + CLEAR + (w < sk.width(s) ? NECK_BEFORE + NECK_TAPER : 0);
+            // a gate field leaves room for the checkpoint before the lip: the lane's own clearBefore, never the
+            // tight run-up (D4 item 3); algo 4's neck and its taper on top
+            double back = MountainTier.clearBefore(w) + CLEAR + (w < sk.width(s) ? NECK_BEFORE + NECK_TAPER : 0);
             if (gates(s - back, end + CLEAR + 8)) {
                 return false;
             }
@@ -407,15 +483,17 @@ public final class DropPlan {
 
         /**
          * Whether checkpoints can still be strung from the start across every lip (and the one at
-         * {@code s}, its zone ending at {@code end}) to the finish, legs at most {@link #LEG}: between two
-         * lips the checkpoints stand from the earlier zone's end + 3 to the later lip less its radius, and
-         * where that window holds only one checkpoint (two spheres need their radii + 0.5 between them) that
-         * one must serve the legs either side. Walked forward, keeping the furthest place the last
-         * checkpoint before each lip can be.
+         * {@code s}, its zone ending at {@code end}) to the finish, each leg within {@link #leg} of the drop it
+         * holds: between two lips the checkpoints stand from the earlier zone's end + 3 to the later lip less
+         * its radius, and where that window holds only one checkpoint (two spheres need their radii + 0.5
+         * between them) that one must serve the legs either side, placed as if the one before it were grown
+         * ({@link #grow}). Walked forward, keeping the furthest place the last checkpoint before each lip can
+         * be; the finish's leg budgets the grow too, as {@link #finalDrop}'s window does.
          */
         boolean chains(double s, int d, double end) {
             double far = Double.NaN; // the furthest the last checkpoint before the next lip can be
             double prevEnd = Double.NaN;
+            int prevD = 0;
             int n = lips.size();
             boolean placed = false;
             for (int i = 0; i <= n; i++) {
@@ -441,15 +519,20 @@ public final class DropPlan {
                     far = b; // before the first lip the track is open from the start
                 } else {
                     double a = prevEnd + CLEAR + ROUNDING;
-                    if (a > b || a > far + LEG) {
+                    if (a > b || a > far + leg(prevD)) {
                         return false;
                     }
-                    far = a + spotAt(a) + c + 0.75 <= b ? b : Math.min(b, far + LEG);
+                    boolean two = a + spotAt(a) + c + 0.75 <= b;
+                    if (!two && a > far + leg(prevD) - grow()) {
+                        return false; // the one checkpoint between can't serve both legs with the one before it grown
+                    }
+                    far = two ? b : Math.min(b, far + leg(prevD) - grow());
                 }
                 prevEnd = le;
+                prevD = ld;
             }
             // the last lip is the Final Drop, the finish's leg its own
-            return Double.isNaN(prevEnd) || sk.finish - far <= LEG - ROUNDING;
+            return Double.isNaN(prevEnd) || sk.finish - far <= leg(prevD) - ROUNDING - grow();
         }
 
         boolean inBlue(double s) {
@@ -501,8 +584,12 @@ public final class DropPlan {
             int d = tier.bigFor(tier.dropsMax) >= 1 ? 2 : 1;
             for (int dd = d; dd >= 1; dd--) {
                 double c = before(sk.finish, dd);
-                double lo = BoatEnvelope.zone(dd) + CLEAR + 0.5;
-                double hi = Math.min(70, LEG - c - ROUNDING);
+                // the window ends where the finish's leg, its checkpoint grown, is still within its bound (D3:
+                // 58 at 11 wide down to 54.5 at 18 for a Big Final Drop); on the wide road it starts at V11's own
+                // Z(d) + 3 (the lip's cells stand before it), so the 18-wide road's window is [54, 54.5] and holds
+                // a half-block lip wherever the finish is (algo 4: Z(d) + 3.5)
+                double lo = BoatEnvelope.zone(dd) + CLEAR + (wide ? 0 : 0.5);
+                double hi = Math.min(70, leg(dd) - c - ROUNDING - grow());
                 if (lo > hi) {
                     continue;
                 }
@@ -529,11 +616,17 @@ public final class DropPlan {
             if (run == null || run.s1() < sk.finish) {
                 return false;
             }
-            double w = width(s, d);
-            return s - run.s0() >= MountainTier.runUp(w) + (necked(s, d) ? NECK_TAPER : 0);
+            double c = before(s, d);
+            if (wide && d >= 2 && !(axis(s) && axis(s - c))) {
+                return false; // a Big Final Drop on an axis-aligned straight, as any Big Drop
+            }
+            return s - run.s0() >= runUp(s, d, c) + (necked(s, d) ? NECK_TAPER : 0);
         }
 
-        /** Hard: 2-4 long straights all blue, each ending in a brake drop or a sweeper R >= 150. */
+        /**
+         * Hard: long straights all blue, each ending in a 1-block brake drop (1-2 on the wide road; algo 4's 2-4
+         * may end in a sweeper R >= 150 instead).
+         */
         void blueStraights() {
             int want = r.nextInt(tier.blueMin, tier.blueMax);
             List<Run> longOnes = new ArrayList<>();
@@ -549,7 +642,7 @@ public final class DropPlan {
                 }
                 Centreline.Element next = sk.line.elementAt(run.s1() + 0.5);
                 double from = run.s0() + 2;
-                if (next.arc() && next.radius >= 150) {
+                if (!wide && next.arc() && next.radius >= 150) {
                     blue.add(new double[]{from, run.s1()});
                     continue;
                 }
@@ -603,12 +696,11 @@ public final class DropPlan {
         }
 
         boolean stair(Run run, int steps, int d) {
-            double w = width(run.s0() + 1, d);
             // 2-block steps stand far enough apart for two checkpoints between them (chains' walk)
             double mid = (run.s0() + run.s1()) / 2;
             double gap = d >= 2 ? Math.max(BoatEnvelope.zone(d) + LIP_GAP + 1, BoatEnvelope.zone(d) + 1.5 + CLEAR
                     + ROUNDING + spotAt(mid) + 2 * before(mid, d) + 1.25) : BoatEnvelope.zone(d) + LIP_GAP + 1;
-            double first = run.s0() + MountainTier.runUp(w) + 2;
+            double first = run.s0() + runUp(run.s0() + 1, d, before(run.s0() + 1, d)) + 2;
             double need = first + gap * (steps - 1) + MountainTier.landing(d, false);
             if (need > run.s1()) {
                 return false;
@@ -812,7 +904,8 @@ public final class DropPlan {
 
         /**
          * Whether a lip at {@code s} would brake for what follows (F-F's test, on the tier's numbers): a link
-         * or an arc of v_c under {@value #BRAKE_VC} b/s within its landing strip and 60 more.
+         * or an arc of v_c under {@value #BRAKE_VC} b/s within its landing strip and 60 more. Algo 4's fill
+         * filter only: the wide road fills any straight (D4), and {@link #share} still asks that 80% brake.
          */
         boolean brakesFor(double s) {
             double horizon = s + MountainTier.landing(1, false) + FlowScore.BRAKE_AFTER;
@@ -835,7 +928,8 @@ public final class DropPlan {
 
         /**
          * The lips the straights hold besides those placed: a weighted interval schedule over every place a
-         * lip may go (a block apart, brake-worthy or on a long straight, each fitting the lips already placed),
+         * lip may go (a block apart on any straight; algo 4: brake-worthy or on a long straight; each fitting
+         * the lips already placed),
          * each consecutive pair the spacing and zone rules apart, most fall first: a 2-block drop is worth
          * 1 + the tier's 2-share (it takes more room and only so many may be 2s). {s, d} in order.
          */
@@ -848,7 +942,7 @@ public final class DropPlan {
             for (Run run : runs) {
                 boolean longRun = run.length() >= LONG_RUN;
                 for (double s = Math.ceil(run.s0()) + offset * 0.5; s <= run.s1(); s += 1) {
-                    if (!longRun && !brakesFor(s)) {
+                    if (!wide && !longRun && !brakesFor(s)) {
                         continue;
                     }
                     for (int d = 1; d <= 2; d++) {
@@ -871,7 +965,7 @@ public final class DropPlan {
                 for (int j = i - 1; j >= 0; j--) {
                     double[] q = cand.get(j);
                     if (c[0] - q[0] < BoatEnvelope.zone((int) q[1]) + LIP_GAP || c[0] < q[2] + CLEAR + ci + 1
-                            || !handOn(q[0], before(q[0], (int) q[1]), q[2], c[0], ci)) {
+                            || !handOn(q[0], before(q[0], (int) q[1]), q[2], (int) q[1], c[0], ci)) {
                         continue;
                     }
                     if (best[j] + c[3] > best[i] + 1e-9) {
@@ -895,15 +989,15 @@ public final class DropPlan {
         }
 
         /**
-         * Whether the checkpoints between a lip at {@code qs} (its checkpoint {@code qc} before it, its zone
-         * ending at {@code qEnd}) and the next at {@code s} ({@code c} before it) leave the last one before
-         * {@code s} as far on as it can be ({@link #chains}' walk, kept true pair by pair): two fit between
-         * them, or the furthest is within a leg of the one before {@code qs}.
+         * Whether the checkpoints between a lip of {@code qd} at {@code qs} (its checkpoint {@code qc} before it,
+         * its zone ending at {@code qEnd}) and the next at {@code s} ({@code c} before it) leave the last one
+         * before {@code s} as far on as it can be ({@link #chains}' walk, kept true pair by pair): two fit
+         * between them, or the furthest is within a leg of the one before {@code qs}, that one grown.
          */
-        boolean handOn(double qs, double qc, double qEnd, double s, double c) {
+        boolean handOn(double qs, double qc, double qEnd, int qd, double s, double c) {
             double a = qEnd + CLEAR + ROUNDING;
             double b = s - c;
-            return a + spotAt(a) + c + 0.75 <= b || b <= qs - qc + LEG;
+            return a + spotAt(a) + c + 0.75 <= b || b <= qs - qc + leg(qd) - grow();
         }
 
         /** A checkpoint's radius {@code s} along on the lane's own width (no neck). */
@@ -1018,7 +1112,8 @@ public final class DropPlan {
                 }
                 Drop d = lips.get(pick);
                 remove(pick);
-                // a 1-block drop keeps every rule there too (out of its neck its lane is wider: a longer run-up)
+                // a 1-block drop keeps every rule there too (algo 4: out of its neck its lane is wider, a longer
+                // run-up)
                 if (ok(d.s(), 1)) {
                     add(d.s(), 1, d.kind());
                 } else {

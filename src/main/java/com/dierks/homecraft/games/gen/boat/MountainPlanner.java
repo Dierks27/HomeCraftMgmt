@@ -29,9 +29,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Mountain Run v2's search (MOUNTAIN-V2-SPEC §5.2, BoatPlanner ALGO 4), on the planner thread: cheap
- * candidates first, the expensive build only for the best of them, and a safe layout that is never
- * missing.
+ * Mountain Run v2's search (MOUNTAIN-V2-SPEC §5.2, BoatPlanner ALGO {@value #ALGO}: the wide road,
+ * MOUNTAIN-V21-SPEC), on the planner thread: cheap candidates first, the expensive build only for the best of
+ * them, and a safe layout that is never missing.
+ *
+ * <p><b>Per version.</b> What a layout is made of comes from its {@link MountainTier}
+ * ({@link MountainTier#of(BoatStyle, String, int)}), whose algo every step reads ({@link MountainTier#wide});
+ * {@link #made(PlanInput)} is today's {@value #ALGO}, and {@link #made(PlanInput, int)} at 4 still makes 0.37.0's
+ * layouts block for block (the frozen fixtures' test; no tag of algo 4 is ever made again by the engine:
+ * {@code BoatPlanner.rederive} refuses it).
  *
  * <p><b>Stage A</b> (milliseconds each, up to {@value #CANDIDATES}): a {@link Frame}, a {@link Skeleton},
  * the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore}, each from its own fork of the
@@ -57,8 +63,11 @@ import java.util.regex.Pattern;
  */
 final class MountainPlanner {
 
-    /** The version: Mountain Run v2. */
-    static final int ALGO = 4;
+    /**
+     * The version: Mountain Run v2. 5 is the wide road, 0.37.1 (the Winding Road 14-18 wide, more drops, snow); 4
+     * was 0.37.0's 7-9 wide road.
+     */
+    static final int ALGO = 5;
     /** Stage A candidates, those Stage B tries, and the score that ends Stage A early. */
     static final int CANDIDATES = 48;
     /**
@@ -142,7 +151,7 @@ final class MountainPlanner {
                     case BULB -> bulbs++;
                 }
             }
-            out.add(in.slot().name() + " v" + ALGO + " " + tier.id + ": " + tier.style.title() + ", "
+            out.add(in.slot().name() + " v" + tier.algo + " " + tier.id + ": " + tier.style.title() + ", "
                     + String.format(Locale.ROOT, "%,d", Math.round(sk.finish - sk.start)) + " blocks, " + sk.frame.bands
                     + " bands (" + hairpins + " hairpins, " + elbows + " elbows, " + bulbs + " bulbs), " + how);
             out.add(cand.flow().summary() + String.format(Locale.ROOT, " - model T_m %.1f s", modelMs(seconds) / 1000.0));
@@ -160,7 +169,8 @@ final class MountainPlanner {
                 for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
                     dealt += pieces.dealt(k);
                 }
-                pieceLine.append("pieces ").append(pieces.list.size()).append(" of ").append(dealt).append(" (pits ")
+                pieceLine.append("pieces ").append(pieces.list.size()).append(" of ").append(dealt)
+                        .append(tier.wide() ? " (snow drifts " : " (pits ")
                         .append(of(pieces, PiecesV4.Kind.SAND_PIT)).append(", splits ")
                         .append(of(pieces, PiecesV4.Kind.SPLIT)).append(", caves ")
                         .append(of(pieces, PiecesV4.Kind.CAVE)).append(", tunnels ")
@@ -216,8 +226,16 @@ final class MountainPlanner {
 
     // ---- the search ---------------------------------------------------------------------------------------
 
-    /** The proven Mountain Run v2 for {@code in}. */
+    /** The proven Mountain Run v2 for {@code in}, by today's planner ({@value #ALGO}). */
     static Made made(PlanInput in) throws GenFailed {
+        return made(in, ALGO);
+    }
+
+    /**
+     * The proven Mountain Run v2 for {@code in} as boat planner {@code algo} makes it (the tables of
+     * {@link MountainTier#of(BoatStyle, String, int)} and the rules they switch): 4 is 0.37.0's, block for block.
+     */
+    static Made made(PlanInput in, int algo) throws GenFailed {
         Box half = in.half();
         if (half.sizeX() != SIZE_X || half.sizeY() != SIZE_Y || half.sizeZ() != SIZE_Z) {
             throw new GenFailed("the area " + half.describe() + " isn't a Mountain Run v2 half: it is " + SIZE_X
@@ -228,7 +246,7 @@ final class MountainPlanner {
         }
         String level = in.slot().normalise(in.tierOrMix());
         BoatStyle style = BoatStyle.of(in.seed());
-        MountainTier tier = MountainTier.of(style, level);
+        MountainTier tier = MountainTier.of(style, level, algo);
         if (tier == null) {
             throw new GenFailed("'" + in.tierOrMix() + "' isn't an Ice Boat tier (easy, medium or hard)");
         }
@@ -563,7 +581,7 @@ final class MountainPlanner {
         }
         long refMs = starRefMs(ride.seconds(), min);
         cancel(in);
-        Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
+        Plan plan = Plan.of(slot.id(), tier.algo, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
                 new PlannedTrial(course, refMs), List.of(), 0);
         return new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
     }
@@ -805,7 +823,7 @@ final class MountainPlanner {
 
     // ---- the safe layouts ---------------------------------------------------------------------------------
 
-    /** The safe candidates, made once per style, tier and mirror. */
+    /** The safe candidates, made once per algo, style, tier and mirror. */
     private static final Map<String, Candidate> SAFE = new ConcurrentHashMap<>();
 
     /** The safe layouts' fixed streams start here: stream {@code SAFE_BASE + j}, Stage A candidate 0. */
@@ -815,9 +833,14 @@ final class MountainPlanner {
      * Which fixed stream each safe layout is, by style (road, slalom), tier (easy, medium, hard) and mirror
      * (its start at the west end, the east): the first stream whose candidate passes every flow gate with
      * that mirror and is proven (MountainPlannerTest holds all twelve to it, in both halves and off the
-     * shipped range, and names the next good stream should a change to the generator move one).
+     * shipped range, and names the next good stream should a change to the generator move one). Today's
+     * planner's ({@value #ALGO}); {@link #SAFE_STREAMS_V4} is algo 4's.
      */
     static final int[][][] SAFE_STREAMS = {
+            {{10, 0}, {22, 0}, {247, 76}},
+            {{1, 2}, {1, 0}, {5, 0}}};
+    /** Algo 4's {@link #SAFE_STREAMS} (0.37.0), frozen. */
+    static final int[][][] SAFE_STREAMS_V4 = {
             {{10, 0}, {22, 0}, {247, 76}},
             {{1, 2}, {1, 0}, {5, 0}}};
 
@@ -838,20 +861,20 @@ final class MountainPlanner {
 
     /** The safe candidate of {@code tier} with its start at the west end or the east ({@link #SAFE_STREAMS}). */
     static Candidate safeCandidate(MountainTier tier, boolean west) {
-        return SAFE.computeIfAbsent(tier.style.id() + ":" + tier.id + ":" + west, k -> {
+        return SAFE.computeIfAbsent(tier.algo + ":" + tier.style.id() + ":" + tier.id + ":" + west, k -> {
             Candidate c = candidate(new GenRandom(SAFE_BASE + safeStream(tier, west)), tier, 0);
             return c != null && c.sk().frame.west == west ? c : findSafe(tier, west, 0);
         });
     }
 
-    /** The table's stream for {@code tier} and the mirror. */
+    /** The table's stream for {@code tier} (of its algo) and the mirror. */
     static int safeStream(MountainTier tier, boolean west) {
         int t = switch (tier.id) {
             case "easy" -> 0;
             case "medium" -> 1;
             default -> 2;
         };
-        return SAFE_STREAMS[tier.slalom() ? 1 : 0][t][west ? 0 : 1];
+        return (tier.wide() ? SAFE_STREAMS : SAFE_STREAMS_V4)[tier.slalom() ? 1 : 0][t][west ? 0 : 1];
     }
 
     /**

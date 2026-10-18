@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.gen.boat.MountainValidator;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -36,7 +37,9 @@ class BoatHypeV2Test {
         assertFalse(BoatHype.mountainV2(MountainRuns.medium()), "the algo-3 spiral isn't");
         assertFalse(BoatHype.mountainV2(MountainRunsV2.of(null)), "a hand-built track isn't");
         assertFalse(BoatHype.mountainV2(null), "nothing isn't");
-        assertEquals(BoatPlanner.ALGO, BoatHype.V2_ALGO, "v2 is boat planner algo 4");
+        assertEquals(MountainValidator.FIRST_ALGO, BoatHype.V2_ALGO, "v2 is boat planner algo 4 and on");
+        assertTrue(BoatPlanner.ALGO >= BoatHype.V2_ALGO, "today's planner makes Mountain Run v2 (algo "
+                + BoatPlanner.ALGO + ")");
     }
 
     @Test

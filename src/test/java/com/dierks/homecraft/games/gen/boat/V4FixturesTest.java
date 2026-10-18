@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The algo-4 Mountain Runs frozen before the wide road (MOUNTAIN-V21-SPEC §5.1, D13 "if it is judged, it is
  * judged by the frozen v4 rules"): they read back whole, their hashes are the index's, and the v4 rules of
  * {@link MountainValidator} prove them, directly and through {@link BoatValidator}'s dispatch on their own
- * algo, whatever the planner and the v5 rules have become.
+ * algo, whatever the planner and the v5 rules have become; and the planner asked for algo 4's tables and rules
+ * still makes them block for block.
  */
 class V4FixturesTest {
 
@@ -114,6 +115,20 @@ class V4FixturesTest {
                     f + ": a newer planner refuses an algo-4 tag");
             assertTrue(e.getMessage().contains("made by boat planner v4, this is v" + BoatPlanner.ALGO),
                     f + ": and says why: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void theAlgoFourTablesAndRulesStillMakeThemBlockForBlock() throws GenFailed {
+        // the wide road chooses every number and rule it changes by the tier's algo (MountainTier.of(style, id,
+        // algo)), so the same planner code asked for algo 4 still makes 0.37.0's layouts exactly
+        for (V4Fixtures.Fixture f : V4Fixtures.all()) {
+            PlanInput in = new PlanInput(Slots.ICE_BOAT, f.plan().half(), f.half(), f.day(), 0, f.seed(), f.tier(), 6,
+                    BoatPlanner.WORK_BUDGET, null);
+            Plan p = MountainPlanner.made(in, MountainValidator.FIRST_ALGO).finished();
+            assertEquals(MountainValidator.FIRST_ALGO, p.algo(), f + ": an algo-4 plan");
+            assertEquals(f.hash(), p.hash(), f + ": the algo-4 tables and rules make the frozen layout again");
+            assertTrue(p.summary().get(0).contains(" v4 "), f + ": and its summary says so: " + p.summary().get(0));
         }
     }
 }

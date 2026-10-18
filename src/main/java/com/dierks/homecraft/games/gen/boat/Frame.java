@@ -379,9 +379,10 @@ public final class Frame {
     /** Elbows dropping {@code pitch}: two arcs (the second no tighter than the first, so it is carried) and the plunge. */
     static Link elbows(GenRandom r, MountainTier tier, double pitch) {
         double lo = elbowRMin(tier);
-        // a plunge long enough for a brake drop where the pitch allows (its second arc is then entered after
-        // the lip), else a short one the second arc, at least as wide as the first, carries (§5.2's link)
-        double lipPlunge = MountainTier.runUp(tier.width) + MountainTier.landing(2, false) + 2;
+        // a plunge long enough for a brake drop where the pitch allows (a Big Drop's run-up and landing strip:
+        // its second arc is then entered after the lip), else a short one the second arc, at least as wide as
+        // the first, carries (§5.2's link)
+        double lipPlunge = tier.lipPlunge();
         double r1;
         double r2;
         if (pitch - 2 * lo >= lipPlunge && r.chance(0.7)) {

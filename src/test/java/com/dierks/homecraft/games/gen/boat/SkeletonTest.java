@@ -34,10 +34,15 @@ class SkeletonTest {
     }
 
     static List<MountainTier> tiers() {
+        return tiers(MountainPlanner.ALGO);
+    }
+
+    /** Every style and tier as boat planner {@code algo} makes them. */
+    static List<MountainTier> tiers(int algo) {
         List<MountainTier> out = new ArrayList<>();
         for (BoatStyle style : BoatStyle.values()) {
             for (String id : List.of("easy", "medium", "hard")) {
-                out.add(MountainTier.of(style, id));
+                out.add(MountainTier.of(style, id, algo));
             }
         }
         return out;
@@ -227,7 +232,9 @@ class SkeletonTest {
 
     @Test
     void theDropPlansKeepTheirRules() {
-        for (MountainTier tier : tiers()) {
+        List<MountainTier> both = new ArrayList<>(tiers(MountainValidator.FIRST_ALGO));
+        both.addAll(tiers(MountainValidator.WIDE_ALGO));
+        for (MountainTier tier : both) {
             int plans = 0;
             for (Skeleton sk : routes(tier)) {
                 DropPlan dp = DropPlan.draw(new GenRandom(sk.frame.bands * 31L + Math.round(sk.end)), sk);
@@ -252,11 +259,23 @@ class SkeletonTest {
                     DropPlan.Run run = runs.runAt(d.s());
                     assertTrue(run != null, tier + ": the lip at " + d.s() + " is on a straight");
                     double w = dp.width(d.s() - 0.5);
-                    assertTrue(d.s() - run.s0() >= MountainTier.runUp(w) - 1e-6, tier + ": its run-up");
+                    double c = runs.before(d.s(), d.drop());
+                    if (tier.wide()) {
+                        // the road's tight run-up, 2 past the checkpoint before the lip; the Slalom's as in 0.37.0
+                        assertTrue(d.s() - run.s0() >= tier.runUp(c) - 1e-6, tier + " v" + tier.algo + ": its run-up");
+                        // its width is the raster invariant's job (MountainPlannerTest): there are no necks
+                        assertTrue(d.drop() < 2 || (runs.axis(d.s()) && runs.axis(d.s() - c)), tier + " v" + tier.algo
+                                + ": a 2-block lip and the checkpoint before it stand on an axis-aligned straight");
+                        assertEquals(tier.width, dp.width(d.s()), 1e-9, tier + " v" + tier.algo
+                                + ": the lane keeps its width at every lip");
+                    } else {
+                        assertTrue(d.s() - run.s0() >= MountainTier.clearBefore(w) - 1e-6,
+                                tier + " v" + tier.algo + ": its run-up");
+                        assertTrue(d.drop() < 2 || w <= MountainTier.NECK + 1e-6, tier + " v" + tier.algo
+                                + ": a 2-block lip stands in a lane at most " + MountainTier.NECK + " wide");
+                    }
                     assertTrue(run.s1() - d.s() >= MountainTier.landing(d.drop(), false) - 1e-6,
                             tier + ": its landing strip is straight");
-                    assertTrue(d.drop() < 2 || w <= MountainTier.NECK + 1e-6,
-                            tier + ": a 2-block lip stands in a lane at most " + MountainTier.NECK + " wide");
                     if (prev != null) {
                         assertTrue(d.s() - prev.s() >= BoatEnvelope.zone(prev.drop()) + DropPlan.LIP_GAP - 1e-6,
                                 tier + ": lips " + prev.s() + " and " + d.s() + " are Z + 12 apart");
@@ -268,7 +287,7 @@ class SkeletonTest {
                     prev = d;
                 }
             }
-            assertTrue(plans > 0, tier + ": some routes make a drop plan");
+            assertTrue(plans > 0, tier + " v" + tier.algo + ": some routes make a drop plan");
         }
     }
 }

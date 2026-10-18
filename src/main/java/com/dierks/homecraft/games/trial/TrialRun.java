@@ -70,6 +70,12 @@ final class TrialRun {
      * reaches this, so the "Checkpoint 37/74 · 1:12.4" line can be read ({@code TimeTrials.QUIET_HOLD}).
      */
     int barHold;
+    /**
+     * The Ice Boat flight recorder's record of this run (MOUNTAIN-V21-SPEC D17, {@link FlightRecorder}): on a
+     * Mountain Run v2, from the boat's first move with the clock running; {@code null} on any other course and
+     * once the run's line has been written.
+     */
+    FlightRecorder.Run flight;
 
     // ---- the warm-up (owner decision D3; C1 contract, WP-R1 and WP-D play it) ------------------
 

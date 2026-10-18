@@ -65,7 +65,12 @@ public final class GamesCommand {
     /** What a player in a world session may still use under {@code /hcm}. */
     static final Set<String> IN_SESSION = Set.of("play", "leave", "games", "help");
     /** The {@code /hcm games} verbs, in the order help and tab completion list them. */
-    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved");
+    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved", "boat");
+    /** The {@code /hcm games boat} verbs (MOUNTAIN-V21-SPEC D17). */
+    static final List<String> BOAT_VERBS = List.of("flights");
+    /** The help line of {@code /hcm games boat flights}. */
+    static final String BOAT_HELP = "&e/hcm games boat flights &7- how far Ice Boats really jump off the Mountain Run's"
+            + " drops (measured on every ride)";
     /** The {@code /hcm games break <player>} verbs. */
     static final List<String> BREAK_VERBS = List.of("show", "pause", "limit", "clear", "clear-own");
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
@@ -422,6 +427,7 @@ public final class GamesCommand {
             case "status" -> status(sender, games);
             case "feature" -> feature(sender, games, args);
             case "scores" -> scores(sender, games, args);
+            case "boat" -> boat(sender, games, args);
             default -> {
                 Game owner = adminOwner(games, verb);
                 if (owner == null) {
@@ -439,6 +445,21 @@ public final class GamesCommand {
 
     private void help(CommandSender sender) {
         for (String line : adminLines()) {
+            sender.sendMessage(Text.of(line));
+        }
+    }
+
+    /**
+     * {@code /hcm games boat flights} (MOUNTAIN-V21-SPEC D17): the Ice Boat jumps the flight recorder measured on
+     * Mountain Run rides (the last runs, and the longest jump per edition and drop next to what the safety rule
+     * allows). Read-only.
+     */
+    private void boat(CommandSender sender, GamesService games, String[] args) {
+        if (args.length < 3 || !BOAT_VERBS.contains(args[2].toLowerCase(Locale.ROOT))) {
+            sender.sendMessage(Text.of(BOAT_HELP));
+            return;
+        }
+        for (String line : com.dierks.homecraft.games.trial.TimeTrials.flightLines(games)) {
             sender.sendMessage(Text.of(line));
         }
     }
@@ -834,6 +855,7 @@ public final class GamesCommand {
                 + " Take a break");
         out.add("&e/hcm games scores reset <game> [board|all] [player] [confirm] &7- clear high scores");
         out.add("&e/hcm games saved <player> show|restore|return|discard confirm &7- a player's saved things");
+        out.add(BOAT_HELP);
         GamesService games = plugin.games();
         if (games != null) {
             for (Game g : games.games()) {
@@ -925,6 +947,11 @@ public final class GamesCommand {
                 }
             }
             case "scores" -> scoreCompletions(out, games, args, last);
+            case "boat" -> {
+                if (n == 3) {
+                    match(out, last, BOAT_VERBS.toArray(new String[0]));
+                }
+            }
             case "saved" -> {
                 if (n == 3) {
                     players(out, last);

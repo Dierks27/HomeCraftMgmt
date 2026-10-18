@@ -43,11 +43,13 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
@@ -165,6 +167,15 @@ public final class TimeTrials implements Game {
     static final long RESULT_EVERY = 10;
     /** A teleport this close to the one the run asked for is the run's own. */
     private static final double MATCH = 0.05;
+    /** MOUNTAIN-V21-SPEC D18: the snow kicked up where a boat lands off a hop, and off a Big Drop (particles). */
+    static final int SNOW_HOP = 6;
+    static final int SNOW_BIG = 14;
+    /** D18: a run's landings puff snow at most this often (half a second, in nanos). */
+    static final long SNOW_EVERY = 500_000_000L;
+    /** D18: the puff's spread across the ice and up from it (blocks), and its particles' speed. */
+    private static final double SNOW_SPREAD = 0.35;
+    private static final double SNOW_RISE = 0.05;
+    private static final double SNOW_SPEED = 0.08;
 
     /** The general rules, shown on the course list. */
     private static final List<String> RULES = List.of(
@@ -198,6 +209,10 @@ public final class TimeTrials implements Game {
     private final PreviewTests previews = new PreviewTests();
     /** MOUNTAIN-V21-SPEC D17: how far Ice Boats really fly off a Mountain Run's drops (it measures, nothing more). */
     private final FlightRecorder flights;
+    /** D18: the snow block's data for the landing's puff, made on first use (no server in a test). */
+    private BlockData snowData;
+    /** D18: a puff failed once and was logged; later failures are quiet. */
+    private boolean snowFailed;
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -1339,14 +1354,15 @@ public final class TimeTrials implements Game {
     /**
      * The flight recorder (MOUNTAIN-V21-SPEC D17): a boat's move on a Mountain Run v2 (boat planner algo 4 on,
      * {@link FlightRecorder#records}), the record begun at the run's first move with the clock running. A few
-     * doubles of arithmetic and nothing allocated; it changes nothing about the ride.
+     * doubles of arithmetic and nothing allocated; it changes nothing about the ride. Its landings puff snow
+     * ({@link #landingSnow}, D18).
      */
     private void flight(Player p, TrialRun run, Location from, Location to) {
         if (run.flight == null) {
             if (!FlightRecorder.records(run.course)) {
                 return;
             }
-            run.flight = flights.start(Bedrock.is(p), run.course);
+            run.flight = flights.start(Bedrock.is(p), run.course, (f, x, y, z, d) -> landingSnow(run, x, y, z, d));
         }
         run.flight.move(from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ(),
                 Bukkit.getCurrentTick());
@@ -1355,14 +1371,82 @@ public final class TimeTrials implements Game {
     /**
      * The run's flight record ends ({@code finished}: at the finish; else it left, was replaced or the game
      * stopped): one INFO line for the console, the edition and the course, never the player's name. Once.
+     *
+     * @return the run's summary, or {@code null} when it had no record (or its line was written already)
      */
-    void flightsEnd(TrialRun run, boolean finished) {
+    FlightRecorder.Summary flightsEnd(TrialRun run, boolean finished) {
         FlightRecorder.Run f = run.flight;
         if (f == null) {
-            return;
+            return null;
         }
         run.flight = null;
-        log().info(flights.close(f, finished).line());
+        FlightRecorder.Summary s = flights.close(f, finished);
+        log().info(s.line());
+        return s;
+    }
+
+    /**
+     * A boat came down off a Mountain Run's drop (MOUNTAIN-V21-SPEC D18, {@link FlightRecorder.Landing}): a small
+     * puff of kicked-up snow on the ice where it landed, {@link #snowPuff} particles, seen by the players near
+     * it. Nothing else: no sound, no action bar, no title. At most one a run every half a second, and none while
+     * the run is being put back or moved or once it is over ({@link #snowDue}). It never breaks a run: a failure
+     * is logged once.
+     *
+     * <p><b>Why the snow block's BLOCK particle</b> (block crack), not SNOWFLAKE: it is what vanilla itself shows
+     * where anything lands (the landed-on block's crack particles, kicked up and falling back), so a puff of it
+     * reads as snow spray off the ice, not an effect; and Geyser draws it on Bedrock as Bedrock's own crack
+     * particle of the same block. SNOWFLAKE is powder snow's drifting flake: it floats down rather than sprays
+     * up, and what Bedrock shows for it is less sure.
+     */
+    void landingSnow(TrialRun run, double x, double y, double z, int d) {
+        long now = System.nanoTime();
+        if (!snowDue(run, now)) {
+            return;
+        }
+        run.snowAt = now;
+        try {
+            World w = Bukkit.getWorld(run.course.world());
+            if (w == null) {
+                return;
+            }
+            if (snowData == null) {
+                snowData = Material.SNOW_BLOCK.createBlockData();
+            }
+            w.spawnParticle(Particle.BLOCK, x, y + 0.1, z, snowPuff(d), SNOW_SPREAD, SNOW_RISE, SNOW_SPREAD,
+                    SNOW_SPEED, snowData);
+        } catch (RuntimeException | LinkageError e) {
+            if (!snowFailed) {
+                snowFailed = true;
+                log().warning("Ice Boat landing snow failed (said once; the runs go on): " + e);
+            }
+        }
+    }
+
+    /**
+     * Whether a landing at {@code nanos} may puff snow (D18): on a Mountain Run v2 only, while the run rides (not
+     * after the finish, not while it is being put back or moved by anyone), and half a second or more after its
+     * last puff.
+     */
+    static boolean snowDue(TrialRun run, long nanos) {
+        return run != null && FlightRecorder.records(run.course) && run.running() && !run.suspended
+                && run.expect == null && !run.backDue && nanos - run.snowAt >= SNOW_EVERY;
+    }
+
+    /** The puff's size: {@value #SNOW_HOP} particles off a hop, {@value #SNOW_BIG} off a Big Drop. */
+    static int snowPuff(int d) {
+        return d >= 2 ? SNOW_BIG : SNOW_HOP;
+    }
+
+    /**
+     * The finish summary's quiet line on a Mountain Run v2 (D18): "&amp;7Best jump: &amp;f12.4 blocks", the run's
+     * longest flight measured cleanly ({@link FlightRecorder.Summary#best}); {@code null} (no line) when it has
+     * none, or no record at all (any other course).
+     */
+    static String bestJump(FlightRecorder.Summary s) {
+        if (s == null || Double.isNaN(s.best())) {
+            return null;
+        }
+        return "&7Best jump: &f" + FlightRecorder.tenth(s.best()) + " blocks";
     }
 
     /** The flight recorder's lines for {@code /hcm games boat flights} (D17). */
@@ -1724,15 +1808,14 @@ public final class TimeTrials implements Game {
                 return;
             }
             case RACE -> {
-                flightsEnd(run, true); // D17
-                race.finish(p, run, nanos);
+                race.finish(p, run, nanos, bestJump(flightsEnd(run, true))); // D17, D18
                 return;
             }
             default -> {
                 // a solo run: as it always was
             }
         }
-        flightsEnd(run, true); // D17
+        String jump = bestJump(flightsEnd(run, true)); // D17, D18
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
@@ -1746,6 +1829,9 @@ public final class TimeTrials implements Game {
         GenTag tag = run.course.gen();
         String code = tag == null ? null : DailyLookup.code(games(), tag);
         p.sendMessage(Text.of("&b" + name + ": &f" + TrialText.time(ms)));
+        if (jump != null) {
+            p.sendMessage(Text.of(jump)); // D18: a Mountain Run's longest jump, quietly
+        }
         if (code != null) {
             p.sendMessage(Text.of("&7" + GenCopy.courseCode(code))); // so players can ask for it back
         }

@@ -76,6 +76,8 @@ final class TrialRun {
      * once the run's line has been written.
      */
     FlightRecorder.Run flight;
+    /** When a landing last puffed snow ({@code System.nanoTime()}; MOUNTAIN-V21-SPEC D18): one a half second. */
+    long snowAt = Long.MIN_VALUE / 2;
 
     // ---- the warm-up (owner decision D3; C1 contract, WP-R1 and WP-D play it) ------------------
 

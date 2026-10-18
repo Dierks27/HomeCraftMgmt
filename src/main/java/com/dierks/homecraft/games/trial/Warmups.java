@@ -202,9 +202,20 @@ final class Warmups {
 
     /** The warm-up is over: back to the start, and the normal 3-2-1. */
     private void end(Player p, TrialRun run, String line) {
-        Warmup.toCountdown(run);
+        over(run);
         KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the kit item only (final gate #16)
         p.sendMessage(Text.of(line));
         trials.toStart(p, run);
+    }
+
+    /**
+     * The run's side of a solo warm-up's end: its flights are written as a line of their own first
+     * (MOUNTAIN-V21-SPEC D17; the early audit's X4, as a race's shared warm-up's are at its re-grid), so the
+     * timed run's line holds the timed run's flights only, its first move beginning a fresh record; then the
+     * run waits for its 3-2-1.
+     */
+    void over(TrialRun run) {
+        trials.flightsEnd(run, false);
+        Warmup.toCountdown(run);
     }
 }

@@ -17,8 +17,8 @@ import java.util.List;
 /**
  * The algo-4 Mountain Runs (Mountain Run v2) frozen before the wide road (MOUNTAIN-V21-SPEC §5.1, D13),
  * for every package's tests: two Winding Roads and a Slalom, the medium road the owner's own preview seed
- * ({@code 4a68f2c5671adda9}, the run they rode in the 0.37.0 live test, 17-18 October 2026), each with the row it would be flipped
- * into (its gen tag).
+ * ({@code 4a68f2c5671adda9}, the run they rode in the 0.37.0 live test, 17-18 October 2026), each with the
+ * row it would be flipped into (its gen tag).
  *
  * <p>They live in {@code src/test/resources/gen/v4/}, in {@link V3Fixtures}' format: {@code index.txt}
  * names each (slot, tier, half, seed, day and the plan's hash), {@code <name>.plan.b64} is the archived

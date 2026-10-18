@@ -69,6 +69,13 @@ class V4FixturesTest {
             assertEquals(List.of(), MountainValidator.problems(p, f.tier()), f + ": and directly");
             assertEquals(List.of(), MountainValidator.problems(p, MountainValidator.Rules.of(f.tier(), slalom)),
                     f + ": by the v4 table, named");
+            assertEquals(MountainValidator.Rules.of(f.tier(), slalom),
+                    MountainValidator.Rules.of(f.tier(), slalom, p.algo()), f + ": which is its own algo's table");
+            List<String> wide = MountainValidator.problems(p, MountainValidator.Rules.of(f.tier(), slalom,
+                    MountainValidator.WIDE_ALGO));
+            assertTrue(wide.stream().anyMatch(s -> s.startsWith("the track falls only ")),
+                    f + ": the wide road's table would refuse it as no downhill, so judging a layout by its own"
+                            + " algo (rule R5) matters: " + wide);
         }
     }
 

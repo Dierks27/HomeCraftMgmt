@@ -36,16 +36,22 @@ import java.util.PriorityQueue;
  *   <li>{@code List<String> MountainValidator.problems(Plan plan, String tier)}: what is wrong with
  *       {@code plan} as a {@code tier} ({@code easy}, {@code medium}, {@code hard}) Mountain Run v2;
  *       empty when it is proven. Never throws; a plan it can't read is refused. The style comes from
- *       the plan's own seed ({@link #slalom(long)}).</li>
+ *       the plan's own seed ({@link #slalom(long)}), and the rules from its own algo
+ *       ({@link Rules#of(String, boolean, int)}): an algo-{@value #FIRST_ALGO} plan is judged by the
+ *       frozen v4 rules forever, one of algo {@value #WIDE_ALGO} on by the wide road's
+ *       (MOUNTAIN-V21-SPEC §4).</li>
  *   <li>{@code List<String> MountainValidator.problems(Plan plan, Rules rules)}: the same with the
- *       style and tier given ({@link Rules#of(String, boolean)}).</li>
+ *       style and tier given ({@link Rules#of(String, boolean)} is v4's table,
+ *       {@link Rules#of(String, boolean, int)} any algo's); the survey's own rules are the plan's
+ *       algo's.</li>
  *   <li>{@code boolean MountainValidator.slalom(long seed)}: the style it judges a seed's plan by:
  *       the low bit of the SplitMix64 finaliser of {@code seed ^ 0x5EED57E1E00DL}, 1 = SLALOM,
  *       0 = ROAD (MOUNTAIN-V2-SPEC §5.1). {@code BoatStyle.of(seed) == SLALOM} must agree; at the
  *       merge this delegates to it.</li>
- *   <li>{@code Rules MountainValidator.Rules.of(String tier, boolean slalom)}: the numbers proven per
- *       style and tier (P, B, the 2-block drop cap, the descent window, blue ice), so the planner
- *       aims at the same ones.</li>
+ *   <li>{@code Rules MountainValidator.Rules.of(String tier, boolean slalom, int algo)}: the numbers
+ *       proven per style and tier (P, B, the 2-block drop cap, the descent window, blue ice) for a
+ *       plan of that algo, so the planner aims at the same ones; {@code Rules.of(tier, slalom)} is the
+ *       v4 table, frozen.</li>
  *   <li>{@code int MountainValidator.minSeconds(Course c)}: the shortest time the course must store
  *       (V12; the same leg bound as v3).</li>
  *   <li>{@code Point MountainValidator.standSpot(Box half, double finishY)}: where a player stands on
@@ -70,16 +76,21 @@ import java.util.PriorityQueue;
  *       walls). No slime or water; every block has a class (drive, wall, gate, riser, roof, scenery,
  *       stand, sign), or it is a stray; leaves at vanilla's distance. Easy is packed ice only.</li>
  *   <li><b>V2-V4</b> as v3, every tier dropping at most {@link BoatEnvelope#MAX_DROP}; W4 adds that
- *       nothing stands on the half's outermost ring of columns.</li>
+ *       nothing stands on the half's outermost ring of columns. From algo {@value #WIDE_ALGO} (D9)
+ *       snow that continues the track at its own level is track and slow ground, as sand is (the
+ *       run-offs, the snow drifts, the paddock); any other snow stays wall or scenery.</li>
  *   <li><b>V5</b> P and B per style and tier ({@link Rules}); the side-pocket rule is waived within
  *       {@value #GATE_FIELD} columns of a gate fence on a SLALOM plan (the corners behind a fence are
  *       drivable pockets by design), and it measures from a middle at most 5 wide
  *       ({@link Rules#pocketWidth}).</li>
- *   <li><b>V6</b> as v3, at most {@value #MAX_CHECKPOINTS} checkpoints.</li>
+ *   <li><b>V6</b> as v3, at most {@value #MAX_CHECKPOINTS} checkpoints. From algo {@value #WIDE_ALGO}
+ *       (D2) a leg holding a 2-block drop, from the checkpoint before its lip to the first past its
+ *       flight zone (the finish's leg over a 2-block Final Drop too), may be up to
+ *       {@value #MAX_LEG_BIG_DROP} across; every other leg keeps v3's 60 across and 60 along.</li>
  *   <li><b>V7</b> as v3; stone and snow may stand over the track 5 up or more (a tunnel's roof and
  *       the rock over it).</li>
  *   <li><b>V8</b> at most 2 a drop; the 2-block drops and the whole fall capped per style and tier,
- *       and the fall at least the tier's minimum (a real downhill).</li>
+ *       and the fall at least the tier's minimum (a real downhill), by the plan's algo's table.</li>
  *   <li><b>V9 the stand at the bottom.</b> The 7 × 7 platform at {@link #standSpot}: whole, railed,
  *       signed, standable; nothing but the stand at or over its floor within {@value #STAND_CLEAR}
  *       of its centre column; at least {@code RaceStand.LANE_CLEARANCE} from any track; and a clear
@@ -104,8 +115,21 @@ import java.util.PriorityQueue;
  */
 public final class MountainValidator {
 
-    /** The first boat planner version this judges: Mountain Run v2. */
+    /**
+     * The first boat planner version this judges: Mountain Run v2 (0.37.0). Every version from here on is a
+     * Mountain Run v2, judged by its own version's rules ({@link #WIDE_ALGO} on, the wide road's).
+     */
     public static final int FIRST_ALGO = 4;
+    /**
+     * The first boat planner version judged by the 0.37.1 rules: legs across a Big Drop up to 66, snow as slow
+     * ground.
+     */
+    public static final int WIDE_ALGO = 5;
+    /**
+     * The farthest a leg holding a 2-block drop may be across, algo >= WIDE_ALGO (D2); every other leg keeps
+     * MAX_LEG 60.
+     */
+    public static final double MAX_LEG_BIG_DROP = 66;
     /** The most blocks a Mountain Run v2 plan may place (V13). */
     public static final int MAX_OPS = 400_000;
     /** The most keep-clear boxes a plan may carry (V13). */
@@ -216,7 +240,10 @@ public final class MountainValidator {
             return (tier.equals("easy") ? "an " : "a ") + tier + " " + style();
         }
 
-        /** The rules of {@code tier} (any case) in a style; {@code null} for a word that isn't a tier. */
+        /**
+         * The rules of {@code tier} (any case) in a style by the v4 table (0.37.0, algo
+         * {@value MountainValidator#FIRST_ALGO}), frozen; {@code null} for a word that isn't a tier.
+         */
         public static Rules of(String tier, boolean slalom) {
             String t = tier == null ? "" : tier.trim().toLowerCase(Locale.ROOT);
             return switch (t) {
@@ -226,6 +253,28 @@ public final class MountainValidator {
                         : new Rules(t, false, 4, 4, 0, 2, 3, 32, 52, true, 4);
                 case "hard" -> slalom ? new Rules(t, true, 4, 3, 0, 4, 5, 20, 40, true, 4)
                         : new Rules(t, false, 4, 3, 0, 4, 5, 44, 64, true, 4);
+                default -> null;
+            };
+        }
+
+        /**
+         * The rules a plan of boat planner version {@code algo} is judged by: from
+         * {@value MountainValidator#WIDE_ALGO} the wide road's table (MOUNTAIN-V21-SPEC §2.3: every drop may be a
+         * 2-block drop, the higher descent windows; P, B, blue ice and the pocket width as v4), before it
+         * {@link #of(String, boolean) v4's}; {@code null} for a word that isn't a tier.
+         */
+        public static Rules of(String tier, boolean slalom, int algo) {
+            if (algo < WIDE_ALGO) {
+                return of(tier, slalom);
+            }
+            String t = tier == null ? "" : tier.trim().toLowerCase(Locale.ROOT);
+            return switch (t) {
+                case "easy" -> slalom ? new Rules(t, true, 7, 5, 14, 0, 0, 18, 28, false, 5)
+                        : new Rules(t, false, 5, 5, 28, 0, 0, 30, 48, false, 5);
+                case "medium" -> slalom ? new Rules(t, true, 5, 4, 0, 1, 1, 26, 40, true, 5)
+                        : new Rules(t, false, 4, 4, 0, 1, 1, 46, 70, true, 4);
+                case "hard" -> slalom ? new Rules(t, true, 4, 3, 0, 1, 1, 30, 44, true, 4)
+                        : new Rules(t, false, 4, 3, 0, 1, 1, 48, 74, true, 4);
                 default -> null;
             };
         }
@@ -251,11 +300,11 @@ public final class MountainValidator {
         if (plan == null) {
             return List.of("there is no plan");
         }
-        Rules rules = Rules.of(tier, slalom(plan.seed()));
+        Rules rules = Rules.of(tier, slalom(plan.seed()), plan.algo());
         if (rules == null) {
             return List.of("'" + tier + "' isn't an Ice Boat tier");
         }
-        return survey(plan, Limits.v4(rules), tick);
+        return survey(plan, Limits.mountain(rules, plan.algo()), tick);
     }
 
     private static final Runnable NO_TICK = () -> {
@@ -263,7 +312,10 @@ public final class MountainValidator {
     /** Checkpoints judged between two of the caller's ticks. */
     static final int TICK_CHECKPOINTS = 8;
 
-    /** What is wrong with {@code plan} as a Mountain Run v2 of this style and tier; empty when nothing is. */
+    /**
+     * What is wrong with {@code plan} as a Mountain Run v2 of this style and tier; empty when nothing is. The
+     * table is the caller's; the survey's own rules (the leg across a Big Drop, snow) are the plan's algo's.
+     */
     public static List<String> problems(Plan plan, Rules rules) {
         if (plan == null) {
             return List.of("there is no plan");
@@ -271,7 +323,7 @@ public final class MountainValidator {
         if (rules == null) {
             return List.of("no rules to judge the plan by");
         }
-        return survey(plan, Limits.v4(rules), NO_TICK);
+        return survey(plan, Limits.mountain(rules, plan.algo()), NO_TICK);
     }
 
     /**
@@ -347,18 +399,22 @@ public final class MountainValidator {
 
     // ---- what one survey asks ------------------------------------------------------------------------
 
-    /** The numbers and switches of one survey: v2's rules, or v3's for the parity test. */
-    private record Limits(boolean v4, String tierId, String label, int narrowest, int iceLine, int maxDrop,
-                          Rules rules, DownhillValidator.Tier v3Tier, int maxOps, int maxCheckpoints, boolean slalom,
-                          boolean blueIce, int pocketWidth) {
+    /**
+     * The numbers and switches of one survey: v2's rules ({@code v4}, algo {@value #FIRST_ALGO} on), with the wide
+     * road's ({@code v5}, algo {@value #WIDE_ALGO} on: a leg across a Big Drop up to {@value #MAX_LEG_BIG_DROP},
+     * snow as slow ground), or v3's for the parity test.
+     */
+    private record Limits(boolean v4, boolean v5, String tierId, String label, int narrowest, int iceLine,
+                          int maxDrop, Rules rules, DownhillValidator.Tier v3Tier, int maxOps, int maxCheckpoints,
+                          boolean slalom, boolean blueIce, int pocketWidth) {
 
-        static Limits v4(Rules r) {
-            return new Limits(true, r.tier(), r.label(), r.narrowest(), r.iceLine(), r.maxDrop(), r, null, MAX_OPS,
-                    MAX_CHECKPOINTS, r.slalom(), r.blueIce(), r.pocketWidth());
+        static Limits mountain(Rules r, int algo) {
+            return new Limits(true, algo >= WIDE_ALGO, r.tier(), r.label(), r.narrowest(), r.iceLine(), r.maxDrop(), r,
+                    null, MAX_OPS, MAX_CHECKPOINTS, r.slalom(), r.blueIce(), r.pocketWidth());
         }
 
         static Limits v3(DownhillValidator.Tier t) {
-            return new Limits(false, t.id(), t.id(), t.narrowest(), t.iceLine(), t.maxDrop(), null, t,
+            return new Limits(false, false, t.id(), t.id(), t.narrowest(), t.iceLine(), t.maxDrop(), null, t,
                     DownhillValidator.MAX_OPS, DownhillValidator.MAX_CHECKPOINTS, false, t.blueIce(), t.narrowest());
         }
     }
@@ -816,6 +872,9 @@ public final class MountainValidator {
                 found.add("there is no track: no ice or sand to drive on");
                 return false;
             }
+            if (lim.v5) {
+                snowFloors();
+            }
             Course.Spot s = course.start();
             startX = (int) Math.floor(s.x()) - half.minX();
             startZ = (int) Math.floor(s.z()) - half.minZ();
@@ -824,8 +883,8 @@ public final class MountainValidator {
                         + ") isn't on the track's surface");
                 return false;
             }
-            if (at(startX, h[startX][startZ], startZ) == SAND) {
-                found.add("the start is on sand");
+            if (slow(startX, startZ)) {
+                found.add("the start is on " + slowName());
             }
             Course.Mark f = course.finish();
             if (!onSurface(cell(f.x(), half.minX()), cell(f.z(), half.minZ()), f.y())) {
@@ -834,6 +893,59 @@ public final class MountainValidator {
                 return false;
             }
             return true;
+        }
+
+        /**
+         * V1/V2 (v5, MOUNTAIN-V21-SPEC §4.3): a snow block continues the track at its own level: 4-beside a drive
+         * cell at the same height, with the headroom over it clear, flooded to a fixed point; any other snow stays
+         * wall or scenery (as in v4). Scenery snow stands two or more from the track or under a wall's ground, and a
+         * wall column has blocks over the ice, so none of it floods; if a plan ever let snow touch the lane at its
+         * level, the "track" grows into it and the walls' rules (W1, W4) refuse it: never a false pass. Afterwards
+         * every rule reads {@code h} as before, and {@link #slow} says which floors are snow.
+         */
+        void snowFloors() {
+            ArrayDeque<int[]> work = new ArrayDeque<>();
+            for (int x = 0; x < sx; x++) {
+                for (int z = 0; z < sz; z++) {
+                    if (h[x][z] != NONE) {
+                        work.add(new int[]{x, z});
+                    }
+                }
+            }
+            while (!work.isEmpty()) {
+                int[] c = work.poll();
+                int y = h[c[0]][c[1]];
+                for (int[] s : SIDES) {
+                    int nx = c[0] + s[0];
+                    int nz = c[1] + s[1];
+                    if (!inside(nx, nz) || h[nx][nz] != NONE || at(nx, y, nz) != SNOW) {
+                        continue;
+                    }
+                    boolean clear = true;
+                    for (int up = 1; up <= DownhillValidator.HEADROOM && clear; up++) {
+                        clear = at(nx, y + up, nz) == AIR;
+                    }
+                    if (!clear) {
+                        continue;
+                    }
+                    h[nx][nz] = y;
+                    work.add(new int[]{nx, nz});
+                }
+            }
+        }
+
+        /** Whether the track at column (x, z) is slow ground: sand, or (v5) snow ({@link #snowFloors}). */
+        boolean slow(int x, int z) {
+            if (!driveAt(x, z)) {
+                return false;
+            }
+            byte m = at(x, h[x][z], z);
+            return m == SAND || (lim.v5 && m == SNOW);
+        }
+
+        /** "sand", or (v5) "snow or sand": how the slow ground's lines name it. */
+        String slowName() {
+            return lim.v5 ? "snow or sand" : "sand";
         }
 
         boolean onSurface(int x, int z, double y) {
@@ -1292,7 +1404,7 @@ public final class MountainValidator {
                     double clear = clearance(x, z, false);
                     core[x][z] = clear >= coreClear - EPS;
                     middle[x][z] = clear >= pocketClear - EPS;
-                    iceCore[x][z] = at(x, h[x][z], z) != SAND && clearance(x, z, true) >= iceClear - EPS;
+                    iceCore[x][z] = !slow(x, z) && clearance(x, z, true) >= iceClear - EPS;
                 }
             }
             Disk finish = disk(course.finish(), "the finish");
@@ -1300,7 +1412,7 @@ public final class MountainValidator {
                 found.add("no path " + lim.narrowest + " wide runs from the start to the finish");
             }
             if (!iceCore[startX][startZ] || !reaches(iceCore, finish)) {
-                found.add("the sand can't be avoided: no all-ice line " + lim.iceLine
+                found.add("the " + slowName() + " can't be avoided: no all-ice line " + lim.iceLine
                         + " wide runs from the start to the finish");
             }
             if (lim.slalom) {
@@ -1362,7 +1474,7 @@ public final class MountainValidator {
                 for (int dz = -3; dz <= 3; dz++) {
                     int nx = x + dx;
                     int nz = z + dz;
-                    boolean open = driveAt(nx, nz) && !(iceOnly && at(nx, h[nx][nz], nz) == SAND);
+                    boolean open = driveAt(nx, nz) && !(iceOnly && slow(nx, nz));
                     if (open) {
                         continue;
                     }
@@ -1696,8 +1808,11 @@ public final class MountainValidator {
                 }
             }
             int[] perLeg = new int[n + 2];
+            // the legs that hold a Big Drop: from the checkpoint before its lip to the first past its zone (v5, D2)
+            boolean[] bigLeg = new boolean[n + 2];
             for (int k = 0; k < lips.size(); k++) {
                 perLeg[lipLeg[k]]++;
+                bigLeg[lipLeg[k]] |= lips.get(k).drop() >= 2;
                 if (lipLeg[k] == n + 1) {
                     int[] u = lips.get(k).first();
                     found.add("a drop after the finish at " + wx(u[0]) + " " + (lips.get(k).upper() + 1) + " "
@@ -1715,9 +1830,9 @@ public final class MountainValidator {
                 double az = leg == 0 ? course.start().z() : cps.get(leg - 1).z();
                 Course.Mark to = disks.get(leg).mark();
                 double apart = Math.hypot(to.x() - ax, to.z() - az);
-                if (apart > DownhillValidator.MAX_LEG + EPS) {
-                    found.add(a + " and " + b + " are " + fmt(apart) + " apart; at most "
-                            + fmt(DownhillValidator.MAX_LEG));
+                double maxLeg = lim.v5 && bigLeg[leg] ? MAX_LEG_BIG_DROP : DownhillValidator.MAX_LEG;
+                if (apart > maxLeg + EPS) {
+                    found.add(a + " and " + b + " are " + fmt(apart) + " apart; at most " + fmt(maxLeg));
                 }
                 if (perLeg[leg] == 0) {
                     double along = along(ax - half.minX(), az - half.minZ(), disks.get(leg).px(), disks.get(leg).pz());
@@ -1771,7 +1886,7 @@ public final class MountainValidator {
             int span = (int) Math.ceil(d.mark().radius()) + 2;
             for (int x = Math.max(0, d.cx() - span); x <= Math.min(sx - 1, d.cx() + span); x++) {
                 for (int z = Math.max(0, d.cz() - span); z <= Math.min(sz - 1, d.cz() + span); z++) {
-                    if (h[x][z] == NONE || d.inside(x, z) || at(x, h[x][z], z) == SAND) {
+                    if (h[x][z] == NONE || d.inside(x, z) || slow(x, z)) {
                         continue;
                     }
                     boolean edge = false;
@@ -1951,7 +2066,7 @@ public final class MountainValidator {
             boolean covered = false;
             for (int[] c : d.nearCells()) {
                 flat &= h[c[0]][c[1]] == level;
-                sand |= at(c[0], h[c[0]][c[1]], c[1]) == SAND
+                sand |= slow(c[0], c[1])
                         && sq(c[0] + 0.5 - d.px()) + sq(c[1] + 0.5 - d.pz())
                         <= DownhillValidator.RESET_ROOM * DownhillValidator.RESET_ROOM + EPS;
                 if (!covered) {
@@ -1972,7 +2087,7 @@ public final class MountainValidator {
                 return true;
             }
             if (sand) {
-                found.add(d.name() + " is on sand: a reset puts the boat down on ice, "
+                found.add(d.name() + " is on " + slowName() + ": a reset puts the boat down on ice, "
                         + fmt(DownhillValidator.RESET_ROOM) + " round its middle");
             }
             if (covered) {
@@ -2072,7 +2187,7 @@ public final class MountainValidator {
                     }
                     any = true;
                     flat &= h[x][z] == level;
-                    if (at(x, h[x][z], z) == SAND) {
+                    if (slow(x, z)) {
                         sand = true;
                         nearestSand = Math.min(nearestSand, Math.hypot(x + 0.5 - d.px(), z + 0.5 - d.pz()));
                     }
@@ -2087,9 +2202,9 @@ public final class MountainValidator {
                 found.add("the run-out after the finish isn't flat");
             }
             if (!sand) {
-                found.add("no sand paddock after the finish");
+                found.add("no " + slowName() + " paddock after the finish");
             } else if (nearestSand < DownhillValidator.RUN_OUT - EPS) {
-                found.add("sand " + fmt(nearestSand) + " after the finish: the run-out is at least "
+                found.add(slowName() + " " + fmt(nearestSand) + " after the finish: the run-out is at least "
                         + fmt(DownhillValidator.RUN_OUT) + " of ice");
             }
         }

@@ -545,7 +545,8 @@ class MountainValidatorTest {
 
     @Test
     void theRulesTableIsTheSpecs() {
-        // §3.4, §5.3, §5.4: {P, B, 2s (count, or share num/den), descent min, cap, blue, pocket width}
+        // §3.4, §5.3, §5.4: {P, B, 2s (count, or share num/den), descent min, cap, blue, pocket width}; the v4
+        // table, frozen (MOUNTAIN-V21-SPEC §2.3): an algo-4 plan is judged by it forever
         Object[][] want = {
                 {"easy", false, 5, 5, 4, 0, 0, 16, 28, false, 5},
                 {"medium", false, 4, 4, 0, 2, 3, 32, 52, true, 4},
@@ -558,6 +559,8 @@ class MountainValidatorTest {
             assertEquals(new MountainValidator.Rules((String) w[0], (Boolean) w[1], (Integer) w[2], (Integer) w[3],
                     (Integer) w[4], (Integer) w[5], (Integer) w[6], (Integer) w[7], (Integer) w[8], (Boolean) w[9],
                     (Integer) w[10]), r, w[0] + (r.slalom() ? " slalom" : " road"));
+            assertEquals(r, MountainValidator.Rules.of((String) w[0], (Boolean) w[1], MountainValidator.FIRST_ALGO),
+                    w[0] + (r.slalom() ? " slalom" : " road") + ": an algo-4 plan's rules are the v4 table");
             assertEquals(2, r.maxDrop(), "drops of at most 2 on every tier (no Gate 0)");
         }
         assertEquals(4, MountainValidator.Rules.of("easy", false).bigDrops(22), "D3: easy road, 4 big drops whatever");
@@ -565,6 +568,311 @@ class MountainValidatorTest {
         assertEquals(20, MountainValidator.Rules.of("hard", true).bigDrops(25), "hard: four fifths");
         assertEquals("an easy slalom", MountainValidator.Rules.of(" EASY ", true).label(), "any case");
         assertNull(MountainValidator.Rules.of("EEE", false), "a golf mix is no tier");
+    }
+
+    @Test
+    void theV5RulesTableIsTheWideRoadsSpecs() {
+        // MOUNTAIN-V21-SPEC §2.3, D3: every drop may be a 2-block drop, the higher descent windows; P, B, blue ice
+        // and the pocket width as v4
+        Object[][] want = {
+                {"easy", false, 5, 5, 28, 0, 0, 30, 48, false, 5},
+                {"medium", false, 4, 4, 0, 1, 1, 46, 70, true, 4},
+                {"hard", false, 4, 3, 0, 1, 1, 48, 74, true, 4},
+                {"easy", true, 7, 5, 14, 0, 0, 18, 28, false, 5},
+                {"medium", true, 5, 4, 0, 1, 1, 26, 40, true, 5},
+                {"hard", true, 4, 3, 0, 1, 1, 30, 44, true, 4}};
+        assertEquals(5, MountainValidator.WIDE_ALGO, "D12: the wide road is boat planner v5");
+        assertEquals(66.0, MountainValidator.MAX_LEG_BIG_DROP, "D2: a leg across a Big Drop up to 66");
+        for (Object[] w : want) {
+            String name = w[0] + ((Boolean) w[1] ? " slalom" : " road");
+            MountainValidator.Rules r = MountainValidator.Rules.of((String) w[0], (Boolean) w[1],
+                    MountainValidator.WIDE_ALGO);
+            assertEquals(new MountainValidator.Rules((String) w[0], (Boolean) w[1], (Integer) w[2], (Integer) w[3],
+                    (Integer) w[4], (Integer) w[5], (Integer) w[6], (Integer) w[7], (Integer) w[8], (Boolean) w[9],
+                    (Integer) w[10]), r, name);
+            assertEquals(r, MountainValidator.Rules.of((String) w[0], (Boolean) w[1], MountainValidator.WIDE_ALGO + 1),
+                    name + ": a later algo keeps the wide road's table until it says otherwise");
+            MountainValidator.Rules v4 = MountainValidator.Rules.of((String) w[0], (Boolean) w[1]);
+            assertEquals(List.of(v4.narrowest(), v4.iceLine(), v4.blueIce(), v4.pocketWidth()),
+                    List.of(r.narrowest(), r.iceLine(), r.blueIce(), r.pocketWidth()),
+                    name + ": §4.4, P, B, blue ice and the pocket width are v4's");
+            assertEquals(2, r.maxDrop(), name + ": drops of at most 2 (no Gate 0)");
+        }
+        assertEquals(30, MountainValidator.Rules.of("medium", false, 5).bigDrops(30), "road medium: all 30 may be big");
+        assertEquals(28, MountainValidator.Rules.of("easy", false, 5).bigDrops(30), "road easy: at most 28 big");
+        assertEquals(14, MountainValidator.Rules.of("easy", true, 5).bigDrops(20), "slalom easy: at most 14 big");
+        assertEquals(22, MountainValidator.Rules.of("hard", true, 5).bigDrops(22), "slalom hard: all of them");
+        assertEquals("a medium road", MountainValidator.Rules.of(" Medium", false, 5).label(), "any case");
+        assertNull(MountainValidator.Rules.of("EEE", false, 5), "a golf mix is no tier");
+    }
+
+    // ---- the wide road's proof (algo 5, MOUNTAIN-V21-SPEC §4, §5.2) ------------------------------------------
+
+    /** The owner's medium width (D1). */
+    private static final int WIDE = 15;
+    /** The planner's set-back before a lip on a 15 lane (MountainTier.setBack): its radius W / 2 + 0.5, a rounding. */
+    private static final double SET_BACK = WIDE / 2.0 + 0.5 + 0.25;
+
+    /**
+     * A medium Winding Road {@value #WIDE} wide falling 46 on eight traverses: {@code bigs} Big Drops first, then
+     * hops that share their checkpoints, a Final Drop of 1; a plan of {@code algo}. Inside both descent windows
+     * (v4 32-52 with at most 2/3 big, v5 46-70), so the two proofs differ only by the rules that changed.
+     */
+    private static HandMountain wide(int bigs, int algo) {
+        HandMountain m = HandMountain.custom("medium", WIDE, HandMountain.drops(45 - bigs, bigs, 1), 8);
+        m.shareHops = true;
+        m.algo = algo;
+        return m;
+    }
+
+    /** The last traverse of {@link #wide}: no drop on it, filled with checkpoints, at z {@value #LAST_Z}, westward. */
+    private static final int LAST_Z = 506;
+    /** A snow drift on it: 4 wide in the lane's middle, 10 long, between two of its checkpoints. */
+    private static final int[] DRIFT = {420, LAST_Z - 2, 429, LAST_Z + 1};
+
+    /**
+     * {@link #wide} with every slow cell laid in {@code block}: a run-off of 2 columns outside the summit's
+     * first corner, a drift ({@link #DRIFT}) and the paddock.
+     */
+    private static HandMountain slowRoad(String block, int algo) {
+        HandMountain m = wide(0, algo);
+        m.plan();
+        int lv = m.level(HandMountain.XE + m.h, m.bandZ[0]);
+        int[] runOff = {HandMountain.XE + m.h + 1, m.bandZ[0] - m.h, HandMountain.XE + m.h + 2, m.bandZ[0] + m.h};
+        m.extra.add(new int[]{runOff[0], runOff[1], runOff[2], runOff[3], lv});
+        m.slow.add(runOff);
+        m.slow.add(DRIFT);
+        m.slowBlock = block;
+        return m;
+    }
+
+    private static String fmt(double v) {
+        return String.format(java.util.Locale.ROOT, "%.1f", v);
+    }
+
+    /** The checkpoint index (0-based) of the {@code n}th mark of {@code kind} on the last traverse. */
+    private static int lastTraverseFill(HandMountain m, Plan p, int n) {
+        List<Course.Mark> cps = HandRun.course(p).checkpoints();
+        int seen = 0;
+        for (int i = 0; i < cps.size(); i++) {
+            if (m.kinds.get(i).equals("fill") && cps.get(i).z() == wz(LAST_Z) + 0.5 && seen++ == n) {
+                return i;
+            }
+        }
+        throw new IllegalStateException("no fill number " + n + " on the last traverse");
+    }
+
+    @Test
+    void theWideRoadsAreProvenByBothRuleSetsWhereTheyAgree() {
+        for (int algo : new int[]{MountainValidator.FIRST_ALGO, MountainValidator.WIDE_ALGO}) {
+            HandMountain m = wide(0, algo);
+            Plan p = m.plan();
+            assertEquals(algo, p.algo(), "fixture: a plan of algo " + algo);
+            Course c = HandRun.course(p);
+            assertEquals(46, (int) (c.start().y() - c.finish().y()), "fixture: it falls 46, in both windows");
+            assertTrue(c.checkpoints().size() <= MountainValidator.MAX_CHECKPOINTS,
+                    "fixture: " + c.checkpoints().size() + " checkpoints");
+            passes(p, "medium", "a 15-wide road of hops, algo " + algo);
+            assertEquals(List.of(), BoatValidator.problems(p, "medium"), "and through the dispatcher, algo " + algo);
+            passes(slowRoad(Palette.SAND, algo).plan(), "medium", "with a sand run-off, drift and paddock, algo " + algo);
+        }
+    }
+
+    @Test
+    void aBigDropLegOfSixtyTwoIsRefusedInV4AndProvenInV5() {
+        HandMountain m = wide(1, MountainValidator.FIRST_ALGO);
+        m.bigBefore = SET_BACK;
+        Plan v4 = m.plan();
+        assertEquals(2, m.lips.get(0)[2], "fixture: the first drop is the road's one Big Drop");
+        int i = mark(m, "before", 0);
+        assertEquals("after", m.kinds.get(i + 1), "fixture: the next checkpoint is the one past its flight zone");
+        List<Course.Mark> cps = HandRun.course(v4).checkpoints();
+        double leg = Math.hypot(cps.get(i + 1).x() - cps.get(i).x(), cps.get(i + 1).z() - cps.get(i).z());
+        assertTrue(leg > DownhillValidator.MAX_LEG && leg < MountainValidator.MAX_LEG_BIG_DROP,
+                "the planner's set-back before the lip and 3 past the zone: a leg of " + leg);
+        Course c = HandRun.course(v4);
+        assertEquals(46, (int) (c.start().y() - c.finish().y()), "fixture: it falls 46, in both windows");
+        String line = "checkpoint " + (i + 1) + " and checkpoint " + (i + 2) + " are " + fmt(leg) + " apart; at most 60.0";
+        List<String> four = check(v4, "medium");
+        assertEquals(List.of(line), four, "v4: 60 across every leg, the Big Drop's too");
+        m.algo = MountainValidator.WIDE_ALGO;
+        List<String> five = check(m.plan(), "medium");
+        List<String> rest = new ArrayList<>(four);
+        rest.remove(line);
+        assertEquals(rest, five, "v5 is v4 without the leg line: v4 " + four + ", v5 " + five);
+        assertEquals(List.of(), five, "v5: a leg across a Big Drop may be up to 66");
+    }
+
+    @Test
+    void aBigDropLegOverSixtySixIsRefused() {
+        HandMountain m = wide(1, MountainValidator.WIDE_ALGO);
+        m.bigBefore = SET_BACK;
+        m.bigAfter = 66.2 + 0.5 - SET_BACK; // the checkpoint after the zone moved on: a leg of 66.2
+        Plan p = m.plan();
+        int i = mark(m, "before", 0);
+        only(p, "medium", "D2: 66 is the most, even across a Big Drop",
+                "checkpoint " + (i + 1) + " and checkpoint " + (i + 2) + " are 66.2 apart; at most 66.0");
+    }
+
+    @Test
+    void aHopLegOverSixtyIsStillRefusedInV5() {
+        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
+        Plan p = m.plan();
+        int last = HandRun.course(p).checkpoints().size() - 1;
+        Course.Mark before = HandRun.course(p).checkpoints().get(last);
+        Course.Mark f = HandRun.course(p).finish();
+        assertEquals(1, m.lips.get(m.lips.size() - 1)[2], "fixture: the Final Drop is a hop");
+        assertEquals(58.0, f.x() - before.x(), 1e-9, "fixture: its leg to the finish");
+        Course.Mark back = new Course.Mark(f.x() - 60.5, before.y(), before.z(), before.radius());
+        only(HandRun.withCheckpoint(p, last, back), "medium", "a leg holding a hop keeps 60",
+                "checkpoint " + (last + 1) + " and the finish are 60.5 apart; at most 60.0");
+    }
+
+    @Test
+    void aFlatLegOverSixtyAlongIsStillRefusedInV5() {
+        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
+        Plan p = m.plan();
+        int i = lastTraverseFill(m, p, 0);
+        assertEquals(List.of("fill", "fill"), m.kinds.subList(i + 1, i + 3), "fixture: three fills in a row");
+        Course.Mark a = HandRun.course(p).checkpoints().get(i);
+        Course.Mark c = HandRun.course(p).checkpoints().get(i + 2);
+        Plan moved = HandRun.withCheckpoint(p, i + 2, new Course.Mark(a.x() - 63, c.y(), c.z(), c.radius()));
+        Plan flat = withoutCheckpoints(moved, i + 1);
+        String names = "checkpoint " + (i + 1) + " and checkpoint " + (i + 2) + " are ";
+        only(flat, "medium", "MAX_ALONG and the leg with no drop keep 60", names + "63.0 apart; at most 60.0",
+                "apart along the track with no drop between; at most 60.0, so a reset never sends a boat far back");
+    }
+
+    @Test
+    void snowRunOffsADriftAndThePaddockAreTrackInV5() {
+        HandMountain m = slowRoad(Palette.SNOW, MountainValidator.WIDE_ALGO);
+        Plan p = m.plan();
+        int snow = 0;
+        for (BlockOp op : p.ops()) {
+            int x = op.x() - HandMountain.HALF.minX();
+            int z = op.z() - HandMountain.HALF.minZ();
+            snow += Palette.SNOW.equals(p.blockOf(op)) && op.y() == m.level(x, z) ? 1 : 0;
+        }
+        assertEquals(2 * WIDE + 10 * 4 + 6 * WIDE, snow, "fixture: the run-off, the drift and the paddock are snow");
+        List<Course.Mark> cps = HandRun.course(p).checkpoints();
+        for (Course.Mark k : cps) {
+            double dx = Math.max(0, Math.max(wx(DRIFT[0]) - k.x(), k.x() - wx(DRIFT[2] + 1)));
+            double dz = Math.max(0, Math.max(wz(DRIFT[1]) - k.z(), k.z() - wz(DRIFT[3] + 1)));
+            assertTrue(Math.hypot(dx, dz) > k.radius() + 2, "fixture: the drift stands between checkpoints, not in one");
+        }
+        passes(p, "medium", "D9: snow continuing the track at its own level is track and slow ground");
+        assertEquals(List.of(), BoatValidator.problems(p, "medium"), "and through the dispatcher");
+    }
+
+    @Test
+    void snowInACheckpointsResetRoomIsRefused() {
+        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
+        Plan p = m.plan();
+        int i = lastTraverseFill(m, p, 2);
+        Course.Mark k = HandRun.course(p).checkpoints().get(i);
+        int x = (int) Math.floor(k.x());
+        int z = (int) Math.floor(k.z());
+        only(HandRun.with(p, x, (int) k.y() - 1, z, Palette.SNOW), "medium", "a reset puts the boat down on ice",
+                "checkpoint " + (i + 1) + " is on snow or sand: a reset puts the boat down on ice, 2.5 round its middle");
+    }
+
+    @Test
+    void theStartOnSnowIsRefused() {
+        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
+        Plan p = m.plan();
+        Course.Spot s = HandRun.course(p).start();
+        only(HandRun.with(p, (int) Math.floor(s.x()), (int) s.y() - 1, (int) Math.floor(s.z()), Palette.SNOW), "medium",
+                "the start is on ice, and so is the all-ice line from it", "the start is on snow or sand",
+                "the snow or sand can't be avoided: no all-ice line 4 wide runs from the start to the finish");
+    }
+
+    @Test
+    void snowAcrossTheWholeLaneIsRefused() {
+        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
+        m.slow.add(new int[]{DRIFT[0] + 4, LAST_Z - m.h, DRIFT[0] + 5, LAST_Z + m.h});
+        m.slowBlock = Palette.SNOW;
+        only(m.plan(), "medium", "V5b: an ice line past every slow piece",
+                "the snow or sand can't be avoided: no all-ice line 4 wide runs from the start to the finish");
+    }
+
+    @Test
+    void sceneryWithSnowTouchingAnUnwalledLaneIsRefused() {
+        // a wall column beside the lane taken out and snow put there at the ice's level: the flood makes it track,
+        // and the column past it has no wall (W1), never a pass
+        for (int algo : new int[]{MountainValidator.FIRST_ALGO, MountainValidator.WIDE_ALGO}) {
+            HandMountain m = wide(0, algo);
+            Plan p = m.plan();
+            int x = 425;
+            int z = LAST_Z - m.h - 1;
+            int ice = m.level(x, LAST_Z);
+            int bx = wx(x);
+            int bz = wz(z);
+            Map<int[], String> snow = new HashMap<>();
+            snow.put(new int[]{bx, ice, bz}, Palette.SNOW);
+            Plan open = HandRun.edit(p, op -> op.x() == bx && op.z() == bz, snow);
+            if (algo == MountainValidator.WIDE_ALGO) {
+                only(open, "medium", "v5: the snow is track, so the lane is open beside it (W1)",
+                        "an open edge beside the track at ");
+            } else {
+                only(open, "medium", "v4: the snow is a wall one block high",
+                        "the wall at " + bx + " " + bz + " isn't solid at y " + (ice + 1));
+            }
+        }
+    }
+
+    @Test
+    void aSnowWallBesideTheLaneStaysAWallInV5() {
+        // §4.3: snow with a block over it (a wall's) fails the flood's headroom test, so it stays the wall it is in v4
+        for (int algo : new int[]{MountainValidator.FIRST_ALGO, MountainValidator.WIDE_ALGO}) {
+            HandMountain m = wide(0, algo);
+            Plan p = m.plan();
+            int bx = wx(425);
+            int bz = wz(LAST_Z - m.h - 1);
+            int ice = m.level(425, LAST_Z);
+            Map<int[], String> snow = new HashMap<>();
+            for (int y = ice; y <= ice + 2; y++) {
+                snow.put(new int[]{bx, y, bz}, Palette.SNOW);
+            }
+            assertEquals(3, p.ops().stream().filter(op -> op.x() == bx && op.z() == bz).count(),
+                    "fixture: the wall column is 3 high");
+            passes(HandRun.edit(p, op -> op.x() == bx && op.z() == bz, snow), "medium",
+                    "a wall of snow is a wall, algo " + algo);
+        }
+    }
+
+    @Test
+    void snowTrackInAnAlgoFourPlanIsRefusedAsBefore() {
+        passes(slowRoad(Palette.SAND, MountainValidator.FIRST_ALGO).plan(), "medium", "fixture: in sand, v4 proves it");
+        List<String> problems = check(slowRoad(Palette.SNOW, MountainValidator.FIRST_ALGO).plan(), "medium");
+        assertTrue(problems.contains("no sand paddock after the finish"), "v4 reads snow as a wall: " + problems);
+        assertTrue(problems.stream().anyMatch(l -> l.startsWith("the wall at ") && l.contains(" isn't solid at y ")),
+                "a snow run-off is a wall one block high: " + problems);
+        assertFalse(problems.stream().anyMatch(l -> l.contains("snow or sand")), "and v4's words: " + problems);
+    }
+
+    @Test
+    void aWideMediumRoadFallingFortyFiveIsNoDownhillInV5() {
+        HandMountain m = HandMountain.custom("medium", WIDE, HandMountain.drops(44, 0, 1), 8);
+        m.shareHops = true;
+        passes(m.plan(), "medium", "fixture: 45 down is in v4's 32-52");
+        m.algo = MountainValidator.WIDE_ALGO;
+        only(m.plan(), "medium", "D3: a v5 medium road falls at least 46",
+                "the track falls only 45 blocks from the start to the bottom; a medium road falls at least 46: a real"
+                        + " downhill");
+    }
+
+    @Test
+    void allTwoBlockDropsAreAllowedOnAV5MediumRoad() {
+        HandMountain m = HandMountain.custom("medium", WIDE, HandMountain.drops(22, 22, 2), 6);
+        m.finalLip = 185; // a 2-block Final Drop: Z(2) + 3 before the finish
+        m.algo = MountainValidator.WIDE_ALGO;
+        Plan p = m.plan();
+        assertTrue(m.lips.stream().allMatch(l -> l[2] == 2), "fixture: 23 Big Drops, the Final Drop too");
+        passes(p, "medium", "D3: every drop may be a 2-block drop, and the finish's leg over it may be 66");
+        m.algo = MountainValidator.FIRST_ALGO;
+        List<String> v4 = check(m.plan(), "medium");
+        assertTrue(v4.contains("23 drops of 2 blocks; a medium road with 23 drops has at most 15"),
+                "v4 holds it to two thirds: " + v4);
     }
 
     @Test

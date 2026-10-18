@@ -287,7 +287,8 @@ class MountainPlannerTest {
         // scarcest first, a card takes the tightest stretch it fits and, failing that, its shortest length. The
         // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's. What a deck
         // places is gathered and asserted at the end, every tier's at once (the wide road's are tuned by
-        // MOUNTAIN-V21-SPEC §6.4's steps D and F)
+        // MOUNTAIN-V21-SPEC §6.4's steps D and F; after F the mini soak put a forest on 78% of the hard roads dealt
+        // one and 38-50% of the medium ones, so a forest is asked of most seeds, not of each, as §5.3 allows)
         List<String> missed = new ArrayList<>();
         for (String tier : List.of("easy", "medium", "hard")) {
             List<Long> seeds = new ArrayList<>();
@@ -303,6 +304,7 @@ class MountainPlannerTest {
             int dealt = 0;
             int twoPits = 0;
             int twoSplits = 0;
+            int forests = 0;
             for (long seed : seeds) {
                 MountainPlanner.Made m = made(HALF_A, seed, tier);
                 PiecesV4 p = m.pieces;
@@ -337,11 +339,8 @@ class MountainPlannerTest {
                     missed.add(name + ": no cave or tunnel" + placedOf);
                 }
                 if (!tier.equals("easy")) {
-                    // a forest and a split on every medium and hard seed (§5.3; if §6.4's step F can't bring the
-                    // forests back, "on most seeds")
-                    if (p.count(PiecesV4.Kind.FOREST) < 1) {
-                        missed.add(name + ": no forest" + placedOf);
-                    }
+                    // a split on every medium and hard seed, and a forest on most (§5.3, after §6.4's step F)
+                    forests += p.count(PiecesV4.Kind.FOREST) > 0 ? 1 : 0;
                     if (p.count(PiecesV4.Kind.SPLIT) < 1) {
                         missed.add(name + ": no split" + placedOf);
                     }
@@ -372,6 +371,10 @@ class MountainPlannerTest {
             }
             if (placed * 4 < dealt * 3) {
                 missed.add("road " + tier + ": " + placed + " pieces of " + dealt + " dealt, under three in four");
+            }
+            if (!tier.equals("easy") && forests * 2 <= seeds.size()) {
+                missed.add("road " + tier + ": a forest on only " + forests + " of " + seeds.size()
+                        + " seeds, not most");
             }
             if (tier.equals("hard") && twoPits * 2 <= seeds.size()) {
                 missed.add("road hard: two snow drifts or more in only " + twoPits + " of " + seeds.size());

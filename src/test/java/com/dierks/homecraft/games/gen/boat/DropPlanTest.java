@@ -17,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The wide road's drop rules (MOUNTAIN-V21-SPEC D2-D4, §2.1, §2.2, §3.1): 66 across a Big Drop and 60 for
  * every other leg, the road's tight run-up and the Slalom's 0.37.0 one, the room a piece or a gate field leaves
  * the checkpoint before a lip, GROW budgeted at the Final Drop and at a shared checkpoint, no blue straight
- * ending in a sweeper, and algo 4's rules where its tables are asked for.
+ * ending in a sweeper, lips within 300 of each other on the medium and hard roads (§6.4 step S), and algo 4's
+ * rules where its tables are asked for.
  */
 class DropPlanTest {
 
@@ -346,6 +347,33 @@ class DropPlanTest {
         assertFalse(dp.bigBetween(400, 450), "and not a");
         assertFalse(dp.bigBetween(450, 600), "the 1-block Final Drop isn't");
         assertEquals(1, dp.lipsBetween(450, 600), "though it is a lip");
+    }
+
+    @Test
+    void theWideRoadsMediumAndHardKeepLipsWithinThreeHundred() {
+        // §6.4 step S: SPREAD 300 on the wide road's medium and hard tiers; easy, the slaloms and algo 4 keep 500
+        for (String id : List.of("easy", "medium", "hard")) {
+            MountainTier road = MountainTier.of(BoatStyle.ROAD, id);
+            assertEquals(road.easy() ? 500 : 300, DropPlan.spreadFor(road), 1e-12, road + ": its spread");
+            assertEquals(500, DropPlan.spreadFor(MountainTier.of(BoatStyle.SLALOM, id)), 1e-12, "the slalom keeps 500");
+            assertEquals(500, DropPlan.spreadFor(MountainTier.of(BoatStyle.ROAD, id, MountainValidator.FIRST_ALGO)),
+                    1e-12, road + " v4 keeps 500");
+        }
+        int plans = 0;
+        for (String id : List.of("medium", "hard")) {
+            for (DropPlan dp : plans(MountainTier.of(BoatStyle.ROAD, id))) {
+                DropPlan.Planner along = new DropPlan.Planner(new GenRandom(0), dp.sk);
+                double prev = dp.sk.start;
+                for (int i = 0; i <= dp.drops.size(); i++) {
+                    double s = i < dp.drops.size() ? dp.drops.get(i).s() : dp.sk.finish;
+                    assertTrue(along.unlinked(prev, s) <= DropPlan.SPREAD_ROAD + 1e-9, "road " + id + ": "
+                            + along.unlinked(prev, s) + " without a lip (links not counted) from " + prev + " to " + s);
+                    prev = s;
+                }
+                plans++;
+            }
+        }
+        assertTrue(plans > 0, "fixture: wide medium and hard drop plans");
     }
 
     @Test

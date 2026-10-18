@@ -21,7 +21,8 @@ import java.util.List;
  *   <li><b>brake drops</b>: the line is ridden ({@link RideLine}, {@link BoatLine}); the arc entered
  *       hardest over its v_c (with no lip in the 40 before it) gets a lip in that 40, landing strip and
  *       all, and the line is ridden again;</li>
- *   <li><b>spread</b>: no 500 blocks without a lip outside the links;</li>
+ *   <li><b>spread</b>: no 500 blocks without a lip outside the links (300 on the wide road's medium and hard
+ *       tiers);</li>
  *   <li><b>fill</b> to the tier's count by brake value and spread, seeded ties, on any straight (algo 4:
  *       only where a lip brakes or on a long straight);</li>
  *   <li>then <b>2-block drops</b> (the Final Drop first) within the tier's 2-count and descent cap.</li>
@@ -54,6 +55,21 @@ public final class DropPlan {
     static final double BRAKE_WINDOW = 40;
     /** No more than this along the line (outside links) without a lip (§7.2). */
     static final double SPREAD = 500;
+    /**
+     * The wide road's medium and hard tiers keep lips closer than {@value #SPREAD} (MOUNTAIN-V21-SPEC §6.4 step S:
+     * in the mini soak a hard road's longest lip-free stretch was over 250 at p90); easy, the slaloms and algo 4
+     * keep {@value #SPREAD}.
+     */
+    static final double SPREAD_ROAD = 300;
+
+    /**
+     * The most along the line (links not counted) without a lip on {@code tier}: {@link #SPREAD}, or
+     * {@link #SPREAD_ROAD}.
+     */
+    static double spreadFor(MountainTier tier) {
+        return tier.road() && tier.wide() && !tier.easy() ? SPREAD_ROAD : SPREAD;
+    }
+
     /**
      * A run may fall this many lips short of the tier's count (§3.4's counts are targets; the proof's floor
      * is the descent, V8): the straights a 2-minute run has room for hold about that many fewer at the
@@ -809,14 +825,15 @@ public final class DropPlan {
             return out;
         }
 
-        /** No more than {@value #SPREAD} along the line (links not counted) without a lip. */
+        /** No more than {@link #spreadFor} the tier along the line (links not counted) without a lip. */
         void spread() {
+            double most = spreadFor(sk.tier);
             for (int guard = 0; guard < 40; guard++) {
                 double prev = sk.start;
                 double[] gap = null;
                 for (int i = 0; i <= lips.size(); i++) {
                     double next = i < lips.size() ? lips.get(i).s() : sk.finish;
-                    if (unlinked(prev, next) > SPREAD) {
+                    if (unlinked(prev, next) > most) {
                         gap = new double[]{prev, next};
                         break;
                     }

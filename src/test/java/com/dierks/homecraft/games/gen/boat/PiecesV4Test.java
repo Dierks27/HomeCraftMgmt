@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The wide road's pieces (MOUNTAIN-V21-SPEC D1b, D8, §2.5): a forest stands in the lane, a split and a snow
- * drift widen it by 2 a side, the ice ways past a drift are at least 7 wide, a medium boost strip stands on
- * straights only and ends 40 before any arc; algo 4's pieces widen by 4 as before.
+ * The wide road's pieces (MOUNTAIN-V21-SPEC D1b, D8, §2.5): a forest of 3 trunks (§6.4 step F) stands in the
+ * lane, a split and a snow drift widen it by 2 a side, the ice ways past a drift are at least 7 wide, a medium
+ * boost strip stands on straights only and ends 40 before any arc; algo 4's pieces widen by 4 as before.
  */
 class PiecesV4Test {
 
@@ -34,6 +34,9 @@ class PiecesV4Test {
             PiecesV4.Piece forest = PiecesV4.make(new GenRandom(3), sk, PiecesV4.Kind.FOREST, s1,
                     s1 + PiecesV4.shortest(sk, PiecesV4.Kind.FOREST));
             assertEquals(tier.width / 2.0, forest.hi, 1e-12, tier + ": the forest is the lane, W / 2 a side");
+            // §6.4 step F: 3 trunks on every wide road, so a hard forest is 32 long as medium's
+            assertEquals(3, forest.trunks.size(), tier + ": a forest's trunks");
+            assertEquals(2 * PiecesV4.TAPER + 16, forest.s2 - forest.s1, 1e-12, tier + ": a forest 32 long");
             for (double[] t : forest.trunks) {
                 assertTrue(t[1] >= -tier.width / 2.0 && t[1] + 2 <= tier.width / 2.0,
                         tier + ": its trunks stand inside the lane");
@@ -49,6 +52,9 @@ class PiecesV4Test {
                 assertEquals(widens ? PiecesV4.WIDEN : 0, p.extra(o1 + len / 2), 1e-12,
                         v4 + " v4: a " + k.word + " as in 0.37.0");
             }
+            assertEquals(v4.hard() ? 4 : 3, PiecesV4.trunks(v4), v4 + " v4: a forest's trunks as in 0.37.0");
+            assertEquals(2 * PiecesV4.TAPER + 6 * (v4.hard() ? 4 : 3) - 2, PiecesV4.shortest(old, PiecesV4.Kind.FOREST),
+                    1e-12, v4 + " v4: its forest's length as in 0.37.0");
         }
         assertEquals(4, PiecesV4.SEARCH_WIDEN, 1e-12, "the raster's search box is 0.37.0's");
     }

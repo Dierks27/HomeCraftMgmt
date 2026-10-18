@@ -26,9 +26,9 @@ import java.util.function.Predicate;
  *       lanterns in its walls.</li>
  *   <li><b>The tunnel</b> (medium, hard): 20-40 blocks through a rock spur, a stone roof 5 over the ice
  *       (V7: rock over the track 5 up or more), lanterns every {@value #LANTERN_EVERY}.</li>
- *   <li><b>The forest slalom</b>: 2 x 2 trunks stand in the lane, alternately left and right of the
- *       middle, every gap wider than P, under the trees' leaves; the wide road's 14-15 lane is wide enough
- *       for it as it is (D1b; algo 4's lane widened by {@value #WIDEN}).</li>
+ *   <li><b>The forest slalom</b>: 2 x 2 trunks ({@link #trunks}: 3; algo 4's hard road 4) stand in the lane,
+ *       alternately left and right of the middle, every gap wider than P, under the trees' leaves; the wide
+ *       road's 14-15 lane is wide enough for it as it is (D1b; algo 4's lane widened by {@value #WIDEN}).</li>
  *   <li><b>Boost strips</b> (medium): the middle 3 columns blue for 15-30 blocks, never within 30
  *       before a lip, and on the wide road on straights only, ending at least {@value #BOOST_ARC_GAP}
  *       before the next arc (D8).</li>
@@ -446,6 +446,15 @@ public final class PiecesV4 {
         return out;
     }
 
+    /**
+     * A forest's trunks on {@code tier}: 3, as medium's, on every wide road (MOUNTAIN-V21-SPEC §6.4 step F: at 4 the
+     * hard road's 38-block forest found a place in none of the mini soak's 40 plans; at 3 it is 32 long); algo 4's
+     * hard road keeps 4.
+     */
+    static int trunks(MountainTier tier) {
+        return tier.hard() && !tier.wide() ? 4 : 3;
+    }
+
     /** How long a piece of {@code k} is, along. */
     static double length(GenRandom r, Skeleton sk, Kind k) {
         return switch (k) {
@@ -453,7 +462,7 @@ public final class PiecesV4 {
             case SPLIT -> 2 * TAPER + 2 + r.nextInt(6, 12);
             case CAVE -> r.nextInt(12, 20);
             case TUNNEL -> r.nextInt(20, 40);
-            case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
+            case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
             case BOOST -> r.nextInt(15, 30);
         };
     }
@@ -475,7 +484,7 @@ public final class PiecesV4 {
             case SPLIT -> 2 * TAPER + 2 + 6;
             case CAVE -> 12;
             case TUNNEL -> 20;
-            case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
+            case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
             case BOOST -> 15;
         };
     }
@@ -613,7 +622,7 @@ public final class PiecesV4 {
                 // trunks alternately left and right of the middle; each gap past them wider than P
                 double at = s1 + TAPER;
                 boolean left = r.nextBoolean();
-                int n = sk.tier.hard() ? 4 : 3;
+                int n = trunks(sk.tier);
                 for (int i = 0; i < n; i++) {
                     double v = left ? -2.5 : 0.5;
                     p.trunks.add(new double[]{Math.floor(at), v});

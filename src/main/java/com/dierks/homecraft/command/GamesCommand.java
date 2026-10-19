@@ -217,9 +217,10 @@ public final class GamesCommand {
             if (games == null) {
                 return;
             }
+            long before = games.refusalsTold();
             boolean opened = games.open(target, id, null);
             sender.sendMessage(Text.of(opened ? "&aOpened &f" + id + " &afor &f" + target.getName() + "&a."
-                    : "&7" + target.getName() + " couldn't play " + id + " right now (they were told why)."));
+                    : notOpened(target.getName(), id, games.lastRefusal(target.getUniqueId()), before)));
             return;
         }
         Player player = self(sender, "Only players can play - from the console: /hcm play <game> <player>");
@@ -1132,6 +1133,18 @@ public final class GamesCommand {
             sender.sendMessage(Text.of((voids ? "&c" : "&7") + line));
         }
         log(sender, "movement " + target.getName() + ": " + String.join(" | ", lines));
+    }
+
+    /**
+     * What {@code /hcm play <game> <player>} tells the admin when nothing opened: the refusal the player was just
+     * told, word for word, when this call told one ({@code last} numbered above {@code before}); otherwise where to
+     * look, since a refusal on the way in comes a tick or more later and is logged then.
+     */
+    static String notOpened(String name, String id, GamesService.Told last, long before) {
+        if (last != null && last.seq() > before) {
+            return "&7" + name + " couldn't play " + id + " right now. They were told: &f" + last.message();
+        }
+        return "&7" + name + " couldn't play " + id + " right now (they were told why; see the console).";
     }
 
     /** Who did what, for the console: every admin action on the Games is logged with the sender. */

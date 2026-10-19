@@ -1,6 +1,7 @@
 package com.dierks.homecraft.command;
 
 import com.dierks.homecraft.games.GamesBench;
+import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.PlayerAs;
 import com.dierks.homecraft.games.chance.wheel.Wheel;
 import com.dierks.homecraft.games.chance.wheel.WheelSettings;
@@ -85,6 +86,17 @@ class GamesCommandTest {
                 + "run the Games\n"), "plugin.yml's /hcm games verbs");
         assertTrue(yml.contains("\n      /hcm games boat flights  - admin: how far Ice Boats really jump off the "
                 + "Mountain Run's drops\n"), "plugin.yml's /hcm games boat flights line");
+    }
+
+    @Test
+    void playForAPlayerEchoesTheRefusalItJustTold() {
+        GamesService.Told told = new GamesService.Told("Stand still and safe to start.", 8);
+        assertEquals("&7Sam couldn't play river_run right now. They were told: &fStand still and safe to start.",
+                GamesCommand.notOpened("Sam", "river_run", told, 7), "told by this call: word for word");
+        assertEquals("&7Sam couldn't play river_run right now (they were told why; see the console).",
+                GamesCommand.notOpened("Sam", "river_run", told, 8), "an older refusal is not this call's");
+        assertEquals("&7Sam couldn't play river_run right now (they were told why; see the console).",
+                GamesCommand.notOpened("Sam", "river_run", null, 0), "nothing told yet (it comes on the way in)");
     }
 
     @Test

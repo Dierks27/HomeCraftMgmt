@@ -110,6 +110,12 @@ public final class GamesService {
     private final Map<String, List<BukkitTask>> tasks = new HashMap<>();
     /** Cancels the one-minute round sweep. */
     private Runnable sweep;
+    /** The last refusal told to each player ({@link #tell}); main thread. */
+    private final Map<UUID, Told> lastTold = new HashMap<>();
+    /** How many refusals have been told: the last one's {@link Told#seq()}. */
+    private long told;
+    /** When a refusal is also written to the console: once a player and message a minute. */
+    private final RefusalLog refusalLog = new RefusalLog();
     /**
      * When this plugin run began (the service is built once, at enable; {@code /hcm reload} keeps it):
      * the restart hold skips a restart whose minute it fell in, since that is the restart it came back
@@ -489,7 +495,12 @@ public final class GamesService {
         return at == null ? null : Refusal.restart(at);
     }
 
-    /** Tell the player why not: a red chat line and the refused sound; nothing at all for the cooldown. */
+    /**
+     * Tell the player why not: a red chat line and the refused sound; nothing at all for the cooldown. The
+     * refusal is also remembered as the player's last ({@link #lastRefusal}) and written to the console, once a
+     * player and message a minute ({@link RefusalLog}): on Bedrock the chat can sit hidden behind an open
+     * screen, so the owner can read there what a player was told. The player sees exactly what they did before.
+     */
     public void tell(Player player, Refusal refusal) {
         if (player == null || refusal == null || refusal.silent() || refusal.message().isEmpty()) {
             return;
@@ -500,6 +511,33 @@ public final class GamesService {
         } catch (RuntimeException | LinkageError ignored) {
             // a sound never stops the line reaching the player
         }
+        try {
+            lastTold.put(player.getUniqueId(), new Told(refusal.message(), ++told));
+            if (refusalLog.due(player.getUniqueId(), refusal.message(), host.clock().nowMillis())) {
+                host.logger().info("Games: " + player.getName() + " was told: " + refusal.message());
+            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // the console's copy never stops the line reaching the player
+        }
+    }
+
+    /**
+     * A refusal told to a player ({@link #tell}).
+     *
+     * @param message what they read
+     * @param seq     its number: one more for every refusal told, so a caller can tell one told after it looked
+     */
+    public record Told(String message, long seq) {
+    }
+
+    /** The last refusal told to {@code player} since the start, or {@code null}. */
+    public Told lastRefusal(UUID player) {
+        return player == null ? null : lastTold.get(player);
+    }
+
+    /** How many refusals have been told since the start: one numbered above this was told after it was read. */
+    public long refusalsTold() {
+        return told;
     }
 
     // ---- listeners, tasks and failure isolation ---------------------------------------------

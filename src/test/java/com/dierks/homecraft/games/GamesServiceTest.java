@@ -271,4 +271,33 @@ class GamesServiceTest {
         games.progress(null);
         assertSame(GameProgress.NONE, games.progress(), "null goes back to nobody");
     }
+
+    @Test
+    void aRefusalIsRememberedAndWrittenToTheConsoleOnceAMinute() {
+        String nope = "There's no game called \"nope\". /hcm play shows them all.";
+        long before = games.refusalsTold();
+        assertFalse(games.open(alex.player, "nope", null), "nothing opened");
+        assertTrue(alex.heard().contains(nope), "the player reads it as before");
+        GamesService.Told told = games.lastRefusal(alex.id);
+        assertNotNull(told, "remembered");
+        assertEquals(nope, told.message(), "word for word");
+        assertTrue(told.seq() > before, "told after the admin looked: /hcm play can echo it");
+        assertEquals(1, consoleLines(nope), "and written to the console");
+
+        games.open(alex.player, "nope", null);
+        assertTrue(games.lastRefusal(alex.id).seq() > told.seq(), "the newest refusal is the one remembered");
+        assertEquals(1, consoleLines(nope), "the same line again within the minute isn't written again");
+        host.move(RefusalLog.EVERY_MS);
+        games.open(alex.player, "nope", null);
+        assertEquals(2, consoleLines(nope), "a minute on, it is");
+
+        games.tell(alex.player, Refusal.SILENT);
+        assertEquals(nope, games.lastRefusal(alex.id).message(), "the silent cooldown tells nothing and changes nothing");
+        assertNull(games.lastRefusal(new Fake("Sam").id), "nobody else was told anything");
+    }
+
+    private long consoleLines(String message) {
+        return host.logs.stream().filter(r -> r.getLevel() == java.util.logging.Level.INFO
+                && ("Games: Alex was told: " + message).equals(r.getMessage())).count();
+    }
 }

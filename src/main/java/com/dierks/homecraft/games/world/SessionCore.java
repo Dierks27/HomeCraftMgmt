@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.world;
 
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.RefusalLog;
 import com.dierks.homecraft.storage.GamesDao;
 
 import java.sql.SQLException;
@@ -377,6 +378,8 @@ final class SessionCore<P, I> {
     private final Set<String> applied = new HashSet<>();
     /** Sessions whose trip home was made this run: only the hand-over is left. */
     private final Set<String> reached = new HashSet<>();
+    /** When a refusal is also written to the console: once a player and message a minute. */
+    private final RefusalLog refusalLog = new RefusalLog();
     private long tokens;
 
     SessionCore(GamesDao dao, Port<P, I> port, Logger log) {
@@ -2098,9 +2101,20 @@ final class SessionCore<P, I> {
         }
     }
 
+    /**
+     * Tell the player why their entry stopped, and write it to the console once a player and message a minute
+     * ({@link RefusalLog}): these come a tick or more after the click, often behind a screen on Bedrock.
+     */
     private void refuse(P p, String why) {
         if (port.online(p)) {
             port.tell(p, "&c" + why);
+        }
+        try {
+            if (refusalLog.due(port.id(p), why, port.now())) {
+                log.info("Games: " + port.name(p) + " was told: " + why);
+            }
+        } catch (RuntimeException e) {
+            // the console's copy never stops an entry ending cleanly
         }
     }
 

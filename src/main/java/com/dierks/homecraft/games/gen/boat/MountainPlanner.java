@@ -39,19 +39,19 @@ import java.util.regex.Pattern;
  * layouts block for block (the frozen fixtures' test; no tag of algo 4 is ever made again by the engine:
  * {@code BoatPlanner.rederive} refuses it).
  *
- * <p><b>Stage A</b> (milliseconds each, up to {@value #CANDIDATES}): a {@link Frame}, a {@link Skeleton},
- * the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore}, each from its own fork of the
- * seed ({@code frame:i}, {@code route:i}, {@code drops:i}); a candidate is kept when every flow gate holds
- * (the model time in the tier's window among them) and its corridors keep their clearance. It stops early
- * once {@value #KEPT} kept candidates score {@value #EARLY} or more, and goes on past {@value #CANDIDATES}
- * (up to {@value #CANDIDATES_MAX}) only while none is kept.
+ * <p><b>Stage A</b> (milliseconds each, up to {@value #CANDIDATES} ({@value #CANDIDATES_WIDE} on the wide road)): a
+ * {@link Frame}, a {@link Skeleton}, the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore},
+ * each from its own fork of the seed ({@code frame:i}, {@code route:i}, {@code drops:i}); a candidate is kept when
+ * every flow gate holds (the model time in the tier's window among them) and its corridors keep their clearance.
+ * It stops early once {@value #KEPT} kept candidates score {@value #EARLY} or more, and goes on past them (up to
+ * {@value #CANDIDATES_MAX}) only while none is kept.
  *
- * <p><b>Stage B</b> (about a second each): the kept candidates by score (ties by number), at most
- * {@value #KEPT}: the pieces ({@code pieces:i}, each kept only while the checkpoints still fit round it),
- * the raster, the checkpoints, the mountain ({@code scenery:i}), the plan, and the proof
- * ({@link MountainValidator}); the first proven plan is the layout. A refused build is tried again without
- * the pieces nearest where its proof failed. Then fewer pieces (REDUCED), then none (BASIC), on the best
- * candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven skeleton per style, tier and
+ * <p><b>Stage B</b> (about a second each): the kept candidates by score (on the wide road the evener fall first,
+ * {@link #stageBOrder}; ties by number), at most {@value #KEPT}: the pieces ({@code pieces:i}, each kept only
+ * while the checkpoints still fit round it), the raster, the checkpoints, the mountain ({@code scenery:i}), the
+ * plan, and the proof ({@link MountainValidator}); the first proven plan is the layout. A refused build is tried
+ * again without the pieces nearest where its proof failed. Then fewer pieces (REDUCED), then none (BASIC), on the
+ * best candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven skeleton per style, tier and
  * mirror ({@link #safe}).
  *
  * <p><b>Work</b> ({@link #BUDGET} units): a Stage A candidate 1, a Stage B attempt {@value #UNIT_B},
@@ -70,6 +70,13 @@ final class MountainPlanner {
     static final int ALGO = 5;
     /** Stage A candidates, those Stage B tries, and the score that ends Stage A early. */
     static final int CANDIDATES = 48;
+    /**
+     * The wide road's: Stage A looks at twice as many before it stops, so Stage B has the evener falls to choose from
+     * and the hard road (its approach of 46 keeps fewer) as many kept as before (0.37.1).
+     */
+    static final int CANDIDATES_WIDE = 96;
+    /** Stage B builds the wide road's kept candidates whose every band falls this much first (§6.2's spread). */
+    static final int EVEN_FALL = 5;
     /**
      * While none of the first {@value #CANDIDATES} is kept, Stage A goes on up to this many: the hard road
      * (descent 44 or more under the checkpoint rules) keeps about one candidate in 60. Within the budget:
@@ -265,7 +272,7 @@ final class MountainPlanner {
         int good = 0;
         for (int i = 0; i < CANDIDATES_MAX; i++) {
             in.checkCancelled();
-            if (work + 1 > budget - SAFE_RESERVE || (i >= CANDIDATES && !kept.isEmpty())) {
+            if (work + 1 > budget - SAFE_RESERVE || (i >= candidates(tier) && !kept.isEmpty())) {
                 break;
             }
             work++;
@@ -279,8 +286,7 @@ final class MountainPlanner {
                 break;
             }
         }
-        kept.sort((a, b) -> a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
-                : Integer.compare(a.index(), b.index()));
+        kept.sort(MountainPlanner::stageBOrder);
         // Stage B: every piece on the best, then fewer, then none
         int[][] steps = {{FULL, Math.min(KEPT, kept.size())}, {REDUCED, Math.min(2, kept.size())},
                 {BASIC, Math.min(1, kept.size())}};
@@ -318,6 +324,41 @@ final class MountainPlanner {
         safe.how = "the safe " + (tier.slalom() ? "slalom" : "road") + " after " + kept.size() + " candidates and "
                 + tries + " builds";
         return safe;
+    }
+
+    /** Stage A's candidates before it stops with any kept: {@link #CANDIDATES_WIDE} on the wide road. */
+    static int candidates(MountainTier tier) {
+        return tier.wide() && tier.road() ? CANDIDATES_WIDE : CANDIDATES;
+    }
+
+    /** The least fall of any band of {@code c}'s drops but the finish's. */
+    static int leastBand(Candidate c) {
+        Skeleton sk = c.sk();
+        int[] f = new int[sk.frame.bands + 1];
+        for (DropPlan.Drop d : c.drops().drops) {
+            f[Math.min(sk.tagAt(d.s()).band(), sk.frame.bands)] += d.drop();
+        }
+        int least = Integer.MAX_VALUE;
+        for (int k = 0; k < sk.frame.bands; k++) {
+            least = Math.min(least, f[k]);
+        }
+        return least;
+    }
+
+    /**
+     * Stage B's order: on the wide road the evener fall first (the least band's fall, counted up to
+     * {@value #EVEN_FALL}), then the flow score, then the number; algo 4 and the Slalom by score and number alone.
+     */
+    static int stageBOrder(Candidate a, Candidate b) {
+        if (a.sk().tier.wide() && a.sk().tier.road()) {
+            int la = Math.min(EVEN_FALL, leastBand(a));
+            int lb = Math.min(EVEN_FALL, leastBand(b));
+            if (la != lb) {
+                return Integer.compare(lb, la);
+            }
+        }
+        return a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
+                : Integer.compare(a.index(), b.index());
     }
 
     /** Stage A candidate {@code i}: frame, route, drops and flow; {@code null} unless every gate holds. */

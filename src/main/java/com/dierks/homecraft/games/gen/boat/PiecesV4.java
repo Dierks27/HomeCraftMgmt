@@ -17,11 +17,12 @@ import java.util.function.Predicate;
  *   <li><b>Snow run-offs</b> (roads): on every bend tighter than R {@value #SANDY_R}, two columns of slow
  *       ground (snow; algo 4's sand) outside the lane on its outer side, so going wide is slow and the full
  *       lane of ice is still there (V5b).</li>
- *   <li><b>The snow drift</b> (algo 4's sand pit): the lane widens by 2 each side ({@link #widen}; algo 4
- *       {@value #WIDEN}) over {@value #TAPER} blocks, a drift of slow ground sits in the middle, ice ways
- *       round both sides at least 7 wide (P on algo 4's narrow road).</li>
+ *   <li><b>The snow drift</b> (algo 4's sand pit): the lane widens by 2 each side over 4 blocks ({@link #widen},
+ *       {@link #taper}; algo 4: {@value #WIDEN} over {@value #TAPER}), a drift of slow ground sits in the middle,
+ *       ice ways round both sides at least 7 wide (P on algo 4's narrow road).</li>
  *   <li><b>Pick a path</b>: the lane splits round a moss island 3 wide with a tree, widening by 2 each side
- *       (algo 4: {@value #WIDEN}); both branches wider than P (the islands rule).</li>
+ *       over 4 blocks (algo 4: {@value #WIDEN} over {@value #TAPER}); both branches wider than P (the islands
+ *       rule).</li>
  *   <li><b>The Ice Cave</b>: 12-20 blocks under a light-blue glass roof exactly 5 over the ice, sea
  *       lanterns in its walls.</li>
  *   <li><b>The tunnel</b> (medium, hard): 20-40 blocks through a rock spur, a stone roof 5 over the ice
@@ -47,6 +48,12 @@ public final class PiecesV4 {
     /** Algo 4's widened pieces' extra lane each side (the sand pit, the split, the forest), and the taper length. */
     static final double WIDEN = 4;
     static final double TAPER = 8;
+    /**
+     * The wide road's split and snow drift widen by 2 a side over this, not {@value #TAPER}: algo 4's wall angle
+     * (4 over 8), so a split is 16-22 long (algo 4's 24-30) and a drift 18-22 (26-30), the island and the snow as
+     * before (0.37.1, the deck fix: about 30 lips a run leave free straights of 18-22, and a split needed 26).
+     */
+    static final double TAPER_WIDE = 4;
     /** RasterV4.columnsOf's search box past the lane each side (0.37.0's WIDEN; no piece widens more). */
     static final double SEARCH_WIDEN = 4;
     /** A medium boost strip ends at least this far before the next arc (0.37.1, D8). */
@@ -83,6 +90,11 @@ public final class PiecesV4 {
         return k == Kind.SPLIT || k == Kind.SAND_PIT ? 2 : 0;
     }
 
+    /** A piece's taper at each end on {@code tier}'s road: {@link #TAPER_WIDE} for the wide road's split and drift. */
+    static double taper(Kind k, MountainTier tier) {
+        return tier.wide() && (k == Kind.SPLIT || k == Kind.SAND_PIT) ? TAPER_WIDE : TAPER;
+    }
+
     /** A piece's extra lane each side on {@code tier}'s road: {@link #widen(Kind)}, or algo 4's {@value #WIDEN}. */
     static double widen(Kind k, MountainTier tier) {
         if (tier.wide()) {
@@ -105,12 +117,15 @@ public final class PiecesV4 {
         final List<double[]> trunks = new ArrayList<>();
         /** Its extra lane each side at its widest ({@link #widen(Kind, MountainTier)}), 0 for none. */
         final double widen;
+        /** Its widening's taper at each end ({@link #taper(Kind, MountainTier)}). */
+        final double taper;
 
-        Piece(Kind kind, double s1, double s2, double widen) {
+        Piece(Kind kind, double s1, double s2, double widen, double taper) {
             this.kind = kind;
             this.s1 = s1;
             this.s2 = s2;
             this.widen = widen;
+            this.taper = taper;
         }
 
         /** The lane's extra width each side {@code s} along. */
@@ -118,7 +133,7 @@ public final class PiecesV4 {
             if (widen == 0 || s <= s1 || s >= s2) {
                 return 0;
             }
-            double ramp = Math.min(1, Math.min((s - s1) / TAPER, (s2 - s) / TAPER));
+            double ramp = Math.min(1, Math.min((s - s1) / taper, (s2 - s) / taper));
             return widen * ramp;
         }
     }
@@ -343,8 +358,15 @@ public final class PiecesV4 {
     static final double ARC_R = 60;
     /** A pick-a-path split stands on a straight of at least this (§7.1). */
     static final double SPLIT_RUN = 40;
-    /** Spots of one card the checkpoint chain is asked about before the card is given up. */
+    /** Spots of one card the checkpoint chain is asked about before the card is given up (algo 4). */
     static final int CHAIN_TRIES = 4;
+    /** The wide road's: a card has 4-33 spots, and with about 30 lips a run the chain refuses many (0.37.1). */
+    static final int CHAIN_TRIES_WIDE = 16;
+
+    /** Spots of one card the chain is asked about on {@code tier}'s road. */
+    static int chainTries(MountainTier tier) {
+        return tier.wide() ? CHAIN_TRIES_WIDE : CHAIN_TRIES;
+    }
 
     /**
      * Where each kind of piece may stand (§7.1), as stretches [from, to] along the centreline: never on the
@@ -458,8 +480,8 @@ public final class PiecesV4 {
     /** How long a piece of {@code k} is, along. */
     static double length(GenRandom r, Skeleton sk, Kind k) {
         return switch (k) {
-            case SAND_PIT -> 2 * TAPER + r.nextInt(10, 14);
-            case SPLIT -> 2 * TAPER + 2 + r.nextInt(6, 12);
+            case SAND_PIT -> 2 * taper(k, sk.tier) + r.nextInt(10, 14);
+            case SPLIT -> 2 * taper(k, sk.tier) + 2 + r.nextInt(6, 12);
             case CAVE -> r.nextInt(12, 20);
             case TUNNEL -> r.nextInt(20, 40);
             case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
@@ -480,8 +502,8 @@ public final class PiecesV4 {
     /** The shortest piece of {@code k} ({@link #length}'s least). */
     static double shortest(Skeleton sk, Kind k) {
         return switch (k) {
-            case SAND_PIT -> 2 * TAPER + 10;
-            case SPLIT -> 2 * TAPER + 2 + 6;
+            case SAND_PIT -> 2 * taper(k, sk.tier) + 10;
+            case SPLIT -> 2 * taper(k, sk.tier) + 2 + 6;
             case CAVE -> 12;
             case TUNNEL -> 20;
             case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
@@ -495,7 +517,7 @@ public final class PiecesV4 {
      * seeded spot in each, so the checkpoints are asked about different stretches before the same one twice.
      * The first that keeps its own rules (a boost strip never within 30 before a lip, and on the wide road at least
      * {@value #BOOST_ARC_GAP} before the next arc; a widening piece §4.2's clearance) and the checkpoint chain
-     * ({@code feasible}, asked at most {@value #CHAIN_TRIES} times; never about a spot that blocks all a refused one
+     * ({@code feasible}, asked at most {@link #chainTries} times; never about a spot that blocks all a refused one
      * did, since fewer checkpoint places never make a chain).
      * {@code null} when none does.
      */
@@ -556,7 +578,7 @@ public final class PiecesV4 {
                 return p;
             }
             refused.add(new double[]{s1 - 1, s2 + 1});
-            if (++asked >= CHAIN_TRIES) {
+            if (++asked >= chainTries(sk.tier)) {
                 return null;
             }
         }
@@ -599,13 +621,13 @@ public final class PiecesV4 {
     /** A piece of kind {@code k} at [s1, s2] with its features. */
     static Piece make(GenRandom r, Skeleton sk, Kind k, double s1, double s2) {
         double widen = widen(k, sk.tier);
-        Piece p = new Piece(k, s1, s2, widen);
+        Piece p = new Piece(k, s1, s2, widen, taper(k, sk.tier));
         double w = sk.tier.width;
         double half = w / 2.0 + widen;
         switch (k) {
             case SAND_PIT -> {
-                p.a1 = s1 + TAPER + 1;
-                p.a2 = s2 - TAPER - 1;
+                p.a1 = s1 + p.taper + 1;
+                p.a2 = s2 - p.taper - 1;
                 double sand = sk.tier.hard() ? 1.5 : 2;
                 double c = r.nextDouble(-0.5, 0.5);
                 p.lo = c - sand;
@@ -613,8 +635,8 @@ public final class PiecesV4 {
             }
             case SPLIT -> {
                 // the island stands where the lane is at its widest, so both ways are P + 2 wide
-                p.a1 = s1 + TAPER + 1;
-                p.a2 = s2 - TAPER - 1;
+                p.a1 = s1 + p.taper + 1;
+                p.a2 = s2 - p.taper - 1;
                 p.lo = -1.5;
                 p.hi = 1.5;
             }

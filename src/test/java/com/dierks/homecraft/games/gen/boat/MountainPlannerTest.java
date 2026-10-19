@@ -288,7 +288,10 @@ class MountainPlannerTest {
         // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's. What a deck
         // places is gathered and asserted at the end, every tier's at once (the wide road's are tuned by
         // MOUNTAIN-V21-SPEC §6.4's steps D and F; after F the mini soak put a forest on 78% of the hard roads dealt
-        // one and 38-50% of the medium ones, so a forest is asked of most seeds, not of each, as §5.3 allows)
+        // one and 38-50% of the medium ones, so a forest is asked of most seeds, not of each, as §5.3 allows). The
+        // wide road's deck fix (0.37.1: a split and a drift taper over 4, the chain is asked about 16 spots of a card)
+        // took the mini soak from 66 / 61 / 70% to 89 / 81 / 90% of the easy, medium and hard decks, and a forest
+        // onto 82% of the medium roads dealt one
         List<String> missed = new ArrayList<>();
         for (String tier : List.of("easy", "medium", "hard")) {
             List<Long> seeds = new ArrayList<>();
@@ -384,6 +387,52 @@ class MountainPlannerTest {
             }
         }
         assertEquals(List.of(), missed, "every road tier's deck placed as §5.3 asks");
+    }
+
+    @Test
+    void theWideRoadLooksAtNinetySixAndBuildsTheEvenerFallFirst() {
+        // the deck fix (0.37.1): on the wide road Stage A looks at 96 before it stops with any kept, and Stage B
+        // builds the kept candidates whose every band falls 5 or more first, then by flow (§6.2's spread)
+        for (String id : List.of("easy", "medium", "hard")) {
+            assertEquals(96, MountainPlanner.candidates(MountainTier.of(BoatStyle.ROAD, id)), id + ": the wide road");
+            assertEquals(48, MountainPlanner.candidates(MountainTier.of(BoatStyle.SLALOM, id)), id + ": the slalom");
+            MountainTier v4 = MountainTier.of(BoatStyle.ROAD, id, MountainValidator.FIRST_ALGO);
+            assertEquals(48, MountainPlanner.candidates(v4), id + ": algo 4's road");
+        }
+        for (int algo : new int[]{MountainPlanner.ALGO, MountainValidator.FIRST_ALGO}) {
+            MountainTier tier = MountainTier.of(BoatStyle.ROAD, "medium", algo);
+            List<MountainPlanner.Candidate> kept = new ArrayList<>();
+            for (long seed = 2; seed <= 5 && kept.size() < 6; seed++) {
+                GenRandom root = new GenRandom(seed);
+                for (int i = 0; i < 96 && kept.size() < 6; i++) {
+                    MountainPlanner.Candidate c = MountainPlanner.candidate(root, tier, i);
+                    if (c != null) {
+                        kept.add(c);
+                    }
+                }
+            }
+            assertTrue(kept.size() >= 3, tier + ": fixture: candidates kept " + kept.size());
+            List<MountainPlanner.Candidate> sorted = new ArrayList<>(kept);
+            sorted.sort(MountainPlanner::stageBOrder);
+            List<MountainPlanner.Candidate> byFlow = new ArrayList<>(kept);
+            byFlow.sort((a, b) -> a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
+                    : Integer.compare(a.index(), b.index()));
+            if (!tier.wide()) {
+                assertEquals(byFlow, sorted, tier + " v4: algo 4 builds by flow score alone, as in 0.37.0");
+                continue;
+            }
+            boolean mixed = false;
+            for (int k = 1; k < sorted.size(); k++) {
+                int la = Math.min(MountainPlanner.EVEN_FALL, MountainPlanner.leastBand(sorted.get(k - 1)));
+                int lb = Math.min(MountainPlanner.EVEN_FALL, MountainPlanner.leastBand(sorted.get(k)));
+                assertTrue(la >= lb, tier + ": the evener fall first, " + la + " before " + lb);
+                if (la == lb) {
+                    assertTrue(sorted.get(k - 1).flow().total >= sorted.get(k).flow().total, tier + ": then the flow");
+                }
+                mixed |= la != lb;
+            }
+            assertTrue(mixed, tier + ": fixture: kept candidates of more than one least band");
+        }
     }
 
     @Test
@@ -703,11 +752,12 @@ class MountainPlannerTest {
         // hard road 7 (two staircases of 3) and 41 (two of 2) had theirs next to each other in the drop list:
         // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01). On
         // the wide road every drop may be a Big Drop (MOUNTAIN-V21-SPEC D3), so a staircase is nearly always all
-        // 2s: hard road 10 has one of hops (beside one of Big Drops)
+        // 2s: hard road 43 has one of hops (beside one of Big Drops; after the deck fix, 0.37.1, hard road 10's
+        // are both of Big Drops, and so are those of the hard roads before 43)
         assertEquals(List.of("THE CLIFFS!", "3 big drops!"), GenCopy.boatCliffs(3, true), "every step a 2-block drop");
         assertEquals(List.of("THE CLIFFS!", "2 drops ahead!"), GenCopy.boatCliffs(2, false), "a hop among them");
         List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L},
-                new Object[]{"hard", 10L}));
+                new Object[]{"hard", 43L}));
         for (BoatStyle style : BoatStyle.values()) {
             for (String tier : List.of("easy", "medium", "hard")) {
                 for (long seed : style == BoatStyle.ROAD ? ROADS : SLALOMS) {

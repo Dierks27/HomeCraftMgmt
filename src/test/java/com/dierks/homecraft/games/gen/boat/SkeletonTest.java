@@ -290,4 +290,37 @@ class SkeletonTest {
             assertTrue(plans > 0, tier + " v" + tier.algo + ": some routes make a drop plan");
         }
     }
+
+    /**
+     * The deck fix (0.37.1): the wide hard road's approach floor is the Slalom's {@link Skeleton#APPROACH}, so fill
+     * lays more of its lips in the rows and its typical approach is well under 104 (47702e1: median 174); the wide
+     * easy and medium roads and algo 4's roads keep 104 / 140.
+     */
+    @Test
+    void theWideHardRoadsApproachIsTheSlaloms() {
+        for (int algo : new int[]{MountainPlanner.ALGO, MountainValidator.FIRST_ALGO}) {
+            for (String id : List.of("easy", "medium", "hard")) {
+                MountainTier tier = MountainTier.of(BoatStyle.ROAD, id, algo);
+                List<Double> lens = new ArrayList<>();
+                for (Skeleton sk : routes(tier)) {
+                    for (Centreline.Element e : sk.line.elements()) {
+                        if (e.turn == 0 && sk.tag(e).role() == Skeleton.Role.APPROACH) {
+                            lens.add(e.length);
+                        }
+                    }
+                }
+                lens.sort(null);
+                assertTrue(lens.size() > 10, tier + " v" + algo + ": fixture: approaches " + lens.size());
+                double median = lens.get(lens.size() / 2);
+                assertTrue(lens.get(0) >= Skeleton.APPROACH - 1e-9, tier + " v" + algo
+                        + ": every approach at least 46, the shortest " + lens.get(0));
+                if (tier.wide() && tier.hard()) {
+                    assertTrue(median < Skeleton.APPROACH_ROAD, tier + ": the median approach under 104: " + median);
+                } else {
+                    assertTrue(median >= Skeleton.APPROACH_ROAD, tier + " v" + algo
+                            + ": the median approach 104 or more: " + median);
+                }
+            }
+        }
+    }
 }

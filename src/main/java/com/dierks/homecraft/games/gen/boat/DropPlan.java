@@ -1084,8 +1084,8 @@ public final class DropPlan {
                     break;
                 }
                 Drop d = lips.get(i);
-                if (d.drop() >= 2) {
-                    continue;
+                if (d.drop() >= 2 || (wide && endsBlue(d.s()))) {
+                    continue; // D8: the wide road's blue straight ends in a 1-block brake drop, never a Big Drop
                 }
                 remove(i);
                 // in place, or shifted a little along its straight
@@ -1102,6 +1102,16 @@ public final class DropPlan {
                     add(d.s(), d.drop(), d.kind());
                 }
             }
+        }
+
+        /** Whether the lip at {@code s} is the brake drop a blue straight ends in ({@link #blueStraights}). */
+        boolean endsBlue(double s) {
+            for (double[] b : blue) {
+                if (b[1] == s) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         int descentNow() {

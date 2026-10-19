@@ -179,6 +179,8 @@ public final class TimeTrials implements Game {
     private static final double SNOW_SPREAD = 0.35;
     private static final double SNOW_RISE = 0.05;
     private static final double SNOW_SPEED = 0.08;
+    /** The sprint modifier keys the watch has read as sprinting and warned about: one warning a key. */
+    private static final Set<String> SPRINT_KEYS_WARNED = ConcurrentHashMap.newKeySet();
 
     /** The general rules, shown on the course list. */
     private static final List<String> RULES = List.of(
@@ -1375,9 +1377,6 @@ public final class TimeTrials implements Game {
         }
         return out;
     }
-
-    /** The sprint modifier keys the watch has read as sprinting and warned about: one warning a key. */
-    private static final Set<String> SPRINT_KEYS_WARNED = ConcurrentHashMap.newKeySet();
 
     /** An attribute's modifiers as the pure rules read them: key, Bukkit operation, amount. */
     private static List<FairPlay.Modifier> modifiers(AttributeInstance in) {

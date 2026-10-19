@@ -7,6 +7,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.junit.jupiter.api.Test;
@@ -86,6 +87,32 @@ class PrizeSafetyTest {
                 "nobody owns it (spilled from a broken chest): anyone could pick it up anyway");
         assertFalse(PrizeSafety.hopperRefuses("hat_creeper", true), "other prizes go into hoppers as before");
         assertFalse(PrizeSafety.hopperRefuses(null, true), "not a prize at all");
+    }
+
+    /**
+     * Step 2 (D15, E15): a prize bundle takes only candy, so she can put her candy apples in her
+     * Trick-or-Treat Bag and nothing else goes in. A plain bundle is never refused.
+     */
+    @Test
+    void aPrizeBundleTakesOnlyCandy() {
+        assertTrue(PrizeSafety.refusesInsert(true, false), "a prize bundle and a block: refused");
+        assertFalse(PrizeSafety.refusesInsert(true, true), "a prize bundle and a candy apple: allowed");
+        assertFalse(PrizeSafety.refusesInsert(false, false), "a plain bundle takes anything, as before");
+        assertFalse(PrizeSafety.refusesInsert(false, true), "a plain bundle takes candy too");
+    }
+
+    /** Even past the insert guard, a prize bundle holding anything but candy gets no keep-inventory (E15). */
+    @Test
+    void aBagThatGotSomethingElseInIsNotKept() {
+        assertTrue(PrizeSafety.keepOnDeath(true, List.of(true, true)), "the bag full of candy is kept");
+        assertFalse(PrizeSafety.keepOnDeath(true, List.of(true, false)), "the bag with a diamond in it drops");
+    }
+
+    @Test
+    void theInsertGuardRunsOnEveryClickThatIsStillGoing() throws Exception {
+        EventHandler guard = handler(PrizeSafetyListener.class, "onBundleInsert", InventoryClickEvent.class);
+        assertEquals(EventPriority.HIGH, guard.priority());
+        assertTrue(guard.ignoreCancelled(), "a click a menu already cancelled moves nothing");
     }
 
     @Test

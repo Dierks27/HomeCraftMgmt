@@ -60,6 +60,16 @@ public final class PrizeSafety {
     }
 
     /**
+     * The prize-bundle insert guard (D15, E15): a prize bundle (the Trick-or-Treat Bag, or any bundle that is a
+     * prize) takes only candy. So she can put her candy apples in her bag, and nothing else goes in. A plain
+     * bundle is never refused. Even with a way round this, {@link #keepOnDeath} is false for a bundle holding
+     * anything but candy, so nothing gains keep-inventory through it.
+     */
+    static boolean refusesInsert(boolean bundleIsPrize, boolean insertedIsCandy) {
+        return bundleIsPrize && !insertedIsCandy;
+    }
+
+    /**
      * A hopper (or a hopper minecart) leaves a dropped collector where it is. The game checks the
      * owner a drop was given only when a player walks over it, so without this a hopper would take it
      * and anyone could then open the hopper or the chest below it. A collector nobody owns on the

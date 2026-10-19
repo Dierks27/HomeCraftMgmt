@@ -17,6 +17,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareGrindstoneEvent;
@@ -43,6 +44,8 @@ import java.util.List;
  * nothing but candy, and, on the ground, is not candy itself. The spawn, despawn and damage handlers
  * run for every item on the server, so they first read the item's read-only data view and return at
  * once without the tag; only a prize has its meta read.
+ *
+ * <p>A prize bundle (the Trick-or-Treat Bag, 0.37.2) takes only candy.
  *
  * <p>Already covered elsewhere, unchanged: crafting, crafters, brewing and villager trades, and placed
  * prize heads ({@link PrizeItemListener}). The void can't be saved.
@@ -236,6 +239,36 @@ public final class PrizeSafetyListener implements Listener {
         if (prize(stack) && keepOnGround(stack)) {
             event.setCancelled(true);
         }
+    }
+
+    // ---- the prize bundle (0.37.2) ---------------------------------------------------------
+
+    /**
+     * A prize bundle takes only candy (D15). Keyed to {@link BundleMeta}, not to the bag's id, so it guards any
+     * prize bundle: cancelled when the clicked item is one and the cursor holds something that isn't candy, or
+     * the cursor is one and the clicked slot holds something that isn't. Geyser sends Bedrock's bundle actions as
+     * these clicks. Picking the bag up or putting it down (nothing to insert) is left alone.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBundleInsert(InventoryClickEvent event) {
+        ItemStack clicked = event.getCurrentItem();
+        ItemStack cursor = event.getCursor();
+        if (refusesInsert(clicked, cursor) || refusesInsert(cursor, clicked)) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player player) {
+                player.sendMessage(Text.of("&7Only candy goes in this bag."));
+                Sounds.refused(player);
+            }
+        }
+    }
+
+    /** {@link PrizeSafety#refusesInsert} for real items: most clicks aren't bundles, so the type name goes first. */
+    private static boolean refusesInsert(ItemStack bundle, ItemStack inserted) {
+        if (bundle == null || inserted == null || inserted.getType().isAir()
+                || !bundle.getType().name().endsWith("BUNDLE")) {
+            return false;
+        }
+        return PrizeSafety.refusesInsert(prize(bundle) && bundle.getItemMeta() instanceof BundleMeta, candy(inserted));
     }
 
     // ---- workstations ----------------------------------------------------------------------

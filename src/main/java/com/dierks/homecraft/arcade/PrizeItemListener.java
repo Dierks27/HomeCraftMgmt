@@ -136,7 +136,7 @@ public final class PrizeItemListener implements Listener {
                 boolean bedrock = Bedrock.is(player);
                 boolean tap = clicked != null && wearsOnBlockTap(bedrock, player.isSneaking(),
                         clicked.getType().isInteractable(), item.getType() == Material.PLAYER_HEAD,
-                        bedrock && ours(clicked));
+                        bedrock && ours(plugin, clicked));
                 if (a == Action.RIGHT_CLICK_AIR || tap) {
                     cancel(event);
                     wear(player, hand);
@@ -173,9 +173,10 @@ public final class PrizeItemListener implements Listener {
     /**
      * Whether {@code clicked} is one of ours: a placed HomeCraft block (the upper head of a Vending Machine acts
      * for the machine, as in {@code CustomBlockListener}), a tagged join sign, or a Mini's head, placed or wild
-     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini). A lookup that fails is "no".
+     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini). A lookup that fails is "no". Public
+     * for the Candy Apple shower's taps (the Bedrock eat fallback and the bag), which leave a block of ours alone too.
      */
-    private boolean ours(Block clicked) {
+    public static boolean ours(HomeCraftManagement plugin, Block clicked) {
         try {
             CustomBlockService blocks = plugin.blockService();
             if (blocks != null && blocks.at(blocks.vendingLowerOf(clicked).orElse(clicked).getLocation()).isPresent()) {

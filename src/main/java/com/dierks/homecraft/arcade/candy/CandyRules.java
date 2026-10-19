@@ -570,4 +570,126 @@ public final class CandyRules {
     public static long days(LocalDate from, LocalDate to) {
         return ChronoUnit.DAYS.between(from, to) + 1;
     }
+
+    // ---- the service's small decisions (D15, D17, D13) ---------------------------------------
+
+    /**
+     * The apples a shower drops: {@code perShower}, cut to what the two live caps leave ({@code liveOwn} and
+     * {@code liveServer} count the queued apples too), so ignoring showers never piles candy up.
+     */
+    public static int applesFor(int perShower, int liveOwn, int liveServer) {
+        int room = Math.min(LIVE_PER_PLAYER - liveOwn, LIVE_ON_SERVER - liveServer);
+        return Math.max(0, Math.min(perShower, room));
+    }
+
+    /**
+     * A tap that eats a candy apple (Bedrock's fallback) or plays the bag: a right-click in the air, or on a
+     * block that does nothing when tapped, while not sneaking. Geyser sends a Bedrock tap on the ground as a
+     * use-on-block only, and a child looks at the ground; a chest or a door still opens, and a block of ours
+     * (the Arcade Machine, a join sign, a Mini) still does its own thing.
+     */
+    public static boolean tap(boolean air, boolean block, boolean interactable, boolean sneaking, boolean ours) {
+        return air || (block && !interactable && !sneaking && !ours);
+    }
+
+    /**
+     * Bedrock's eat fallback: Geyser sends no food component, so a full Bedrock player can't eat the red apple.
+     * Only for a Bedrock player who is full, with a Candy Apple (not a golden one, always edible) in the main
+     * hand, home from every game.
+     */
+    public static boolean eatsOnTap(boolean bedrock, int foodLevel, boolean tap, boolean mainHand, boolean redCandy,
+                                    boolean home) {
+        return bedrock && foodLevel >= 20 && tap && mainHand && redCandy && home;
+    }
+
+    /** The bag is a toy on both editions: on Java a tap is otherwise followed by the bundle's own use, which empties it. */
+    public static boolean toyOnTap(boolean tap, boolean mainHand, boolean bag, boolean home) {
+        return tap && mainHand && bag && home;
+    }
+
+    /** Whether {@code cooldownMs} has passed since {@code last} (null: never). */
+    public static boolean cooledDown(Long last, long now, long cooldownMs) {
+        return last == null || now - last >= cooldownMs;
+    }
+
+    /** What to do about the Trick-or-Treat Bag now. */
+    public enum BagStep {
+        /** The mark is there: this year's bag was given. */
+        HAS_IT,
+        /** Below the goal. */
+        NOT_YET,
+        /** In a game, on the way back, or somewhere a present can't go: owed, retried, nothing said. */
+        WAIT_GAME,
+        /** No free slot: owed, retried every second, "make room" said once. */
+        WAIT_ROOM,
+        /** Mark it, then give it. */
+        GIVE
+    }
+
+    /**
+     * The bag's step, in order: had it, below the goal, not home (a game's restore replaces the whole inventory,
+     * so a bag given in one would be wiped while its mark says it was delivered), no room (never on the ground),
+     * else give it.
+     */
+    public static BagStep bagStep(boolean marked, long found, int goal, boolean home, boolean room) {
+        if (marked) {
+            return BagStep.HAS_IT;
+        }
+        if (found < goal) {
+            return BagStep.NOT_YET;
+        }
+        if (!home) {
+            return BagStep.WAIT_GAME;
+        }
+        return room ? BagStep.GIVE : BagStep.WAIT_ROOM;
+    }
+
+    /** A mark that may fail to be written: true when this call wrote it (the first time ever). */
+    @FunctionalInterface
+    public interface Mark {
+        boolean once() throws java.sql.SQLException;
+    }
+
+    /** How a bag hand-over went. */
+    public enum HandOver {
+        /** Marked, then given. */
+        GIVEN,
+        /** Already marked: nothing given. */
+        ALREADY,
+        /** The mark couldn't be written: nothing given. */
+        NOT_SAVED,
+        /** Marked, but the give failed (it can't, with room checked): an admin restores it. */
+        LOST
+    }
+
+    /**
+     * The bag's hand-over: the mark first, then the give, so a failed write can never hand out two (a lost one
+     * is restored with {@code /hcm candy bag}). Static, with the steps passed in, so the order is pinned by a test.
+     */
+    public static HandOver handOver(Mark mark, java.util.function.BooleanSupplier give) {
+        try {
+            if (!mark.once()) {
+                return HandOver.ALREADY;
+            }
+        } catch (java.sql.SQLException e) {
+            return HandOver.NOT_SAVED;
+        }
+        return give.getAsBoolean() ? HandOver.GIVEN : HandOver.LOST;
+    }
+
+    /** The action bar after a counted pickup: {@code Candy apples: 17 / 31}, or just the count from the goal on. */
+    public static String actionBar(long found, int goal) {
+        return "&6Candy apples: &f" + found + (found < goal ? " &7/ " + goal : "");
+    }
+
+    /**
+     * The boss bar's line: {@code Candy apples 17 / 31}; from the goal on, {@code Candy apples: 35 · You got your
+     * bag!}, or {@code · Your bag is waiting!} while it is owed. Its fill is {@link #progress}.
+     */
+    public static String barLine(long found, int goal, boolean bagWaiting) {
+        if (found < goal) {
+            return "&6Candy apples &f" + found + " &7/ " + goal;
+        }
+        return "&6Candy apples: &f" + found + " &7· " + (bagWaiting ? "&eYour bag is waiting!" : "&aYou got your bag!");
+    }
 }

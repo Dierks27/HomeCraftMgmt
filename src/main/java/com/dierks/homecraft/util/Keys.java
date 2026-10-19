@@ -130,6 +130,13 @@ public final class Keys {
      * Deliberately NOT {@link #EFFECT_ENTITY}, which the effects service deletes on sight.
      */
     public static NamespacedKey GAME_ENTITY;
+    /**
+     * On a Candy Apple shower candy (an item entity): {@code "<owner uuid>:<slot id>"} (String). Only such an
+     * entity, picked up by its owner, counts toward the Trick-or-Treat Bag; one dropped with Q is a new entity
+     * without it. Never persistent, and removed on chunk load. Deliberately NOT {@link #GAME_ENTITY} (swept
+     * only while the Games are on) or {@link #EFFECT_ENTITY} (deleted by the effects service on sight).
+     */
+    public static NamespacedKey CANDY_DROP;
 
     private Keys() {
     }
@@ -177,5 +184,6 @@ public final class Keys {
         GAME_KIT = new NamespacedKey(plugin, "game_kit");
         GAME_SIGN = new NamespacedKey(plugin, "game_sign");
         GAME_ENTITY = new NamespacedKey(plugin, "game_entity");
+        CANDY_DROP = new NamespacedKey(plugin, "candy_drop");
     }
 }

@@ -78,7 +78,10 @@ public final class TokenService {
         // element anywhere, so these never count as "tokens put into games of chance".
         GAMES_CUP_ENTRY("Weekly Cup entry"),
         GAMES_CUP_PRIZE("Weekly Cup prize"),
-        GAMES_CUP_REFUND("Weekly Cup refund");
+        GAMES_CUP_REFUND("Weekly Cup refund"),
+        // The Candy Apple shower (HALLOWEEN-SPEC D16): a Golden Candy Apple picked up, under a daily cap that is
+        // read back from these lines. Nothing is staked, so it is not a game of chance.
+        EVENT_CANDY("Candy Apples");
 
         private final String label;
 

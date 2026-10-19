@@ -1,5 +1,6 @@
 package com.dierks.homecraft;
 
+import com.dierks.homecraft.config.CandyConfig;
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.config.MarketSimConfig;
 import com.dierks.homecraft.games.GameCatalog;
@@ -186,6 +187,39 @@ class ConfigMigrationTest {
                 "saveDefaultConfig() just wrote this file — migration must not touch it");
         assertEquals(List.of(), HomeCraftManagement.backfillConfig(onDisk, bundled()),
                 "a fresh install must not log a backfill line");
+    }
+
+    /**
+     * The Candy Apple shower's section is all new keys (HALLOWEEN-SPEC §2.2), so a 0.37.1 file gets it from the
+     * backfill, every leaf with its comment, and the section's own explanatory block. No revision is needed.
+     */
+    @Test
+    void the0371FileGetsTheCandySectionWithItsComments() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("arcade.events", null); // a 0.37.1 file: no candy section
+        assertFalse(onDisk.contains("arcade.events"));
+
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, shipped);
+        List<String> leaves = new ArrayList<>(shipped.getConfigurationSection(CandyConfig.PATH).getKeys(false));
+        assertEquals(12, leaves.size(), "the section's leaves: " + leaves);
+        for (String leaf : leaves) {
+            String path = CandyConfig.PATH + "." + leaf;
+            assertTrue(added.contains(path), path + " is backfilled: " + added);
+            assertEquals(shipped.get(path), onDisk.get(path), path);
+            assertEquals(shipped.getComments(path), onDisk.getComments(path), path + "'s comment");
+        }
+        assertEquals(leaves.size(), added.size(), "and nothing else: " + added);
+        assertFalse(shipped.getComments("arcade.events").isEmpty(), "the section ships with its block");
+        assertEquals(shipped.getComments("arcade.events"), onDisk.getComments("arcade.events"));
+
+        YamlConfiguration reread = yaml(onDisk.saveToString());
+        assertTrue(reread.saveToString().contains("# ---- Halloween: the Candy Apple shower (0.37.2)."));
+        List<String> warnings = new ArrayList<>();
+        assertEquals(CandyConfig.Candy.DEFAULTS, CandyConfig.parse(reread, warnings::add), "the shipped settings");
+        assertEquals(List.of(), warnings);
+        assertEquals(List.of(), HomeCraftManagement.backfillConfig(reread, shipped), "a second pass is a no-op");
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(reread, "world"), "and no revision runs");
     }
 
     /** The Java gate and the shipped YAML must agree, or first boot migrates itself. */

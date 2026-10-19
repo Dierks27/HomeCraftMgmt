@@ -759,6 +759,8 @@ public final class PluginConfig {
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
+    /** Off until {@link #load()} has read it. */
+    private CandyConfig.Candy candy = CandyConfig.Candy.OFF;
     private Map<String, Icon> arcadeIcons = Map.of();
     private Reveal reveal = new Reveal(60, 24, 6);
     private Map<String, AchievementDef> achievements;
@@ -932,6 +934,14 @@ public final class PluginConfig {
 
     public Arcade arcade() {
         return arcade;
+    }
+
+    /**
+     * The Candy Apple shower (0.37.2): {@code arcade.events.candy}. Never null; {@link CandyConfig.Candy#OFF}
+     * until loaded.
+     */
+    public CandyConfig.Candy candy() {
+        return candy;
     }
 
     /** One-time achievement definitions keyed by id (Phase 9). */
@@ -1191,6 +1201,7 @@ public final class PluginConfig {
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
+        this.candy = CandyConfig.parse(c, log::warning);
         this.arcadeIcons = readArcadeIcons(c);
         this.reveal = new Reveal(
                 Math.max(10, c.getInt("arcade.reveal.spin_ticks", 60)),

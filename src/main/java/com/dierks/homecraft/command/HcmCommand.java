@@ -1,6 +1,9 @@
 package com.dierks.homecraft.command;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.candy.CandyRules;
+import com.dierks.homecraft.arcade.candy.CandyService;
+import com.dierks.homecraft.config.CandyConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
@@ -14,11 +17,18 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * {@code /hcm} — admin & utility commands.
@@ -42,6 +52,10 @@ import java.util.Map;
  *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
  *   <li>{@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} — playing and running the
  *       Games; see {@link GamesCommand}. (hcm.games.play / hcm.games.admin)</li>
+ *   <li>{@code /hcm candy} — your candy apples, your Trick-or-Treat Bag and the next shower.
+ *       (hcm.arcade.use)</li>
+ *   <li>{@code /hcm candy now [player]|status|clear|bag <player>|add <player> <n>} — run the Candy
+ *       Apple shower. (admin)</li>
  * </ul>
  *
  * <p>Each subcommand checks its own permission — the command node itself is ungated, so
@@ -277,6 +291,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             case "museum" -> handleMuseum(sender, args);
             case "hunt" -> handleHunt(sender, args);
+            case "candy" -> handleCandy(sender, args);
             case "backup" -> handleBackup(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
@@ -509,6 +524,492 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             default -> sender.sendMessage(Text.of("&cUsage: /hcm hunt <spawn [rarity] [player]|status|clear>"));
         }
+    }
+
+    // ---------------------------------------------------------------------
+    //  candy (the Candy Apple shower: your own count; admins run it)
+    // ---------------------------------------------------------------------
+
+    /** {@code /hcm candy}'s admin words (hcm.admin). With no word it is the player's own count (hcm.arcade.use). */
+    static final List<String> CANDY_VERBS = List.of("now", "status", "clear", "bag", "add");
+    /** The most {@code /hcm candy add} adds at once. */
+    static final int CANDY_ADD_MAX = 200;
+    static final String CANDY_USAGE = "Usage: /hcm candy [now [player]|status|clear|bag <player>|add <player> <n>]";
+    private static final DateTimeFormatter CANDY_DAY = DateTimeFormatter.ofPattern("d MMM", Locale.US);
+    private static final DateTimeFormatter CANDY_CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
+
+    /** Where the shower stands today (D18): the words {@code /hcm candy} and its admin words use. */
+    enum CandyState { OPEN, NOT_YET, OVER, OFF, ARCADE_OFF }
+
+    /**
+     * {@code /hcm candy} (HALLOWEEN-SPEC D19). With no word: the player's count, their bag and the next
+     * shower, and a bag they are owed is tried again. The admin words: {@code now [player]} a shower now for
+     * every eligible player (or the named one), one line each; {@code status}; {@code clear} removes every
+     * live candy, counting nothing; {@code bag <player>} gives a bag back and sets its mark (the restore);
+     * {@code add <player> <n>} adds to a count, then the goal check, to test the bag without collecting 31.
+     *
+     * <p>The permission and the words are checked before anything is read, so a refusal touches nothing.
+     * Inside a world game the whole of {@code /hcm candy} is refused already ({@link GamesCommand#refuseInSession}).
+     */
+    private void handleCandy(CommandSender sender, String[] args) {
+        String verb = candyVerb(args);
+        if (verb == null) {
+            if (!denyUnless(sender, "hcm.arcade.use")) {
+                sender.sendMessage(Text.of("&c" + (sender.hasPermission("hcm.admin") ? CANDY_USAGE : "Usage: /hcm candy")));
+            }
+            return;
+        }
+        if (denyUnless(sender, candyPermission(verb))) {
+            return;
+        }
+        String wrong = candyArgsError(verb, args);
+        if (wrong != null) {
+            sender.sendMessage(Text.of("&c" + wrong));
+            return;
+        }
+        if (verb.isEmpty() && !(sender instanceof Player)) {
+            sender.sendMessage(Text.of("&cOnly players collect candy apples. &7" + CANDY_USAGE));
+            return;
+        }
+        CandyService candy = plugin.candy();
+        if (candy == null) {
+            sender.sendMessage(Text.of("&cThe Candy Apple shower is not running."));
+            return;
+        }
+        switch (verb) {
+            case "now" -> candyNow(sender, args, candy);
+            case "status" -> candyStatus(sender, candy);
+            case "clear" -> {
+                int n = candy.clear();
+                sender.sendMessage(Text.of("&aCleared " + n + " candy apple" + (n == 1 ? "" : "s")
+                        + ". &7Nothing was counted."));
+            }
+            case "bag" -> candyBag(sender, args[2], candy);
+            case "add" -> candyAdd(sender, args[2], candyAddAmount(args[3]), candy);
+            default -> candyMine((Player) sender, candy);
+        }
+    }
+
+    /** {@code /hcm candy}: the player's count, their bag, and when the next shower is. An owed bag is tried again. */
+    private void candyMine(Player player, CandyService candy) {
+        CandyConfig.Candy c = plugin.config().candy();
+        com.dierks.homecraft.storage.AchievementDao dao = new com.dierks.homecraft.storage.AchievementDao(plugin.database());
+        long found;
+        boolean bag;
+        try {
+            found = dao.counter(player.getUniqueId(), CandyRules.counterKey(c.year()));
+            bag = dao.counter(player.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
+            if (found >= c.goal() && !bag) {
+                // Owed (a full bag, or back from a game since): tried again now, even after the window (D18).
+                candy.giveBag(player, false);
+                bag = dao.counter(player.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
+            }
+        } catch (java.sql.SQLException e) {
+            plugin.getLogger().warning("Failed to read " + player.getName() + "'s candy apples: " + e.getMessage());
+            player.sendMessage(Text.of("&cYour candy apples couldn't be read right now. Try again in a moment."));
+            return;
+        }
+        CandyState state = candyState();
+        String next = null;
+        if (state == CandyState.OPEN) {
+            LocalDateTime now = localNow();
+            LocalDateTime at = nextShower(now, c, candyHeld());
+            next = at == null ? null : showerWhen(now, at);
+        }
+        for (String line : candyMineLines(state, c.from(), found, c.goal(), bag, next)) {
+            player.sendMessage(Text.of(line));
+        }
+    }
+
+    /** {@code /hcm candy now [player]}: a shower now for every eligible player, or the named one. */
+    private void candyNow(CommandSender sender, String[] args, CandyService candy) {
+        String closed = candyClosed(candyState(), plugin.config().candy());
+        if (closed != null) {
+            sender.sendMessage(Text.of("&c" + closed));
+            return;
+        }
+        List<Player> who = new ArrayList<>();
+        if (args.length >= 3) {
+            Player target = Bukkit.getPlayerExact(args[2]);
+            if (target == null) {
+                sender.sendMessage(Text.of("&cPlayer '" + args[2] + "' is not online."));
+                return;
+            }
+            who.add(target);
+        } else {
+            who.addAll(Bukkit.getOnlinePlayers());
+            who.sort(java.util.Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
+        }
+        if (who.isEmpty()) {
+            sender.sendMessage(Text.of("&7Nobody is online."));
+            return;
+        }
+        int showered = 0;
+        for (Player p : who) {
+            String why = candy.showerNow(p);
+            if (why == null) {
+                showered++;
+            }
+            sender.sendMessage(Text.of(candyNowLine(p.getName(), why)));
+        }
+        if (who.size() > 1) {
+            sender.sendMessage(Text.of("&7" + showered + " of " + who.size() + " showered."));
+        }
+    }
+
+    /**
+     * {@code /hcm candy status}: on or off; the window, in which zone; the next shower (and one a restart
+     * skips); live candy; each online player's count, bag and idle minutes; and when this season's
+     * collectors leave the shop, with the zone, so a UTC fallback shows (red-team m8a).
+     */
+    private void candyStatus(CommandSender sender, CandyService candy) {
+        CandyConfig.Candy c = plugin.config().candy();
+        ZoneId zone = plugin.clock().zone();
+        LocalDate today = plugin.clock().today();
+        CandyState state = candyState(c, plugin.config().arcade().enabled(), today);
+        sender.sendMessage(Text.of("&6Candy Apple shower " + c.year() + " &7- " + candyStateText(state)));
+        sender.sendMessage(Text.of("&7" + candyWindowText(c, zone)));
+        sender.sendMessage(Text.of("&7Next shower " + candyNextText(state, localNow(), c, candyHeld())));
+
+        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+        online.sort(java.util.Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
+        Map<java.util.UUID, Integer> live = new HashMap<>();
+        int total = 0;
+        for (Player p : online) {
+            int n = candy.live(p.getUniqueId());
+            live.put(p.getUniqueId(), n);
+            total += n;
+        }
+        sender.sendMessage(Text.of("&7Live candy: &f" + total + " &7(at most " + CandyRules.LIVE_PER_PLAYER
+                + " a player, " + CandyRules.LIVE_ON_SERVER + " on the server)"));
+        if (online.isEmpty()) {
+            sender.sendMessage(Text.of("&7Nobody is online."));
+        }
+        com.dierks.homecraft.storage.AchievementDao dao = new com.dierks.homecraft.storage.AchievementDao(plugin.database());
+        for (Player p : online) {
+            long found = -1;
+            boolean bag = false;
+            try {
+                found = dao.counter(p.getUniqueId(), CandyRules.counterKey(c.year()));
+                bag = dao.counter(p.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
+            } catch (java.sql.SQLException e) {
+                plugin.getLogger().warning("Failed to read " + p.getName() + "'s candy apples: " + e.getMessage());
+            }
+            sender.sendMessage(Text.of(candyPlayerLine(p.getName(), found, c.goal(), bag, live.get(p.getUniqueId()),
+                    CandyRules.idleMinutes(p.getIdleDuration().toMillis()))));
+        }
+        boolean onSale = plugin.config().arcade().collectorsOnSale();
+        for (com.dierks.homecraft.config.PluginConfig.Prize p : com.dierks.homecraft.arcade.Collectors.ROWS) {
+            if (p.collector() != null && p.collector().inSeason(today)) {
+                sender.sendMessage(Text.of("&7" + collectorSaleLine(p.display(), p.collector(), onSale, zone)));
+            }
+        }
+    }
+
+    /** {@code /hcm candy bag <player>}: one bag, given back free and marked (room needed, home from every game). */
+    private void candyBag(CommandSender sender, String name, CandyService candy) {
+        Player target = Bukkit.getPlayerExact(name);
+        if (target == null) {
+            sender.sendMessage(Text.of("&cPlayer '" + name + "' is not online."));
+            return;
+        }
+        if (!homeFromGames(target)) {
+            // A world game's restore would wipe a bag handed into its inventory, mark and all (red-team m2).
+            sender.sendMessage(Text.of("&c" + target.getName() + " is in a game. Try again when they're back."));
+            return;
+        }
+        if (target.isDead()) {
+            sender.sendMessage(Text.of("&c" + target.getName() + " is respawning. Try again in a moment."));
+            return;
+        }
+        if (target.getInventory().firstEmpty() == -1) {
+            sender.sendMessage(Text.of("&c" + target.getName() + "'s bag is full."));
+            return;
+        }
+        String refused = candy.giveBag(target, true);
+        if (refused != null) {
+            sender.sendMessage(Text.of("&c" + refused));
+            return;
+        }
+        int year = plugin.config().candy().year();
+        plugin.getLogger().info("Admin " + sender.getName() + " gave a Trick-or-Treat Bag " + year + " to " + target.getName());
+        sender.sendMessage(Text.of("&aGave the Trick-or-Treat Bag " + year + " to " + target.getName() + "."));
+    }
+
+    /** {@code /hcm candy add <player> <n>}: n more on the player's count, then the goal check (D15). */
+    private void candyAdd(CommandSender sender, String name, int n, CandyService candy) {
+        Player target = Bukkit.getPlayerExact(name);
+        if (target == null) {
+            sender.sendMessage(Text.of("&cPlayer '" + name + "' is not online."));
+            return;
+        }
+        CandyConfig.Candy c = plugin.config().candy();
+        com.dierks.homecraft.storage.AchievementDao dao = new com.dierks.homecraft.storage.AchievementDao(plugin.database());
+        long after;
+        boolean bag;
+        try {
+            after = dao.addCounter(target.getUniqueId(), CandyRules.counterKey(c.year()), n);
+            bag = dao.counter(target.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
+        } catch (java.sql.SQLException e) {
+            plugin.getLogger().warning("Failed to add candy apples for " + target.getName() + ": " + e.getMessage());
+            sender.sendMessage(Text.of("&cThat couldn't be saved. See the console."));
+            return;
+        }
+        plugin.getLogger().info("Admin " + sender.getName() + " added " + n + " candy apples for " + target.getName());
+        sender.sendMessage(Text.of("&aAdded " + n + " candy apple" + (n == 1 ? "" : "s") + " for " + target.getName()
+                + ": &f" + after + " &7/ " + c.goal()));
+        if (after >= c.goal() && !bag) {
+            // The goal check: the bag now, or owed (and retried) until there's room and they're home.
+            String why = candy.giveBag(target, false);
+            sender.sendMessage(Text.of(why == null ? "&a" + target.getName() + " got their Trick-or-Treat Bag."
+                    : "&7Their Trick-or-Treat Bag is waiting: " + why));
+        }
+    }
+
+    private CandyState candyState() {
+        return candyState(plugin.config().candy(), plugin.config().arcade().enabled(), plugin.clock().today());
+    }
+
+    /** The wall clock where the players live ({@code clock.time_zone}): slots are local minutes. */
+    private LocalDateTime localNow() {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(plugin.clock().nowMillis()), plugin.clock().zone());
+    }
+
+    /**
+     * Whether a restart is close at a slot's start, so the shower skips it (D10): the Games' own hold, or,
+     * with the Games off, the same settings read without them.
+     */
+    private Predicate<LocalDateTime> candyHeld() {
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        ZoneId zone = plugin.clock().zone();
+        com.dierks.homecraft.games.RestartHold hold;
+        if (games != null) {
+            hold = games.restartHold();
+        } else {
+            com.dierks.homecraft.config.GamesConfig.Common common = plugin.config().games().common();
+            hold = new com.dierks.homecraft.games.RestartHold(common.restartTimes(), zone, common.restartHoldMinutes());
+        }
+        return t -> CandyRules.heldByRestart(CandyRules.slotId(t.toLocalDate(), t.getHour() * 60 + t.getMinute()),
+                zone, hold);
+    }
+
+    /** {@code /hcm candy}'s word, lower case: "" for none, null for one it doesn't know. */
+    static String candyVerb(String[] args) {
+        if (args == null || args.length < 2 || args[1] == null || args[1].isBlank()) {
+            return "";
+        }
+        String w = args[1].trim().toLowerCase(Locale.ROOT);
+        return CANDY_VERBS.contains(w) ? w : null;
+    }
+
+    /** Who may use the word: anyone with the Arcade for their own count, admins for the rest (no new nodes). */
+    static String candyPermission(String verb) {
+        return verb == null || verb.isEmpty() ? "hcm.arcade.use" : "hcm.admin";
+    }
+
+    /** What is wrong with the words after {@code /hcm candy <verb>}, or null when they will do. */
+    static String candyArgsError(String verb, String[] args) {
+        if ("bag".equals(verb) && args.length < 3) {
+            return "Usage: /hcm candy bag <player>";
+        }
+        if ("add".equals(verb)) {
+            if (args.length < 4) {
+                return "Usage: /hcm candy add <player> <n>";
+            }
+            if (candyAddAmount(args[3]) < 0) {
+                return "Add 1-" + CANDY_ADD_MAX + " candy apples: /hcm candy add <player> <n>";
+            }
+        }
+        return null;
+    }
+
+    /** {@code /hcm candy add}'s number: a whole 1-{@value #CANDY_ADD_MAX}, else -1. */
+    static int candyAddAmount(String raw) {
+        if (raw == null) {
+            return -1;
+        }
+        try {
+            int n = Integer.parseInt(raw.trim());
+            return n >= 1 && n <= CANDY_ADD_MAX ? n : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * Where the shower stands on {@code today}: over after {@code to} and not yet before {@code from} (when the
+     * window reads the right way round), then switched off ({@code enabled}, or a date config.yml got wrong),
+     * then the Arcade's own switch.
+     */
+    static CandyState candyState(CandyConfig.Candy c, boolean arcadeOn, LocalDate today) {
+        boolean window = !c.from().isAfter(c.to());
+        if (window && today.isAfter(c.to())) {
+            return CandyState.OVER;
+        }
+        if (window && today.isBefore(c.from())) {
+            return CandyState.NOT_YET;
+        }
+        if (!c.enabled() || !window) {
+            return CandyState.OFF;
+        }
+        return arcadeOn ? CandyState.OPEN : CandyState.ARCADE_OFF;
+    }
+
+    /** Why {@code /hcm candy now} refuses (D18, D19), or null when the shower is open. */
+    static String candyClosed(CandyState state, CandyConfig.Candy c) {
+        return switch (state) {
+            case OPEN -> null;
+            case NOT_YET -> "The Candy Apple shower starts on " + CANDY_DAY.format(c.from()) + ".";
+            case OVER -> "The Candy Apple shower is over for this year.";
+            case OFF -> "The Candy Apple shower is switched off in config.yml (arcade.events.candy).";
+            case ARCADE_OFF -> "The Arcade is switched off (arcade.enabled: false), and the candy with it.";
+        };
+    }
+
+    /** The status's headline word for the state. */
+    static String candyStateText(CandyState state) {
+        return switch (state) {
+            case OPEN -> "&aon";
+            case NOT_YET -> "&enot yet";
+            case OVER -> "&7over";
+            case OFF -> "&coff &7(arcade.events.candy)";
+            case ARCADE_OFF -> "&coff &7(arcade.enabled: false)";
+        };
+    }
+
+    /** The window and the schedule, with the zone the dates are read in. */
+    static String candyWindowText(CandyConfig.Candy c, ZoneId zone) {
+        String window = c.from().getYear() == c.to().getYear()
+                ? CANDY_DAY.format(c.from()) + " - " + CANDY_DAY.format(c.to()) + " " + c.to().getYear()
+                : CANDY_DAY.format(c.from()) + " " + c.from().getYear() + " - " + CANDY_DAY.format(c.to()) + " "
+                        + c.to().getYear();
+        int every = c.everyMinutes();
+        String out = "Window: &f" + window + " &7(" + zoneName(zone) + "). Every &f" + every + " &7min from &f"
+                + minuteText(CandyRules.offsetOn(c.offsetMinutes(), every));
+        int last = CandyRules.everyOn(every, c.lastDayEveryMinutes(), true);
+        if (last != every) {
+            out += "&7, every &f" + last + " &7min on " + CANDY_DAY.format(c.to()) + " from &f"
+                    + minuteText(CandyRules.offsetOn(c.offsetMinutes(), last));
+        }
+        return out + "&7.";
+    }
+
+    /** {@code 00:10}: a minute of the day on a 24-hour clock. */
+    private static String minuteText(int minuteOfDay) {
+        return String.format(Locale.ROOT, "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60);
+    }
+
+    /** A zone's name for players to read: "UTC" rather than "Z" for the fallback. */
+    static String zoneName(ZoneId zone) {
+        return zone == null || zone.equals(ZoneOffset.UTC) ? "UTC" : zone.getId();
+    }
+
+    /**
+     * The next shower after {@code after} that a restart won't skip, or null when the window has none left.
+     * {@code held} is the restart hold at a slot's start (null: nothing is held).
+     */
+    static LocalDateTime nextShower(LocalDateTime after, CandyConfig.Candy c, Predicate<LocalDateTime> held) {
+        LocalDateTime at = after;
+        // A hold covers minutes, so a few slots at most; the bound only stops a hold that never lets go.
+        for (int i = 0; i < 1000 && at != null; i++) {
+            at = CandyRules.nextSlot(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes());
+            if (at == null || held == null || !held.test(at)) {
+                return at;
+            }
+        }
+        return null;
+    }
+
+    /** "at 7:30 PM", "tomorrow at 12:10 AM" or "on 1 Oct at 12:10 AM", seen from {@code now}. */
+    static String showerWhen(LocalDateTime now, LocalDateTime at) {
+        String clock = CANDY_CLOCK.format(at);
+        LocalDate day = at.toLocalDate();
+        if (day.equals(now.toLocalDate())) {
+            return "at " + clock;
+        }
+        if (day.equals(now.toLocalDate().plusDays(1))) {
+            return "tomorrow at " + clock;
+        }
+        return "on " + CANDY_DAY.format(day) + " at " + clock;
+    }
+
+    /** The status's next shower, naming one a restart skips and the one after it. */
+    static String candyNextText(CandyState state, LocalDateTime now, CandyConfig.Candy c, Predicate<LocalDateTime> held) {
+        if (state != CandyState.OPEN && state != CandyState.NOT_YET) {
+            return "&f- none";
+        }
+        LocalDateTime first = CandyRules.nextSlot(now, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(),
+                c.lastDayEveryMinutes());
+        if (first == null) {
+            return "&f- none left this year";
+        }
+        if (held == null || !held.test(first)) {
+            return "&f" + showerWhen(now, first);
+        }
+        LocalDateTime then = nextShower(first, c, held);
+        return "&f" + showerWhen(now, first) + " &c(skipped: a restart is due) &7then "
+                + (then == null ? "&fnone" : "&f" + showerWhen(now, then));
+    }
+
+    /** One line of {@code /hcm candy now}: "showered", or the reason the player was skipped (D17). */
+    static String candyNowLine(String name, String why) {
+        return why == null ? "&a" + name + " &7- showered" : "&e" + name + " &7- " + why;
+    }
+
+    /** One player's line in the status: their count, their candy out, idle minutes (kid-bedrock #15) and the bag. */
+    static String candyPlayerLine(String name, long found, int goal, boolean bag, int live, long idleMinutes) {
+        String state = bag ? "&agiven" : found >= goal ? "&6owed" : "&7not yet";
+        return "&e" + name + " &7- found &f" + (found < 0 ? "?" : String.valueOf(found)) + "&7/" + goal + ", &f" + live
+                + " &7out, idle &f" + idleMinutes + " &7min, bag: " + state;
+    }
+
+    /** "Pumpkin Cap on sale until 23:59 on 31 Oct (America/Chicago)": its last minute, in the server's zone. */
+    static String collectorSaleLine(String display, com.dierks.homecraft.config.PluginConfig.Collector collector,
+                                    boolean onSale, ZoneId zone) {
+        String name = Text.plain(display);
+        String year = " " + collector.year();
+        if (name.endsWith(year)) {
+            name = name.substring(0, name.length() - year.length());
+        }
+        return onSale ? name + " on sale until 23:59 on " + CANDY_DAY.format(collector.to()) + " (" + zoneName(zone) + ")"
+                : name + " is not on sale (arcade.collectors.on_sale: false)";
+    }
+
+    /**
+     * What {@code /hcm candy} tells a player: their count and the bag, then the next shower ({@code next}, from
+     * {@link #showerWhen}; null when none is left) while the shower is open, or why there is none.
+     */
+    static List<String> candyMineLines(CandyState state, LocalDate from, long found, int goal, boolean bag, String next) {
+        List<String> out = new ArrayList<>();
+        switch (state) {
+            case NOT_YET -> out.add("&6Candy apples start falling on " + CANDY_DAY.format(from) + "!");
+            case OVER -> {
+                out.add("&7The Candy Apple shower is over for this year.");
+                if (found > 0 || bag) {
+                    out.add(candyFound(found, goal, bag, false));
+                }
+            }
+            case OPEN -> out.add(candyFound(found, goal, bag, true)
+                    + (next == null ? " &7That was the last shower this year!" : " &7Next shower " + next + "."));
+            default -> {
+                out.add(candyFound(found, goal, bag, true));
+                out.add("&7No candy apples are falling right now.");
+            }
+        }
+        return out;
+    }
+
+    /** "You've found 17 candy apples. 14 more for the Trick-or-Treat Bag!", or the bag got or waiting. */
+    static String candyFound(long found, int goal, boolean bag, boolean stillFalling) {
+        String head = (stillFalling ? "&6You've found &f" : "&6You found &f") + found + " &6candy apple"
+                + (found == 1 ? "" : "s") + ".";
+        if (bag) {
+            return head + " &aYou got your Trick-or-Treat Bag!";
+        }
+        if (found >= goal) {
+            return head + " &eYour Trick-or-Treat Bag is waiting: make room in your bag!";
+        }
+        return stillFalling ? head + " &f" + (goal - found) + " &6more for the Trick-or-Treat Bag!" : head;
     }
 
     /** {@code /hcm museum [id]} — open the browse-only Museum, optionally straight onto one Mini's card. */
@@ -1296,6 +1797,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
             sender.sendMessage(Text.of("&e/hcm mini repair-escaped [confirm] &7- give back numbers old escapes burned"));
             sender.sendMessage(Text.of("&e/hcm hunt spawn [rarity] [player]|status|clear &7- the wild hunt"));
+            sender.sendMessage(Text.of("&e/hcm candy now [player]|status|clear|bag <player>|add <player> <n> &7- the Candy Apple shower"));
+        }
+        if (sender.hasPermission("hcm.arcade.use")) {
+            sender.sendMessage(Text.of("&e/hcm candy &7- your candy apples and the next shower"));
         }
     }
 
@@ -1691,9 +2196,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail", "achievements", "guide", "config", "homes");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "candy", "trail", "achievements", "guide", "config", "homes");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
             }
             if (sender.hasPermission(GamesCommand.PLAY)) {
                 addMatches(out, args[0], "play", "leave");
@@ -1745,6 +2250,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 4 && args[0].equalsIgnoreCase("hunt") && args[1].equalsIgnoreCase("spawn")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[3].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("candy") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[1], CANDY_VERBS.toArray(new String[0]));
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("candy") && sender.hasPermission("hcm.admin")
+                && List.of("now", "bag", "add").contains(args[1].toLowerCase(Locale.ROOT))) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
                     out.add(p.getName());
                 }
             }

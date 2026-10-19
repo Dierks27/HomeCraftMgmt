@@ -180,6 +180,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.trade.PlacedMiniService placedMinis;
     private com.dierks.homecraft.effects.MiniEffectsService effects;
     private com.dierks.homecraft.hunt.HuntService hunt;
+    /** The Candy Apple shower (0.37.2). Not built yet: {@code /hcm candy} then says it is not running. */
+    private com.dierks.homecraft.arcade.candy.CandyService candy;
     private com.dierks.homecraft.trade.StandService stands;
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
@@ -2337,6 +2339,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The wild hunt: naturally spawned wild Minis (the NATURAL_SPAWN trigger). */
     public com.dierks.homecraft.hunt.HuntService hunt() {
         return hunt;
+    }
+
+    /** The Candy Apple shower (0.37.2), or null when it isn't running. */
+    public com.dierks.homecraft.arcade.candy.CandyService candy() {
+        return candy;
     }
 
     public WildDropService wildDrops() {

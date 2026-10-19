@@ -80,6 +80,8 @@ commands:
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
       /hcm mini repair-escaped [confirm]  - admin: give back mint numbers old wild escapes burned
       /hcm hunt spawn [rarity] [player]|status|clear  - admin: the wild hunt
+      /hcm candy             - your candy apples, your Trick-or-Treat Bag and the next shower
+      /hcm candy now [player]|status|clear|bag <player>|add <player> <n>  - admin: the Candy Apple shower
       /hcm play              - the Games screen (games of chance, cabinets, courses, mini golf)
       /hcm play <game|course> [player]  - open a game or start a course (for another player: admin)
       /hcm play break        - Take a break: your own limits on games of chance

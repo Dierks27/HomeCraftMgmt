@@ -27,6 +27,15 @@ class HatTapTest {
         assertFalse(PrizeItemListener.wearsOnBlockTap(true, false, false, true), "a head is still placed");
     }
 
+    @Test
+    void aBedrockTapOnABlockOfOursNeverWearsIt() {
+        assertFalse(PrizeItemListener.wearsOnBlockTap(true, false, false, false, true),
+                "the Arcade Machine is a head, not interactable: its tap opens the screen and leaves the hat alone");
+        assertTrue(PrizeItemListener.wearsOnBlockTap(true, false, false, false, false),
+                "any other plain block is as before");
+        assertFalse(PrizeItemListener.wearsOnBlockTap(false, false, false, false, true), "Java: as before");
+    }
+
     /**
      * Review R1: wearing the Pumpkin Cap, a right-click with a stack of two hats and a full bag used to drop
      * the cap on the ground, with no owner, for anyone to take. A collector coming off the head is never

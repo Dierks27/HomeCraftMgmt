@@ -937,7 +937,7 @@ public final class PluginConfig {
     }
 
     /**
-     * The Candy Apple shower (0.37.2): {@code arcade.events.candy}. Never null; {@link CandyConfig.Candy#OFF}
+     * The Candy Apple shower (0.37.1): {@code arcade.events.candy}. Never null; {@link CandyConfig.Candy#OFF}
      * until loaded.
      */
     public CandyConfig.Candy candy() {

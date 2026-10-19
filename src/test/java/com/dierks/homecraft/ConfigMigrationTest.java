@@ -214,7 +214,7 @@ class ConfigMigrationTest {
         assertEquals(shipped.getComments("arcade.events"), onDisk.getComments("arcade.events"));
 
         YamlConfiguration reread = yaml(onDisk.saveToString());
-        assertTrue(reread.saveToString().contains("# ---- Halloween: the Candy Apple shower (0.37.2)."));
+        assertTrue(reread.saveToString().contains("# ---- Halloween: the Candy Apple shower (0.37.1)."));
         List<String> warnings = new ArrayList<>();
         assertEquals(CandyConfig.Candy.DEFAULTS, CandyConfig.parse(reread, warnings::add), "the shipped settings");
         assertEquals(List.of(), warnings);

@@ -46,7 +46,7 @@ import java.util.List;
  * run for every item on the server, so they first read the item's read-only data view and return at
  * once without the tag; only a prize has its meta read.
  *
- * <p>A prize bundle (the Trick-or-Treat Bag, 0.37.2) takes only candy.
+ * <p>A prize bundle (the Trick-or-Treat Bag, 0.37.1) takes only candy.
  *
  * <p>Already covered elsewhere, unchanged: crafting, crafters, brewing and villager trades, and placed
  * prize heads ({@link PrizeItemListener}). The void can't be saved.
@@ -242,7 +242,7 @@ public final class PrizeSafetyListener implements Listener {
         }
     }
 
-    // ---- the prize bundle (0.37.2) ---------------------------------------------------------
+    // ---- the prize bundle (0.37.1) ---------------------------------------------------------
 
     /**
      * A prize bundle takes only candy (D15). Keyed to {@link BundleMeta}, not to the bag's id, so it guards any

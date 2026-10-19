@@ -166,12 +166,10 @@ rolling back is a two-part procedure and **both halves are required**:
    *to*, not the one you are rolling back *from*.
 
 **Back to 0.37.0 from 0.37.1:** the Halloween collectors are hidden (and owned collector trails stop
-showing) until you upgrade again, and prizes drop on death again. Nothing is deleted. See
-[Halloween 2026](#halloween-2026-0371-0372).
-
-**Back to 0.37.1 from 0.37.2:** no candy falls. Counts, Trick-or-Treat Bags and candy apples are
-kept, but a bag takes anything until you upgrade again (one holding anything but candy drops on
-death). See [The Candy Apple shower](#the-candy-apple-shower-0372).
+showing) until you upgrade again, and prizes drop on death again. No candy falls; counts,
+Trick-or-Treat Bags and candy apples are kept, but a bag takes anything until you upgrade again
+(one holding anything but candy drops on death). Nothing is deleted. See
+[Halloween 2026](#halloween-2026-0371) and [The Candy Apple shower](#the-candy-apple-shower-0371).
 
 Check which you have before trusting a downloaded jar:
 
@@ -445,7 +443,7 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
 | `/hcm tokens history <player> [n]` | admin | A player's last n token changes |
 | `/hcm give prize <id> [player]` | admin | Give back a lost prize, free (works out of season) |
-| `/hcm candy` | `hcm.arcade.use` | Your candy apples, your Trick-or-Treat Bag and the next shower (0.37.2) |
+| `/hcm candy` | `hcm.arcade.use` | Your candy apples, your Trick-or-Treat Bag and the next shower (0.37.1) |
 | `/hcm candy now [player]\|status\|clear\|bag <player>\|add <player> <n>` | admin | Run the Candy Apple shower: a shower now, its status, clear the candy out, give a bag back, add to a count ([below](#the-candy-apple-shower-0372)) |
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
@@ -462,11 +460,11 @@ per total under `sethome-multiple` in `plugins/Essentials/config.yml` (`hcm_2: 2
 
 ---
 
-## Halloween 2026 (0.37.1, 0.37.2)
+## Halloween 2026 (0.37.1)
 
 0.37.1 adds the first **collectors**: holiday looks you keep for good, sold only in their season,
 with the year in the name. They can be bought for yourself or given as a present to someone online.
-It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
+It also keeps every prize safe (below). It also brings the Candy Apple shower.
 
 ### Collectors
 
@@ -603,7 +601,7 @@ The collectors are hidden (nothing is sold or given), and owned collector trails
 you upgrade again. Their rows stay in the database, so nothing is lost. Caps already handed out stay
 in players' bags, and prizes drop on death again.
 
-### The Candy Apple shower (0.37.2)
+### The Candy Apple shower (0.37.1)
 
 Candy apples fall from the sky around each player in an economy world through 31 October 2026,
 with a "Trick or treat!". Each player's candy is their own: only they see it, and only they can
@@ -703,7 +701,7 @@ after 31 October with nothing to edit.
 | `goal` | `31` | Candy apples to find for the Trick-or-Treat Bag (1-200) |
 | `admins_see_all` | `false` | `true`: every `hcm.admin` online sees everyone's candy too, to help a child find hers. Only its owner can pick it up, and the sounds and sparkles stay theirs |
 
-Every key is new: the first start of 0.37.2 writes them, with their comment, into your
+Every key is new: the first start of 0.37.1 writes them, with their comment, into your
 config.yml, after `collectors:`. A number out of its range is brought into it, with one WARN.
 `config_revision` stays 21, and `/hcm config reset arcade.events.candy` puts the section back.
 

@@ -346,7 +346,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.radar = new com.dierks.homecraft.arcade.RadarService(this);
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
-        // The Candy Apple shower (0.37.2): candy apples fall around each player through October; collect
+        // The Candy Apple shower (0.37.1): candy apples fall around each player through October; collect
         // them for the Trick-or-Treat Bag. Its counts live in player_counters, as the achievements' do.
         this.candy = new com.dierks.homecraft.arcade.candy.CandyService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
@@ -2416,7 +2416,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         return quests;
     }
 
-    /** The Candy Apple shower (0.37.2), or null before enable / after disable. */
+    /** The Candy Apple shower (0.37.1), or null before enable / after disable. */
     public com.dierks.homecraft.arcade.candy.CandyService candy() {
         return candy;
     }

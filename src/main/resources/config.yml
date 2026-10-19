@@ -1562,7 +1562,7 @@ arcade:
   collectors:
     on_sale: true
     gifting: true
-  # ---- Halloween: the Candy Apple shower (0.37.2). Candy apples fall around each player in an economy
+  # ---- Halloween: the Candy Apple shower (0.37.1). Candy apples fall around each player in an economy
   # world, with a "Trick or treat!". Only you see and pick up your own candy. Never in a Games world, a
   # game or a race, and never for anyone idle 5+ minutes. Collect `goal` for the Trick-or-Treat Bag
   # (once each). Runs from `from` to `to` (local dates, clock.time_zone; keep the quotes) and switches

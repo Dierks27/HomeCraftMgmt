@@ -101,6 +101,17 @@ class PrizeSafetyTest {
         assertFalse(PrizeSafety.refusesInsert(false, true), "a plain bundle takes candy too");
     }
 
+    /**
+     * In Creative the client sends a slot's new stack, not a click, so a candy put in the bag arrives as the bag
+     * set again with the candy inside: that is allowed, and a bag set holding anything else is not.
+     */
+    @Test
+    void inCreativeTheBagSetWithCandyInIsAllowed() {
+        assertFalse(PrizeSafety.refusesCreativeSet(true, true), "her bag with a candy apple put in: allowed");
+        assertTrue(PrizeSafety.refusesCreativeSet(true, false), "her bag with a block put in: refused");
+        assertFalse(PrizeSafety.refusesCreativeSet(false, false), "a plain bundle, or any other stack: a move");
+    }
+
     /** Even past the insert guard, a prize bundle holding anything but candy gets no keep-inventory (E15). */
     @Test
     void aBagThatGotSomethingElseInIsNotKept() {

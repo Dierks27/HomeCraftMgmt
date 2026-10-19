@@ -1,4 +1,4 @@
-# HomeCraft Management — Plugin Design Specification (v17.21)
+# HomeCraft Management — Plugin Design Specification (v17.22)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.

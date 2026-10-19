@@ -596,12 +596,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         com.dierks.homecraft.storage.AchievementDao dao = new com.dierks.homecraft.storage.AchievementDao(plugin.database());
         long found;
         boolean bag;
+        boolean away = false;
         try {
             found = dao.counter(player.getUniqueId(), CandyRules.counterKey(c.year()));
             bag = dao.counter(player.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
             if (found >= c.goal() && !bag) {
                 // Owed (a full bag, or back from a game since): tried again now, even after the window (D18).
-                candy.tryBag(player);
+                away = candy.tryBag(player) == CandyService.BagResult.WAITING;
                 bag = dao.counter(player.getUniqueId(), CandyRules.bagKey(c.year())) > 0;
             }
         } catch (java.sql.SQLException e) {
@@ -616,7 +617,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             LocalDateTime at = nextShower(now, c, candyHeld());
             next = at == null ? null : showerWhen(now, at);
         }
-        for (String line : candyMineLines(state, c.from(), found, c.goal(), bag, next)) {
+        for (String line : candyMineLines(state, c.from(), found, c.goal(), bag, next, away)) {
             player.sendMessage(Text.of(line));
         }
     }
@@ -985,19 +986,28 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
      * {@link #showerWhen}; null when none is left) while the shower is open, or why there is none.
      */
     static List<String> candyMineLines(CandyState state, LocalDate from, long found, int goal, boolean bag, String next) {
+        return candyMineLines(state, from, found, goal, bag, next, false);
+    }
+
+    /**
+     * {@link #candyMineLines(CandyState, LocalDate, long, int, boolean, String)}, where {@code away} says an owed
+     * bag waits because the player is in a game or another world, not for room in their bag.
+     */
+    static List<String> candyMineLines(CandyState state, LocalDate from, long found, int goal, boolean bag, String next,
+                                       boolean away) {
         List<String> out = new ArrayList<>();
         switch (state) {
             case NOT_YET -> out.add("&6Candy apples start falling on " + CANDY_DAY.format(from) + "!");
             case OVER -> {
                 out.add("&7The Candy Apple shower is over for this year.");
                 if (found > 0 || bag) {
-                    out.add(candyFound(found, goal, bag, false));
+                    out.add(candyFound(found, goal, bag, false, away));
                 }
             }
-            case OPEN -> out.add(candyFound(found, goal, bag, true)
+            case OPEN -> out.add(candyFound(found, goal, bag, true, away)
                     + (next == null ? " &7That was the last shower this year!" : " &7Next shower " + next + "."));
             default -> {
-                out.add(candyFound(found, goal, bag, true));
+                out.add(candyFound(found, goal, bag, true, away));
                 out.add("&7No candy apples are falling right now.");
             }
         }
@@ -1006,13 +1016,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
 
     /** "You've found 17 candy apples. 14 more for the Trick-or-Treat Bag!", or the bag got or waiting. */
     static String candyFound(long found, int goal, boolean bag, boolean stillFalling) {
+        return candyFound(found, goal, bag, stillFalling, false);
+    }
+
+    /** {@link #candyFound(long, int, boolean, boolean)}; {@code away}: an owed bag waits for the player to come back. */
+    static String candyFound(long found, int goal, boolean bag, boolean stillFalling, boolean away) {
         String head = (stillFalling ? "&6You've found &f" : "&6You found &f") + found + " &6candy apple"
                 + (found == 1 ? "" : "s") + ".";
         if (bag) {
             return head + " &aYou got your Trick-or-Treat Bag!";
         }
         if (found >= goal) {
-            return head + " &eYour Trick-or-Treat Bag is waiting: make room in your bag!";
+            return head + (away ? " &eYour Trick-or-Treat Bag is waiting: it comes when you're back from the Games or"
+                    + " another world!" : " &eYour Trick-or-Treat Bag is waiting: make room in your bag!");
         }
         return stillFalling ? head + " &f" + (goal - found) + " &6more for the Trick-or-Treat Bag!" : head;
     }

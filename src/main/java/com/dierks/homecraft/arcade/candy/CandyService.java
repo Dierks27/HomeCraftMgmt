@@ -281,7 +281,10 @@ public final class CandyService implements Listener {
     /** Once a second: the window (D18), the sweep, owed bags, welcomes, and the slot (D10). */
     private void second() {
         CandyConfig.Candy c = settings();
-        LocalDate today = plugin.clock().today();
+        // One reading of the clock for the day and the minute, so the second at midnight can't pair the last
+        // day with the next day's 00:00 slot.
+        LocalDateTime local = localNow();
+        LocalDate today = local.toLocalDate();
         if (!open(c, today)) {
             if (today.isAfter(c.to())) {
                 plugin.getLogger().info("The Candy Apple shower is over for " + c.year() + ".");
@@ -293,7 +296,7 @@ public final class CandyService implements Listener {
         sweep(now);
         retryOwed();
         welcomes(now, today);
-        long slot = CandyRules.dueSlot(localNow(), c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes(),
+        long slot = CandyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes(),
                 c.lastDay(today));
         if (slot == CandyRules.NO_SLOT || slot == lastSlot) {
             return;

@@ -227,6 +227,10 @@ class CandyCommandTest {
         assertEquals("You've found 3 candy apples. You got your Trick-or-Treat Bag! Next shower at 7:30 PM.",
                 plain(HcmCommand.candyMineLines(HcmCommand.CandyState.OPEN, null, 3, 31, true, "at 7:30 PM")),
                 "a bag an admin gave back counts as got");
+        assertEquals("You've found 31 candy apples. Your Trick-or-Treat Bag is waiting: it comes when you're back from "
+                        + "the Games or another world! Next shower at 7:30 PM.",
+                plain(HcmCommand.candyMineLines(HcmCommand.CandyState.OPEN, null, 31, 31, false, "at 7:30 PM", true)),
+                "owed while in the Games world: room isn't what it waits for");
     }
 
     @Test

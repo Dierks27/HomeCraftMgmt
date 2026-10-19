@@ -18,6 +18,7 @@ import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCreativeEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.event.inventory.PrepareGrindstoneEvent;
@@ -247,13 +248,18 @@ public final class PrizeSafetyListener implements Listener {
      * A prize bundle takes only candy (D15). Keyed to {@link BundleMeta}, not to the bag's id, so it guards any
      * prize bundle: cancelled when the clicked item is one and the cursor holds something that isn't candy, or
      * the cursor is one and the clicked slot holds something that isn't. Geyser sends Bedrock's bundle actions as
-     * these clicks. Picking the bag up or putting it down (nothing to insert) is left alone.
+     * these clicks. Picking the bag up or putting it down (nothing to insert) is left alone. In a Creative
+     * player's own inventory the "cursor" is the slot's new stack ({@link PrizeSafety#refusesCreativeSet}), so
+     * a child in Creative can still put her candy in her bag.
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBundleInsert(InventoryClickEvent event) {
         ItemStack clicked = event.getCurrentItem();
         ItemStack cursor = event.getCursor();
-        if (refusesInsert(clicked, cursor) || refusesInsert(cursor, clicked)) {
+        boolean refused = event instanceof InventoryCreativeEvent
+                ? refusesCreativeSet(cursor)
+                : refusesInsert(clicked, cursor) || refusesInsert(cursor, clicked);
+        if (refused) {
             event.setCancelled(true);
             if (event.getWhoClicked() instanceof Player player) {
                 player.sendMessage(Text.of("&7Only candy goes in this bag."));
@@ -269,6 +275,15 @@ public final class PrizeSafetyListener implements Listener {
             return false;
         }
         return PrizeSafety.refusesInsert(prize(bundle) && bundle.getItemMeta() instanceof BundleMeta, candy(inserted));
+    }
+
+    /** {@link PrizeSafety#refusesCreativeSet} for the stack a Creative player sets in a slot. */
+    private static boolean refusesCreativeSet(ItemStack set) {
+        if (set == null || !set.getType().name().endsWith("BUNDLE") || !prize(set)) {
+            return false;
+        }
+        return PrizeSafety.refusesCreativeSet(set.getItemMeta() instanceof BundleMeta,
+                PrizeSafety.holdsOnlyCandy(contents(set)));
     }
 
     // ---- workstations ----------------------------------------------------------------------

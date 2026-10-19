@@ -70,6 +70,16 @@ public final class PrizeSafety {
     }
 
     /**
+     * The same guard in a Creative player's own inventory, where the client sends each slot's new stack rather
+     * than a click (and Geyser sends a Bedrock player's Creative moves the same way): a candy put in the bag
+     * arrives as the bag set again with the candy inside. So a prize bundle being set is refused only when it
+     * holds anything but candy, and anything else being set is a move, not an insert.
+     */
+    static boolean refusesCreativeSet(boolean setIsPrizeBundle, boolean holdsOnlyCandy) {
+        return setIsPrizeBundle && !holdsOnlyCandy;
+    }
+
+    /**
      * A hopper (or a hopper minecart) leaves a dropped collector where it is. The game checks the
      * owner a drop was given only when a player walks over it, so without this a hopper would take it
      * and anyone could then open the hopper or the chest below it. A collector nobody owns on the

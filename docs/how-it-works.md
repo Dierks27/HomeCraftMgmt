@@ -40,6 +40,24 @@ Courier runs all say no.
 Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
 inside one drops with it.
 
+## Candy apples (until 31 Oct)
+
+Every 20 minutes in October (every 10 on Halloween), you hear "Trick or treat!" and six candy
+apples fall a few steps in front of you, sparkling where they land. They're all yours: only you can
+see them and pick them up. Indoors they pop up from the floor instead.
+
+- **Eat one** for a treat: a Candy Apple makes you speedy or bouncy for a little while. On Bedrock,
+  if you're full, hold it and tap the ground.
+- **A Golden Candy Apple** is very rare and gives 5 tokens (up to 10 a day). Your first shower
+  always has one.
+- **Find 31** and you get the **Trick-or-Treat Bag 2026**, yours for good. Put your candy apples in
+  it! A yellow bar shows how many you've found. Bag full? Walk over your candy anyway: it still
+  counts.
+- Type `/hcm candy` to see how many you've found and when the next shower comes.
+
+Candy apples don't fall in the Games world, during a game, or when you've stood still for 5
+minutes.
+
 ## Minis
 
 1. **Open a Card Pack.** Buy one on the PC's Card Packs site or in the Arcade, then right-click it. You get **one Card**.

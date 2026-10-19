@@ -169,6 +169,10 @@ rolling back is a two-part procedure and **both halves are required**:
 showing) until you upgrade again, and prizes drop on death again. Nothing is deleted. See
 [Halloween 2026](#halloween-2026-0371-0372).
 
+**Back to 0.37.1 from 0.37.2:** no candy falls. Counts, Trick-or-Treat Bags and candy apples are
+kept, but a bag takes anything until you upgrade again (one holding anything but candy drops on
+death). See [The Candy Apple shower](#the-candy-apple-shower-0372).
+
 Check which you have before trusting a downloaded jar:
 
 ```bash
@@ -441,6 +445,8 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
 | `/hcm tokens history <player> [n]` | admin | A player's last n token changes |
 | `/hcm give prize <id> [player]` | admin | Give back a lost prize, free (works out of season) |
+| `/hcm candy` | `hcm.arcade.use` | Your candy apples, your Trick-or-Treat Bag and the next shower (0.37.2) |
+| `/hcm candy now [player]\|status\|clear\|bag <player>\|add <player> <n>` | admin | Run the Candy Apple shower: a shower now, its status, clear the candy out, give a bag back, add to a count ([below](#the-candy-apple-shower-0372)) |
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
 | `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
@@ -599,7 +605,121 @@ in players' bags, and prizes drop on death again.
 
 ### The Candy Apple shower (0.37.2)
 
-Comes with 0.37.2, and this section gains it then.
+Candy apples fall from the sky around each player in an economy world through 31 October 2026,
+with a "Trick or treat!". Each player's candy is their own: only they see it, and only they can
+pick it up. Finding 31 earns the **Trick-or-Treat Bag 2026**, and the shower switches itself off
+after 31 October with nothing to edit.
+
+- **When.** Every 20 minutes, at :10, :30 and :50 local time (`clock.time_zone`), for everyone at
+  the same moment. On 31 October every 10 minutes, at :00, :10, :20 and so on. A shower that would
+  start inside the Games' restart hold (from 5 minutes before a restart to the end of its minute) is
+  skipped, because candy isn't saved and the restart would wipe it: on the shipped 04:00 and 16:00
+  that is only the 04:00 and 16:00 showers on 31 October. A start or a `/hcm reload` partway
+  through a slot waits for the next one.
+- **A welcome shower.** On a player's first join of each local day they get a shower of their own
+  30 seconds later (if the checks below pass then), so nobody waits up to 20 minutes for the
+  first one. A restart can give one more.
+- **The show, for that player alone:** "Trick or treat!" on screen, a chime and a high, quiet
+  giggle, the candy bar for 3 seconds, and six candy apples falling one every half second, 2-4
+  blocks away, mostly in front of them. Witch sparkles follow each one down, it lands with a
+  "plop" you can hear from where it is and a puff of green sparkles, and a green sparkle marks it
+  every second until it is picked up. Under a roof or a tree the candy pops up from the floor 2-3
+  blocks away instead.
+- **Where it never goes:** at a player's feet or within reach of a player who doesn't move (so
+  standing still collects nothing), behind a wall, in a hole deeper than one step, into lava,
+  water, fire, a cactus, a berry bush, powder snow, a cobweb or a portal. An apple with nowhere to
+  go is tried again every second for 10 seconds, then dropped: nothing spawns and nothing counts.
+- **Who gets one.** Everyone online, checked at each shower in this order; the first that fails is
+  the reason `/hcm candy now` prints:
+  1. dead or sleeping ("not here");
+  2. a spectator;
+  3. not in an economy world;
+  4. in the Games world;
+  5. in a game, a race, a golf round, Falling Floors or the Clubhouse, or on the way back ("in a game");
+  6. idle 5 minutes or more ("idle N min");
+  7. gliding, or flying more than 2 blocks up; in lava; in water; in a boat or minecart;
+  8. 12 of their candies already out (120 on the server).
+
+  **Creative players get the shower,** the count and the bag, but never tokens.
+- **Only yours.** Each candy is hidden from everyone else, on Java and on Bedrock, and only its
+  owner can pick it up (`admins_see_all` lets admins see it too). Two never merge, no mob or hopper
+  takes one, and a portal removes it. It lasts 3 minutes. Candy isn't saved: a restart, a
+  `/hcm reload` or a quit removes it, and so does leaving the world or going into a game.
+- **Eating one.** A **Candy Apple** gives Speed I or Jump Boost I for 20 seconds, with hearts and
+  "Yum! You feel speedy!" (or bouncy). On Java it can be eaten when full. **On Bedrock a full
+  player** (on Peaceful that is everyone, always) **eats it by holding it and tapping the ground or
+  the air**, one every 1.6 seconds while the tap is held: Bedrock doesn't know a full player may
+  eat it. A tap on a chest or a door still opens it. A **Golden Candy Apple** gives a golden
+  apple's effects plus Speed II for 30 seconds, sparkles, "GOLDEN!" and a firework in front of
+  them. The sparkles go in front of the eater's eyes, and others within 32 blocks see them at the
+  eater's head. Candy dropped with Q can be shared and eaten by anyone, but it never counts.
+- **Golden ones.** 4 in every 100 apples. Every shower's third apple is golden until the player
+  has picked up their first golden one, so a child's first shower always has one. A falling golden
+  apple shows "Golden!" above it. Picking one up plays "GOLDEN!" with a firework and pays **5
+  tokens, at most 10 a player a local day**, read from the token ledger, so a restart doesn't
+  reset it. The cap is apart from the games' 60 a day. "Candy Apples" is its own line in the
+  token history and in `/hcm tokens audit` (ledger source `EVENT_CANDY`). Nothing is paid in
+  Creative or after the window, but the moment still plays.
+- **Counting.** Every shower candy a player picks up counts: a pop, the action bar "Candy apples:
+  17 / 31", a yellow bar that fills toward 31 for 5 seconds, and a chime at 10, 20 and 30. **A full
+  bag still counts:** standing on your own candy with no room for it counts it, and it is eaten
+  on the spot. A golden one counts 1, like a red one. The count is per player and per year
+  (`player_counters`, `candy:2026`), so next year starts from 0.
+- **The Trick-or-Treat Bag 2026.** An orange bundle with "You found 31 candy apples!",
+  "Halloween 2026 collector" and "Yours for good!". It arrives in the player's bag the moment the
+  31st is picked up, with a fanfare, a title and a firework. It is a collector: one each, kept on
+  death, never despawning, only its owner can pick it up when dropped, and it is not on the
+  counter, in a crate or giftable. **It takes only candy apples** ("Only candy goes in this
+  bag."). Tapping it while looking at the ground or the air plays a chime, a giggle and witch
+  sparkles.
+- **A bag that waits.** With no free slot, the player reads "Make room in your bag for your
+  Trick-or-Treat Bag!" once, and admins online read "<name>'s bag is full, so their
+  Trick-or-Treat Bag is waiting." once a shower. In a game, the Games world or another world
+  nothing is said. Either way the bag appears the moment there is room and they are home, and on
+  their next join or `/hcm candy`. It is marked as given before it is handed over, so a failed
+  write can never give two; a lost one comes back with `/hcm candy bag <player>`.
+- **Off by itself.** From midnight going into 1 November no candy falls, every candy out is
+  removed, the bars go, and the log says "The Candy Apple shower is over for 2026."
+  `/hcm candy now` then answers "The Candy Apple shower is over for this year." A bag still owed
+  can be claimed after that, on a join or with `/hcm candy`. Next year, set `from` and `to` to the
+  new dates: the year in the count, the names and the bag comes from `from`, so 2027 starts from 0
+  with a "2027" bag.
+- On join, while the shower runs, each player reads "✦ Candy apples fall every 20 minutes until
+  31 Oct! You've found 17 of 31."
+
+#### Owner knobs (`arcade.events.candy`)
+
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | The shower's switch (after `/hcm reload`). Counts and bags stay. `arcade.enabled: false` stops it too |
+| `from`, `to` | `"2026-10-01"`, `"2026-10-31"` | The window: local dates (`clock.time_zone`), both days included. Keep the quotes (a bare date is read too). A date that can't be read, or `from` after `to`, turns the shower off with one WARN. A window over 62 days or across a year still runs, with a WARN |
+| `every_minutes` | `20` | A shower this often (10-120), counted from local midnight plus `offset_minutes` |
+| `offset_minutes` | `10` | The day's first shower, in minutes after midnight (0 to `every_minutes` - 1) |
+| `last_day_every_minutes` | `10` | On the last day (`to`), a shower this often instead (10-120; `0` = as `every_minutes`) |
+| `apples_per_shower` | `6` | Candy apples per player per shower (1-12) |
+| `golden_percent` | `4` | The chance in 100 that an apple is a Golden Candy Apple (0-100) |
+| `golden_tokens` | `5` | Tokens for each Golden Candy Apple picked up (0-20) |
+| `daily_token_cap` | `10` | The most tokens a player gets from candy in a local day (0-50) |
+| `goal` | `31` | Candy apples to find for the Trick-or-Treat Bag (1-200) |
+| `admins_see_all` | `false` | `true`: every `hcm.admin` online sees everyone's candy too, to help a child find hers. Only its owner can pick it up, and the sounds and sparkles stay theirs |
+
+Every key is new: the first start of 0.37.2 writes them, with their comment, into your
+config.yml, after `collectors:`. A number out of its range is brought into it, with one WARN.
+`config_revision` stays 21, and `/hcm config reset arcade.events.candy` puts the section back.
+
+#### Commands
+
+| Command | Who | What |
+|---|---|---|
+| `/hcm candy` | `hcm.arcade.use` (everyone) | "You've found 17 candy apples. 14 more for the Trick-or-Treat Bag! Next shower at 7:30 PM." A bag that is waiting is tried again |
+| `/hcm candy now [player]` | admin | A shower now for everyone online, or the named player: one line each, "showered" or the reason they were skipped. Refused outside the window or while switched off |
+| `/hcm candy status` | admin | On or off; the window and its zone; the next shower (and one a restart skips); the candy out; each online player's count, candy out, idle minutes and bag; and "Pumpkin Cap on sale until 23:59 on 31 Oct (America/Chicago)" |
+| `/hcm candy clear` | admin | Removes every candy out. Nothing is counted |
+| `/hcm candy bag <player>` | admin | Gives a Trick-or-Treat Bag back, free (room needed, home from every game), and marks it given. Logged as `Admin <you> gave a Trick-or-Treat Bag 2026 to <player>` |
+| `/hcm candy add <player> <n>` | admin | Adds 1-200 to a player's count, then checks for the bag: the way to test the bag without finding 31. Logged as `Admin <you> added <n> candy apples for <player>` |
+
+Inside a world game `/hcm candy` is refused, like every `/hcm` command except play, leave, games
+and help.
 
 ---
 

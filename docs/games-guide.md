@@ -99,6 +99,7 @@
 - The five new games of chance never earn quests, achievements, today's pick or skill rewards.
 - You can see your tokens in your Wallet (top of the Arcade), on the sunflower at the top-left of the Games screen, or with /hcm tokens.
 - Every daily limit and cap starts fresh at midnight, server time.
+- Halloween's candy apples (plugin 0.37.2, until 31 October) never fall in the Games world or during a game, a race or a round of golf. The tokens from a Golden Candy Apple are their own line in your token history, "Candy Apples", and they don't count toward the 60 a day from skill games.
 
 ## Quests and achievements from the games
 

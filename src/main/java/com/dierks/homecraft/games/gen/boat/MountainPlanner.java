@@ -906,11 +906,13 @@ final class MountainPlanner {
      * (its start at the west end, the east): the first stream whose candidate passes every flow gate with
      * that mirror and is proven (MountainPlannerTest holds all twelve to it, in both halves and off the
      * shipped range, and names the next good stream should a change to the generator move one). Today's
-     * planner's ({@value #ALGO}); {@link #SAFE_STREAMS_V4} is algo 4's.
+     * planner's ({@value #ALGO}); {@link #SAFE_STREAMS_V4} is algo 4's. Re-searched for 0.37.1, when all twelve
+     * of algo 4's had moved: road easy west's first passing stream, 26, is refused by the proof (a side pocket),
+     * so it is 29, the next that passes.
      */
     static final int[][][] SAFE_STREAMS = {
-            {{10, 0}, {22, 0}, {247, 76}},
-            {{1, 2}, {1, 0}, {5, 0}}};
+            {{29, 7}, {10, 47}, {128, 3}},
+            {{14, 3}, {26, 4}, {32, 41}}};
     /** Algo 4's {@link #SAFE_STREAMS} (0.37.0), frozen. */
     static final int[][][] SAFE_STREAMS_V4 = {
             {{10, 0}, {22, 0}, {247, 76}},

@@ -40,11 +40,21 @@ public final class Collectors {
                     new Collector(2026, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), true,
                             new CapLook(0xF9801D, "wild", "emerald"))),
             new Prize("trail_leaves_2026", PrizeTab.COSMETICS, "&6Autumn Leaves 2026",
-                    List.of("Autumn leaves follow you!"), 400, new Icon("", Material.ORANGE_POPLAR_LEAVES),
+                    List.of("Autumn leaves follow you!"), 400, new Icon("", leaves()),
                     PrizeType.TRAIL, true, new PrizeLimit(LimitPer.LIFETIME, 1),
                     1, null, null, null, null, 0, 0, "ORANGE_POPLAR_LEAVES", 36500, "",
                     List.of(), List.of(), null, null, List.of(),
                     new Collector(2026, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 30), true, null)));
+
+    /**
+     * The Autumn Leaves trail's icon: the orange poplar leaves block, looked up by name because it is new in
+     * the 26.3 API and the plugin compiles against 26.2's (build.gradle); on 26.2 a plain leaves block stands in
+     * (there the trail's particle is missing too, and the collector self-test says so at enable).
+     */
+    static Material leaves() {
+        Material poplar = Material.matchMaterial("ORANGE_POPLAR_LEAVES");
+        return poplar != null ? poplar : Material.OAK_LEAVES;
+    }
 
     /** True for an id the catalogue owns (case-insensitive). */
     public static boolean isCollectorId(String id) {

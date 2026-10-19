@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.37.0-mountain-golf`
+- **Version:** `0.37.1-mountain-halloween`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -530,6 +530,8 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
   server counts 0 armour.
 - The trail's particle, `ORANGE_POPLAR_LEAVES`, is mapped by current Geyser. If the leaves don't
   show on a Bedrock screen, update Geyser.
+- The orange poplar leaves are new in Paper **26.3**. On 26.2 the trail shows nothing (its counter
+  tile shows oak leaves), and the collector self-test says so in the log at startup.
 - Bedrock shows lore only on a long press, so the year is in the name as well.
 
 ### Prizes are safe (every prize, for everyone)

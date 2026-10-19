@@ -246,8 +246,11 @@ class DropPlanTest {
         assertTrue(finals > 0, "fixture: some Final Drops");
         assertTrue(big > 0, "some of them Big Drops: " + big + " of " + finals);
         assertTrue(bigEasy > 0, "the 18-wide road's too, upgraded within 54-54.5 of the finish: " + bigEasy);
-        // two Big Drops as close as chains() lets them stand, sharing the one checkpoint between them
+        // two Big Drops as close as ok()'s spacing lets them stand (65.5 apart at 18 wide, 64 at 15), sharing the
+        // one checkpoint between them
         int pairs = 0;
+        int refused = 0;
+        int taken = 0;
         for (String id : new String[]{"easy", "medium"}) {
             MountainTier tier = MountainTier.of(BoatStyle.ROAD, id);
             for (Skeleton sk : SkeletonTest.routes(tier)) {
@@ -271,15 +274,32 @@ class DropPlanTest {
                 double shared = Math.min(b, s1 - c1 + DropPlan.BIG_LEG - RasterV4.GROW);
                 assertTrue(shared >= a - 1e-9, tier + ": which stands past the first one's zone: " + shared + " >= "
                         + a);
-                double grown = s1 - c1 - RasterV4.GROW;
-                assertTrue(shared - grown <= DropPlan.BIG_LEG + 1e-9, tier + ": the first leg, its checkpoint grown,"
-                        + " is " + (shared - grown));
                 double after = p.zoneEnd.get(indexOf(p, s2)) + DropPlan.CLEAR + DropPlan.ROUNDING;
                 assertTrue(after - shared <= DropPlan.BIG_LEG + 1e-9, tier + ": and the second " + (after - shared));
                 pairs++;
+                // where the budget changes the answer (audit TQ1): chains() keeps that shared checkpoint at most
+                // BIG_LEG - GROW past the one before the first lip, so a third Big Drop at the same gap, its flight
+                // zone ending on the same straight, needs its own checkpoint within a grown leg of it. At 18 wide
+                // (set back 9.75) it would stand 1 past that and is refused; at 15 (8.25, 64 apart) the clamp
+                // doesn't bind and the same third is taken. Without the grow budget the 18-wide road takes it too.
+                double s3 = s2 + (s2 - s1);
+                if (p.zoneEnd(s3, 2) > p.runAt(s2).s1()) {
+                    continue; // its zone would run into the bend past the straight, a refusal of another rule
+                }
+                if (tier.easy()) {
+                    assertFalse(p.ok(s3, 2), tier + ": a third Big Drop " + (s2 - s1) + " past the pair at (" + s1
+                            + ", " + s2 + ") is refused: the checkpoint the pair shares, grown, can't reach one past it");
+                    refused++;
+                } else {
+                    assertTrue(p.ok(s3, 2), tier + ": a third Big Drop " + (s2 - s1) + " past the pair at (" + s1
+                            + ", " + s2 + ") is taken: the grow budget doesn't bind at 15 wide");
+                    taken++;
+                }
             }
         }
         assertTrue(pairs >= 4, "fixture: " + pairs + " pairs of Big Drops sharing a checkpoint");
+        assertTrue(refused >= 4 && taken >= 4, "fixture: third Big Drops read on the 18-wide road " + refused
+                + " and on the 15-wide " + taken);
     }
 
     /**

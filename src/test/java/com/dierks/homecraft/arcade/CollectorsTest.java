@@ -113,7 +113,10 @@ class CollectorsTest {
         assertTrue(trail.enabled());
         assertTrue(trail.collector().giftable());
         assertEquals("ORANGE_POPLAR_LEAVES", trail.particle());
-        assertEquals(Material.ORANGE_POPLAR_LEAVES, trail.icon().material());
+        // the orange poplar leaves block where the API has it (26.3); the 26.2 API the plugin compiles against
+        // has none, and there a plain leaves block stands in
+        Material poplar = Material.matchMaterial("ORANGE_POPLAR_LEAVES");
+        assertEquals(poplar != null ? poplar : Material.OAK_LEAVES, trail.icon().material());
         assertEquals(36500, trail.days(), "kept for good: 100 years, never a Long.MAX_VALUE that overflows");
         assertNull(trail.collector().look());
     }

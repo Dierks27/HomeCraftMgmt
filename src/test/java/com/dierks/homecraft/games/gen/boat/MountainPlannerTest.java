@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Mountain Run v2's planner (MOUNTAIN-V2-SPEC §5.2, §15; BoatPlanner algo 4): pinned layouts for three
+ * Mountain Run v2's planner (MOUNTAIN-V2-SPEC §5.2, §15; BoatPlanner algo 5): pinned layouts for three
  * seeds of each style at each tier, every one proven; the same seed twice the same blocks; the same blocks
  * wherever the half is; the twelve safe layouts proven in both halves and off the shipped range; the work
  * budget and cancels; the summary; and BoatPlanner's dispatch between the mountain and the spiral.
@@ -81,19 +81,17 @@ class MountainPlannerTest {
 
     @Test
     void goldenHashesPinThreeSeedsPerStyleAndTier() {
-        // A change here means the planner makes different layouts: Mountain Run v2 is unreleased (it ships
-        // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead. Re-pinned for audit M00
-        // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved. Then
-        // once for the FX-MTN fixes: every road moved (the tier's pieces placed on bends too, MTN-R3-00; SANDY
-        // BEND signs, R3-02; the chicane sign's hand, MTN00; road medium 4 and 5 also by the chicane cap, MTN01);
-        // the slaloms didn't.
+        // A change here means the planner makes different layouts. Re-pinned for 0.37.1 (boat planner ALGO 5,
+        // MOUNTAIN-V21-SPEC §5.3: the wide road, more drops, snow, arrows, crowns; the mini soak's steps S and F
+        // and the deck fix): all 18 moved. From here on, a layout change bumps ALGO; 0.37.1 is public. Algo 4's
+        // 0.37.0 layouts stay pinned by V4FixturesTest.
         String golden = """
-                road easy fd007631bde5 43d2dd016bcb 8ee1381b7442
-                road medium f277c9be3f41 475f73605cc8 4da8daecf8f3
-                road hard 9fe15e052a31 2f304cc00fd1 643a210adc0f
-                slalom easy e5437e73e554 52be95a3b5fd 0df883d71e01
-                slalom medium f874b0413052 c1208132055e 2a1bdd16f106
-                slalom hard fe19c45a486d e6cb568e821d 92c0cf205316
+                road easy 04b2a10d0b99 a6146922caa3 13289885ab1e
+                road medium e9def12de2bb 8f8141983cc7 3773810ce9c9
+                road hard 83cf4ec92603 164ab155d33b 52a5a49a23a4
+                slalom easy 8bc76bff8dbe 3a3b28dcf6bd 545d75e7299d
+                slalom medium ab6aac52f36f 0d1e41c80d80 f7a7668e3264
+                slalom hard b30cb0ca5812 3418e97868be 5d4ac29c82f8
                 """;
         StringBuilder got = new StringBuilder();
         for (BoatStyle style : BoatStyle.values()) {
@@ -107,7 +105,7 @@ class MountainPlannerTest {
             }
         }
         assertEquals(golden, got.toString(), "every style, tier and seed (if this changed, re-pin or bump ALGO)");
-        assertEquals(4, BoatPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(5, BoatPlanner.ALGO, "the version these hashes were pinned at");
     }
 
     @Test
@@ -121,7 +119,7 @@ class MountainPlannerTest {
                     assertEquals(List.of(), MountainValidator.problems(p, tier), name + ": proven");
                     assertEquals(List.of(), BoatValidator.problems(p, input(HALF_A, seed, tier)),
                             name + ": and by the engine's own dispatch");
-                    assertEquals(BoatPlanner.ALGO, p.algo(), name + ": algo 4");
+                    assertEquals(BoatPlanner.ALGO, p.algo(), name + ": algo 5");
                     assertTrue(p.ops().size() <= MountainValidator.MAX_OPS, name + ": " + p.ops().size() + " blocks");
                     Course c = ((PlannedTrial) p.course()).course();
                     assertTrue(c.checkpoints().size() <= MountainValidator.MAX_CHECKPOINTS,
@@ -573,7 +571,7 @@ class MountainPlannerTest {
     void theSummarySaysWhatWasMade() {
         Plan road = made(HALF_A, 2, "medium").finished();
         List<String> s = road.summary();
-        assertTrue(s.get(0).startsWith("Ice Boat v4 medium: Winding Road, "), "style and tier: " + s.get(0));
+        assertTrue(s.get(0).startsWith("Ice Boat v5 medium: Winding Road, "), "style and tier: " + s.get(0));
         assertTrue(s.get(0).contains(" bands (") && s.get(0).contains("hairpins"), "its bands and links: " + s.get(0));
         assertTrue(s.get(1).startsWith("flow 0.") && s.get(1).contains("model T_m "), "the flow line: " + s.get(1));
         assertTrue(s.get(2).startsWith("drops ") && s.get(2).contains("Final Drop")
@@ -814,14 +812,14 @@ class MountainPlannerTest {
                 "F-F misses the staircase: " + FlowScore.of(sk, none).missing);
     }
 
-    // ---- BoatPlanner: algo 4 in the mountain's half, the spiral elsewhere --------------------------------
+    // ---- BoatPlanner: algo 5 in the mountain's half, the spiral elsewhere --------------------------------
 
     @Test
     void theBoatPlannerMakesTheMountainInItsHalfAndTheSpiralElsewhere() throws GenFailed {
         BoatPlanner planner = new BoatPlanner();
-        assertEquals(4, planner.algo(), "the planner is algo 4");
+        assertEquals(5, planner.algo(), "the planner is algo 5");
         Plan mountain = planner.plan(input(HALF_A, 2, "medium"));
-        assertEquals(4, mountain.algo(), "a 480 x 176 x 640 half gets Mountain Run v2");
+        assertEquals(5, mountain.algo(), "a 480 x 176 x 640 half gets Mountain Run v2, the wide road");
         assertEquals(made(HALF_A, 2, "medium").finished().hash(), mountain.hash(), "the same as MountainPlanner's");
         Box legacy = LegacyBoxes.half(Slots.ICE_BOAT, 'A');
         Plan spiral = planner.plan(new PlanInput(Slots.ICE_BOAT, legacy, 'A', 20725, 0, 31, "medium", 6, 0, null));
@@ -831,16 +829,24 @@ class MountainPlannerTest {
 
     @Test
     void aTagIsMadeAgainByItsOwnAlgo() throws GenFailed {
+        // MOUNTAIN-V21-SPEC §5.3 and D13: a tag of 5 (every live wide road's, the boot path) is made again; a tag
+        // of 4 (0.37.0's 7-9 wide road) is refused by this planner as any other algo is, and so is a later one
         BoatPlanner planner = new BoatPlanner();
         Plan live = made(HALF_A, 2, "medium").finished();
-        GenTag tag = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 4, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+        GenTag tag = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(live.hash(), planner.rederive(input(HALF_A, 0, "medium"), tag).hash(), "the stored tier");
         assertEquals(live.hash(), planner.rederive(input(HALF_A, 0, "hard"), tag).hash(), "any tier asked");
+        GenTag v4 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 4, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+                List.of(), List.of(), 0);
+        GenFailed refused = assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), v4),
+                "an algo-4 layout isn't made again by the algo-5 planner (D13)");
+        assertTrue(refused.getMessage().contains("made by boat planner v4, this is v5"),
+                "it says which planner made it: " + refused.getMessage());
         GenTag old = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 2, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), old), "an algo-2 loop isn't");
-        GenTag next = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+        GenTag next = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 6, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), next), "nor a later one");
     }
@@ -856,10 +862,10 @@ class MountainPlannerTest {
         GenTag v3 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 3, 20725, 0, 2, 'A', live.hash(), 18_100, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(18_100, BoatPlanner.modelMs(v3), "an older tag's reference is its time");
-        GenTag v5 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, MountainValidator.WIDE_ALGO, 20725, 0, 2, 'A',
-                live.hash(), ref, 2, 3, List.of(), List.of(), 0);
+        GenTag v5 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), ref, 2, 3,
+                List.of(), List.of(), 0);
         assertEquals(MountainPlanner.modelMs(made(HALF_A, 2, "medium").seconds), BoatPlanner.modelMs(v5),
-                "the wide road's tag (this plan's own) gets its T_m back the same way");
+                "an algo-5 tag (the wide road's, this plan's own) gets its T_m back the same way (D12's modelMs)");
         assertEquals(0, BoatPlanner.modelMs(null), "no tag, no time");
     }
 }

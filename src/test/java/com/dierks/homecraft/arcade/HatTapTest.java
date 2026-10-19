@@ -34,6 +34,11 @@ class HatTapTest {
         assertTrue(PrizeItemListener.wearsOnBlockTap(true, false, false, false, false),
                 "any other plain block is as before");
         assertFalse(PrizeItemListener.wearsOnBlockTap(false, false, false, false, true), "Java: as before");
+        // review HAT-1: a Mini's head (placed or wild) is ours too, though it is no placed block: MiniHeadListener
+        // catches a wild one or opens a placed one's card, and PrizeItemListener.ours reads its skull's Mini, so a
+        // child holding a Pumpkin Cap who taps a wild Mini catches it without putting the cap on
+        assertFalse(PrizeItemListener.wearsOnBlockTap(true, false, false, false, true),
+                "a Mini's head, placed or wild: caught or shown, and the hat stays in the hand");
     }
 
     /**

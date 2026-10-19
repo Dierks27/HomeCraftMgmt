@@ -358,7 +358,7 @@ class ParkourPlannerTest {
                 Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
                 for (Course.Mark m : ((PlannedTrial) p.course()).course().checkpoints()) {
                     Course one = new Course(slot.id(), TrialKind.PARKOUR, slot.name(), Tier.EASY, "", null, List.of(m),
-                            new Course.Mark(0, -100, 0, 1), null, null, true, false, 1);
+                            new Course.Mark(0, -100, 0, 1), null, null, true, false, 1, tag(p, ParkourPlanner.ALGO));
                     for (double dx = -2.5; dx <= 2.501; dx += 0.25) {
                         for (double dz = -2.5; dz <= 2.501; dz += 0.25) {
                             Progress drop = new Progress(one, new Point(m.x() + dx, m.y() - 0.51, m.z() + dz), 0);

@@ -417,6 +417,22 @@ class FairPlayTest {
         assertEquals("12 s in", FairPlay.when(12_000));
     }
 
+    @Test
+    void aRacerReleasedAfterTheSharedGoIsTimedFromTheirOwnGo() {
+        // review FP-2: a racer not in place at Go (a slow chunk, put back on the spot) starts on the shared clock
+        TrialRun late = new TrialRun(java.util.UUID.randomUUID(), PARKOUR, false, 0);
+        late.progress = new Progress(PARKOUR, PARKOUR.start().point(), 0); // the shared Go, at 0
+        late.goNanos = 2_100_000_000L; // their own, 2.1 s later
+        long voided = late.goNanos + 10_000_000L; // the watch's call at their Go, a tick's work later
+        assertEquals(2_110, late.elapsedMs(voided), "the clock already shows the time since the shared Go");
+        assertEquals("at Go", FairPlay.when(late.sinceGoMs(voided)), "but the void fired at their own Go");
+        assertEquals("3.2 s in", FairPlay.when(late.sinceGoMs(late.goNanos + 3_240_000_000L)), "and later, from it");
+
+        TrialRun none = new TrialRun(java.util.UUID.randomUUID(), PARKOUR, false, 0);
+        none.progress = new Progress(PARKOUR, PARKOUR.start().point(), 0);
+        assertEquals(none.elapsedMs(3_240_000_000L), none.sinceGoMs(3_240_000_000L), "no Go recorded: the clock");
+    }
+
     // ---- a changed course ------------------------------------------------------------------------
 
     @Test

@@ -52,8 +52,9 @@ final class Geometry {
 
     /**
      * {@link #firstHit} no lower than {@code floorY}: the move is cut to its part at or above the floor, then
-     * tested as before; {@code NaN} when that part never touches the sphere. A parkour checkpoint counts with
-     * the feet up on its pad, never while they fall past its side or under it ({@link Progress#FEET_BELOW}).
+     * tested as before; {@code NaN} when that part never touches the sphere. A Fresh Courses parkour checkpoint
+     * counts with the feet up on its pad, never while they fall past its side or under it
+     * ({@link Progress#FEET_BELOW}).
      */
     static double firstHitAbove(Point a, Point b, Point c, double r, double from, double floorY) {
         double lo = Math.max(0, from);

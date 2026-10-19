@@ -438,6 +438,29 @@ class GamesCheckTest {
     }
 
     @Test
+    void aHandBuiltParkourCoursesPointsInTheAirAreAWarning() {
+        Good g = new Good();
+        g.courses = List.of(new Course("cliffs", false, "games", true, true, List.of(),
+                List.of("checkpoint 2", "the finish")));
+        List<Line> lines = GamesCheck.run(g);
+        assertTrue(lines.stream().anyMatch(l -> l.status() == Status.OK && l.what().equals("Course 'cliffs' is ready")),
+                "it can still be played: the course itself is ready");
+        Line air = only(lines);
+        assertEquals(Status.WARN, air.status(), "a warning, never a fail: the points still work");
+        assertEquals("Course 'cliffs': checkpoint 2 and the finish aren't on a block (nothing solid within half a "
+                + "block under them), so a player reaches each only within its radius of that spot in the air",
+                air.what());
+        assertEquals("try it on foot with /hcm games course cliffs test, or set it again standing on its pad", air.fix());
+
+        g.courses = List.of(new Course("cliffs", false, "games", true, true, List.of(), List.of("checkpoint 1")));
+        assertEquals("Course 'cliffs': checkpoint 1 isn't on a block (nothing solid within half a block under it), so a"
+                + " player reaches it only within its radius of that spot in the air", only(GamesCheck.run(g)).what());
+
+        g.courses = List.of(new Course("cliffs", false, "games", true, true, List.of()));
+        assertEquals(List.of(), bad(GamesCheck.run(g)), "every point on a block: nothing to say");
+    }
+
+    @Test
     void theWebsiteFeed() {
         Good g = new Good();
         g.web = new Web(false, false, null, 0, 0);

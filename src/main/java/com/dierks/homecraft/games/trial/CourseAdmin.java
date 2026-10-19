@@ -248,8 +248,10 @@ final class CourseAdmin implements GameAdmin {
                     return;
                 }
                 Course after = c.withWorld(here.getWorld().getName()).plusCheckpoint(mark(here, r));
-                layout(sender, c, after, confirm, args, "Checkpoint " + after.checkpoints().size() + " added here "
-                        + "(radius " + fmt(r) + ").");
+                if (layout(sender, c, after, confirm, args, "Checkpoint " + after.checkpoints().size() + " added here "
+                        + "(radius " + fmt(r) + ").")) {
+                    footing(sender, c, here, after.checkpoints().size());
+                }
             }
             case "remove" -> {
                 int n = rest.size() > 1 ? whole(rest.get(1)) : -1;
@@ -288,8 +290,44 @@ final class CourseAdmin implements GameAdmin {
         if (here == null) {
             return;
         }
-        layout(sender, c, c.withWorld(here.getWorld().getName()).withFinish(mark(here, r)), confirm, args,
-                "Finish set here (radius " + fmt(r) + ").");
+        if (layout(sender, c, c.withWorld(here.getWorld().getName()).withFinish(mark(here, r)), confirm, args,
+                "Finish set here (radius " + fmt(r) + ").")) {
+            footing(sender, c, here, 0);
+        }
+    }
+
+    /**
+     * After a parkour checkpoint ({@code n}, 1-based) or the finish ({@code n} 0) was set at {@code here}: a
+     * warning, never a refusal, when the builder isn't standing on a block ({@link Footing}). A lookup that fails
+     * says nothing.
+     */
+    private static void footing(CommandSender sender, Course c, Location here, int n) {
+        if (c.kind() != TrialKind.PARKOUR) {
+            return;
+        }
+        try {
+            World w = here.getWorld();
+            if (w == null || Footing.onGround(here.getX(), here.getY(), here.getZ(),
+                    (x, y, z) -> w.getBlockAt(x, y, z).getType().isSolid())) {
+                return;
+            }
+        } catch (RuntimeException | LinkageError e) {
+            return;
+        }
+        sender.sendMessage(Text.of(offGroundWarning(c.id(), n)));
+    }
+
+    /**
+     * The warning for a parkour checkpoint ({@code n}, 1-based) or the finish ({@code n} 0) set while not standing
+     * on a block: it hangs in the air, and a player reaches it only within its radius of that spot.
+     */
+    static String offGroundWarning(String id, int n) {
+        String what = n > 0 ? "checkpoint " + n : "the finish";
+        String again = n > 0 ? "/hcm games course " + id + " checkpoint remove " + n + ", then checkpoint add"
+                : "/hcm games course " + id + " finish";
+        return "&eYou aren't standing on a block, so " + what + " hangs in the air here. &7A player reaches it only "
+                + "within its radius of this spot. If it should count on a pad, stand on the pad and set it again: "
+                + "&f" + again;
     }
 
     private void fall(CommandSender sender, Course c, List<String> rest, boolean confirm, String[] args)
@@ -469,14 +507,14 @@ final class CourseAdmin implements GameAdmin {
 
     /**
      * A layout change: asks for {@code confirm} when it would clear times, then bumps {@code rev}
-     * and clears the course's all-time and this week's boards.
+     * and clears the course's all-time and this week's boards. True once it is saved.
      */
-    private void layout(CommandSender sender, Course before, Course after, boolean confirm, String[] args, String done)
-            throws SQLException {
+    private boolean layout(CommandSender sender, Course before, Course after, boolean confirm, String[] args,
+                           String done) throws SQLException {
         String fall = fallProblem(after, minHeight(after));
         if (fall != null) {
             sender.sendMessage(Text.of("&c" + fall + " &7(/hcm games course " + before.id() + " fall <y|off>)"));
-            return;
+            return false;
         }
         long week = trials.weekKey();
         boolean times = trials.store().hasTimes(before.id(), week);
@@ -486,17 +524,18 @@ final class CourseAdmin implements GameAdmin {
                     + "(all-time and this week). &7Type it again with &fconfirm &7on the end: &e/hcm games course "
                     + String.join(" ", args) + " confirm"));
             cupWarning(sender, before);
-            return;
+            return false;
         }
         Course saved = trials.store().save(after, true, week, now());
         if (saved == null) {
             sender.sendMessage(Text.of("&cAnother game has a course called '" + before.id() + "'."));
-            return;
+            return false;
         }
         trials.forget();
         changed(sender, args);
         sender.sendMessage(Text.of("&a" + done + " &7(layout " + saved.rev() + (times ? ", times cleared)" : ")")));
         CupLink.courseChanged(trials.games(), sender, before.id(), before.name(), CupPlan.VoidReason.CHANGED); // Weekly Cup
+        return true;
     }
 
     /** The confirm prompt's Weekly Cup line: this week's Cup on the course is called off (WP-C). */

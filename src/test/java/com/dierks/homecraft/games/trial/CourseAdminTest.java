@@ -51,6 +51,18 @@ class CourseAdminTest {
     }
 
     @Test
+    void aParkourPointSetInTheAirIsWarnedAboutNeverRefused() {
+        assertEquals("&eYou aren't standing on a block, so checkpoint 2 hangs in the air here. &7A player reaches it "
+                + "only within its radius of this spot. If it should count on a pad, stand on the pad and set it again: "
+                + "&f/hcm games course cliffs checkpoint remove 2, then checkpoint add",
+                CourseAdmin.offGroundWarning("cliffs", 2), "the checkpoint just added is the last: removing it and "
+                        + "adding it again keeps the order");
+        assertEquals("&eYou aren't standing on a block, so the finish hangs in the air here. &7A player reaches it "
+                + "only within its radius of this spot. If it should count on a pad, stand on the pad and set it again: "
+                + "&f/hcm games course cliffs finish", CourseAdmin.offGroundWarning("cliffs", 0));
+    }
+
+    @Test
     void numbersPrintWithoutAPointlessPointZero() {
         assertEquals("3", CourseAdmin.fmt(3.0), "a whole number");
         assertEquals("2.5", CourseAdmin.fmt(2.5), "a half");

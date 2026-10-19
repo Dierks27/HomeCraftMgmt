@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * can't count before the last checkpoint even when the move goes through it; each target's time
  * is interpolated to where along the move it was touched; the run's own teleport ({@code jump})
  * starts the next move from there, so nothing between the two places counts; nothing is
- * reached after the finish; and on parkour a checkpoint counts with the feet up on its pad, never
- * while falling past its side or under it, while the other kinds keep the whole sphere.
+ * reached after the finish; and on a parkour course Fresh Courses made a checkpoint counts with the
+ * feet up on its pad, never while falling past its side or under it, while a hand-built parkour
+ * course (a mark set in the air above its pad included) and the other kinds keep the whole sphere.
  */
 class ProgressTest {
 
@@ -108,14 +110,21 @@ class ProgressTest {
                 "a jump past checkpoints never counts them, and without them nothing after does");
     }
 
-    /** A parkour pad's checkpoint at (10, 64, 0) on its top, sized for a 3x3 pad (r 2.6), then the finish. */
+    /** Fresh Courses' tag: the course was generated, so its marks sit on their pads' tops. */
+    private static final GenTag FRESH = new GenTag("fresh_parkour_easy", "parkour", 1, 20_725, 0, 1L, 'A',
+            "abcabcabcabc", 1, 2, 3, List.of(), List.of(), 0);
+
+    /**
+     * A Fresh Courses parkour pad's checkpoint at (10, 64, 0) on its top, sized for a 3x3 pad (r 2.6), then the
+     * finish.
+     */
     private static final Course PAD = new Course("pad", TrialKind.PARKOUR, "Pad", Tier.EASY, "games",
             new Course.Spot(20, 64, 0, 0, 0), List.of(new Course.Mark(10, 64, 0, 2.6)),
-            new Course.Mark(0, 64, 0, 3), null, null, true, false, 1);
+            new Course.Mark(0, 64, 0, 3), null, null, true, false, 1, FRESH);
 
     private static Course as(TrialKind kind) {
         return new Course("pad", kind, "Pad", Tier.EASY, "games", PAD.start(), PAD.checkpoints(), PAD.finish(),
-                null, null, true, false, 1);
+                null, null, true, false, 1, FRESH);
     }
 
     @Test
@@ -139,6 +148,26 @@ class ProgressTest {
         Progress p = new Progress(PAD, new Point(13.5, 65.25, 0), 0);
         assertEquals(List.of(new Progress.Reached(0, false, 434)), p.move(new Point(11.2, 64.0, 0), 1000),
                 "coming down onto the pad from above: the same time as the whole sphere gives");
+    }
+
+    @Test
+    void aHandBuiltParkourCourseKeepsTheWholeSphere() {
+        Progress p = new Progress(PAD.withGen(null), new Point(13.5, 63.6, 0), 0);
+        assertEquals(1, p.move(new Point(11.5, 62.6, 0), 100).size(),
+                "no gen tag (built by hand, or kept): the same move under the mark counts, as it always did");
+        assertEquals(0, p.lastCheckpoint(), "checkpoint 1");
+    }
+
+    @Test
+    void aHandBuiltMarkSetInTheAirAboveItsPadIsStillReachedByWalkingOntoThePad() {
+        // set while flying a block above a pad whose top is y 64, with the default parkour radius
+        Course air = new Course("air", TrialKind.PARKOUR, "Air", Tier.EASY, "games", new Course.Spot(14, 64, 0, 0, 0),
+                List.of(new Course.Mark(10, 65, 0, TrialKind.PARKOUR.defaultRadius())), new Course.Mark(0, 64, 0, 1.5),
+                null, null, true, false, 1);
+        Progress p = new Progress(air, new Point(14, 64, 0), 0);
+        List<Progress.Reached> r = p.move(new Point(10, 64, 0), 1000);
+        assertEquals(1, r.size(), "walking onto the pad, the feet a block under the mark: it counts");
+        assertEquals(0, p.lastCheckpoint(), "checkpoint 1");
     }
 
     @Test

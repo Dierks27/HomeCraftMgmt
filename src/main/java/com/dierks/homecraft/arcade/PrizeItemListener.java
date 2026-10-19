@@ -53,7 +53,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
- *       one of ours, such as the Arcade Machine).</li>
+ *       one of ours, such as the Arcade Machine or a Mini).</li>
  *   <li><b>Placed hats and trophies</b> remember exactly what they were, so breaking one (or
  *       blowing it up, pushing it, washing it away) gives the same prize back — never a plain head
  *       that has lost its tag and could be sold.</li>
@@ -161,8 +161,9 @@ public final class PrizeItemListener implements Listener {
 
     /**
      * {@link #wearsOnBlockTap(boolean, boolean, boolean, boolean)}, and never on a block of ours ({@code ours}): a
-     * HomeCraft block or a join sign. The Arcade Machine is a player head, which doesn't count as interactable,
-     * so a tap that opened its screen also put the hat in the hand on.
+     * HomeCraft block, a join sign, or a Mini's head (placed or wild). The Arcade Machine and a Mini are player
+     * heads, which don't count as interactable, so a tap that opened the machine's screen, caught a wild Mini or
+     * opened a placed one's card also put the hat in the hand on.
      */
     static boolean wearsOnBlockTap(boolean bedrock, boolean sneaking, boolean interactable, boolean head,
                                    boolean ours) {
@@ -171,7 +172,8 @@ public final class PrizeItemListener implements Listener {
 
     /**
      * Whether {@code clicked} is one of ours: a placed HomeCraft block (the upper head of a Vending Machine acts
-     * for the machine, as in {@code CustomBlockListener}) or a tagged join sign. A lookup that fails is "no".
+     * for the machine, as in {@code CustomBlockListener}), a tagged join sign, or a Mini's head, placed or wild
+     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini). A lookup that fails is "no".
      */
     private boolean ours(Block clicked) {
         try {
@@ -179,7 +181,13 @@ public final class PrizeItemListener implements Listener {
             if (blocks != null && blocks.at(blocks.vendingLowerOf(clicked).orElse(clicked).getLocation()).isPresent()) {
                 return true;
             }
-            return JoinSigns.isJoinSign(clicked);
+            if (JoinSigns.isJoinSign(clicked)) {
+                return true;
+            }
+            Material type = clicked.getType();
+            return (type == Material.PLAYER_HEAD || type == Material.PLAYER_WALL_HEAD)
+                    && clicked.getState(false) instanceof Skull skull && plugin.miniService() != null
+                    && plugin.miniService().refFrom(skull.getPersistentDataContainer()) != null;
         } catch (RuntimeException | LinkageError e) {
             return false;
         }

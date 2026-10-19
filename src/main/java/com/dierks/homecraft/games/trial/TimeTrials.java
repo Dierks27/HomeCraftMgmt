@@ -12,7 +12,6 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.GeneratedCourses;
-import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
@@ -482,7 +481,6 @@ public final class TimeTrials implements Game {
             flightsEnd(run, false);
             removeBoat(run, p);
             drops.end(run, p);
-            together(run.player, p, run);
         }
         runs.clear();
         boats.clear();
@@ -1056,7 +1054,6 @@ public final class TimeTrials implements Game {
         end(p);
         TrialRun run = new TrialRun(p.getUniqueId(), course, test, COUNTDOWN_TICKS + 1);
         runs.put(p.getUniqueId(), run);
-        apart(p, run); // Easy and Medium: nobody on the course pushes anybody, from the countdown on
         giveKit(p, course.kind());
         p.setFallDistance(0f);
         if (course.kind() == TrialKind.BOAT) {
@@ -1156,7 +1153,6 @@ public final class TimeTrials implements Game {
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
                 drops.end(run, p);
-                together(run.player, p, run);
                 continue;
             }
             if (stall != null && run.running()) {
@@ -1209,6 +1205,7 @@ public final class TimeTrials implements Game {
             return;
         }
         run.progress = new Progress(run.course, here, System.nanoTime());
+        run.goNanos = run.progress.startNanos();
         run.phase = TrialRun.Phase.RUNNING;
         title(p, "&aGo!", "", 15);
         ping(p, 2.0f);
@@ -1259,15 +1256,16 @@ public final class TimeTrials implements Game {
 
     /**
      * A void's one console line, once a run (run.voided is set by then): who, where, why, when it fired ("at Go"
-     * or "3.2 s in") and whether they were sprinting, then everything the watch read. The watch runs inside the
+     * or "3.2 s in", from the player's own Go: {@link TrialRun#sinceGoMs}) and whether they were sprinting, then
+     * everything the watch read. The watch runs inside the
      * tick loop, so a diagnostic that fails says so on that same line and never breaks the run.
      */
     private void logVoid(Player p, TrialRun run, String why) {
         String what = (run.race != null ? "race" : "run") + " on " + run.course.id() + " won't count - " + why;
         try {
             log().info("Time trials: " + p.getName() + (Bedrock.is(p) ? " (Bedrock)" : "") + "'s " + what + " ("
-                    + FairPlay.when(run.elapsedMs(System.nanoTime())) + ", sprinting " + (p.isSprinting() ? "yes" : "no")
-                    + ") | " + String.join(" | ", movementState(p)));
+                    + FairPlay.when(run.sinceGoMs(System.nanoTime())) + ", sprinting "
+                    + (p.isSprinting() ? "yes" : "no") + ") | " + String.join(" | ", movementState(p)));
         } catch (RuntimeException | LinkageError e) {
             log().info("Time trials: " + p.getName() + "'s " + what + " (its details could not be read: " + e + ")");
         }
@@ -2210,53 +2208,6 @@ public final class TimeTrials implements Game {
             flightsEnd(run, false); // D17: a no-op after the finish wrote its line
             removeBoat(run, player);
             drops.end(run, player);
-            together(player.getUniqueId(), player, run);
-        }
-    }
-
-    /**
-     * A solo run on an Easy or Medium course ({@link Bumping#run}): its player is set not collidable and joins the
-     * games' no-push team from the countdown, so two players who start the same course on their own at once don't
-     * shove each other on its start pad or a jump. Hard, boats and the Dropper (its own rule) are as before; a
-     * race is race mode's ({@link RaceMode#inRace}). Every way the run ends puts it back ({@link #together}).
-     * Called from {@code ready}; package-private for the tests.
-     */
-    void apart(Player p, TrialRun run) {
-        if (run.apart || run.race != null || Bumping.run(run.course.kind(), run.course.tier()) != Bumping.Rule.APART) {
-            return;
-        }
-        try {
-            run.collidableBefore = p.isCollidable();
-            p.setCollidable(false);
-            run.apart = true;
-            NoPush np = race.noPush();
-            if (np != null) {
-                np.on(p);
-            }
-        } catch (RuntimeException | LinkageError ignored) {
-            // a run never fails over who may push whom
-        }
-    }
-
-    /**
-     * The run is over, however it ended: off the no-push team (by id, so a player who is gone comes off too) and
-     * collidable as before. Once.
-     */
-    private void together(UUID id, Player p, TrialRun run) {
-        if (run == null || !run.apart) {
-            return;
-        }
-        run.apart = false;
-        try {
-            NoPush np = race.noPush();
-            if (np != null) {
-                np.off(id, p == null ? null : p.getName());
-            }
-            if (p != null) {
-                p.setCollidable(run.collidableBefore);
-            }
-        } catch (RuntimeException | LinkageError ignored) {
-            // nothing more to give back to a player who is gone
         }
     }
 
@@ -2336,7 +2287,6 @@ public final class TimeTrials implements Game {
         TrialRun old = runs.put(run.player, run);
         if (old != null && old != run) {
             flightsEnd(old, false); // D17: the old run's record ends with it
-            together(old.player, online(old.player), old); // a solo run's "apart" ends with it too
         }
     }
 

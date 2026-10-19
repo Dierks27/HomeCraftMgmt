@@ -10,8 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Racer bumping by tier (the owner's decision after the 0.37.1 live test): off on Easy and Medium, kept on Hard
- * and harder, a course with no tier counted as Medium; boats keep their own rules on every tier (a racer not
- * collidable, never on the no-push team: boats bump), and a solo dropper run keeps its own (DropperRun).
+ * and harder, a course with no tier counted as Medium; boats keep their own rule on every tier (a racer not
+ * collidable, never on the no-push team: boats bump). A solo run isn't a race: it is left as it always was
+ * (RaceModeEndToEndTest).
  */
 class BumpingTest {
 
@@ -44,25 +45,5 @@ class BumpingTest {
                     tier + ": the rider not collidable, never on the team (boats bump)");
         }
         assertEquals(Bumping.Rule.RIDER, Bumping.race(TrialKind.BOAT, null));
-    }
-
-    @Test
-    void soloRunsOnFootAreKeptApartOnEasyAndMediumToo() {
-        for (TrialKind kind : ON_FOOT) {
-            assertEquals(Bumping.Rule.APART, Bumping.run(kind, Tier.EASY), kind + " easy: two solo runs side by side");
-            assertEquals(Bumping.Rule.APART, Bumping.run(kind, Tier.MEDIUM), kind + " medium");
-            assertEquals(Bumping.Rule.APART, Bumping.run(kind, null), kind + " with no tier");
-            assertEquals(Bumping.Rule.NONE, Bumping.run(kind, Tier.HARD), kind + " hard: as before");
-            assertEquals(Bumping.Rule.NONE, Bumping.run(kind, Tier.EXTREME), kind + " extreme: as before");
-        }
-    }
-
-    @Test
-    void aSoloBoatOrDropperRunIsAsBefore() {
-        for (Tier tier : Tier.values()) {
-            assertEquals(Bumping.Rule.NONE, Bumping.run(TrialKind.BOAT, tier), tier + ": a solo boat run is left alone");
-            assertEquals(Bumping.Rule.NONE, Bumping.run(TrialKind.DROPPER, tier),
-                    tier + ": a dropper run keeps every faller apart itself");
-        }
     }
 }

@@ -261,8 +261,10 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   plugin's "use" rule cancelled the tap, as `[Arcade]` join signs do (0.37.1): both spare ops,
   so a player who isn't op used to tap and get nothing. The economy check and, with
   `crafting.respect_town_perms`, the build-rights check still apply; one console line a player
-  a day says such a tap was opened. A Bedrock tap on one of our blocks with a hat in hand no longer
-  puts the hat on.
+  a day says such a tap opened a screen. A player in a world game is left alone, as before (the
+  game's own guard says no to every block). A Bedrock tap with a hat in hand no longer puts the hat
+  on when it lands on one of ours: a HomeCraft block, a join sign, or a Mini's head (catching a
+  wild Mini, or opening a placed one's card).
 
 ---
 
@@ -964,19 +966,19 @@ Easy, Medium, Hard and "Why did we build this?".
   game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
-  finish. On parkour a checkpoint counts with your feet up on its pad, not while falling past it
-  or under it (0.37.1). Each move is checked as the line it really travelled, so a fast glide
-  through a ring counts and no checkpoint can be skipped. The action bar shows the clock and the
-  checkpoints so far.
+  finish. On a Fresh Courses parkour course a checkpoint counts with your feet up on its pad, not
+  while falling past it or under it (0.37.1); a hand-built (or kept) course's checkpoints count
+  anywhere in their sphere, as they always did. Each move is checked as the line it really
+  travelled, so a fast glide through a ring counts and no checkpoint can be skipped. The action bar
+  shows the clock and the checkpoints so far.
 - **Going wrong** sends you back to your last checkpoint, facing the next one, and the clock keeps
   running. On parkour that's a fall `fall_depth` (6) blocks below the lower of the last and next
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
   anywhere but the start, a checkpoint or the finish. On a boat it's getting out. Anywhere, it's
   the void, or a short teleport by someone else (a long one ends the game).
-- **Bumping, by tier (0.37.1).** On an Easy or Medium course nobody running it pushes anybody, from
-  the countdown to the finish or Leave game: in a race, and on your own run too, so two players who
-  start the same course at once don't shove each other on its start pad. Hard and harder keep
-  vanilla bumping. Boats bump on every tier, and the Dropper keeps fallers apart on every tier.
+- **Bumping in races, by tier (0.37.1).** In a race (Race Night, a party race, the Clubhouse's) on an
+  Easy or Medium course nobody pushes anybody, from seating to the finish or Leave game. Hard and
+  harder keep vanilla bumping. Boats bump on every tier. A run on your own is as it always was.
   (Geyser doesn't pass the no-push team's rule to a Bedrock client, so a Bedrock player's own
   client may still nudge them a little; the Java player no longer pushes, or is pushed.)
 - **Fair play.** Flying, a game mode other than adventure, any potion effect, a walk speed other
@@ -993,7 +995,8 @@ Easy, Medium, Hard and "Why did we build this?".
   again. The red line says what tripped it: the attribute and the modifier, or the value that
   changed ("your movement changed (minecraft:movement_speed: modifier x:y)"), and for a finish too
   fast, which leg and how fast. The console gets one "Time trials: ..." line a void, with when it
-  fired ("at Go" or "3.2 s in") and whether the player was sprinting, and
+  fired ("at Go" or "3.2 s in", from that player's own Go, so a racer who set off late still reads
+  "at Go") and whether the player was sprinting, and
   **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now. Should a
   server key vanilla's sprint modifier otherwise than `minecraft:sprinting`, a sprint still
   counts: exactly one modifier of sprinting's shape, only while sprinting, is read as sprinting,
@@ -1092,7 +1095,10 @@ nobody waits for them.
    which is how `/hcm games feature` lets the day pick.
 2. Stand where it starts, facing the way it goes: `<id> start`.
 3. At each checkpoint, in order: `<id> checkpoint add [radius]`. The default radius is 1.5 for
-   parkour, 4 for elytra and 3 for boats (0.5-16, at most 128 checkpoints).
+   parkour, 4 for elytra and 3 for boats (0.5-16, at most 128 checkpoints). A point is a sphere
+   around your feet, so on parkour stand on the pad: set while flying, it hangs in the air and a
+   player on the pad may have to jump for it. `checkpoint add` and `finish` warn you then (they
+   don't refuse), and `/hcm games check` lists any such point.
 4. `<id> finish [radius]`, then `<id> test` (a run that records nothing and says whether it would
    have counted) and `<id> enable`.
 
@@ -2923,7 +2929,8 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
    change, each course live or why not, the keep area and the Classics); Falling Floors (its box fits
    and is claimed, or what is wrong and the fix); the Clubhouse (off, or its world loaded, its box
    allowed and claimed, built and checked; or an owner-built room's arrival, podium and board set);
-   every hand-built course is ready and its world loaded; Race Night (off, or Time Trials open, the
+   every hand-built course is ready and its world loaded, and a parkour one's checkpoints and finish
+   are on a block (a WARN naming any set in the air); Race Night (off, or Time Trials open, the
    schedule reads, each coming night fits or why it is skipped, the track can be raced with its grid
    spots, and its viewing stand); what players can see (each Games world void or not, the view
    distance used, and every pair of the games' places close enough to see each other, as WARNs:
@@ -2943,8 +2950,8 @@ knockback and fishing-rod pulls are cancelled.
 
 **Nobody pushes anybody where players crowd.** `setCollidable(false)` stops mobs pushing a
 player but not another player, so the places players share (Falling Floors' rounds, the Dropper's
-shafts, the Clubhouse, and parkour and elytra runs and races on Easy and Medium courses; Hard keeps
-vanilla bumping and boats bump, as the owner chose) put their players on one main-scoreboard team,
+shafts, the Clubhouse, and parkour and elytra races on Easy and Medium courses; Hard keeps vanilla
+bumping and boats bump, as the owner chose) put their players on one main-scoreboard team,
 **`hcm_nopush`**, whose collision rule is never. A player is on at most one main-scoreboard team,
 so someone on another plugin's team (nametag colours, a tab-list prefix) comes off it for the round
 or race and goes back on it as soon as that ends, if the team still exists. That earlier team is remembered in memory only: stopping the games puts everyone back,

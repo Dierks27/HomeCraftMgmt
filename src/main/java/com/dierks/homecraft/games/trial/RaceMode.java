@@ -375,6 +375,7 @@ final class RaceMode {
             return; // still arriving (or going back to the spot): starts once in, on the shared clock
         }
         run.progress = new Progress(run.course, TimeTrials.position(p, run), r.nanos());
+        run.goNanos = System.nanoTime(); // their own Go: later than the shared one for a racer released late
         run.phase = TrialRun.Phase.RUNNING;
         rr.started();
         TimeTrials.title(p, "&aGo!", "", 15);
@@ -758,8 +759,8 @@ final class RaceMode {
         }
     }
 
-    /** The games' no-push team (or the one a test passed); solo runs use it too ({@code TimeTrials}). */
-    NoPush noPush() {
+    /** The games' no-push team (or the one a test passed). */
+    private NoPush noPush() {
         if (pushes != null) {
             return pushes;
         }

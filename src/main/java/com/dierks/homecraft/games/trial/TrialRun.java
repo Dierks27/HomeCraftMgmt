@@ -111,12 +111,11 @@ final class TrialRun {
     RaceRun race;
 
     /**
-     * A solo run on an Easy or Medium course keeps its player apart ({@link Bumping}): not collidable and on the
-     * no-push team from the countdown until the run ends, then {@link #collidableBefore} back. Set while it is.
+     * When this player's own "Go!" was ({@code System.nanoTime()}), or {@link Long#MIN_VALUE} before it. A solo
+     * run's is its clock's start; a racer released after the shared Go (not in place yet, or put back on the
+     * spot) starts on the shared clock, so theirs is later. Only a void's log line reads it ({@link #sinceGoMs}).
      */
-    boolean apart;
-    /** Whether the player was collidable before {@link #apart}. */
-    boolean collidableBefore = true;
+    long goNanos = Long.MIN_VALUE;
 
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
@@ -169,5 +168,14 @@ final class TrialRun {
     /** Milliseconds on the clock at {@code nanos}. */
     long elapsedMs(long nanos) {
         return progress == null ? 0 : Math.max(0, (nanos - progress.startNanos()) / 1_000_000L);
+    }
+
+    /**
+     * Milliseconds since this player's own Go at {@code nanos} ({@link #goNanos}), for "at Go" or "3.2 s in" in a
+     * void's log line: a racer released late already has time on the shared clock at their Go. The clock's time
+     * when there has been no Go.
+     */
+    long sinceGoMs(long nanos) {
+        return goNanos == Long.MIN_VALUE ? elapsedMs(nanos) : Math.max(0, (nanos - goNanos) / 1_000_000L);
     }
 }

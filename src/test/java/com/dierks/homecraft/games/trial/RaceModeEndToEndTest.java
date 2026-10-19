@@ -730,6 +730,11 @@ class RaceModeEndToEndTest {
         mode.tick(players.get(2), runs.get(2), 510);
         assertEquals(TrialRun.Phase.RUNNING, runs.get(2).phase, "back on its spot: off it goes");
         assertEquals(go, runs.get(2).progress.startNanos(), "on the shared clock: the time going back is lost");
+        TrialRun late = runs.get(2);
+        assertTrue(runs.get(0).goNanos >= go && late.goNanos >= runs.get(0).goNanos,
+                "each racer's own Go is kept, the drifter's when it was really released");
+        assertEquals("at Go", FairPlay.when(late.sinceGoMs(late.goNanos)),
+                "so a void at the drifter's Go is logged as at Go, not as the time on the shared clock (FP-2)");
     }
 
     /** A main scoreboard's teams, as a map: entry to team. */
@@ -846,47 +851,30 @@ class RaceModeEndToEndTest {
     }
 
     @Test
-    void soloRunsOnTheSameEasyOrMediumCourseNeverPushAndEveryWayOutPutsThatBack() {
+    void aSoloRunOnAnyTierLeavesItsPlayersTeamAloneTheWholeWayThrough() {
+        // the owner's decision is for races on courses with a tier (review BUMP-2): a solo run is as it always was
         Board board = new Board();
         board.teams.add("nametags");
         board.teamOf.put("Ava", "nametags"); // another plugin's team
         trials.raceMode().pushes(new NoPush(() -> board));
+        java.util.Map<String, java.util.function.Consumer<Player>> exits = new java.util.LinkedHashMap<>();
+        exits.put("the finish", p -> trials.onSessionEnd(p, EndReason.FINISH));
+        exits.put("Leave game", p -> trials.onSessionEnd(p, EndReason.QUIT_ITEM));
+        exits.put("a disconnect", trials::onQuit);
         for (Tier tier : Tier.values()) {
-            Course c = LapsTest.straight().withTier(tier);
-            TrialRun solo = new TrialRun(id(ava), c, false, TimeTrials.COUNTDOWN_TICKS + 1);
-            trials.replaceRun(solo);
-            trials.apart(ava, solo); // TimeTrials.ready: from the countdown on
-            boolean bumps = tier == Tier.HARD || tier == Tier.EXTREME;
-            assertEquals(bumps ? "nametags" : NoPush.TEAM, board.teamOf("Ava"), tier + ": the no-push team only below Hard");
-            assertEquals(!bumps, solo.apart, tier + ": not collidable only below Hard");
-            trials.onSessionEnd(ava, EndReason.FINISH);
-            assertEquals("nametags", board.teamOf("Ava"), tier + ": back on their own team once the run ends");
-            assertFalse(solo.apart, tier + ": collidable as before");
+            for (java.util.Map.Entry<String, java.util.function.Consumer<Player>> exit : exits.entrySet()) {
+                TrialRun solo = new TrialRun(id(ava), LapsTest.straight().withTier(tier), false,
+                        TimeTrials.COUNTDOWN_TICKS + 1);
+                trials.replaceRun(solo);
+                assertEquals("nametags", board.teamOf("Ava"), tier + ": a solo run never puts them on the no-push team");
+                exit.getValue().accept(ava);
+                assertEquals("nametags", board.teamOf("Ava"), tier + ", " + exit.getKey() + ": still on their own team");
+            }
         }
-        Course easy = LapsTest.straight();
-        Course drop = new Course("drop", TrialKind.DROPPER, "Drop", Tier.EASY, "games", easy.start(),
-                easy.checkpoints(), easy.finish(), null, 10, true, false, 1);
-        for (Course c : List.of(loop, drop)) {
-            TrialRun solo = new TrialRun(id(ben), c, false, TimeTrials.COUNTDOWN_TICKS + 1);
-            trials.replaceRun(solo);
-            trials.apart(ben, solo);
-            assertNull(board.teamOf("Ben"), c.kind() + ": a solo boat or dropper run is as before (its own rules)");
-            assertFalse(solo.apart, c.kind() + ": nothing to put back");
-            trials.end(ben);
-        }
-        java.util.Map<String, Runnable> exits = new java.util.LinkedHashMap<>();
-        exits.put("Leave game", () -> trials.onSessionEnd(ava, EndReason.QUIT_ITEM));
-        exits.put("a disconnect", () -> trials.onQuit(ava));
-        exits.put("a race seats them", () -> trials.end(ava)); // RaceMode.seated ends the solo run first
-        exits.put("Time Trials stopping", () -> trials.stop());
-        for (java.util.Map.Entry<String, Runnable> exit : exits.entrySet()) {
-            TrialRun solo = new TrialRun(id(ava), easy, false, TimeTrials.COUNTDOWN_TICKS + 1);
-            trials.replaceRun(solo);
-            trials.apart(ava, solo);
-            assertEquals(NoPush.TEAM, board.teamOf("Ava"), exit.getKey() + ": on the team for an Easy run");
-            exit.getValue().run();
-            assertEquals("nametags", board.teamOf("Ava"), exit.getKey() + ": off it, back on their own");
-        }
+        trials.replaceRun(new TrialRun(id(ava), LapsTest.straight(), false, TimeTrials.COUNTDOWN_TICKS + 1));
+        trials.stop();
+        assertEquals("nametags", board.teamOf("Ava"), "Time Trials stopping: still on their own team");
+        assertEquals(java.util.Set.of("nametags"), board.teams, "no no-push team was ever made for a solo run");
         assertEquals(0, bench.severe(), "nothing threw");
     }
 

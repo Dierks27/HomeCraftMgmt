@@ -63,6 +63,12 @@ public final class PrizeService {
     private static final String NOTHING_MADE = "That prize couldn't be made — nothing charged.";
     private static final String NOT_SAVED = "That couldn't be saved — nothing charged. Tell an admin.";
     private static final String NO_TRAIL = "Couldn't add that trail — nothing charged. Tell an admin.";
+    private static final String NOT_A_COLLECTOR = "That isn't a collector.";
+    /**
+     * Worded for the one collector trail so far, the Autumn Leaves 2026 (its particle is new in the 26.3 API).
+     * {@link #trailsNotHere} also holds a trail whose particle needs data, which no upgrade fixes: revisit this
+     * wording, and the collector self-test's, with the next collector trail.
+     */
     private static final String TRAIL_NOT_HERE = "That trail needs Paper 26.3.";
 
     /** Where a collector cap goes: on the head, on the head with the old helmet into the bag, or into the bag. */
@@ -146,9 +152,15 @@ public final class PrizeService {
         return Set.copyOf(out);
     }
 
-    /** Why {@link #restore} won't give {@code p} back on this server ({@code notHere}), or null. */
-    static String notHereRefusal(Prize p, Set<String> notHere) {
-        return p != null && notHere.contains(p.id()) ? TRAIL_NOT_HERE : null;
+    /**
+     * Why {@link #restore} won't give {@code p} back at all, before it looks at the player: not a collector, or a
+     * collector trail this server can't show ({@code notHere}, {@link #trailsNotHere}). Null when it may go on.
+     */
+    static String restoreRefusal(Prize p, Set<String> notHere) {
+        if (p == null || p.collector() == null) {
+            return NOT_A_COLLECTOR;
+        }
+        return notHere.contains(p.id()) ? TRAIL_NOT_HERE : null;
     }
 
     /** The rows a player sees on one tab. */
@@ -762,15 +774,12 @@ public final class PrizeService {
      * game's inventory restore would wipe it), and a cap needs room by the placement rule: nothing
      * goes on the ground. With {@code fromName} set to someone other than the target, it is a present:
      * "A gift from" in the lore, the swap, and the whole moment. Logging who gave it is the caller's.
-     * A collector trail this server can't show is refused ({@link #notHereRefusal}).
+     * A collector trail this server can't show is refused ({@link #restoreRefusal}).
      */
     public Outcome restore(Player target, Prize p, String fromName) {
-        if (p == null || p.collector() == null) {
-            return Outcome.fail("That isn't a collector.");
-        }
-        String notHere = notHereRefusal(p, trailsNotHere);
-        if (notHere != null) {
-            return Outcome.fail(notHere);
+        String refused = restoreRefusal(p, trailsNotHere);
+        if (refused != null) {
+            return Outcome.fail(refused);
         }
         if (!homeFromGames(target)) {
             return Outcome.fail(target.getName() + " is in a game. Try again when they're back.");
@@ -904,9 +913,11 @@ public final class PrizeService {
 
     /**
      * Close the receiver's screen before their present's moment (review BK-1) when it is one of our
-     * menus other than a game screen (a live match or scored try would end), which holds nothing of
-     * theirs. Any other screen (a chest, another plugin's, a game's) is left open, and the moment plays
-     * over it. A trail present calls this before its select, whose "trail is on" burst is part of the moment.
+     * menus other than a Games screen, which holds nothing of theirs (the Prize Counter, the Arcade, a
+     * crate). Every Games screen is left open, the Games menu, high scores, Take a break and the lobbies
+     * as well as the play screens whose close would end a live match or a scored try (final audit F2).
+     * Any other screen (a chest, another plugin's) is left open too, and the moment plays over it. A
+     * trail present calls this before its select, whose "trail is on" burst is part of the moment.
      */
     private static void closeOurMenu(Player r) {
         try {
@@ -920,8 +931,9 @@ public final class PrizeService {
 
     /**
      * True for a screen of ours ({@link com.dierks.homecraft.gui.Menu}), which a present may close, but
-     * never a game screen ({@link com.dierks.homecraft.gui.games.GameMenu}): closing one ends a friend
-     * match for both players, or a Daily board's scored try with no score (final audit F2).
+     * never a Games screen ({@link com.dierks.homecraft.gui.games.GameMenu}, the base of all of them, so
+     * the Games menu, high scores, Take a break and the lobbies stay open too): closing a play screen ends
+     * a friend match for both players, or a Daily board's scored try with no score (final audit F2).
      */
     static boolean hidesTheMoment(org.bukkit.inventory.InventoryHolder holder) {
         return holder instanceof com.dierks.homecraft.gui.Menu

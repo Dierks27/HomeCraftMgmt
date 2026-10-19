@@ -81,8 +81,8 @@ Tokens are **earned by playing and never become dollars**.
   and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
   money path.
-- **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bag or
-  box), and can't be washed, renamed, re-trimmed or enchanted.
+- **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bundle
+  or shulker box), and can't be washed, renamed, re-trimmed or enchanted.
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -515,10 +515,11 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
   in front of them (nearer when a wall is close), hearts, and the cap goes straight onto their
   head. A helmet they were wearing goes into their bag; one with Curse of Binding stays on, and the
   cap goes into the bag. A trail present switches on with a puff of leaves in front of them. If one
-  of the plugin's menus is open on their screen, it is closed first, so nothing plays behind it. **A
-  game screen is left open, so the game goes on:** an arcade cabinet, a friend's Connect Four or
-  Tic-Tac-Toe match and a Daily board's scored try are never ended by a present, and the moment
-  plays over the screen.
+  of the plugin's menus is open on their screen (the Prize Counter, the Arcade, a crate), it is
+  closed first, so nothing plays behind it. **A Games screen is left open** (any of them: the Games
+  menu, high scores and Take a break too), **so a game goes on:** an arcade cabinet, a friend's
+  Connect Four or Tic-Tac-Toe match and a Daily board's scored try are never ended by a present, and
+  the moment plays over the screen.
 - **The giver's menu closes** (so it doesn't hide the moment) with "✔ You gave the … to …!".
 - Every present costs the giver the full price, and it is one of each per receiver for good. A
   present never goes on the ground, to someone offline or into a game. It can't be undone:
@@ -536,18 +537,18 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
 - The orange poplar leaves are new in Paper **26.3**. **On 26.2 the trail is not sold or given:** it
   has no counter tile, "Give a present" doesn't offer it, the website feed leaves it out, and
   `/hcm give prize trail_leaves_2026` answers "That trail needs Paper 26.3." One already owned stays
-  in the database and shows after the upgrade to 26.3. The collector self-test's WARN at startup is
-  the one line that says why.
+  in the database and shows after the upgrade to 26.3. The collector self-test's WARN at startup says
+  why (and an owned trail switched on logs that its particle is missing when its owner joins).
 - Bedrock shows lore only on a long press, so the year is in the name as well.
 
 ### Prizes are safe (every prize, for everyone)
 
 - **Kept when you die.** Every prize stack goes from your drops to what you keep (when
   `keepInventory` is off). A grave plugin such as GravesX builds its grave from the drops, so a
-  prize is never in a grave and never copied; a last check before the grave plugin takes out any
-  prize another plugin put back, with one WARN. A prize bundle holding anything but candy drops like
-  any other item. **A prize inside a plain bundle or shulker box is not a prize stack:** it drops
-  with its container, into a grave if you have one, and is not protected on the ground. Carry
+  prize stack is never in a grave and never copied; a last check before the grave plugin takes out
+  any prize another plugin put back, with one WARN. A prize bundle holding anything but candy drops
+  like any other item. **A prize inside a plain bundle or shulker box is not a prize stack:** it
+  drops with its container, into a grave if you have one, and is not protected on the ground. Carry
   collectors loose.
 - **On the ground** a dropped prize (not one inside a dropped container) never despawns, burns or
   blows up, and no mob picks it up. **The void can't be saved.**
@@ -652,10 +653,10 @@ Three times the fall doesn't fit at the same length, so 0.37.1 measures how far 
 for 0.38 to use (`/hcm games boat flights`). Snow replaces the sand on the run-offs, the drifts to
 steer round and the stop after the finish; Medium keeps at most one boost strip of blue ice; the
 wall arrows point the way you are going; the forest's trees have round tops; and a landing kicks up
-a little snow. A crash just after a Big Drop can send you back up to about 66 blocks (it was 60).
-Ice Boat still ships off: preview and ride it first. 0.37.1 also brings **Halloween 2026 Step 1**:
-the Pumpkin Cap 2026 and Autumn Leaves 2026 collectors, Give a present, and prizes kept safe for
-everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) and [Halloween
+a little snow. A crash late in the stretch after a Big Drop can send you back up to about 66 blocks
+(it was 60). Ice Boat still ships off: preview and ride it first. 0.37.1 also brings **Halloween 2026
+Step 1**: the Pumpkin Cap 2026 and Autumn Leaves 2026 collectors, Give a present, and prizes kept
+safe for everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) and [Halloween
 2026](#halloween-2026-0371-0372).
 
 ### What players get
@@ -1883,16 +1884,18 @@ tier has many more Big Drops, and more of the drops stand along the rows.
 
 A run is planned for **2 to 3 minutes**: a model boat rides it in 100-130 s on an Easy road, 120-150 s
 on a Medium or Hard road, and 90-120 s on an Easy Slalom and 105-135 s on a Medium or Hard one (its
-model time, T_m), and people are slower. A wide road is ridden faster than the 7-wide one was: at about
-the pace the owner rode the Slalom, a Medium road (T_m 137.6 s and about 3,200 blocks on the release
-soak's median plan) takes about 2:40-3:05. That is an estimate, not a promise.
+model time, T_m), and people are slower. A wide road is ridden faster than the 7-wide one was (the
+owner rode that at 0.60 of the model's pace, and the 13-wide Slalom at about 0.83-0.9): ridden at
+0.75-0.85 of the model's pace, a Medium road (T_m 137.6 s and about 3,200 blocks on the release soak's
+median plan) takes about 2:40-3:05, or 2:33-2:46 at the owner's Slalom pace. That is an estimate, not
+a promise.
 
 **Two styles,** read from the week's seed:
 
 | | The Winding Road (for racing) | The Slalom (for solo runs) |
 |---|---|---|
 | The track | A road 18 wide on Easy, 15 on Medium, 14 on Hard (0.37.0's was 9 / 7 / 7), the same width at every drop, bend and checkpoint | A corridor 15, 13 or 11 wide |
-| What is on it | Long straights, sweepers, S-curves, wide hairpins; chicanes on Medium and Hard; snow run-offs on the outside of the tight bends and snow drifts to steer round (with ice both sides), pick-a-path splits round a tree island, an ice cave on Easy, a cave or a tunnel through the rock on Medium (one of them dealt every time), tunnels on Hard, a forest on Medium and Hard; on Medium at most one boost strip of blue ice, on a straight; on Hard one or two blue-ice straights, each ending in a hop that takes the extra speed off. Pieces stand on straights and (all but splits and boost strips) on wide bends; a run may get a piece or two fewer than its tier's deck where they don't fit | Sets of red and blue gate fences down the slope ("SLALOM / 8 gates / Go through / the gaps!"): ride through the gaps, back and forth; open runs with drops between the sets |
+| What is on it | Long straights, sweepers, S-curves, wide hairpins; chicanes on Medium and Hard; snow run-offs on the outside of the tight bends and snow drifts to steer round (with ice both sides), pick-a-path splits round a tree island, an ice cave on Easy, a cave or a tunnel through the rock on Medium (one of them dealt every time), tunnels on Hard, a forest on Medium and Hard; on Medium at most one boost strip of blue ice, on a straight; on Hard one or two blue-ice straights, each ending in a hop that takes the extra speed off. Pieces stand on straights and (all but splits and boost strips) on wide bends; a run often gets a piece or two fewer than its tier's deck where they don't fit (about one Medium or Hard run in ten misses three or more) | Sets of red and blue gate fences down the slope ("SLALOM / 8 gates / Go through / the gaps!"): ride through the gaps, back and forth; open runs with drops between the sets |
 | Race Night | Always races it | Never: a night refuses it |
 
 - **The width.** The road is its tier's width from the start pit to the finish: there are no 7-wide
@@ -1924,9 +1927,10 @@ soak's median plan) takes about 2:40-3:05. That is an estimate, not a promise.
   fall (about 108 blocks) would need a road about twice as long. The flight recorder (below) measures
   how far boats really jump, so 0.38 can stand the drops closer together. A staircase of 2 or 3 drops
   down one straight has its own THE CLIFFS! sign: "THE CLIFFS! / 3 big drops!" when every step is 2
-  blocks, otherwise "THE CLIFFS! / 3 drops ahead!". Every run ends with the **Final Drop**, a Big Drop,
-  just before the finish (its sign: "FINAL DROP! / Then the gold / finish line!"). Every drop lands on a
-  straight. Packed ice only on Easy.
+  blocks, otherwise "THE CLIFFS! / 3 drops ahead!". Every run ends with the **Final Drop** just before
+  the finish (its sign: "FINAL DROP! / Then the gold / finish line!"), a Big Drop wherever it fits (a
+  hop only where it doesn't; it was 2 blocks on all 90 plans probed). Every drop lands on a straight.
+  Packed ice only on Easy.
 - **The style** (`games.fresh.slots.fresh_boat.style`, shipped `random`): each week's own, about half
   and half, but **the Winding Road every week while Race Night is on** (the owner: racing is the
   Winding Road, the Slalom is for solo runs). `road` or `slalom` makes every week that one. The style
@@ -2005,11 +2009,12 @@ soak's median plan) takes about 2:40-3:05. That is an estimate, not a promise.
   the course is never missing. The release soak's 1,800 plans were all proven, with no fixed layout
   needed.
 - **Size.** About 310,000-378,000 blocks a run (the release soak's 1,800 plans: a road 327,000-378,000,
-  the Slalom 309,000-352,000). Planning takes about 1-9 seconds on the planner thread (in the soak a
-  Medium road took 2.6-6.4 s and no plan more than 8.3 s; the online throttle adds about a fifth), and
-  every plan-sized step (the proof, the archive copy, the build index) stays off the main thread. The
-  first build in the new area checks the area first (2 x 1,200 empty chunks), so it takes a few
-  minutes; later builds pause above `budget.pause_above_mspt` like any other.
+  the Slalom 309,000-352,000). Planning takes about 1-8 seconds on the planner thread (in the soak,
+  which runs without the online throttle, a Medium road took 2.6-6.4 s and no plan more than 8.3 s),
+  and about 1-10 on a live server, where the planner rests 2 ms after every 10 ms of work while anyone
+  is online; every plan-sized step (the proof, the archive copy, the build index) stays off the main
+  thread. The first build in the new area checks the area first (2 x 1,200 empty chunks), so it takes
+  a few minutes; later builds pause above `budget.pause_above_mspt` like any other.
 - `/hcm games gen plan fresh_boat` shows 5 lines (your numbers differ; these are a Medium road's):
   "Ice Boat v5 medium: Winding Road, 3,251 blocks, 7 bands (3 hairpins, 4 elbows, 0 bulbs), candidate
   59 (9 kept), build 1" (the length is the track's, or "the safe road after ..." when the fixed layout
@@ -2061,10 +2066,11 @@ and ride it instead.
    used: ...)": `/hcm games gen unpin fresh_boat`.
 2. `/hcm games gen preview fresh_boat style:road`: "A preview of Ice Boat (seed ...) is on its way into
    half A. It is the Winding Road. Ice Boat stays off: ...". The first preview in the new area checks
-   and claims it first, and a first 0.37.1 preview over a 0.37.0 one writes both, so allow a minute
-   or two more; then "The preview of Ice Boat is ready in half A (seed ...)".
+   and claims it first, and a first 0.37.1 preview writes over the 0.37.0 one, so allow a minute or
+   two more; then "The preview of Ice Boat is ready in half A (seed ...)".
 3. `/hcm games gen plan fresh_boat <that seed>` (the seed from the "ready" line): "Ice Boat v5 ...", and
-   on a Medium road its pieces line ("snow drifts 2/2", and usually "forests 1/1").
+   on a Medium road its pieces line (usually "snow drifts 2/2" and "forests 1/1"; one of them short is
+   normal).
 4. `/hcm games gen test fresh_boat` on Java, then again as a Bedrock admin, and `/hcm games gen tp
    fresh_boat idle` to walk it. Do the *preview* checks below. Then `/hcm games boat flights`: your
    runs' lines and the longest jumps.
@@ -2100,7 +2106,7 @@ and ride it instead.
 7. *Preview:* steer off the track at a drop or a run-off: you are back at the last checkpoint within
    about 4 blocks of falling, facing down the track. Right after you land a BIG DROP, tap Back to
    checkpoint: you are back at the checkpoint just before that drop, on ice, facing down the track.
-8. *Preview:* landings kick up a little snow, with no sound and nothing on screen, and the finish
+8. *Preview:* landings kick up a little snow, with no sound and no text on screen, and the finish
    shows "Best jump: N blocks".
 9. *Preview:* the Slalom's gates are easy to read, the fences turn you and never trap you, and the
    corners behind them are fine to drive into.

@@ -7,6 +7,10 @@ import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -130,6 +134,14 @@ class CollectorsTest {
                 p.requiresPrize(), p.costs(), p.collector());
     }
 
+    /** {@code p} as a plain row: no collector part, everything else kept. */
+    private static Prize uncollected(Prize p) {
+        return new Prize(p.id(), p.tab(), p.display(), p.description(), p.costTokens(), p.icon(), p.type(), p.enabled(),
+                p.limit(), p.amount(), p.color(), p.blockKey(), p.packId(), p.effect(), p.amplifier(), p.minutes(),
+                p.particle(), p.days(), p.texture(), p.commands(), p.requiresPlugins(), p.ownedIfPermission(),
+                p.requiresPrize(), p.costs(), null);
+    }
+
     /**
      * Final audit F7: a collector trail whose particle this server doesn't have (the Autumn Leaves trail's
      * ORANGE_POPLAR_LEAVES is new in the 26.3 API) is not sold or given. It is hidden, so a buy, a present and
@@ -151,18 +163,56 @@ class CollectorsTest {
         assertFalse(PrizeService.offered(unknown, true, halloween, notHere),
                 "hidden: no tile, no buy, no present, so nothing is charged for a trail that never draws");
         assertTrue(PrizeService.offered(cap, true, halloween, notHere), "the cap is still sold and given");
-        assertEquals("That trail needs Paper 26.3.", PrizeService.notHereRefusal(unknown, notHere),
+        assertEquals("That trail needs Paper 26.3.", PrizeService.restoreRefusal(unknown, notHere),
                 "/hcm give prize refuses it and says why");
-        assertNull(PrizeService.notHereRefusal(cap, notHere), "and gives the cap back");
+        assertNull(PrizeService.restoreRefusal(cap, notHere), "and gives the cap back");
+        assertEquals("That isn't a collector.", PrizeService.restoreRefusal(uncollected(cap), notHere),
+                "a plain row is never given back this way");
+        assertEquals("That isn't a collector.", PrizeService.restoreRefusal(null, notHere), "nor no row at all");
         Set<String> all = PrizeService.trailsNotHere(Collectors.ROWS, name -> true);
         assertEquals(Set.of(), all, "a server with every particle (26.3) holds nothing back");
         assertTrue(PrizeService.offered(leaves, true, halloween, all), "there it is sold and given as before");
         assertFalse(PrizeService.offered(leaves, false, halloween, all), "and the season gate still applies");
-        assertNull(PrizeService.notHereRefusal(leaves, all), "and given back");
+        assertNull(PrizeService.restoreRefusal(leaves, all), "and given back");
         // the shipped trail on this API: 26.2's (the test classpath) has no ORANGE_POPLAR_LEAVES, 26.3's has it
         assertEquals(!TrailService.particleUsable("ORANGE_POPLAR_LEAVES"),
                 PrizeService.trailsNotHere(Collectors.ROWS, TrailService::particleUsable).contains("trail_leaves_2026"),
                 "the Autumn Leaves trail is held back exactly where its particle can't show");
+    }
+
+    /**
+     * The call sites of {@link #aTrailThisServerCantShowIsNotSoldOrGiven}'s rules, read from the source (a
+     * PrizeService can't be built without a server): {@code visible()} answers a collector with {@code offered}
+     * and the trails this server can't show, and {@code restore()} refuses first with {@code restoreRefusal}.
+     */
+    @Test
+    void theShopAndTheGiveBackUseThoseRules() throws IOException {
+        String src = Files.readString(Path.of("src", "main", "java", "com", "dierks", "homecraft", "arcade",
+                "PrizeService.java"), StandardCharsets.UTF_8).replaceAll("\\s+", " ");
+        String visible = body(src, "public boolean visible(Prize p) {");
+        assertTrue(visible.contains("if (p.collector() != null) { return offered(p, plugin.config().arcade()"
+                + ".collectorsOnSale(), plugin.clock().today(), trailsNotHere); }"),
+                "visible(): a collector is shown, sold and given only where offered() says, trailsNotHere and all");
+        String restore = body(src, "public Outcome restore(Player target, Prize p, String fromName) {");
+        assertTrue(restore.startsWith(" String refused = restoreRefusal(p, trailsNotHere); if (refused != null) "
+                + "{ return Outcome.fail(refused); }"), "restore(): restoreRefusal first, and its answer returned");
+    }
+
+    /** The text of the method that {@code head} opens, up to its closing brace (whitespace already one space). */
+    private static String body(String src, String head) {
+        int from = src.indexOf(head);
+        assertTrue(from >= 0, "fixture: " + head);
+        int at = from + head.length();
+        int depth = 1;
+        for (int i = at; i < src.length(); i++) {
+            char ch = src.charAt(i);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}' && --depth == 0) {
+                return src.substring(at, i);
+            }
+        }
+        throw new AssertionError("fixture: no end to " + head);
     }
 
     @Test

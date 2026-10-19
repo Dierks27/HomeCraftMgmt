@@ -140,8 +140,9 @@ public final class CollectorSelfTest {
 
     /**
      * Null when the trail's particle exists and needs no data; otherwise why it would show nothing, and so is
-     * not sold or given here ({@link TrailService#particleUsable}, the same two facts). This is the one line
-     * that says so (final audit F7).
+     * not sold or given here ({@link TrailService#particleUsable}, the same two facts). This is the line at
+     * enable that says so (final audit F7). "It needs Paper 26.3" is worded for the one collector trail so far,
+     * the Autumn Leaves 2026, whose particle is new in the 26.3 API: revisit it with the next collector trail.
      */
     static String particleProblem(Prize p, boolean known, Class<?> dataType) {
         if (!known) {

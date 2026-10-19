@@ -590,7 +590,11 @@ class MountainPlannerTest {
         APART,
         /** The title's rule before M00 ({@link #halfwayFromStart}): the pole heard it at the sign, a grid spot not. */
         GRID,
-        /** Another sign has the title checkpoint's own spot, so HALFWAY! stands a few blocks along (MTN03). */
+        /**
+         * Another sign has the title checkpoint's own spot, so HALFWAY! stands a few blocks along (MTN03): placed 3
+         * or more along from its checkpoint, where a sign on its own spot is placed within 2 (each measures up to
+         * about half a block off where it was placed).
+         */
         MOVED
     }
 
@@ -601,17 +605,21 @@ class MountainPlannerTest {
      * a checkpoint from the title. GRID: medium road 10, where half way measured from the start (which a race moves
      * to each racer's spot) is the title's checkpoint at pole but another from grid spots 11 and 12, so racers in
      * one race heard "Halfway!" at different checkpoints. MOVED: medium slalom 23 (the one with no sign at all
-     * before MTN03), hard road 13 and easy slalom 20, whose checkpoint's own spot another sign has, so its HALFWAY!
-     * stands a few blocks along (MTN03: no plan of 600 went without). At algo 4 the APART seeds were easy road 5 and
-     * 19, hard road 13 and 16 and medium slalom 26, and the grid one medium road 2; at algo 5 only medium slalom 26
-     * still shows its case, so the others were searched again (easy and hard road seeds 1-100 for APART, medium
-     * road seeds 1-60 for the grid).
+     * before MTN03), hard road 13, hard road 16 and easy slalom 20, whose checkpoint's own spot another sign has, so
+     * its HALFWAY! stands a few blocks along (MTN03: no plan of 600 went without). Hard road 16 is also where the
+     * sign's checkpoint before M00 (35, half way along the line) and the title's before M00 (34, from every grid
+     * spot) still disagree, so a revert of both M00 rules fails there as well as at medium road 10's grid. At algo 4
+     * the APART seeds were easy road 5 and 19, hard road 13 and 16 and medium slalom 26, and the grid one medium
+     * road 2; at algo 5 only medium slalom 26 still shows its case, so the others were searched again (easy and
+     * hard road seeds 1-100 for APART, medium road seeds 1-60 for the grid). Of the old seeds only easy road 19
+     * shows no case at algo 5 (checkpoint 27 every way, its sign on its own spot), and it was dropped.
      */
     static final List<Object[]> HALFWAY_SEEDS = List.of(
             new Object[]{"easy", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 26L, Set.of(Halfway.APART)},
             new Object[]{"hard", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 10L, Set.of(Halfway.GRID)},
             new Object[]{"medium", 23L, Set.of(Halfway.MOVED)}, new Object[]{"hard", 13L, Set.of(Halfway.MOVED)},
-            new Object[]{"easy", 20L, Set.of(Halfway.APART, Halfway.MOVED)});
+            new Object[]{"hard", 16L, Set.of(Halfway.MOVED)}, new Object[]{"easy", 20L, Set.of(Halfway.APART,
+                    Halfway.MOVED)});
 
     /** The checkpoint whose centreline s is nearest half way from the start to the finish: the sign's before M00. */
     static int halfwayAlong(MountainPlanner.Made m) {
@@ -688,7 +696,9 @@ class MountainPlannerTest {
             }
             if (cases.contains(Halfway.MOVED)) {
                 double off = along(m, sign) - m.checkpoints.get(title).s();
-                assertTrue(Math.abs(off) > 3, name + ": fixture: the sign stands " + off + " along from its "
+                // between the own spot's window (offsets -2..+2) and the first move (+/-3): the measured s is up
+                // to about half a block off the offset asked for (hard road 16, moved +3, measures 2.99)
+                assertTrue(Math.abs(off) > 2.5, name + ": fixture: the sign stands " + off + " along from its "
                         + "checkpoint, whose own spot another sign has");
             }
             RaceGrid.Grid grid = RaceGrid.forCourse(c, new PlanSurface(p), RaceGrid.MAX_SPOTS);

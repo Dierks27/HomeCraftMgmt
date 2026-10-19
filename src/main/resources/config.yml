@@ -1553,6 +1553,15 @@ arcade:
       - { tokens: 60, weight: 3 }
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
+  # ---- Collectors: holiday looks you keep for good, sold only in their season and stamped with the
+  # year (0.37.1: the Pumpkin Cap 2026 in October, the Autumn Leaves 2026 trail in October and
+  # November). They are built into the plugin, so they are not rows in arcade.prizes, and the ones
+  # players own never go away. Tap one at the Prize Counter to buy it, or tap Give a present to buy
+  # one for someone online. on_sale: false = this season's collectors are not sold or given; owned
+  # ones keep working. gifting: false = no presents; your own buys still work.
+  collectors:
+    on_sale: true
+    gifting: true
 
 # ---------------------------------------------------------------------
 #  Games — play games of chance and skill games for tokens (never dollars).

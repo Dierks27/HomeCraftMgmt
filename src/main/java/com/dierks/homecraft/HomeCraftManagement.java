@@ -434,6 +434,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
         getServer().getPluginManager().registerEvents(trails, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
+        // Prizes are kept on death, safe on the ground, and can't be changed at a workstation (on for everyone).
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeSafetyListener(this), this);
         // The +1 Home perk. LuckPerms and Essentials load before us (softdepend), so both the
         // tiers and the API are there to read now.
         this.homes = new com.dierks.homecraft.arcade.homes.HomeService(this);
@@ -471,6 +473,8 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Item-builder self-test on the live API (Card lore/PDC + Legendary glint).
         com.dierks.homecraft.mini.ItemSelfTest.run(this);
+        // The collectors' look on the live API (dye, trim, no armour, tags), their trail particle, the clock's zone.
+        com.dierks.homecraft.arcade.CollectorSelfTest.run(this);
 
         // Once the worlds are up: rebuild placed-Mini effects, natural spawns, placed
         // heads and shop displays from the datastore (nothing leaks after a crash),

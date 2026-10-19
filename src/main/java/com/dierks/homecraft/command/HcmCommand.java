@@ -25,6 +25,8 @@ import java.util.Map;
  * <ul>
  *   <li>{@code /hcm reload} — reload config.yml + recipes + market catalog. (admin)</li>
  *   <li>{@code /hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade|…> [player]} — hand out a custom item. (admin)</li>
+ *   <li>{@code /hcm give prize <id> [player]} — give back a lost Prize Counter prize, free; a
+ *       collector given to someone else is a present. (admin)</li>
  *   <li>{@code /hcm market list} — list catalog + live prices. (hcm.market.list, op-only)</li>
  *   <li>{@code /hcm market price|history <item>} — inspect one item. (hcm.market.price, all)</li>
  *   <li>{@code /hcm market sell <item> <qty>} — sell into the engine. (hcm.market.order)</li>
@@ -589,6 +591,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             handleGiveDisplay(sender, args);
             return;
         }
+        if (kind.equals("prize")) {
+            handleGivePrize(sender, args);
+            return;
+        }
         // The Auction House and the individual Arcade machines (crate/scratch/pity/counter)
         // are no longer given out: auctions are reached via /hcm auction, the Arcade via
         // its hub block. Already-placed machines keep working.
@@ -603,7 +609,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "muffler", "sound_muffler" -> item = plugin.items().soundMuffler();
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use printer, pc, card, filament, pack, binder, vending, display, "
+                        + "'. Use printer, pc, card, filament, pack, prize, binder, vending, display, "
                         + "mailbox [variant], pallet, arcade, or muffler."));
                 return;
             }
@@ -678,6 +684,118 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         target.getInventory().addItem(item).values()
                 .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
         sender.sendMessage(Text.of("&aGave a " + variant.label() + " Display Case to " + target.getName() + "."));
+    }
+
+    /**
+     * {@code /hcm give prize <id> [player]} — give back a lost prize, free (HALLOWEEN-SPEC D19). It
+     * works out of season and whatever the player is recorded as having, because restoring is the
+     * point, and {@code arcade.collectors.gifting} doesn't apply: it is an admin path. The player must
+     * be home from every game, because a world game's inventory restore would wipe what they're given.
+     *
+     * <p>A collector goes through {@link com.dierks.homecraft.arcade.PrizeService#restore}: its claim is
+     * written, or found already there, so a restore never counts twice; a cap needs room by the
+     * present's placement rule and never goes on the ground; and given by a player to someone else it
+     * is a present, with "A gift from" on the cap and the whole moment. Any other row is handed out as
+     * a crate would ({@code grant}), and an item only into a free bag slot, never onto the ground.
+     */
+    private void handleGivePrize(CommandSender sender, String[] args) {
+        String id = givePrizeId(args);
+        if (id == null) {
+            sender.sendMessage(Text.of("&cUsage: /hcm give prize <id> [player]"));
+            return;
+        }
+        com.dierks.homecraft.config.PluginConfig.Prize p = plugin.config().arcade().prize(id);
+        if (p == null) {
+            sender.sendMessage(Text.of("&cUnknown prize '" + id + "'. Use a row id from arcade.prizes, or "
+                    + String.join(", ", com.dierks.homecraft.arcade.Collectors.SHIPPED_IDS) + "."));
+            return;
+        }
+        String refused = notGivenBack(p.type());
+        if (refused != null) {
+            sender.sendMessage(Text.of("&c" + refused));
+            return;
+        }
+        Player target = resolveTarget(sender, args, GIVE_PRIZE_PLAYER, "give prize " + p.id());
+        if (target == null) {
+            return;
+        }
+        if (!homeFromGames(target)) {
+            sender.sendMessage(Text.of("&c" + target.getName() + " is in a game. Try again when they're back."));
+            return;
+        }
+        if (target.isDead()) {
+            sender.sendMessage(Text.of("&c" + target.getName() + " is respawning. Try again in a moment."));
+            return;
+        }
+        if (p.collector() == null && givesAnItem(p.type()) && target.getInventory().firstEmpty() == -1) {
+            // A crate's hand-over drops what doesn't fit; a give-back never goes on the ground.
+            sender.sendMessage(Text.of("&c" + target.getName() + "'s bag is full."));
+            return;
+        }
+        String from = sender instanceof Player sp ? presentFrom(sp.getName(), sp.getUniqueId(), target.getUniqueId()) : null;
+        var out = p.collector() != null ? plugin.prizes().restore(target, p, from) : plugin.prizes().grant(target, p, 0);
+        if (!out.ok()) {
+            sender.sendMessage(Text.of("&c" + out.error()));
+            return;
+        }
+        plugin.getLogger().info("Admin " + sender.getName() + " gave " + p.id() + " to " + target.getName());
+        boolean self = sender instanceof Player me && me.getUniqueId().equals(target.getUniqueId());
+        if (p.collector() == null && !self) {
+            // A collector's restore tells the player itself (the present's moment, or "yours again").
+            target.sendMessage(Text.of("&a✔ You got " + out.label() + "&a!"));
+            com.dierks.homecraft.util.Sounds.received(target);
+        }
+        sender.sendMessage(Text.of("&aGave " + out.label() + " &ato " + target.getName() + "."));
+    }
+
+    /** Where {@code /hcm give prize <id> [player]} reads the player (none: the sender). */
+    static final int GIVE_PRIZE_PLAYER = 3;
+
+    /** The prize id of {@code /hcm give prize <id> [player]}, or null when it is missing (show the usage). */
+    static String givePrizeId(String[] args) {
+        if (args == null || args.length < 3 || args[2] == null || args[2].isBlank()) {
+            return null;
+        }
+        return args[2].trim();
+    }
+
+    /**
+     * Who a give-back is a present from: the sending player when it goes to someone else, else null
+     * (a plain restore: given to yourself, or from the console, it is not a present).
+     */
+    static String presentFrom(String senderName, java.util.UUID senderId, java.util.UUID targetId) {
+        if (senderName == null || senderName.isBlank() || senderId == null || senderId.equals(targetId)) {
+            return null;
+        }
+        return senderName;
+    }
+
+    /**
+     * Why a row is not given back by {@code /hcm give prize}, or null. A +1 Home is a perk recorded by
+     * its purchase, not an item: granting one unrecorded would vanish at the next refresh.
+     */
+    static String notGivenBack(com.dierks.homecraft.config.PluginConfig.PrizeType type) {
+        if (type == com.dierks.homecraft.config.PluginConfig.PrizeType.HOME_SLOT) {
+            return "A +1 Home isn't an item: /hcm homes refresh <player> gives back the homes they bought.";
+        }
+        return null;
+    }
+
+    /**
+     * Whether a (non-collector) row is handed over as an item, which needs a free bag slot: a give-back
+     * never drops one on the ground. A trail, a command row and the rest are not items.
+     */
+    static boolean givesAnItem(com.dierks.homecraft.config.PluginConfig.PrizeType type) {
+        return switch (type) {
+            case BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY, FILAMENT, BLOCK, PACK -> true;
+            default -> false;
+        };
+    }
+
+    /** Home from every game: no session, nothing on the way back, no saved-state row sending them back. */
+    private boolean homeFromGames(Player player) {
+        var games = plugin.games();
+        return games == null || (games.sessions().session(player) == null && games.sessions().home(player));
     }
 
     /** {@code /hcm backup now} — write a SQLite backup immediately (hcm.admin). */
@@ -1137,6 +1255,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade> [player]"));
             sender.sendMessage(Text.of("&e/hcm backup now &7- write a database backup"));
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
+            sender.sendMessage(Text.of("&e/hcm give prize <id> [player] &7- give back a lost prize (free)"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
             sender.sendMessage(Text.of("&e/hcm tokens give|set|take <player> <n> &7- adjust tokens"));
             sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back, crate values"));
@@ -1638,8 +1757,23 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "vending", "display",
+            addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "prize", "vending", "display",
                     "mailbox", "pallet", "arcade", "muffler");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("prize")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.config.PluginConfig.Prize p : plugin.config().arcade().prizes()) {
+                if (p.id().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    out.add(p.id());
+                }
+            }
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("prize")) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[3].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("mailbox")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

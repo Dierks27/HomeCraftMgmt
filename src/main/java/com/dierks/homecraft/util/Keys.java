@@ -79,6 +79,12 @@ public final class Keys {
      * carrying it: tokens never become dollars (§11 #9).
      */
     public static NamespacedKey TOKEN_PRIZE;
+    /**
+     * {@code hcm:candy_item} — on a Halloween candy item (and only there): holds the year (an
+     * integer). Candy is known by this key, never by an id prefix, so a prize whose id merely
+     * starts with "candy" keeps its protection and gets no treat.
+     */
+    public static NamespacedKey CANDY_ITEM;
     /** On a token-prize item: what it does when used (BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY). */
     public static NamespacedKey PRIZE_KIND;
     /** On a boost item: the potion effect key, its amplifier and minutes. */
@@ -157,6 +163,7 @@ public final class Keys {
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
         WILD_GRADE = new NamespacedKey(plugin, "wild_grade");
         TOKEN_PRIZE = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:token_prize"));
+        CANDY_ITEM = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:candy_item"));
         PRIZE_KIND = new NamespacedKey(plugin, "prize_kind");
         BOOST_EFFECT = new NamespacedKey(plugin, "boost_effect");
         BOOST_AMPLIFIER = new NamespacedKey(plugin, "boost_amplifier");

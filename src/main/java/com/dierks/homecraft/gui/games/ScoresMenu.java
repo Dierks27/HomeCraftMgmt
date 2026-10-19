@@ -327,8 +327,8 @@ public final class ScoresMenu extends GameMenu {
         return head;
     }
 
-    /** Heads for the picker too. */
-    static ItemStack playerHead(OfflinePlayer who, String name, String... lore) {
+    /** Heads for the pickers too (the invite picker, and the Prize Counter's present picker). */
+    public static ItemStack playerHead(OfflinePlayer who, String name, String... lore) {
         return head(who, name, lore);
     }
 

@@ -29,7 +29,12 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Wires placed custom blocks into the world: places (with build-permission
@@ -43,6 +48,8 @@ public final class CustomBlockListener implements Listener {
     private final CustomBlockService blocks;
     private final CustomItems items;
     private final ProtectionService protection;
+    /** The day each player's tap that arrived cancelled was last logged ({@link #cancelledTap}); main thread. */
+    private final Map<UUID, LocalDate> cancelledTapLogged = new HashMap<>();
 
     public CustomBlockListener(HomeCraftManagement plugin,
                                PluginConfig config,
@@ -206,8 +213,17 @@ public final class CustomBlockListener implements Listener {
         loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop);
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    /**
+     * Right-click opens the block's screen. It listens without {@code ignoreCancelled}, as join signs do: a tap
+     * on the Arcade Machine (or one of its retired machines) can arrive already cancelled, by vanilla spawn
+     * protection or a protection plugin's "use" rule, and both spare ops, so a player who isn't op tapped and
+     * nothing happened. Those open anyway ({@link #opensWhenCancelled}), still behind the economy sandbox and
+     * the build-rights check below; a cancelled tap on any other block is left alone exactly as before.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
+        // what isCancelled() and ignoreCancelled read for this event, before we deny it ourselves
+        boolean arrivedCancelled = event.useInteractedBlock() == Event.Result.DENY;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND) {
             return;
         }
@@ -221,13 +237,16 @@ public final class CustomBlockListener implements Listener {
         if (placed.isEmpty()) {
             return;
         }
+        CustomBlockType type = placed.get().type();
+        if (arrivedCancelled && !opensWhenCancelled(type)) {
+            return; // as with ignoreCancelled: someone else said no, and this block doesn't open anyway
+        }
 
         // It's one of ours — never run the vanilla interaction (crafter GUI, etc.).
         event.setUseInteractedBlock(Event.Result.DENY);
         event.setCancelled(true);
 
         Player player = event.getPlayer();
-        CustomBlockType type = placed.get().type();
 
         if (type != CustomBlockType.SOUND_MUFFLER && !arcadeInGamesWorld(type, player)
                 && !plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
@@ -237,6 +256,9 @@ public final class CustomBlockListener implements Listener {
         if (config.respectTownPerms() && !protection.canBuild(player, clicked.getLocation())) {
             player.sendMessage(Text.of("&cYou can't use this here."));
             return;
+        }
+        if (arrivedCancelled) {
+            cancelledTap(player, type, clicked);
         }
 
         switch (type) {
@@ -305,6 +327,30 @@ public final class CustomBlockListener implements Listener {
                         com.dierks.homecraft.muffler.SoundMufflerService.posOf(clicked.getLocation())).open(player);
             }
         }
+    }
+
+    /**
+     * Whether a tap on {@code type} that arrived already cancelled still opens it: the Arcade family (the Arcade
+     * Machine and its retired machines: the crate, the Scratch-Ticket booth, the Pity Exchange, the Token
+     * Counter). They only open a screen, and the screen asks for whatever it spends. Every other block keeps
+     * the old rule: a cancelled tap does nothing.
+     */
+    static boolean opensWhenCancelled(CustomBlockType type) {
+        return switch (type) {
+            case ARCADE, CRATE_MACHINE, SCRATCH_BOOTH, PITY_KIOSK, TOKEN_COUNTER -> true;
+            default -> false;
+        };
+    }
+
+    /** A tap that arrived cancelled and opened anyway: one console line a player a day says so. */
+    private void cancelledTap(Player player, CustomBlockType type, Block at) {
+        LocalDate today = LocalDate.now();
+        if (today.equals(cancelledTapLogged.put(player.getUniqueId(), today))) {
+            return;
+        }
+        plugin.getLogger().info("Arcade: " + player.getName() + "'s tap on " + type.name().toLowerCase(Locale.ROOT)
+                + " at " + at.getX() + " " + at.getY() + " " + at.getZ() + " in " + at.getWorld().getName()
+                + " arrived cancelled (spawn protection or another plugin); opened it");
     }
 
     /** Friendly display label for a placed-block type (for the placement message). */

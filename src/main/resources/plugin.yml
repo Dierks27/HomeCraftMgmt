@@ -93,6 +93,7 @@ commands:
       /hcm games saved <player> show|restore|return|discard confirm  - admin: a player's things saved by a world game
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
       /hcm games boat flights  - admin: how far Ice Boats really jump off the Mountain Run's drops
+      /hcm games movement [player]  - admin: what the courses' fair-play watch reads on a player (it only looks)
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.

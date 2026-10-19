@@ -1240,15 +1240,105 @@ public final class TimeTrials implements Game {
         if (run.voided != null || run.warmup) { // WP-R1 (D3): nothing in a warm-up counts anyway
             return;
         }
-        String why = p.getGameMode() != GameMode.ADVENTURE ? FairPlay.GAME_MODE
-                : p.getAllowFlight() || p.isFlying() ? FairPlay.FLYING
-                : !p.getActivePotionEffects().isEmpty() ? FairPlay.EFFECT
-                : FairPlay.movement(p.getWalkSpeed(), movementStats(p));
+        String why = voidWhy(p);
         if (why != null) {
             run.voided = why;
             p.sendMessage(Text.of("&cThis run won't count &7- " + why + ". Finish it for fun, or use Leave game."));
             Sounds.miss(p);
+            logVoid(p, run, why);
         }
+    }
+
+    /**
+     * A void's one console line, once a run (run.voided is set by then): who, where, why, when it fired ("at Go"
+     * or "3.2 s in") and whether they were sprinting, then everything the watch read. The watch runs inside the
+     * tick loop, so a diagnostic that fails says so on that same line and never breaks the run.
+     */
+    private void logVoid(Player p, TrialRun run, String why) {
+        String what = (run.race != null ? "race" : "run") + " on " + run.course.id() + " won't count - " + why;
+        try {
+            log().info("Time trials: " + p.getName() + (Bedrock.is(p) ? " (Bedrock)" : "") + "'s " + what + " ("
+                    + FairPlay.when(run.elapsedMs(System.nanoTime())) + ", sprinting " + (p.isSprinting() ? "yes" : "no")
+                    + ") | " + String.join(" | ", movementState(p)));
+        } catch (RuntimeException | LinkageError e) {
+            log().info("Time trials: " + p.getName() + "'s " + what + " (its details could not be read: " + e + ")");
+        }
+    }
+
+    /**
+     * The watch's reason, with what exactly tripped it: "your game mode changed (survival)", "flying (flight
+     * allowed)", "a potion effect (minecraft:speed 1 for 11999 ticks)", "your movement changed
+     * (minecraft:gravity: modifier someplugin:floaty)"; {@code null} when the run is fine.
+     */
+    static String voidWhy(Player p) {
+        if (p.getGameMode() != GameMode.ADVENTURE) {
+            return FairPlay.GAME_MODE + " (" + p.getGameMode().name().toLowerCase(Locale.ROOT) + ")";
+        }
+        if (p.getAllowFlight() || p.isFlying()) {
+            return FairPlay.FLYING + (p.isFlying() ? "" : " (flight allowed)");
+        }
+        if (!p.getActivePotionEffects().isEmpty()) {
+            return FairPlay.EFFECT + " (" + effects(p) + ")";
+        }
+        FairPlay.Finding f = FairPlay.finding(p.getWalkSpeed(), movementStats(p));
+        return f == null ? null : f.line();
+    }
+
+    /** "minecraft:speed 1 for 11999 ticks, minecraft:night_vision 0 for ever". */
+    private static String effects(Player p) {
+        List<String> out = new ArrayList<>();
+        for (org.bukkit.potion.PotionEffect e : p.getActivePotionEffects()) {
+            out.add(e.getType().getKey() + " " + e.getAmplifier() + " for "
+                    + (e.isInfinite() ? "ever" : e.getDuration() + " ticks"));
+        }
+        return String.join(", ", out);
+    }
+
+    /**
+     * Everything the fair-play watch reads on {@code p}, a line each ({@code /hcm games movement} and a void's log
+     * line): game mode, flight and sprinting; walk speed; effects; each watched attribute's base, value and every
+     * modifier on it (id, amount, operation), with VOIDS on what would void a run; then every other attribute
+     * that carries a modifier ("not watched"); then the verdict the watch would give now.
+     */
+    public static List<String> movementState(Player p) {
+        List<String> out = new ArrayList<>();
+        out.add((Bedrock.is(p) ? "Bedrock" : "Java") + ", game mode " + p.getGameMode().name().toLowerCase(Locale.ROOT)
+                + ", allow flight " + p.getAllowFlight() + ", flying " + p.isFlying() + ", sprinting " + p.isSprinting()
+                + ", sneaking " + p.isSneaking());
+        out.add("walk speed " + FairPlay.num(p.getWalkSpeed()) + " (usual " + FairPlay.num(FairPlay.DEFAULT_WALK_SPEED)
+                + "), fly speed " + FairPlay.num(p.getFlySpeed()));
+        out.add("effects: " + (p.getActivePotionEffects().isEmpty() ? "none" : effects(p)));
+        for (Attribute a : io.papermc.paper.registry.RegistryAccess.registryAccess()
+                .getRegistry(io.papermc.paper.registry.RegistryKey.ATTRIBUTE)) {
+            AttributeInstance in = p.getAttribute(a);
+            if (in == null) {
+                continue;
+            }
+            String key = a.getKey().toString();
+            Double usual = FairPlay.PLAYER_BASES.get(key);
+            if (usual == null && in.getModifiers().isEmpty()) {
+                continue; // not watched and untouched
+            }
+            StringBuilder line = new StringBuilder(key).append(" base ").append(FairPlay.num(in.getBaseValue()));
+            if (usual == null) {
+                line.append(" (not watched)");
+            } else if (!(Math.abs(in.getBaseValue() - usual) <= 1e-6)) {
+                line.append(" VOIDS (usual ").append(FairPlay.num(usual)).append(')');
+            }
+            line.append(", value ").append(FairPlay.num(in.getValue()));
+            for (AttributeModifier m : in.getModifiers()) {
+                String id = m.getKey().toString();
+                line.append("; ").append(id).append(' ').append(FairPlay.num(m.getAmount())).append(' ')
+                        .append(m.getOperation().name().toLowerCase(Locale.ROOT));
+                if (usual != null && !FairPlay.allowed(key, id)) {
+                    line.append(" VOIDS");
+                }
+            }
+            out.add(line.toString());
+        }
+        String why = voidWhy(p);
+        out.add("the watch now: " + (why == null ? "fine" : why));
+        return out;
     }
 
     /** The movement attributes the watch reads: base values and modifier keys. */
@@ -1828,6 +1918,8 @@ public final class TimeTrials implements Game {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
+        verdict = FairPlay.explained(verdict, run.course, run.progress.startNanos(), run.progress.times(), tooFast, ms,
+                run.course.minSecondsOr(s.minSeconds())); // which leg, how fast: the line and the log say
         verdict = withRider(p, run, verdict); // WP-CH: rider_runs_count false makes a ride just for fun
         String name = run.course.name();
         GenTag tag = run.course.gen();
@@ -1849,6 +1941,8 @@ public final class TimeTrials implements Game {
                 sound(() -> Sounds.received(p));
             }
             case VOID, STALE -> {
+                log().info("Time trials: " + p.getName() + (Bedrock.is(p) ? " (Bedrock)" : "") + "'s run on "
+                        + run.course.id() + " in " + TrialText.time(ms) + " didn't count - " + verdict.reason());
                 p.sendMessage(Text.of("&cThat run didn't count. &7(" + verdict.reason() + ")"));
                 title(p, "&f" + TrialText.time(ms), "&cThat run didn't count", 40);
                 sound(() -> Sounds.miss(p));

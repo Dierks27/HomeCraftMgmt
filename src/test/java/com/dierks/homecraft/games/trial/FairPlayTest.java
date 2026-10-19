@@ -319,6 +319,52 @@ class FairPlayTest {
                 "a longer safe fall");
     }
 
+    @Test
+    void aVoidNamesTheAttributeAndTheModifier() {
+        assertEquals("your movement changed (minecraft:gravity: modifier someplugin:floaty)",
+                FairPlay.finding(0.2f, own("minecraft:gravity", 0.08, "someplugin:floaty")).line());
+        assertEquals("your movement changed (minecraft:movement_speed: modifier someplugin:boots)",
+                FairPlay.finding(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING, "someplugin:boots")).line(),
+                "sprinting is passed over, the boots are named");
+        assertEquals("your movement changed (minecraft:step_height: modifier minecraft:sprinting)",
+                FairPlay.finding(0.2f, own("minecraft:step_height", 0.6, FairPlay.SPRINTING)).line(),
+                "sprinting anywhere but the movement speed is named too");
+        assertEquals("your movement changed (minecraft:jump_strength base 0.6, not 0.42)",
+                FairPlay.finding(0.2f, own("minecraft:jump_strength", 0.6)).line());
+        assertEquals("your walk speed changed (walk speed 0.4, not 0.2)",
+                FairPlay.finding(0.4f, own(FairPlay.MOVEMENT_SPEED, 0.1)).line());
+        assertNull(FairPlay.finding(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1f, FairPlay.SPRINTING)),
+                "an honest sprint: no finding, as movement() says");
+        assertEquals("0.42", FairPlay.num(0.42f), "a float base reads as the player's own value");
+        assertEquals("0.1", FairPlay.num(0.1f));
+    }
+
+    @Test
+    void aFinishTimeVoidNamesItsLegOrItsTime() {
+        Course straight = new Course("dash", TrialKind.PARKOUR, "Dash", Tier.EASY, "games",
+                new Course.Spot(0, 64, 0, 0, 0), List.of(), new Course.Mark(16, 64, 0, 1), null, null, true, false, 1);
+        long[] times = {900_000_000L};
+        int at = FairPlay.tooFast(straight, 0, times, 1, List.of());
+        FairPlay.Verdict v = FairPlay.explained(FairPlay.judge(false, null, false, 30_000, 5, at), straight, 0, times,
+                at, 30_000, 5);
+        assertEquals("too fast between two checkpoints (to the finish: 14 blocks in 0.9 s, limit 14 a second)",
+                v.reason());
+        assertEquals(FairPlay.Kind.VOID, v.kind());
+        assertEquals("quicker than this course allows (0:04.9, shortest 5 s)", FairPlay.explained(
+                FairPlay.judge(false, null, false, 4_999, 5, -1), straight, 0, times, -1, 4_999, 5).reason());
+        FairPlay.Verdict flying = FairPlay.judge(false, FairPlay.FLYING, false, 30_000, 5, -1);
+        assertEquals(flying, FairPlay.explained(flying, straight, 0, times, -1, 30_000, 5), "a watch void is as it was");
+    }
+
+    @Test
+    void aVoidsLogLineSaysWhenItFired() {
+        assertEquals("at Go", FairPlay.when(0), "the watch's own call at Go");
+        assertEquals("at Go", FairPlay.when(49), "still within the clock's first tick");
+        assertEquals("0.1 s in", FairPlay.when(50), "the first tick after Go");
+        assertEquals("3.2 s in", FairPlay.when(3_240));
+        assertEquals("12 s in", FairPlay.when(12_000));
+    }
+
     // ---- a changed course ------------------------------------------------------------------------
 
     @Test

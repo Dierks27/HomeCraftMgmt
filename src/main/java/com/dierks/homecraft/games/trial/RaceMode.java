@@ -455,8 +455,10 @@ final class RaceMode {
         boolean stale = rr.stale(trials.course(rr.base.id()), trials.generated()::standing);
         int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
                 run.progress.reachedTargets(), run.stalls);
-        FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
-                run.course.minSecondsOr(s.minSeconds()), tooFast);
+        int min = run.course.minSecondsOr(s.minSeconds());
+        // which leg, how fast: the line and the log say (one expression: the link's lambda below reads it)
+        FairPlay.Verdict verdict = FairPlay.explained(FairPlay.judge(false, run.voided, stale, ms, min, tooFast),
+                run.course, run.progress.startNanos(), run.progress.times(), tooFast, ms, min);
         // WP-CH (the review's #12): with rider_runs_count false a ride with a rider is just for fun: the
         // place in the race stands, but it is never the course's normal run (no board, record, rewards,
         // Cup time or quest step)
@@ -471,6 +473,8 @@ final class RaceMode {
             p.sendMessage(Text.of(jump)); // MOUNTAIN-V21-SPEC D18: a Mountain Run's longest jump, quietly
         }
         if (!verdict.counts()) {
+            trials.log().info("Time trials: " + p.getName() + (com.dierks.homecraft.util.Bedrock.is(p) ? " (Bedrock)" : "")
+                    + "'s race on " + rr.base.id() + " in " + TrialText.time(ms) + " didn't count - " + verdict.reason());
             p.sendMessage(Text.of(voidLine(verdict.reason())));
             TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);
             Sounds.miss(p);

@@ -65,7 +65,8 @@ public final class GamesCommand {
     /** What a player in a world session may still use under {@code /hcm}. */
     static final Set<String> IN_SESSION = Set.of("play", "leave", "games", "help");
     /** The {@code /hcm games} verbs, in the order help and tab completion list them. */
-    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved", "boat");
+    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved", "boat",
+            "movement");
     /** The {@code /hcm games boat} verbs (MOUNTAIN-V21-SPEC D17). */
     static final List<String> BOAT_VERBS = List.of("flights");
     /** The help line of {@code /hcm games boat flights}. */
@@ -406,6 +407,10 @@ public final class GamesCommand {
         }
         if (verb.equals("help")) {
             help(sender);
+            return;
+        }
+        if (verb.equals("movement")) {
+            movement(sender, args); // read-only, and works with the games off or failed to start
             return;
         }
         if (verb.equals("check")) {
@@ -856,6 +861,7 @@ public final class GamesCommand {
         out.add("&e/hcm games scores reset <game> [board|all] [player] [confirm] &7- clear high scores");
         out.add("&e/hcm games saved <player> show|restore|return|discard confirm &7- a player's saved things");
         out.add(BOAT_HELP);
+        out.add("&e/hcm games movement [player] &7- what the courses' fair-play watch reads on a player (changes nothing)");
         GamesService games = plugin.games();
         if (games != null) {
             for (Game g : games.games()) {
@@ -947,6 +953,11 @@ public final class GamesCommand {
                 }
             }
             case "scores" -> scoreCompletions(out, games, args, last);
+            case "movement" -> {
+                if (n == 3) {
+                    players(out, last);
+                }
+            }
             case "boat" -> {
                 if (n == 3) {
                     match(out, last, BOAT_VERBS.toArray(new String[0]));
@@ -1101,6 +1112,26 @@ public final class GamesCommand {
 
     private static void failed(CommandSender sender) {
         sender.sendMessage(Text.of("&cThat couldn't be saved - see the console."));
+    }
+
+    /**
+     * {@code /hcm games movement [player]}: what the time trials' fair-play watch reads on an online player (yourself
+     * when no name is given): game mode, flight, walk speed, effects, every watched attribute's base, value and
+     * modifiers, any other attribute carrying a modifier, and the verdict it would give now. Read-only; logged.
+     */
+    private void movement(CommandSender sender, String[] args) {
+        Player target = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : sender instanceof Player self ? self : null;
+        if (target == null) {
+            sender.sendMessage(Text.of("&eUsage: /hcm games movement <online player>"));
+            return;
+        }
+        List<String> lines = com.dierks.homecraft.games.trial.TimeTrials.movementState(target);
+        sender.sendMessage(Text.of("&6Fair-play movement of &f" + target.getName() + "&6:"));
+        for (String line : lines) {
+            boolean voids = line.contains("VOIDS") || (line.startsWith("the watch now: ") && !line.equals("the watch now: fine"));
+            sender.sendMessage(Text.of((voids ? "&c" : "&7") + line));
+        }
+        log(sender, "movement " + target.getName() + ": " + String.join(" | ", lines));
     }
 
     /** Who did what, for the console: every admin action on the Games is logged with the sender. */

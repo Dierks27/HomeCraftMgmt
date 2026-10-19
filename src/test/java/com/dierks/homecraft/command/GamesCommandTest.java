@@ -88,6 +88,14 @@ class GamesCommandTest {
     }
 
     @Test
+    void movementIsAnAdminVerbWithItsUsageLine() throws Exception {
+        assertTrue(GamesCommand.VERBS.contains("movement"), "/hcm games movement [player] is offered to admins");
+        String yml = Files.readString(Path.of("src", "main", "resources", "plugin.yml"), StandardCharsets.UTF_8);
+        assertTrue(yml.contains("\n      /hcm games movement [player]  - admin: what the courses' fair-play watch reads "
+                + "on a player (it only looks)\n"), "plugin.yml's /hcm games movement line");
+    }
+
+    @Test
     void adminNumbersAreWholeAndInRange() {
         assertEquals(7, GamesCommand.parse("7", 1, 365), "a pause of 7 days");
         assertEquals(-2, GamesCommand.parse("0", 1, 365), "below the range");

@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.gen.api.GenTag;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -331,6 +332,66 @@ public final class FairPlay {
             }
         }
         return null;
+    }
+
+    /** Vanilla sprinting's shape: +30% of the total (Bukkit's MULTIPLY_SCALAR_1 is vanilla's add_multiplied_total). */
+    public static boolean sprintShaped(String bukkitOperation, double amount) {
+        return "MULTIPLY_SCALAR_1".equals(bukkitOperation) && Math.abs(amount - 0.3) <= 1e-6;
+    }
+
+    /**
+     * One modifier on an attribute, as the player has it.
+     *
+     * @param key       its key ({@code minecraft:sprinting})
+     * @param operation its Bukkit operation's name ({@code MULTIPLY_SCALAR_1})
+     * @param amount    its amount
+     */
+    public record Modifier(String key, String operation, double amount) {
+    }
+
+    /**
+     * The modifier keys the watch reads on one attribute.
+     *
+     * @param keys    the keys, for {@link Stat#modifiers()}
+     * @param renamed the real key of a modifier read as {@link #SPRINTING} ({@link #sprintRead}), or {@code null}
+     */
+    public record SprintRead(List<String> keys, String renamed) {
+    }
+
+    /**
+     * The modifier keys the watch reads on attribute {@code key}: their own keys, with one fallback. Should the
+     * server key vanilla's sprint modifier other than {@link #SPRINTING}, every sprint would void a run. So on the
+     * movement speed, while the player is sprinting and carries no {@link #SPRINTING} modifier, exactly one
+     * modifier of sprinting's shape ({@link #sprintShaped}) under a key the watch doesn't allow is read as
+     * {@link #SPRINTING}. Everything else is read as it is and still voids: a second such modifier, one while not
+     * sprinting, one next to a real {@link #SPRINTING}, one on another attribute, or any other shape.
+     *
+     * @param sprinting whether the player is sprinting now
+     */
+    public static SprintRead sprintRead(String key, List<Modifier> modifiers, boolean sprinting) {
+        List<String> keys = new ArrayList<>(modifiers.size());
+        for (Modifier m : modifiers) {
+            keys.add(m.key());
+        }
+        if (!sprinting || !MOVEMENT_SPEED.equals(key) || keys.contains(SPRINTING)) {
+            return new SprintRead(keys, null);
+        }
+        int at = -1;
+        for (int i = 0; i < modifiers.size(); i++) {
+            Modifier m = modifiers.get(i);
+            if (!allowed(key, m.key()) && sprintShaped(m.operation(), m.amount())) {
+                if (at >= 0) {
+                    return new SprintRead(keys, null); // two of them: neither is the player's own sprint
+                }
+                at = i;
+            }
+        }
+        if (at < 0) {
+            return new SprintRead(keys, null);
+        }
+        String renamed = keys.get(at);
+        keys.set(at, SPRINTING);
+        return new SprintRead(keys, renamed);
     }
 
     /** Whether modifier {@code modifier} on attribute {@code key} is an honest run's: sprinting or powder snow, on the movement speed. */

@@ -357,6 +357,58 @@ class FairPlayTest {
     }
 
     @Test
+    void vanillaSprintingsShapeIsRecognised() {
+        assertTrue(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.3), "+30% of the total: vanilla's add_multiplied_total");
+        assertTrue(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.3f), "stored as a float");
+        assertFalse(FairPlay.sprintShaped("ADD_NUMBER", 0.3), "a flat 0.3 is another shape");
+        assertFalse(FairPlay.sprintShaped("ADD_SCALAR", 0.3), "so is 30% of the base");
+        assertFalse(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.5), "+50% is not sprinting");
+    }
+
+    private static final FairPlay.Modifier RENAMED = new FairPlay.Modifier("paper:sprint", "MULTIPLY_SCALAR_1", 0.3f);
+
+    /** The watched attributes with {@code mods} on the movement speed, read as the watch reads them. */
+    private static List<FairPlay.Stat> read(boolean sprinting, FairPlay.Modifier... mods) {
+        List<FairPlay.Stat> out = new ArrayList<>();
+        for (FairPlay.Stat st : own(FairPlay.MOVEMENT_SPEED, 0.1)) {
+            List<String> keys = st.key().equals(FairPlay.MOVEMENT_SPEED)
+                    ? FairPlay.sprintRead(st.key(), List.of(mods), sprinting).keys() : List.copyOf(st.modifiers());
+            out.add(new FairPlay.Stat(st.key(), st.base(), keys));
+        }
+        return out;
+    }
+
+    @Test
+    void aRenamedSprintWhileSprintingIsReadAsSprinting() {
+        FairPlay.SprintRead r = FairPlay.sprintRead(FairPlay.MOVEMENT_SPEED, List.of(RENAMED), true);
+        assertEquals(List.of(FairPlay.SPRINTING), r.keys(), "read as vanilla's sprint");
+        assertEquals("paper:sprint", r.renamed(), "its real key, for the warning");
+        assertNull(FairPlay.movement(0.2f, read(true, RENAMED)), "so the run still counts");
+        assertNull(FairPlay.movement(0.2f, read(true, RENAMED,
+                new FairPlay.Modifier(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.01))), "next to powder snow too");
+        FairPlay.SprintRead real = FairPlay.sprintRead(FairPlay.MOVEMENT_SPEED,
+                List.of(new FairPlay.Modifier(FairPlay.SPRINTING, "MULTIPLY_SCALAR_1", 0.3f)), true);
+        assertEquals(List.of(FairPlay.SPRINTING), real.keys(), "the real one is read as it is");
+        assertNull(real.renamed(), "and nothing is renamed");
+    }
+
+    @Test
+    void everythingElseOfSprintingsShapeStillVoids() {
+        assertEquals("your movement changed (minecraft:movement_speed: modifier paper:sprint)",
+                FairPlay.finding(0.2f, read(false, RENAMED)).line(), "the same modifier while not sprinting");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, read(true, RENAMED,
+                new FairPlay.Modifier("other:boost", "MULTIPLY_SCALAR_1", 0.3))), "two of sprinting's shape");
+        assertEquals("your movement changed (minecraft:movement_speed: modifier paper:sprint)",
+                FairPlay.finding(0.2f, read(true, new FairPlay.Modifier(FairPlay.SPRINTING, "MULTIPLY_SCALAR_1", 0.3f),
+                        RENAMED)).line(), "a real minecraft:sprinting and a renamed one");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, read(true,
+                new FairPlay.Modifier("other:boost", "ADD_NUMBER", 0.3))), "another shape while sprinting");
+        FairPlay.SprintRead jump = FairPlay.sprintRead("minecraft:jump_strength", List.of(RENAMED), true);
+        assertEquals(List.of("paper:sprint"), jump.keys(), "on any attribute but the movement speed it is read as it is");
+        assertNull(jump.renamed());
+    }
+
+    @Test
     void aVoidsLogLineSaysWhenItFired() {
         assertEquals("at Go", FairPlay.when(0), "the watch's own call at Go");
         assertEquals("at Go", FairPlay.when(49), "still within the clock's first tick");

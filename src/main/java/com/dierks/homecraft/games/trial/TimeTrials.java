@@ -78,7 +78,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -1326,11 +1328,14 @@ public final class TimeTrials implements Game {
                 line.append(" VOIDS (usual ").append(FairPlay.num(usual)).append(')');
             }
             line.append(", value ").append(FairPlay.num(in.getValue()));
+            String renamed = FairPlay.sprintRead(key, modifiers(in), p.isSprinting()).renamed();
             for (AttributeModifier m : in.getModifiers()) {
                 String id = m.getKey().toString();
                 line.append("; ").append(id).append(' ').append(FairPlay.num(m.getAmount())).append(' ')
                         .append(m.getOperation().name().toLowerCase(Locale.ROOT));
-                if (usual != null && !FairPlay.allowed(key, id)) {
+                if (id.equals(renamed)) {
+                    line.append(" (read as sprinting)");
+                } else if (usual != null && !FairPlay.allowed(key, id)) {
                     line.append(" VOIDS");
                 }
             }
@@ -1341,20 +1346,40 @@ public final class TimeTrials implements Game {
         return out;
     }
 
-    /** The movement attributes the watch reads: base values and modifier keys. */
+    /**
+     * The movement attributes the watch reads: base values and modifier keys, with the sprint fallback
+     * ({@link FairPlay#sprintRead}): a server that keys vanilla's sprint modifier otherwise has it read as
+     * sprinting, and its real key is logged once as a warning.
+     */
     private static List<FairPlay.Stat> movementStats(Player p) {
         List<FairPlay.Stat> out = new ArrayList<>(5);
+        boolean sprinting = p.isSprinting();
         for (Attribute a : List.of(Attribute.MOVEMENT_SPEED, Attribute.JUMP_STRENGTH, Attribute.STEP_HEIGHT,
                 Attribute.GRAVITY, Attribute.SAFE_FALL_DISTANCE)) {
             AttributeInstance in = p.getAttribute(a);
             if (in == null) {
                 continue;
             }
-            List<String> modifiers = new ArrayList<>();
-            for (AttributeModifier m : in.getModifiers()) {
-                modifiers.add(m.getKey().toString());
+            String key = a.getKey().toString();
+            FairPlay.SprintRead read = FairPlay.sprintRead(key, modifiers(in), sprinting);
+            if (read.renamed() != null && SPRINT_KEYS_WARNED.add(read.renamed())) {
+                Logger.getLogger("HomeCraftManagement").warning("Time trials: this server's sprint modifier is "
+                        + read.renamed() + ", not " + FairPlay.SPRINTING + "; the fair-play watch reads it as "
+                        + "sprinting (the same shape, +30% of the total, only while sprinting)");
             }
-            out.add(new FairPlay.Stat(a.getKey().toString(), in.getBaseValue(), modifiers));
+            out.add(new FairPlay.Stat(key, in.getBaseValue(), read.keys()));
+        }
+        return out;
+    }
+
+    /** The sprint modifier keys the watch has read as sprinting and warned about: one warning a key. */
+    private static final Set<String> SPRINT_KEYS_WARNED = ConcurrentHashMap.newKeySet();
+
+    /** An attribute's modifiers as the pure rules read them: key, Bukkit operation, amount. */
+    private static List<FairPlay.Modifier> modifiers(AttributeInstance in) {
+        List<FairPlay.Modifier> out = new ArrayList<>();
+        for (AttributeModifier m : in.getModifiers()) {
+            out.add(new FairPlay.Modifier(m.getKey().toString(), m.getOperation().name(), m.getAmount()));
         }
         return out;
     }

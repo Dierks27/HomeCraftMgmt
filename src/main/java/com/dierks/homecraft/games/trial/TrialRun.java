@@ -110,6 +110,14 @@ final class TrialRun {
     /** Race mode (EVENTS-DROPPER-SPEC §A.4.11): the racer's side of a race, or {@code null} for a normal run. */
     RaceRun race;
 
+    /**
+     * A solo run on an Easy or Medium course keeps its player apart ({@link Bumping}): not collidable and on the
+     * no-push team from the countdown until the run ends, then {@link #collidableBefore} back. Set while it is.
+     */
+    boolean apart;
+    /** Whether the player was collidable before {@link #apart}. */
+    boolean collidableBefore = true;
+
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
         this.course = course;

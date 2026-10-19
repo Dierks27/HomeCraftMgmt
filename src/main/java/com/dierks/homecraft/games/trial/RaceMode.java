@@ -58,10 +58,11 @@ import java.util.logging.Level;
  * </ol>
  * Finishers are parked on the stand (the boat goes, the run idles) or, with no stand, sent home at
  * the line; race mode is the stand's one keeper (a racer who wanders off it is put back once, here,
- * within the link's {@link RaceLink#standRadius()}). A racer's collisions are off for the whole race
- * run (runners share the start spot, finishers the stand), and a parkour or elytra racer is on the
- * games' no-push team ({@link NoPush}) from seating until the run ends by any way at all, so nobody
- * shoves anybody; boats still bump, as the owner chose. Every teleport a finish causes happens on the
+ * within the link's {@link RaceLink#standRadius()}). On an Easy or Medium course a racer's collisions are
+ * off for the whole race run (runners share the start spot, finishers the stand), and a parkour or elytra
+ * racer is on the games' no-push team ({@link NoPush}) from seating until the run ends by any way at all, so
+ * nobody shoves anybody; on Hard, racers bump; boats still bump on every tier, as the owner chose
+ * ({@link Bumping}). Every teleport a finish causes happens on the
  * next trial tick, never inside the move event that saw the line. A racer the coordinator ends while
  * still on the way in goes straight home on arrival; a racer whose entry is dropped on the way (hands
  * not free, hurt, can't be reached: nothing tells the game) is swept once a tick and the race hears
@@ -736,14 +737,20 @@ final class RaceMode {
     }
 
     /**
-     * Seated in a race (its warm-up or the grid), and again on the stand: nobody shoves anybody
-     * ({@link #noShoving}), and a parkour or elytra racer joins the games' no-push team, which is what
-     * really stops one player pushing another ({@code setCollidable} only stops mobs). Never a boat
-     * race: boats bump, as the owner chose. Every way the run ends {@link #restore}s both.
+     * Seated in a race (its warm-up or the grid), and again on the stand, by the course's tier ({@link Bumping}):
+     * on Easy and Medium nobody shoves anybody ({@link #noShoving}), and a parkour or elytra racer joins the
+     * games' no-push team, which is what really stops one player pushing another ({@code setCollidable} only
+     * stops mobs). A boat racer is only {@link #noShoving}, on every tier: boats bump, as the owner chose. On
+     * Hard a parkour or elytra racer is left as they are: racers bump. Every way the run ends {@link #restore}s
+     * whatever was done.
      */
     void inRace(Player p, RaceRun rr) {
+        Bumping.Rule rule = Bumping.race(rr.base.kind(), rr.base.tier());
+        if (rule == Bumping.Rule.NONE) {
+            return; // a Hard course: racers bump
+        }
         noShoving(p, rr);
-        if (!rr.noPush && rr.base.kind() != TrialKind.BOAT) {
+        if (rule == Bumping.Rule.APART && !rr.noPush) {
             NoPush np = noPush();
             if (np != null && np.on(p)) {
                 rr.noPush = true;
@@ -751,8 +758,8 @@ final class RaceMode {
         }
     }
 
-    /** The games' no-push team (or the one a test passed). */
-    private NoPush noPush() {
+    /** The games' no-push team (or the one a test passed); solo runs use it too ({@code TimeTrials}). */
+    NoPush noPush() {
         if (pushes != null) {
             return pushes;
         }

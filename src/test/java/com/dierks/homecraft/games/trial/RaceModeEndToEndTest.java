@@ -824,6 +824,73 @@ class RaceModeEndToEndTest {
     }
 
     @Test
+    void aHardCoursesRacersBumpAndAnEasyOrMediumCoursesNeverDo() {
+        Board board = new Board();
+        RaceMode mode = trials.raceMode();
+        mode.pushes(new NoPush(() -> board));
+        TrialFakes.Link link = new TrialFakes.Link();
+        for (Tier tier : Tier.values()) {
+            Course c = LapsTest.straight().withTier(tier);
+            TrialRun r = new TrialRun(id(ava), c, false, 0);
+            r.race = new RaceRun(link, c, c.start(), null, false);
+            trials.replaceRun(r);
+            mode.inRace(ava, r.race); // RaceMode.seated
+            boolean bumps = tier == Tier.HARD || tier == Tier.EXTREME;
+            assertEquals(bumps ? null : NoPush.TEAM, board.teamOf("Ava"), tier + ": the no-push team only below Hard");
+            assertEquals(!bumps, r.race.noShove, tier + ": not collidable only below Hard");
+            trials.onSessionEnd(ava, EndReason.QUIT_ITEM);
+            assertNull(board.teamOf("Ava"), tier + ": off the team once the run ends");
+            assertFalse(r.race.noShove, tier + ": collidable again");
+        }
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    @Test
+    void soloRunsOnTheSameEasyOrMediumCourseNeverPushAndEveryWayOutPutsThatBack() {
+        Board board = new Board();
+        board.teams.add("nametags");
+        board.teamOf.put("Ava", "nametags"); // another plugin's team
+        trials.raceMode().pushes(new NoPush(() -> board));
+        for (Tier tier : Tier.values()) {
+            Course c = LapsTest.straight().withTier(tier);
+            TrialRun solo = new TrialRun(id(ava), c, false, TimeTrials.COUNTDOWN_TICKS + 1);
+            trials.replaceRun(solo);
+            trials.apart(ava, solo); // TimeTrials.ready: from the countdown on
+            boolean bumps = tier == Tier.HARD || tier == Tier.EXTREME;
+            assertEquals(bumps ? "nametags" : NoPush.TEAM, board.teamOf("Ava"), tier + ": the no-push team only below Hard");
+            assertEquals(!bumps, solo.apart, tier + ": not collidable only below Hard");
+            trials.onSessionEnd(ava, EndReason.FINISH);
+            assertEquals("nametags", board.teamOf("Ava"), tier + ": back on their own team once the run ends");
+            assertFalse(solo.apart, tier + ": collidable as before");
+        }
+        Course easy = LapsTest.straight();
+        Course drop = new Course("drop", TrialKind.DROPPER, "Drop", Tier.EASY, "games", easy.start(),
+                easy.checkpoints(), easy.finish(), null, 10, true, false, 1);
+        for (Course c : List.of(loop, drop)) {
+            TrialRun solo = new TrialRun(id(ben), c, false, TimeTrials.COUNTDOWN_TICKS + 1);
+            trials.replaceRun(solo);
+            trials.apart(ben, solo);
+            assertNull(board.teamOf("Ben"), c.kind() + ": a solo boat or dropper run is as before (its own rules)");
+            assertFalse(solo.apart, c.kind() + ": nothing to put back");
+            trials.end(ben);
+        }
+        java.util.Map<String, Runnable> exits = new java.util.LinkedHashMap<>();
+        exits.put("Leave game", () -> trials.onSessionEnd(ava, EndReason.QUIT_ITEM));
+        exits.put("a disconnect", () -> trials.onQuit(ava));
+        exits.put("a race seats them", () -> trials.end(ava)); // RaceMode.seated ends the solo run first
+        exits.put("Time Trials stopping", () -> trials.stop());
+        for (java.util.Map.Entry<String, Runnable> exit : exits.entrySet()) {
+            TrialRun solo = new TrialRun(id(ava), easy, false, TimeTrials.COUNTDOWN_TICKS + 1);
+            trials.replaceRun(solo);
+            trials.apart(ava, solo);
+            assertEquals(NoPush.TEAM, board.teamOf("Ava"), exit.getKey() + ": on the team for an Easy run");
+            exit.getValue().run();
+            assertEquals("nametags", board.teamOf("Ava"), exit.getKey() + ": off it, back on their own");
+        }
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    @Test
     void aSoloWarmUpLapThroughTheFinishNeverCountsAndAQuitForgetsAWarmUpChoice() throws Exception {
         TrialRun solo = new TrialRun(id(ben), loop, false, TimeTrials.COUNTDOWN_TICKS + 1);
         assertTrue(Warmup.begin(solo, race.tick, 180, loop.start().point(), race.nanos), "Ben chose a warm-up");

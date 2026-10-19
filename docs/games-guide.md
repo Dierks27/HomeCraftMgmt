@@ -1166,7 +1166,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2 (on a course that goes one way from start to finish, like the Ice Boat's Mountain Run, just 2nd of 5). Boats can bump into each other.
 - The race ends when everyone is in, 2 minutes after the first person finishes (on the Ice Boat's Mountain Run it waits longer: about 2 and a half minutes on a 2-minute run, so younger racers still finish), or 10 minutes after Go. Then everyone comes back to the Clubhouse, where the board shows the results. If the Clubhouse isn't open (or a restart is only a minute or so away), everyone goes home and a results screen shows the whole group.
 - Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
-- On foot or with wings, racers can't push each other. The Dropper has no party races.
+- On an Easy or Medium course, racers on foot or with wings can't push each other. On a Hard course they can bump, so watch out. The Dropper has no party races.
 - When Race Night needs the track, a party race on it is called off: everyone goes home with their things, and a race you hadn't finished doesn't count.
 - You can leave any time with Leave game, or Leave the party on the party screen. The others carry on. If the host leaves, the next person who joined becomes the host.
 - /hcm play invites off turns off party race invites too.
@@ -1205,8 +1205,8 @@ These are played in the Games world, on courses the server's builders make. Each
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
 3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line with only the course kit.
-5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
-6. Jump to every checkpoint in order. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
+5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go. On an Easy or Medium course, nobody else on the course can push you, and you can't push them.
+6. Land on every checkpoint in order. Falling past one doesn't count. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Fall too far and you go back to your last checkpoint, facing the next one. The clock keeps running.
 8. After the last checkpoint, reach the finish. You see your time, your best and the course record.
 9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
@@ -1278,7 +1278,7 @@ These are played in the Games world, on courses the server's builders make. Each
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
 3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line wearing an elytra, with 3 rockets and the course kit.
-5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
+5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go. On an Easy or Medium course, nobody else on the course can push you, and you can't push them.
 6. Take off and glide: jump, then press jump again while you fall to open your wings. Fly through every ring in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time.
 7. Click the rockets while gliding for a boost. Your rockets are filled back up to 3 at every ring, and each time you go back.
 8. If you land anywhere except near the start, inside a ring or at the finish, or if you touch water, you go back to your last ring and keep gliding from it. If you haven't reached a ring yet, you go back to the start. The clock keeps running.

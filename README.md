@@ -256,7 +256,13 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
 - **Arcade** — hub only. `/hcm give arcade` (or craft it); the Crate Machine,
   Scratch-Ticket Booth, Pity Exchange and Token Counter blocks, and
   `/hcm give auction`, are no longer handed out (already-placed machines open the
-  matching Arcade screen; auctions are reached with `/hcm auction`).
+  matching Arcade screen; auctions are reached with `/hcm auction`). A tap on the Arcade
+  Machine (or an older machine) opens it even when vanilla spawn protection or a protection
+  plugin's "use" rule cancelled the tap, as `[Arcade]` join signs do (0.37.1): both spare ops,
+  so a player who isn't op used to tap and get nothing. The economy check and, with
+  `crafting.respect_town_perms`, the build-rights check still apply; one console line a player
+  a day says such a tap was opened. A Bedrock tap on one of our blocks with a hat in hand no longer
+  puts the hat on.
 
 ---
 
@@ -958,14 +964,21 @@ Easy, Medium, Hard and "Why did we build this?".
   game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
-  finish. Each move is checked as the line it really travelled, so a fast glide through a ring
-  counts and no checkpoint can be skipped. The action bar shows the clock and the checkpoints
-  so far.
+  finish. On parkour a checkpoint counts with your feet up on its pad, not while falling past it
+  or under it (0.37.1). Each move is checked as the line it really travelled, so a fast glide
+  through a ring counts and no checkpoint can be skipped. The action bar shows the clock and the
+  checkpoints so far.
 - **Going wrong** sends you back to your last checkpoint, facing the next one, and the clock keeps
   running. On parkour that's a fall `fall_depth` (6) blocks below the lower of the last and next
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
   anywhere but the start, a checkpoint or the finish. On a boat it's getting out. Anywhere, it's
   the void, or a short teleport by someone else (a long one ends the game).
+- **Bumping, by tier (0.37.1).** On an Easy or Medium course nobody running it pushes anybody, from
+  the countdown to the finish or Leave game: in a race, and on your own run too, so two players who
+  start the same course at once don't shove each other on its start pad. Hard and harder keep
+  vanilla bumping. Boats bump on every tier, and the Dropper keeps fallers apart on every tier.
+  (Geyser doesn't pass the no-push team's rule to a Bedrock client, so a Bedrock player's own
+  client may still nudge them a little; the Java player no longer pushes, or is pushed.)
 - **Fair play.** Flying, a game mode other than adventure, any potion effect, a walk speed other
   than the usual 0.2 (`/speed`) or a changed movement voids the run the moment it's seen ("This
   run won't count - …"); you can still finish it for fun. Movement means movement speed, jump
@@ -977,7 +990,14 @@ Easy, Medium, Hard and "Why did we build this?".
   with why, and nothing is recorded. Every leg gets 0.05 s of slack, and a server stall (over
   250 ms between two ticks) never voids an honest run: a leg it touched isn't checked. Nothing is
   recorded either for a run whose course changed layout while it ran, or was deleted and made
-  again.
+  again. The red line says what tripped it: the attribute and the modifier, or the value that
+  changed ("your movement changed (minecraft:movement_speed: modifier x:y)"), and for a finish too
+  fast, which leg and how fast. The console gets one "Time trials: ..." line a void, with when it
+  fired ("at Go" or "3.2 s in") and whether the player was sprinting, and
+  **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now. Should a
+  server key vanilla's sprint modifier otherwise than `minecraft:sprinting`, a sprint still
+  counts: exactly one modifier of sprinting's shape, only while sprinting, is read as sprinting,
+  and the console WARNs its real key once.
 - **Nobody else can touch a run.** For anyone in a world game, an effect from anything but a
   plugin or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
   charge, a hit) and a fishing rod reeling them in are cancelled. A bystander can't spoil a run,
@@ -1039,11 +1059,11 @@ ends when everyone is in, 2 minutes after the first finish (on a Mountain Run v2
 ⌈1.25 × its model time⌉): 150 s on a 2-minute run), or 10 minutes after Go. Each racer's
 finish is also their **normal counted run** on the course, exactly once and
 under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
-party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; runners
-and flyers can't push each other (they are on the `hcm_nopush` scoreboard team while they race, and
-back on any team they were on before as soon as their run ends). Anyone
-can leave at any time (Leave game, or Leave the party on the party screen) and the others carry
-on; a disconnect is the same. A host who leaves passes the party to the next one who joined. A
+party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; on an Easy
+or Medium course runners and flyers can't push each other (they are on the `hcm_nopush` scoreboard
+team while they race, and back on any team they were on before as soon as their run ends), and on
+Hard they bump. Anyone can leave at any time (Leave game, or Leave the party on the party screen)
+and the others carry on; a disconnect is the same. A host who leaves passes the party to the next one who joined. A
 restart due soon refuses a new start (and ends a shared warm-up: straight to the grid), and a course
 held for Race Night can't be party-raced: when Race Night takes the track, a party race still on it is
 called off, its racers go home with their things, and nothing they hadn't finished counts.
@@ -2583,7 +2603,7 @@ entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 |---|---|---|
 | `/hcm play` | `hcm.games.play` | The Games screen |
 | `/hcm play <game\|course>` | `hcm.games.play` | Open a game (rules and odds first). A time trial first asks "Warm up (3:00) - then the timed run" or "Go straight to the timed run" (it starts straight away only with `games.trials.warmup_seconds: 0`, or on a Dropper); a golf course opens its course screen |
-| `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub |
+| `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub. When nothing opens it says what the player was told, word for word (a refusal on the way in comes a moment later: "see the console"). Every refusal a player is told is also logged, `Games: <player> was told: <line>`, once a player and line a minute |
 | `/hcm play break` | `hcm.games.play` | The Take a break screen |
 | `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
 | `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings: Connect Four, Tic-Tac-Toe, party races, Ride along and golf together (an older `off` covers any added since; Connect Four's or Tic-Tac-Toe's own screen switch is just for that game). `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
@@ -2596,6 +2616,7 @@ entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 | `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
 | `/hcm games saved <player> show\|restore\|return\|discard confirm` | `hcm.games.admin` | A player's things saved by a world game. `show` works offline; `restore` and `return` need them online; `discard confirm` deletes the row (logged) |
 | `/hcm games boat flights` | `hcm.games.admin` or the console | How far Ice Boats really jump off the Mountain Run's drops: the last 10 runs' lines and the longest 1- and 2-block jump per edition (Java, Bedrock) next to what the safety rule allows (38 and 49). It only reads (see "The flight recorder" in [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)) |
+| `/hcm games movement [player]` | `hcm.games.admin` or the console | What the courses' fair-play watch reads on an online player (yourself with no name): game mode, flight and sprinting, walk speed, effects, every watched attribute's base, value and modifiers (with VOIDS on what would void a run), any other attribute with a modifier, and what the watch would say now. It only looks, works with the games off, and is logged |
 | `/hcm games course list` | `hcm.games.admin` | Every time-trial course: open or closed, checkpoints, layout number, the course of the week |
 | `/hcm games course create <id> <parkour\|elytra\|boat> [tier]` | `hcm.games.admin` | A new, closed course (tier `easy` unless given: `easy`, `medium`, `hard` or `extreme`) |
 | `/hcm games course <id> [info]` | `hcm.games.admin` | Its world, start, checkpoints, finish, fall height, shortest time and record, and what stops it opening |
@@ -2922,11 +2943,11 @@ knockback and fishing-rod pulls are cancelled.
 
 **Nobody pushes anybody where players crowd.** `setCollidable(false)` stops mobs pushing a
 player but not another player, so the places players share (Falling Floors' rounds, the Dropper's
-shafts, the Clubhouse, and parkour and elytra party races; boats bump, as the owner chose) put their
-players on one main-scoreboard team, **`hcm_nopush`**, whose collision rule is never. A player is on
-at most one main-scoreboard team, so someone on another plugin's team (nametag colours, a tab-list
-prefix) comes off it for the round or race and goes back on it as soon as that ends, if the team
-still exists. That earlier team is remembered in memory only: stopping the games puts everyone back,
+shafts, the Clubhouse, and parkour and elytra runs and races on Easy and Medium courses; Hard keeps
+vanilla bumping and boats bump, as the owner chose) put their players on one main-scoreboard team,
+**`hcm_nopush`**, whose collision rule is never. A player is on at most one main-scoreboard team,
+so someone on another plugin's team (nametag colours, a tab-list prefix) comes off it for the round
+or race and goes back on it as soon as that ends, if the team still exists. That earlier team is remembered in memory only: stopping the games puts everyone back,
 but after a crash the next start empties `hcm_nopush` and WARNs how many were still on it, and their
 earlier teams can't be restored.
 

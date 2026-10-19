@@ -81,8 +81,8 @@ Tokens are **earned by playing and never become dollars**.
   and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
   money path.
-- **Prizes are safe:** kept when you die, never despawn or burn, and can't be washed, renamed,
-  re-trimmed or enchanted.
+- **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bag or
+  box), and can't be washed, renamed, re-trimmed or enchanted.
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -515,7 +515,10 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
   in front of them (nearer when a wall is close), hearts, and the cap goes straight onto their
   head. A helmet they were wearing goes into their bag; one with Curse of Binding stays on, and the
   cap goes into the bag. A trail present switches on with a puff of leaves in front of them. If one
-  of the plugin's menus is open on their screen, it is closed first, so nothing plays behind it.
+  of the plugin's menus is open on their screen, it is closed first, so nothing plays behind it. **A
+  game screen is left open, so the game goes on:** an arcade cabinet, a friend's Connect Four or
+  Tic-Tac-Toe match and a Daily board's scored try are never ended by a present, and the moment
+  plays over the screen.
 - **The giver's menu closes** (so it doesn't hide the moment) with "✔ You gave the … to …!".
 - Every present costs the giver the full price, and it is one of each per receiver for good. A
   present never goes on the ground, to someone offline or into a game. It can't be undone:
@@ -530,8 +533,11 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
   server counts 0 armour.
 - The trail's particle, `ORANGE_POPLAR_LEAVES`, is mapped by current Geyser. If the leaves don't
   show on a Bedrock screen, update Geyser.
-- The orange poplar leaves are new in Paper **26.3**. On 26.2 the trail shows nothing (its counter
-  tile shows oak leaves), and the collector self-test says so in the log at startup.
+- The orange poplar leaves are new in Paper **26.3**. **On 26.2 the trail is not sold or given:** it
+  has no counter tile, "Give a present" doesn't offer it, the website feed leaves it out, and
+  `/hcm give prize trail_leaves_2026` answers "That trail needs Paper 26.3." One already owned stays
+  in the database and shows after the upgrade to 26.3. The collector self-test's WARN at startup is
+  the one line that says why.
 - Bedrock shows lore only on a long press, so the year is in the name as well.
 
 ### Prizes are safe (every prize, for everyone)
@@ -540,9 +546,11 @@ It also keeps every prize safe (below). 0.37.2 adds the Candy Apple shower.
   `keepInventory` is off). A grave plugin such as GravesX builds its grave from the drops, so a
   prize is never in a grave and never copied; a last check before the grave plugin takes out any
   prize another plugin put back, with one WARN. A prize bundle holding anything but candy drops like
-  any other item.
-- **On the ground** a dropped prize never despawns, burns or blows up, and no mob picks it up. **The
-  void can't be saved.**
+  any other item. **A prize inside a plain bundle or shulker box is not a prize stack:** it drops
+  with its container, into a grave if you have one, and is not protected on the ground. Carry
+  collectors loose.
+- **On the ground** a dropped prize (not one inside a dropped container) never despawns, burns or
+  blows up, and no mob picks it up. **The void can't be saved.**
 - **A dropped collector** can be picked up again only by the player who dropped it, and no hopper
   takes it. Other prizes can still be handed over by dropping them, as before.
 - **Taking a worn collector off** by right-clicking with another hat needs room in the bag, or it
@@ -632,6 +640,23 @@ each medal 5, today's pick 5, the Weekly Cup 10 to enter with a 20 top-up, Race 
 the day's cap on all skill games 60 (it was 6). Games of chance, quests, achievements and prices are
 unchanged; the Scratch Ticket comes into the 85-95 band. Config revision 20 moves every value you
 haven't changed. See [The token balance (0.37)](#the-token-balance-037).
+
+**The Mountain Run, wider and downhill (0.37.1)** answers the owner's ride on 0.37.0 ("the track is
+just so skinny", "it wasn't really downhill"). The **Winding Road** is 18 blocks wide on Easy, 15 on
+Medium and 14 on Hard (it was 9 / 7 / 7), the same width at every drop, bend and checkpoint; the
+Slalom keeps its 15 / 13 / 11. Every run falls further, with more of the drops along the long rows.
+In the release soak (300 plans a style and tier; 0.37.0's code in brackets) a Medium road falls a
+median 47 blocks in 30 drops, 18 of them Big Drops (36 in 25 with 12 big; the owner's ride fell 35),
+Easy 33 (22), Hard 50 (45), and the Slalom 20 / 27 / 31 on Easy / Medium / Hard (10 / 18 / 22).
+Three times the fall doesn't fit at the same length, so 0.37.1 measures how far boats really jump,
+for 0.38 to use (`/hcm games boat flights`). Snow replaces the sand on the run-offs, the drifts to
+steer round and the stop after the finish; Medium keeps at most one boost strip of blue ice; the
+wall arrows point the way you are going; the forest's trees have round tops; and a landing kicks up
+a little snow. A crash just after a Big Drop can send you back up to about 66 blocks (it was 60).
+Ice Boat still ships off: preview and ride it first. 0.37.1 also brings **Halloween 2026 Step 1**:
+the Pumpkin Cap 2026 and Autumn Leaves 2026 collectors, Give a present, and prizes kept safe for
+everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) and [Halloween
+2026](#halloween-2026-0371-0372).
 
 ### What players get
 
@@ -1601,7 +1626,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 
 | Command | What |
 |---|---|
-| `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course: its set's key and end, its area and pin too. Ice Boat adds its style rule ("style random: each week's own (Winding Road or Slalom); this set's is the Winding Road"), and a course an update moved adds its old area's state ("its old area (...) is emptied by itself once nothing else is being built") |
+| `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course (e.g. `/hcm games gen status fresh_boat`): its set's key and end, its area and pin too; for Ice Boat also its style rule ("style random: each week's own (Winding Road or Slalom); this set's is the Winding Road") and the server's ice values ("ice on this server: packed 0.98, plain 0.98, blue 0.989; snow 0.6, smooth sandstone 0.6", yellow and ending " - the planner's model assumes 0.98 / 0.989 / 0.6" when one differs). The overview (no course) shows neither. A course an update moved adds its old area's state ("its old area (...) is emptied by itself once nothing else is being built") |
 | `/hcm games gen plan <course> [seed\|next]` | A dry run, no blocks: what a build would make (its blocks, hash and the planner's own summary), for this set or the `next` one |
 | `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to try it (`test`) or walk it (`tp <course> idle`). The next scheduled build clears it away (unless it was chosen: see `choose`). Works while the course is switched off too: the first one checks and claims its area, and the course stays closed (see "Trying a course that is switched off") |
 | `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
@@ -1851,25 +1876,57 @@ twisted circle"). v2 is a whole mountain. Each half is 480 x 176 x 640 (north of
 see "Where they are"); the start is on the summit and the finish at the foot, in front of a viewing
 stand. The track folds down the face from side to side in 5 to 8 long rows, joined by wide turns that
 alternate left and right, and each row mixes long straights, sweeping bends, S-curves and drops, so it
-flows instead of "go fast, turn, go fast, turn". A run is planned for **2 to 3 minutes**: a model boat
-rides it in 90-120 s on Easy and 105-135 s on Medium and Hard (its model time, T_m), and people are
-slower.
+flows instead of "go fast, turn, go fast, turn". **0.37.1 (algo 5) makes the road twice as wide and
+the run more downhill:** the owner found 0.37.0's 7-wide road "just so skinny" and the run not
+"really downhill", so the Winding Road is 18 / 15 / 14 wide with no narrow bits at the drops, every
+tier has many more Big Drops, and more of the drops stand along the rows.
+
+A run is planned for **2 to 3 minutes**: a model boat rides it in 100-130 s on an Easy road, 120-150 s
+on a Medium or Hard road, and 90-120 s on an Easy Slalom and 105-135 s on a Medium or Hard one (its
+model time, T_m), and people are slower. A wide road is ridden faster than the 7-wide one was: at about
+the pace the owner rode the Slalom, a Medium road (T_m 137.6 s and about 3,200 blocks on the release
+soak's median plan) takes about 2:40-3:05. That is an estimate, not a promise.
 
 **Two styles,** read from the week's seed:
 
 | | The Winding Road (for racing) | The Slalom (for solo runs) |
 |---|---|---|
-| The track | A road 9 wide on Easy, 7 on Medium and Hard | A corridor 15, 13 or 11 wide |
-| What is on it | Long straights, sweepers, S-curves, wide hairpins; chicanes on Medium and Hard; sand run-offs on the tight bends and sand pits, pick-a-path splits round a tree island, an ice cave on Easy, a cave or a tunnel through the rock on Medium (one of them dealt every time), tunnels on Hard, a forest on Medium and Hard; boost strips of blue ice on Medium, whole blue-ice straights on Hard. Pieces stand on straights and (all but splits) on wide bends; a run may get a piece or two fewer than its tier's deck where they don't fit | Sets of red and blue gate fences down the slope ("SLALOM / 8 gates / Go through / the gaps!"): ride through the gaps, back and forth; open runs with drops between the sets |
+| The track | A road 18 wide on Easy, 15 on Medium, 14 on Hard (0.37.0's was 9 / 7 / 7), the same width at every drop, bend and checkpoint | A corridor 15, 13 or 11 wide |
+| What is on it | Long straights, sweepers, S-curves, wide hairpins; chicanes on Medium and Hard; snow run-offs on the outside of the tight bends and snow drifts to steer round (with ice both sides), pick-a-path splits round a tree island, an ice cave on Easy, a cave or a tunnel through the rock on Medium (one of them dealt every time), tunnels on Hard, a forest on Medium and Hard; on Medium at most one boost strip of blue ice, on a straight; on Hard one or two blue-ice straights, each ending in a hop that takes the extra speed off. Pieces stand on straights and (all but splits and boost strips) on wide bends; a run may get a piece or two fewer than its tier's deck where they don't fit | Sets of red and blue gate fences down the slope ("SLALOM / 8 gates / Go through / the gaps!"): ride through the gaps, back and forth; open runs with drops between the sets |
 | Race Night | Always races it | Never: a night refuses it |
 
-- **Drops** are 1 block (HOP!) or 2 (BIG DROP!), never more. A run has many: a Medium road about 22-30,
-  some 35-50 blocks down in all; Easy has fewer and at most 4 Big Drops; the Slalom about half as many
-  as the road. A staircase of 2 or 3 drops down one straight has its own THE CLIFFS! sign: "THE
-  CLIFFS! / 3 big drops!" when every step is 2 blocks, otherwise "THE CLIFFS! / 3 drops ahead!". Every
-  run ends with the **Final
-  Drop** just before the finish (its sign: "FINAL DROP! / Then the gold / finish line!"). Every drop
-  lands on a straight. Packed ice only on Easy.
+- **The width.** The road is its tier's width from the start pit to the finish: there are no 7-wide
+  necks at the drops any more. It is wider only on the outside of a tight bend (its 2 columns of snow
+  run-off) and where it bulges out by 2 a side round a snow drift or a split, and narrower only where
+  the forest's trunks or a split's island stand in it. The release soak's 1,800 plans had no narrow
+  spot.
+- **The pieces placed.** In the release soak (300 plans a tier) a run placed 89% of the pieces dealt
+  to it on Easy, 84% on Medium and 90% on Hard. An Easy run has its ice cave (300 of 300) and its snow
+  drift (299 of 300); a Medium run places 89% of its snow drifts, almost always its cave or tunnel
+  (352 of 370), and a forest on 244 of 300; a Hard run almost always has its forest (298 of 300). A
+  split is 16-22 blocks long and a drift 18-22, and the road opens out round each as sharply as in
+  0.37.0.
+- **Drops** are 1 block (HOP!) or 2 (BIG DROP!), never more, and every tier has Big Drops now. The
+  release soak's median run (0.37.0's in brackets, from a 40-plan soak of its code):
+
+  | | Drops | Big Drops | Blocks down in all |
+  |---|---|---|---|
+  | Road Easy | 23 (18) | 10 (4) | 33 (22) |
+  | Road Medium | 30 (25) | 18 (12) | 47 (36) |
+  | Road Hard | 31 (29) | 19 (16) | 50 (45) |
+  | Slalom Easy / Medium / Hard | 13 / 16 / 17 (10 / 14 / 15) | 7 / 12 / 14 (0 / 5 / 7) | 20 / 27 / 31 (10 / 18 / 22) |
+
+  A Medium road falls 46-55 blocks over its 300 plans (the owner's 0.37.0 ride fell 35, in 23 drops).
+  More of the drops stand along the long rows, not only before the turns: on a typical Medium or Hard
+  run every row falls at least 5 blocks. **Why not three times the fall:** each Big Drop needs about 63
+  blocks of straight before the next one can stand (its flight zone is sized for any boat at the 75 b/s
+  speed cap with no air drag), and the runs already use their straights; three times a Medium road's
+  fall (about 108 blocks) would need a road about twice as long. The flight recorder (below) measures
+  how far boats really jump, so 0.38 can stand the drops closer together. A staircase of 2 or 3 drops
+  down one straight has its own THE CLIFFS! sign: "THE CLIFFS! / 3 big drops!" when every step is 2
+  blocks, otherwise "THE CLIFFS! / 3 drops ahead!". Every run ends with the **Final Drop**, a Big Drop,
+  just before the finish (its sign: "FINAL DROP! / Then the gold / finish line!"). Every drop lands on a
+  straight. Packed ice only on Easy.
 - **The style** (`games.fresh.slots.fresh_boat.style`, shipped `random`): each week's own, about half
   and half, but **the Winding Road every week while Race Night is on** (the owner: racing is the
   Winding Road, the Slalom is for solo runs). `road` or `slalom` makes every week that one. The style
@@ -1884,16 +1941,18 @@ slower.
   two.
 - **Signs** stand on the wall 10 blocks before what they announce: HOP!, BIG DROP!, THE CLIFFS!, FINAL
   DROP!, HAIRPIN "Ease off!", CHICANE "Right, left!" or "Left, right!" (the way its first bend goes),
-  SANDY BEND "Sand is slow, ice is fast!" (before a tight bend with sand on its outside), SAND PIT!
+  SNOWY BEND "Snow is slow, ice is fast!" (before a tight bend with snow on its outside), SNOW DRIFT!
   "Stay on the ice to go fast!", PICK A PATH! "Left or right?", ICE CAVE and TUNNEL "Lights on!",
-  FOREST "Weave through the trees!", the
-  Slalom's gate sets, and HALFWAY! "Keep going!" by the checkpoint half way down. Arrows in the walls
-  point the way every 40 blocks. The walls are stripped spruce with glass on top, 2 above the ice (and
-  above every drop's flight zone).
-- **Checkpoints** are about 45 and never more than about 60 blocks apart (a run has about 50-75; up to
-  128 are allowed), with at most one drop between two. A reset puts you at the last one, on flat ice,
-  facing down the track. **Most checkpoints are quiet:** the action bar shows
-  "Checkpoint 37/74 · 1:12.4" with a soft ping, and the big title shows only at every 10th, at
+  FOREST "Weave through the trees!", the Slalom's gate sets, and HALFWAY! "Keep going!" by the
+  checkpoint half way down. **Arrows in the walls point the way you are going**, on both walls, every
+  40 blocks and just before every bend, each with a wood cap over it (0.37.0's pointed up or down on
+  most faces). The walls are stripped spruce with glass on top, 2 above the ice (and above every drop's
+  flight zone).
+- **Checkpoints** are about 45 and never more than about 60 blocks apart, or 66 across a Big Drop (a run
+  has about 50-75; up to 128 are allowed), with at most one drop between two. A reset puts you at the
+  last one, on flat ice (never on snow), facing down the track, so a crash just after a Big Drop sends
+  you back to the checkpoint about 8-11 blocks before it. **Most checkpoints are quiet:** the action
+  bar shows "Checkpoint 37/74 · 1:12.4" with a soft ping, and the big title shows only at every 10th, at
   "Halfway!" (the same checkpoint for every racer, wherever they started on the grid) and at "Final
   drop!" before the Final Drop.
 - **Falling off the track** goes back to the last checkpoint: a boat more than 4 blocks under the lower
@@ -1905,53 +1964,89 @@ slower.
   there facing north, up the mountain, and Watch live starts 6 above it looking north. How much of
   the mountain shows from it depends on the server's view distance: the finish and the lower slopes,
   and more the higher it is, but never the summit, 34 to 36 chunks away (Java's largest view distance
-  is 32).
+  is 32). The road now cuts only 2 blocks into the hill on its uphill side (it was 5), so about a fifth
+  of the track shows from the stand (20-23% on three Medium plans measured before release), where
+  0.37.0's showed about an eighth (12% on the owner's seed). From the start you still see none of the
+  run's lower half.
 - **The mountain**: a stone and snow summit 30-40 blocks above the start, a cliff rim behind it,
   ridges along the sides, snow on the top quarter, stone on the steep faces, moss elsewhere, spruce
   higher up and oak and birch lower down, all kept clear of the track; moss in the valley round the
-  stand. Scenery only: nothing on it is in play, and no water anywhere.
+  stand. **In the forest** the trees have round tops (0.37.0's were cut flat), more trees stand in both
+  walls, and a split's island tree is a round ball. Scenery only: nothing on it is in play, and no
+  water anywhere.
 - **Stars** come from the model time: the reference is 0.8 of T_m, and the tier's factors (`fresh.stars`)
-  multiply it, so on Medium gold needs about 0.83 of the model boat's pace (a 2-minute model run: gold
-  about 2:24, silver about 3:31), and silver about 0.57.
-- **The tile** says the style and the drops: "Ice Boat - Winding Road · 27 drops · ★★☆".
+  multiply it, so on Medium gold needs about 0.83 of the model boat's pace and silver about 0.57 (on a
+  Medium road whose model run is 2:18, the release soak's median: gold about 2:45, silver about 4:02).
+- **The tile** says the style and the drops: "Ice Boat - Winding Road · 30 drops · ★★☆".
 - **A test run** (`/hcm games gen test fresh_boat`) ends "Test run - nothing was recorded. It would have
   counted. Top leg speed 38 b/s.": the fastest leg between two checkpoints (a leg a server stall
-  touched is skipped). It is about 40 or less on packed ice; a leg with blue ice (a boost strip, a Hard
-  blue straight) can reach about 73.
+  touched is skipped). It is about 40 or less on packed ice, and a little more on a Hard blue straight,
+  because drops stand on it (73 is the most any blue stretch could ever reach).
+- **The best jump and the landing snow** (0.37.1). A Mountain Run's finish (a test run and a race too)
+  adds one quiet line, "Best jump: 12.4 blocks": the run's longest flight off a drop that was measured
+  cleanly (no line when there is none). Where a boat lands off a drop, a small puff of snow kicks up
+  off the ice, about 6 bits off a hop and 14 off a Big Drop, seen by everyone near; at most one every
+  half second a run, and none while a run is being put back or once it is over. There is no sound and
+  no title or action-bar text.
 - **Races.** A party race there waits max(120 s, ⌈1.25 T_m⌉) after the first finisher (150 s on a
-  2-minute run), and a party race started on the Slalom gets a heads-up: "Heads up: Ice Boat is the
-  Slalom this week. The gates are narrow and boats bump, so give each other room!". Race Night's
-  windows grow with the track (see [Race Night](#race-night)).
+  2-minute run, about 2:52 on a Medium road of T_m 137.6 s), and a party race started on the Slalom
+  gets a heads-up: "Heads up: Ice Boat is the Slalom this week. The gates are narrow and boats bump, so
+  give each other room!". Race Night's windows grow with the track (see [Race Night](#race-night)).
 - **Still proven.** Before a block is placed, every run is proven from its blocks alone
   (`MountainValidator`): downhill only (a boat can't climb), drops of at most 2, walls 2 above anything
   a boat can reach and round every drop's flight zone, at most one drop and at most about 60 blocks
-  between two checkpoints, checkpoints nobody can skip, resets facing down the track, a real descent
-  (a floor and a cap per style and tier), 12 grid spots, the stand's clearance and sight line, the
-  Final Drop in the finish's own leg, at most 128 checkpoints and 400,000 blocks. The planner scores
-  cheap candidates on the line model and a **flow score** (turns both ways, no beat repeated over and
-  over, speed carried through the bends, few hard brakes), builds and proves the best few, and if none
-  is proven falls back to a fixed proven layout for the style and tier, so the course is never missing.
-- **Size.** Up to about 340,000 blocks a run. Planning takes 1-8 seconds on the planner thread
-  (a Hard road up to about 15), and every plan-sized step (the proof, the archive copy, the build index)
-  stays off the main thread. The first build in the new area checks the area first (2 x 1,200 empty
-  chunks), so it takes a few minutes; later builds pause above `budget.pause_above_mspt` like any
-  other.
-- `/hcm games gen plan fresh_boat` shows 5 lines (your numbers differ): "Ice Boat v4 medium: Winding
-  Road, 3,412 blocks, 6 bands (2 hairpins, 3 elbows, 0 bulbs), candidate 3 (6 kept), build 1" (the
-  length is the track's, or "the safe road after ..." when the fixed layout was used; a build whose
-  proof failed near a piece is built again without only the pieces near that spot and ends "(1 piece
-  left out for the proof)"); "flow 0.81
-  (carry ..., balance ..., period ..., variety ..., brakes .../km) - model T_m 120.6 s"; "drops 26 (9
-  big, 44 down), Final Drop 2 (31 before the finish) - staircases 1 - pieces 7 of 8 (pits 2/2, splits
-  1/2, caves ..., tunnels ..., forests ..., boosts ...), blue straights 0, run-offs 9 - trees ..." (each
-  kind placed of dealt, so a thin deck shows in the preview; on the Slalom "gate sets 3 (21 gates)");
-  "grid 12 (double) - checkpoints 72 - stand at the bottom - 318,604 blocks"; and "reference 96.48 s
-  for the stars (0.8 of T_m 120.6 s), shortest ... s - seed ...".
+  between two checkpoints (66 across a Big Drop), checkpoints nobody can skip, resets facing down the
+  track, snow and sand counted as slow ground, a real descent (a floor and a cap per style and tier),
+  12 grid spots, the stand's clearance and sight line, the Final Drop in the finish's own leg, at most
+  128 checkpoints and 400,000 blocks. The planner scores cheap candidates on the line model and a
+  **flow score** (turns both ways, no beat repeated over and over, speed carried through the bends, few
+  hard brakes), builds and proves the best few (on the Winding Road, the ones whose every row falls most
+  evenly first), and if none is proven falls back to a fixed proven layout for the style and tier, so
+  the course is never missing. The release soak's 1,800 plans were all proven, with no fixed layout
+  needed.
+- **Size.** About 310,000-378,000 blocks a run (the release soak's 1,800 plans: a road 327,000-378,000,
+  the Slalom 309,000-352,000). Planning takes about 1-9 seconds on the planner thread (in the soak a
+  Medium road took 2.6-6.4 s and no plan more than 8.3 s; the online throttle adds about a fifth), and
+  every plan-sized step (the proof, the archive copy, the build index) stays off the main thread. The
+  first build in the new area checks the area first (2 x 1,200 empty chunks), so it takes a few
+  minutes; later builds pause above `budget.pause_above_mspt` like any other.
+- `/hcm games gen plan fresh_boat` shows 5 lines (your numbers differ; these are a Medium road's):
+  "Ice Boat v5 medium: Winding Road, 3,251 blocks, 7 bands (3 hairpins, 4 elbows, 0 bulbs), candidate
+  59 (9 kept), build 1" (the length is the track's, or "the safe road after ..." when the fixed layout
+  was used; a build whose proof failed near a piece is built again without only the pieces near that
+  spot and ends "(1 piece left out for the proof)"); "flow 0.81 (carry .75, balance .89, period .33,
+  variety .68, brakes 0.0/km) - model T_m 137.5 s"; "drops 30 (17 big, 47 down), Final Drop 2 (54
+  before the finish) - staircases 1 - pieces 6 of 6 (snow drifts 2/2, splits 2/2, caves 1/1, tunnels
+  0/0, forests 1/1, boosts 0/0), blue straights 0, run-offs 12 - trees 320" (each kind placed of
+  dealt, so a thin deck shows in the preview; on the Slalom "gate sets 3 (18 gates)"); "grid 12
+  (double) - checkpoints 66 - stand at the bottom - 370,904 blocks"; and "reference 110.00 s for the
+  stars (0.8 of T_m 137.5 s), shortest 26 s - seed ...".
+- **The flight recorder** (0.37.1). The proof keeps every drop's flight zone clear for a boat that
+  leaves the lip at the 75 b/s speed cap with no air drag, plus a margin for Bedrock: 38 blocks off a
+  hop and 49 off a Big Drop. Real boats on packed ice (at most about 40 b/s, slowed by the air) should
+  fly about 10-13 off a Big Drop. So every Ice Boat run on a Mountain Run v2, a test run of a preview
+  included, is measured: each flight off a 1- or 2-block drop, its take-off speed and its length, and
+  the edition (Java or Bedrock), never the player's name. It changes nothing about the ride. At the
+  end of each run the console gets one INFO line, like "Ice Boat flights (Java, road medium): 31 drops;
+  2-block: 18, longest 12.4 at 39.8 b/s, p90 11.9; 1-block: 13, longest 8.1 at 38.2 b/s, p90 7.7"
+  (", not finished" for a run that ended before the finish; "18 (2 lagged)" when a server hitch
+  blurred some flights, which are counted but not measured). **`/hcm games boat flights`** (admin)
+  prints the last 10 of those lines, then the longest 1- and 2-block jump per edition since the restart
+  (and the all-time longest when that is longer) next to what the safety rule allows: "Longest 2-block
+  jump (Java): 12.4 blocks at 39.8 b/s, fastest take-off 40.1 b/s (the safety rule allows 49)". With
+  nothing recorded yet it says so. The last 50 runs are kept in memory, the all-time longest in the
+  database (`hcm_meta`). These numbers decide how close together the drops can stand in 0.38, for more
+  fall on the same length; the drops stay at most 2 blocks.
 - **Keep and the archive.** A Mountain Run v2 can't be kept ("Mountain Run v2 courses are too big to
   keep; they stay in the archive"); there is no Classic boat slot to recall it into, and a recall says
   so without sending you to a keep ("Ice Boat has no Classics slot, and BOAT-1 can't be kept: ..."). Its archive row is
-  about 0.2-0.4 MB (stored compact), and `history <code>` answers a moment later, because the row is read
-  off the main thread.
+  about 50-70 KB (stored compact; twelve 0.37.1 plans measured 54-65 KB), and `history <code>` answers a
+  moment later, because the row is read off the main thread.
+- **0.37.0's road** (algo 4, 7-9 wide) keeps its own rules wherever one exists: a live one keeps its
+  blocks, board and stars until its set ends and is judged by 0.37.0's proof (60 across every leg,
+  sandstone), and its archive rows read exactly. A pin made on 0.37.0 is not used: the status shows
+  "(not used: it was made for boat planner v4 and this is v5)", the console says so once, and
+  `/hcm games gen unpin fresh_boat` clears it.
 - **0.36's spiral** (algo 3) keeps its own rules and size wherever it is still stored (the archive, a
   kept course): 64 checkpoints at most, the old proof, the "5 drops" tile. A preview of one left in the
   old area is emptied with that area (see "When an update moves or grows an area").
@@ -1960,50 +2055,69 @@ slower.
 blocks with the same flight numbers, so the 0.36 boat test strip (Gate 0) isn't needed again: preview
 and ride it instead.
 
-1. `/hcm games gen status fresh_boat` shows it off, with its style rule.
+1. `/hcm games gen status fresh_boat` shows it off, with its style rule and the ice values line
+   ("ice on this server: packed 0.98, plain 0.98, blue 0.989; snow 0.6, smooth sandstone 0.6"; if it is
+   yellow, a value differs from the planner's model: note which). A pin left from 0.37.0 shows "(not
+   used: ...)": `/hcm games gen unpin fresh_boat`.
 2. `/hcm games gen preview fresh_boat style:road`: "A preview of Ice Boat (seed ...) is on its way into
    half A. It is the Winding Road. Ice Boat stays off: ...". The first preview in the new area checks
-   and claims it first; a few minutes later "The preview of Ice Boat is ready in half A (seed ...)".
-3. `/hcm games gen test fresh_boat` on Java, then again as a Bedrock admin, and `/hcm games gen tp
-   fresh_boat idle` to walk it. Do the *preview* checks below.
-4. The same with `style:slalom` (a new preview replaces the last).
-5. With Race Night planned, switch it on first (`games.race_night.enabled: true`, `/hcm reload`), so
+   and claims it first, and a first 0.37.1 preview over a 0.37.0 one writes both, so allow a minute
+   or two more; then "The preview of Ice Boat is ready in half A (seed ...)".
+3. `/hcm games gen plan fresh_boat <that seed>` (the seed from the "ready" line): "Ice Boat v5 ...", and
+   on a Medium road its pieces line ("snow drifts 2/2", and usually "forests 1/1").
+4. `/hcm games gen test fresh_boat` on Java, then again as a Bedrock admin, and `/hcm games gen tp
+   fresh_boat idle` to walk it. Do the *preview* checks below. Then `/hcm games boat flights`: your
+   runs' lines and the longest jumps.
+5. The same with `style:slalom` (a new preview replaces the last).
+6. With Race Night planned, switch it on first (`games.race_night.enabled: true`, `/hcm reload`), so
    `plan` and `on` pick the Winding Road.
-6. On one day, so the set doesn't change: set the tier you want live. For this set's own course,
+7. On one day, so the set doesn't change: set the tier you want live. For this set's own course,
    `/hcm games gen plan fresh_boat` names its seed and style: `preview fresh_boat <that seed>`, wait for
    "ready", `test`. For another seed you liked: preview it, `test`, then `/hcm games gen pin fresh_boat
    <seed> 1`.
-7. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat is on. Its course for <set> is built next,
+8. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat is on. Its course for <set> is built next,
    in half A over the preview there, and opens once it's built." (`on` before "ready" drops the
    preview; the set's course still opens, untested.)
-8. Ride it live (`/hcm play fresh_boat`), then the checks marked *live*. If anything is wrong,
+9. Ride it live (`/hcm play fresh_boat`), then the checks marked *live*. If anything is wrong,
    `/hcm games gen off fresh_boat`: runs end, the course closes, its blocks stay.
-9. Later weeks: `preview fresh_boat next` (with a `style:` if you like), `test`, `choose fresh_boat`.
+10. Later weeks: `preview fresh_boat next` (with a `style:` if you like), `test`, `choose fresh_boat`.
 
 **Verify in game** (each on Java and on Bedrock)
 
 1. *Preview:* both styles from the top to the bottom: the drops feel like hops, the bends flow, turns
    go both ways, no boat breaks or throws you out. The test summary's top leg speed is 40 b/s or less
    on packed ice (73 or less on a Hard blue straight).
-2. *Preview:* quiet checkpoints: the action-bar line and a soft ping; the big title at checkpoints
+2. *Preview:* flying over the Winding Road: the road is the same width at every drop, bend and
+   checkpoint (18, 15 or 14), wider only round a snow drift or a split and on a tight bend's run-off,
+   and narrower only where the forest's trees or a split's island stand in it.
+3. *Preview:* the run-offs and the drifts are snow, with ice round both sides of each drift. At a
+   SNOWY BEND, go wide on purpose: you slow right down on the snow, you're never stuck, and you're not
+   sent back.
+4. *Preview:* standing on the ice, the magenta arrows on both walls point the way of travel.
+5. *Preview:* the forest's tree tops are round, with trees standing in the walls too.
+6. *Preview:* quiet checkpoints: the action-bar line and a soft ping; the big title at checkpoints
    10, 20, ..., at "Halfway!" by the HALFWAY! sign, and at "Final drop!" just before the last drop.
-3. *Preview:* steer off the track at a drop or a run-off: you are back at the last checkpoint within
-   about 4 blocks of falling, facing down the track.
-4. *Preview:* the Slalom's gates are easy to read, the fences turn you and never trap you, and the
+7. *Preview:* steer off the track at a drop or a run-off: you are back at the last checkpoint within
+   about 4 blocks of falling, facing down the track. Right after you land a BIG DROP, tap Back to
+   checkpoint: you are back at the checkpoint just before that drop, on ice, facing down the track.
+8. *Preview:* landings kick up a little snow, with no sound and nothing on screen, and the finish
+   shows "Best jump: N blocks".
+9. *Preview:* the Slalom's gates are easy to read, the fences turn you and never trap you, and the
    corners behind them are fine to drive into.
-5. *Preview:* stand on the viewing stand: the finish line is in clear view and nothing stands over
-   the platform.
-6. *Live:* the tile reads "Ice Boat - Winding Road · N drops · ★★☆" (or Slalom).
-7. *Live:* finish a party race: you park on the white stand at the bottom, facing north up the
-   mountain. Watch live from the Clubhouse starts about 6 above the stand, looking north.
-8. *Live:* 3-4 boats over THE CLIFFS together: nobody leaves the track, and any accident resets at the
-   leg's floor.
-9. *Live:* a warm-up: each run at the finish goes back to the summit.
-10. *Live:* the tick time stays even while a run is planned, built and switched to (no hitch at the
+10. *Preview:* stand on the viewing stand: the finish line is in clear view and nothing stands over
+    the platform.
+11. *Live:* the tile reads "Ice Boat - Winding Road · N drops · ★★☆" (or Slalom).
+12. *Live:* finish a party race: you park on the white stand at the bottom, facing north up the
+    mountain. Watch live from the Clubhouse starts about 6 above the stand, looking north.
+13. *Live:* 3-4 boats over THE CLIFFS together: nobody leaves the track, and any accident resets at the
+    leg's floor.
+14. *Live:* a warm-up: each run at the finish goes back to the summit.
+15. *Live:* the tick time stays even while a run is planned, built and switched to (no hitch at the
     plan, the build's start or the flip).
-11. `/hcm games gen history <its code>`: "Plan: N blocks, hash H (it can be brought back exactly)";
+16. `/hcm games gen status fresh_boat`: the ice values line is grey (every value is the model's).
+17. `/hcm games gen history <its code>`: "Plan: N blocks, hash H (it can be brought back exactly)";
     `/hcm games gen keep <its code> x confirm`: "... too big to keep ...".
-12. `style: fast` and `/hcm reload`: one WARN, "games.fresh.slots.fresh_boat.style should be random,
+18. `style: fast` and `/hcm reload`: one WARN, "games.fresh.slots.fresh_boat.style should be random,
     road or slalom, not "fast" - using random". Put it back.
 <!-- ---- end Course Variety ---- -->
 
@@ -2097,10 +2211,10 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 Every set that goes up is archived with its whole layout, its **course code** (`HARD-40`: the
 course's code word and how many sets it has had, never reused), its dates, seed and board.
 `games.fresh.archive.keep` (0 = forever) removes old ones after that many days; kept and recalled
-ones never go. A course's layout is a few KB in the database and a Mountain Run v2 about 0.2-0.4 MB
+ones never go. A course's layout is a few KB in the database and a Mountain Run v2 about 50-70 KB
 (stored compact, in the archive's version 2 format; older rows still read), so a year of weekly sets
-for every course is about 25 MB with Ice Boat on. Players see the code on every Fresh
-course's tile, on its screen and in the finish line, so they can ask for a favourite back.
+for every course is a few MB with Ice Boat on (Ice Boat's own about 3 MB). Players see the code on
+every Fresh course's tile, on its screen and in the finish line, so they can ask for a favourite back.
 
 | Command | What |
 |---|---|
@@ -2475,6 +2589,7 @@ entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 | `/hcm games break <player> show\|pause <days>\|limit <tokens\|none>\|clear\|clear-own confirm` | `hcm.games.admin` | A player's Take a break, online or not. `pause` (1-365 days) and `limit` set an admin pause or limit the player can't lift; `clear` removes only those; `clear-own confirm` lifts the player's OWN settings and logs a WARNING |
 | `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
 | `/hcm games saved <player> show\|restore\|return\|discard confirm` | `hcm.games.admin` | A player's things saved by a world game. `show` works offline; `restore` and `return` need them online; `discard confirm` deletes the row (logged) |
+| `/hcm games boat flights` | `hcm.games.admin` or the console | How far Ice Boats really jump off the Mountain Run's drops: the last 10 runs' lines and the longest 1- and 2-block jump per edition (Java, Bedrock) next to what the safety rule allows (38 and 49). It only reads (see "The flight recorder" in [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)) |
 | `/hcm games course list` | `hcm.games.admin` | Every time-trial course: open or closed, checkpoints, layout number, the course of the week |
 | `/hcm games course create <id> <parkour\|elytra\|boat> [tier]` | `hcm.games.admin` | A new, closed course (tier `easy` unless given: `easy`, `medium`, `hard` or `extreme`) |
 | `/hcm games course <id> [info]` | `hcm.games.admin` | Its world, start, checkpoints, finish, fall height, shortest time and record, and what stops it opening |

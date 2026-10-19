@@ -30,9 +30,10 @@ import java.util.zip.GZIPOutputStream;
  * written before version 2 decodes exactly as it always did.
  *
  * <p><b>Version 1</b> ({@value #V1}) writes each block as 14 bytes (x, y, z as ints, the palette
- * index as a short). A Mountain Run v2 plan is some 320,000-390,000 blocks: 4.5-5.5 MB, about
- * 0.8-1 MB gzipped a course (0.37.0's plans measured 4.5-4.7 MB and 0.78-0.82 MB), some 45-50 MB a
- * year of archive (MOUNTAIN-V2-SPEC §3.6, MOUNTAIN-V21-SPEC §3.3).
+ * index as a short). A Mountain Run v2 plan is some 310,000-380,000 blocks (0.37.1's release soak,
+ * 1,800 plans: 309,157-377,880): 4.3-5.3 MB, about 0.8-1 MB gzipped a course (0.37.0's plans
+ * measured 4.5-4.7 MB and 0.78-0.82 MB), some 45-50 MB a year of archive (MOUNTAIN-V2-SPEC §3.6,
+ * MOUNTAIN-V21-SPEC §3.3).
  *
  * <p><b>Version 2</b> ({@value #VERSION}, MOUNTAIN-V2-SPEC §13.5) is version 1 with only the
  * blocks written differently, as <em>columns</em> and <em>runs</em>, in exactly the plan's order:
@@ -59,9 +60,10 @@ import java.util.zip.GZIPOutputStream;
  * {@code decode(encode(plan))} equals the plan for every plan, and the encoder needs no "is it
  * sorted" test. What sorting buys is size: a planner that emits its blocks in (x, z, y) order (as
  * MOUNTAIN-V2-SPEC §3.6 asks of the Mountain Run's) gets one column per x, z and one run per stretch
- * of a block, so a Mountain Run v2 row is about 50-70 KB gzipped, from 1.6-2 MB raw (0.37.0's
- * plans measured 49-61 KB from 1.6-1.7 MB; version 1 about 0.8 MB), some 3-4 MB a year. A plan in
- * any other order is still exact, only less compact.
+ * of a block, so a Mountain Run v2 row is about 50-70 KB gzipped, from 1.6-2 MB raw (0.37.1's
+ * twelve golden road and slalom plans measured 54-65 KB from 1.68-1.84 MB, 0.37.0's 49-61 KB from
+ * 1.6-1.7 MB; version 1 about 0.8 MB), some 3-4 MB a year. A plan in any other order is still exact,
+ * only less compact.
  *
  * <p>{@link #encode} and {@link #payload} write version 2 for every plan, unless its blocks would
  * take more bytes than version 1's 14 an op (only blocks scattered across the whole int range do:

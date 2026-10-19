@@ -37,7 +37,8 @@ comes, and your last ten token changes.
 Arcade prizes can't be sold for money. Shops, Pallets, vending machines, the Auction House and
 Courier runs all say no.
 
-Prizes stay with you when you die.
+Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
+inside one drops with it.
 
 ## Minis
 

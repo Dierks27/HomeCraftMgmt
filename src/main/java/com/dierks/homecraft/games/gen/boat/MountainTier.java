@@ -22,7 +22,12 @@ import java.util.Locale;
  * checkpoint before its lip within {@value MountainValidator#MAX_LEG_BIG_DROP} across of the one after its
  * flight zone (D2): its set-back ({@link #setBack}) + Z(2) 51 + 3 + a block's rounding is 60.5-64 on these
  * lanes, so a Big Drop's leg may be 66 (every other leg keeps 60), and it stands only on an axis-aligned
- * straight.
+ * straight. What these tables made in the release soak (300 plans a style and tier, the median plan; algo 4's
+ * 40-plan soak in brackets): the road falls 33 / 47 / 50 on Easy / Medium / Hard (22 / 36 / 45) in 23 / 30 /
+ * 31 drops (18 / 25 / 29), 10 / 18 / 19 of them 2-block (4 / 12 / 16), at T_m 116 / 138 / 141 s; the Slalom
+ * falls 20 / 27 / 31 (10 / 18 / 22) in 13 / 16 / 17 drops. Three times algo 4's fall doesn't fit at this
+ * length: two 2-block lips stand at least Z(2) + {@code DropPlan.LIP_GAP} = 63 apart, and the straights are full
+ * (D3, D15).
  *
  * <p><b>Algo 4's necks.</b> There the leg across a 2-block drop stays within 60, which is over 60 for any lane
  * wider than 7 (W / 2 + 0.5 is 5 on the easy road's 9, 7-8 on a 13-15 wide slalom), so a 2-block drop on a
@@ -87,7 +92,7 @@ public final class MountainTier {
     public final int boostMax;
     public final int blueMin;
     public final int blueMax;
-    /** Pieces (fewest, most): sand pits, splits, caves, tunnels, forests. */
+    /** Pieces (fewest, most): sand pits (the wide road's snow drifts), splits, caves, tunnels, forests. */
     public final int[] pits;
     public final int[] splits;
     public final int[] caves;

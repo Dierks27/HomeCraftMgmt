@@ -22,8 +22,8 @@ import java.util.Locale;
  * Startup self-test for the collectors on the live API (HALLOWEEN-SPEC §3.1 #11): builds each collector
  * cap and checks the parts of its look that only a server can build — the dye, the trim, unbreakable,
  * an EMPTY attribute list (no armour) and the tags — then checks each collector trail's particle needs
- * no data, and that the clock isn't on UTC. Each failure is one warning, never fatal, the pattern of
- * {@code mini.ItemSelfTest}.
+ * no data (one that fails is not sold or given), and that the clock isn't on UTC. Each failure is one
+ * warning, never fatal, the pattern of {@code mini.ItemSelfTest}.
  */
 public final class CollectorSelfTest {
 
@@ -138,15 +138,19 @@ public final class CollectorSelfTest {
         return out;
     }
 
-    /** Null when the trail's particle exists and needs no data; otherwise why it would show nothing. */
+    /**
+     * Null when the trail's particle exists and needs no data; otherwise why it would show nothing, and so is
+     * not sold or given here ({@link TrailService#particleUsable}, the same two facts). This is the one line
+     * that says so (final audit F7).
+     */
     static String particleProblem(Prize p, boolean known, Class<?> dataType) {
         if (!known) {
             return p.id() + "'s particle " + p.particle() + " is not a particle on this server - the trail "
-                    + "shows nothing. Update the server.";
+                    + "is not sold or given (it needs Paper 26.3); one already owned shows after the update.";
         }
         if (dataType != Void.class) {
             return p.id() + "'s particle " + p.particle() + " needs data (" + (dataType == null ? "null"
-                    : dataType.getSimpleName()) + ") - the trail shows nothing.";
+                    : dataType.getSimpleName()) + ") - the trail shows nothing, so it is not sold or given.";
         }
         return null;
     }

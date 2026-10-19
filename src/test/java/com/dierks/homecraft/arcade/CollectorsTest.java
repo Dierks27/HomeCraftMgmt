@@ -7,6 +7,7 @@ import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -119,6 +120,49 @@ class CollectorsTest {
         assertEquals(poplar != null ? poplar : Material.OAK_LEAVES, trail.icon().material());
         assertEquals(36500, trail.days(), "kept for good: 100 years, never a Long.MAX_VALUE that overflows");
         assertNull(trail.collector().look());
+    }
+
+    /** {@code p} with another particle: everything else, its id and season included, kept. */
+    private static Prize withParticle(Prize p, String particle) {
+        return new Prize(p.id(), p.tab(), p.display(), p.description(), p.costTokens(), p.icon(), p.type(), p.enabled(),
+                p.limit(), p.amount(), p.color(), p.blockKey(), p.packId(), p.effect(), p.amplifier(), p.minutes(),
+                particle, p.days(), p.texture(), p.commands(), p.requiresPlugins(), p.ownedIfPermission(),
+                p.requiresPrize(), p.costs(), p.collector());
+    }
+
+    /**
+     * Final audit F7: a collector trail whose particle this server doesn't have (the Autumn Leaves trail's
+     * ORANGE_POPLAR_LEAVES is new in the 26.3 API) is not sold or given. It is hidden, so a buy, a present and
+     * "Give a present" refuse it, and the give-back says why. Where the server has it (26.3), nothing changes.
+     */
+    @Test
+    void aTrailThisServerCantShowIsNotSoldOrGiven() {
+        Prize leaves = row("trail_leaves_2026");
+        Prize cap = row("cap_pumpkin_2026");
+        Prize unknown = withParticle(leaves, "NO_SUCH_PARTICLE_2099");
+        assertFalse(TrailService.particleUsable("NO_SUCH_PARTICLE_2099"), "not a particle on this server");
+        assertFalse(TrailService.particleUsable(null), "no particle at all");
+        assertTrue(TrailService.particleUsable(" flame "), "a particle needing no data, any case, trimmed");
+        assertFalse(TrailService.particleUsable("DUST"), "one needing data (DustOptions) shows nothing either");
+        Set<String> notHere = PrizeService.trailsNotHere(List.of(cap, unknown), TrailService::particleUsable);
+        assertEquals(Set.of("trail_leaves_2026"), notHere, "the trail, never the cap");
+        LocalDate halloween = LocalDate.of(2026, 10, 31);
+        assertTrue(PrizeService.onSale(unknown, true, halloween), "fixture: in season and on sale");
+        assertFalse(PrizeService.offered(unknown, true, halloween, notHere),
+                "hidden: no tile, no buy, no present, so nothing is charged for a trail that never draws");
+        assertTrue(PrizeService.offered(cap, true, halloween, notHere), "the cap is still sold and given");
+        assertEquals("That trail needs Paper 26.3.", PrizeService.notHereRefusal(unknown, notHere),
+                "/hcm give prize refuses it and says why");
+        assertNull(PrizeService.notHereRefusal(cap, notHere), "and gives the cap back");
+        Set<String> all = PrizeService.trailsNotHere(Collectors.ROWS, name -> true);
+        assertEquals(Set.of(), all, "a server with every particle (26.3) holds nothing back");
+        assertTrue(PrizeService.offered(leaves, true, halloween, all), "there it is sold and given as before");
+        assertFalse(PrizeService.offered(leaves, false, halloween, all), "and the season gate still applies");
+        assertNull(PrizeService.notHereRefusal(leaves, all), "and given back");
+        // the shipped trail on this API: 26.2's (the test classpath) has no ORANGE_POPLAR_LEAVES, 26.3's has it
+        assertEquals(!TrailService.particleUsable("ORANGE_POPLAR_LEAVES"),
+                PrizeService.trailsNotHere(Collectors.ROWS, TrailService::particleUsable).contains("trail_leaves_2026"),
+                "the Autumn Leaves trail is held back exactly where its particle can't show");
     }
 
     @Test

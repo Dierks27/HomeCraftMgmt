@@ -73,6 +73,10 @@ class CollectorSelfTestRulesTest {
         assertNull(CollectorSelfTest.particleProblem(TRAIL, true, Void.class));
         assertTrue(CollectorSelfTest.particleProblem(TRAIL, false, null).contains("is not a particle"));
         assertTrue(CollectorSelfTest.particleProblem(TRAIL, true, Color.class).contains("needs data (Color)"));
+        // final audit F7: the one line at enable says the trail is held back, and why
+        assertTrue(CollectorSelfTest.particleProblem(TRAIL, false, null).contains("is not sold or given (it needs "
+                + "Paper 26.3)"));
+        assertTrue(CollectorSelfTest.particleProblem(TRAIL, true, Color.class).contains("not sold or given"));
     }
 
     @Test

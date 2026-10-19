@@ -49,7 +49,8 @@ public final class Collectors {
     /**
      * The Autumn Leaves trail's icon: the orange poplar leaves block, looked up by name because it is new in
      * the 26.3 API and the plugin compiles against 26.2's (build.gradle); on 26.2 a plain leaves block stands in
-     * (there the trail's particle is missing too, and the collector self-test says so at enable).
+     * (there the trail's particle is missing too, so the trail is not sold or given, and the collector self-test
+     * says so at enable).
      */
     static Material leaves() {
         Material poplar = Material.matchMaterial("ORANGE_POPLAR_LEAVES");

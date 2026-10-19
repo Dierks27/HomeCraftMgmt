@@ -584,15 +584,68 @@ class MountainPlannerTest {
 
     // ---- the HALFWAY! sign and the "Halfway!" title (audit M00) ------------------------------------------
 
+    /** A case a {@link #HALFWAY_SEEDS} seed shows (audits M00 and MTN03), checked so a re-pin can't lose it. */
+    enum Halfway {
+        /** The checkpoint half way along the line ({@link #halfwayAlong}, the sign's before M00) isn't the title's. */
+        APART,
+        /** The title's rule before M00 ({@link #halfwayFromStart}): the pole heard it at the sign, a grid spot not. */
+        GRID,
+        /** Another sign has the title checkpoint's own spot, so HALFWAY! stands a few blocks along (MTN03). */
+        MOVED
+    }
+
     /**
-     * The seeds the audit found the sign and the title a checkpoint apart on (easy road 5 and 19, medium slalom
-     * 26, hard road 13 and 16), the grid that moved the title (medium road 2), and the one with no sign at all
-     * (medium slalom 23), besides every pinned layout; and easy slalom 20, whose checkpoint's own spot is taken
-     * by another sign, so its HALFWAY! stands a few blocks along (audit MTN03: no plan of 600 went without).
+     * The seeds that show the audits' cases at algo 5, besides every pinned layout, each with the cases it is
+     * checked to show (final audit F9: re-searched for 0.37.1, MOUNTAIN-V21-SPEC §5.3). APART: easy road 6, medium
+     * slalom 26, hard road 6 and easy slalom 20, where a sign by the checkpoint half way along the line would stand
+     * a checkpoint from the title. GRID: medium road 10, where half way measured from the start (which a race moves
+     * to each racer's spot) is the title's checkpoint at pole but another from grid spots 11 and 12, so racers in
+     * one race heard "Halfway!" at different checkpoints. MOVED: medium slalom 23 (the one with no sign at all
+     * before MTN03), hard road 13 and easy slalom 20, whose checkpoint's own spot another sign has, so its HALFWAY!
+     * stands a few blocks along (MTN03: no plan of 600 went without). At algo 4 the APART seeds were easy road 5 and
+     * 19, hard road 13 and 16 and medium slalom 26, and the grid one medium road 2; at algo 5 only medium slalom 26
+     * still shows its case, so the others were searched again (easy and hard road seeds 1-100 for APART, medium
+     * road seeds 1-60 for the grid).
      */
-    static final List<Object[]> HALFWAY_SEEDS = List.of(new Object[]{"easy", 19L}, new Object[]{"medium", 23L},
-            new Object[]{"medium", 26L}, new Object[]{"hard", 13L}, new Object[]{"hard", 16L},
-            new Object[]{"easy", 20L});
+    static final List<Object[]> HALFWAY_SEEDS = List.of(
+            new Object[]{"easy", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 26L, Set.of(Halfway.APART)},
+            new Object[]{"hard", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 10L, Set.of(Halfway.GRID)},
+            new Object[]{"medium", 23L, Set.of(Halfway.MOVED)}, new Object[]{"hard", 13L, Set.of(Halfway.MOVED)},
+            new Object[]{"easy", 20L, Set.of(Halfway.APART, Halfway.MOVED)});
+
+    /** The checkpoint whose centreline s is nearest half way from the start to the finish: the sign's before M00. */
+    static int halfwayAlong(MountainPlanner.Made m) {
+        Skeleton sk = m.cand.sk();
+        double mid = (sk.start + sk.finish) / 2;
+        int best = 0;
+        for (int i = 1; i < m.checkpoints.size(); i++) {
+            if (Math.abs(m.checkpoints.get(i).s() - mid) < Math.abs(m.checkpoints.get(best).s() - mid)) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The "Halfway!" title's checkpoint before M00: the one nearest half the mark-to-mark distance, measured from
+     * the course's start, which a race moves to each racer's grid spot.
+     */
+    static int halfwayFromStart(Course c) {
+        List<Course.Mark> cps = c.checkpoints();
+        double[] at = new double[cps.size()];
+        at[0] = c.start().point().distance(cps.get(0).center());
+        for (int i = 1; i < cps.size(); i++) {
+            at[i] = at[i - 1] + cps.get(i - 1).center().distance(cps.get(i).center());
+        }
+        double mid = (at[at.length - 1] + cps.get(cps.size() - 1).center().distance(c.finish().center())) / 2;
+        int best = 0;
+        for (int i = 1; i < at.length; i++) {
+            if (Math.abs(at[i] - mid) < Math.abs(at[best] - mid)) {
+                best = i;
+            }
+        }
+        return best;
+    }
 
     @Test
     void theHalfwaySignStandsByTheCheckpointEveryRacerHearsHalfwayAt() {
@@ -608,7 +661,10 @@ class MountainPlannerTest {
             String tier = (String) run[0];
             long seed = (Long) run[1];
             String name = tier + " " + BoatStyle.of(seed).id() + " seed " + seed;
-            Plan p = made(HALF_A, seed, tier).finished();
+            @SuppressWarnings("unchecked")
+            Set<Halfway> cases = run.length > 2 ? (Set<Halfway>) run[2] : Set.of();
+            MountainPlanner.Made m = made(HALF_A, seed, tier);
+            Plan p = m.finished();
             PlannedTrial pt = (PlannedTrial) p.course();
             Course c = pt.course().withGen(new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, seed,
                     'A', p.hash(), pt.refMs(), 2, 3, List.of(), List.of(), 0, 7));
@@ -626,12 +682,28 @@ class MountainPlannerTest {
             int title = BoatHype.halfway(c);
             assertEquals(near, title, name + ": the sign stands by the checkpoint the \"Halfway!\" title shows at");
             assertEquals(BoatHype.HALFWAY, BoatHype.checkpointTitle(c, title), name + ": \"Halfway!\" there");
+            if (cases.contains(Halfway.APART)) {
+                assertNotEquals(halfwayAlong(m), title, name + ": fixture: half way along the line is checkpoint "
+                        + halfwayAlong(m) + ", not the title's " + title);
+            }
+            if (cases.contains(Halfway.MOVED)) {
+                double off = along(m, sign) - m.checkpoints.get(title).s();
+                assertTrue(Math.abs(off) > 3, name + ": fixture: the sign stands " + off + " along from its "
+                        + "checkpoint, whose own spot another sign has");
+            }
             RaceGrid.Grid grid = RaceGrid.forCourse(c, new PlanSurface(p), RaceGrid.MAX_SPOTS);
             assertTrue(grid.size() >= 2, name + ": fixture: a grid");
+            Set<Integer> fromStart = new HashSet<>();
             for (int k = 0; k < grid.size(); k++) {
                 Course raced = RaceTrack.raced(c, grid.spot(k), 0);
                 assertEquals(title, BoatHype.halfway(raced), name + ": grid spot " + (k + 1) + " hears it there too");
                 assertTrue(BoatHype.loud(raced, title), name + ": loud from grid spot " + (k + 1));
+                fromStart.add(halfwayFromStart(raced));
+            }
+            if (cases.contains(Halfway.GRID)) {
+                assertEquals(title, halfwayFromStart(RaceTrack.raced(c, grid.spot(0), 0)), name
+                        + ": fixture: measured from the start, the pole heard it at the sign's checkpoint");
+                assertTrue(fromStart.size() > 1, name + ": fixture: and the grid at " + fromStart);
             }
         }
     }

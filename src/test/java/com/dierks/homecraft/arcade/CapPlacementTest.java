@@ -2,6 +2,7 @@ package com.dierks.homecraft.arcade;
 
 import com.dierks.homecraft.arcade.PrizeService.CapPlacement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.games.GameMenu;
 import org.bukkit.inventory.InventoryHolder;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Where a collector cap goes (HALLOWEEN-SPEC D8, kid-bedrock #6): a present goes on the head, swapping
  * an old helmet into the bag, unless that helmet has Curse of Binding; a buy never takes a helmet off. And
- * the present's moment is never hidden behind one of our menus.
+ * the present's moment is never hidden behind one of our menus, though it never closes a game screen.
  */
 class CapPlacementTest {
 
@@ -32,7 +33,9 @@ class CapPlacementTest {
 
     /**
      * Review BK-1: the present's moment must not play behind the receiver's open menu (on a Bedrock window a
-     * chest screen covers the whole view). One of our menus is closed first; any other screen is left open.
+     * chest screen covers the whole view). One of our menus is closed first; any other screen is left open,
+     * and so is a game screen (final audit F2): closing a cabinet game ends a friend match for both players, or
+     * today's scored try on a Daily board with no score.
      */
     @Test
     void theMomentClosesOnlyOurOwnMenu() {
@@ -45,5 +48,11 @@ class CapPlacementTest {
         InventoryHolder chest = () -> null;
         assertFalse(PrizeService.hidesTheMoment(chest), "a chest, or another plugin's screen: left open");
         assertFalse(PrizeService.hidesTheMoment(null), "nothing open");
+        GameMenu game = new GameMenu(null, null, null, null) {
+            @Override
+            protected void build() {
+            }
+        };
+        assertFalse(PrizeService.hidesTheMoment(game), "a game screen: left open, the game goes on");
     }
 }

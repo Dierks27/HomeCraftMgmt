@@ -259,6 +259,22 @@ public final class TrailService implements Listener {
         }
     }
 
+    /**
+     * Whether a trail of particle {@code name} can show on this server: a particle it has, needing no data
+     * (final audit F7). The Autumn Leaves trail's ORANGE_POPLAR_LEAVES is new in the 26.3 API, so on 26.2 it
+     * is not, and that collector is not sold or given there ({@link PrizeService#visible}).
+     */
+    static boolean particleUsable(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        try {
+            return Particle.valueOf(name.trim().toUpperCase(Locale.ROOT)).getDataType() == Void.class;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         load(event.getPlayer());

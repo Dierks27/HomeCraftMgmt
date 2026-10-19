@@ -11,6 +11,9 @@ import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -72,10 +75,16 @@ class GamesCommandTest {
     }
 
     @Test
-    void boatFlightsIsAnAdminVerbWithItsHelpLine() {
+    void boatFlightsIsAnAdminVerbWithItsHelpLine() throws Exception {
         assertTrue(GamesCommand.VERBS.contains("boat"), "/hcm games boat flights is offered to admins (D17)");
         assertEquals(List.of("flights"), GamesCommand.BOAT_VERBS, "Tab offers flights after boat");
         assertTrue(GamesCommand.BOAT_HELP.startsWith("&e/hcm games boat flights &7- "), GamesCommand.BOAT_HELP);
+        // final audit F10: plugin.yml's usage lists it too
+        String yml = Files.readString(Path.of("src", "main", "resources", "plugin.yml"), StandardCharsets.UTF_8);
+        assertTrue(yml.contains("\n      /hcm games status|course|golf|feature|break|saved|scores|boat  - admin: "
+                + "run the Games\n"), "plugin.yml's /hcm games verbs");
+        assertTrue(yml.contains("\n      /hcm games boat flights  - admin: how far Ice Boats really jump off the "
+                + "Mountain Run's drops\n"), "plugin.yml's /hcm games boat flights line");
     }
 
     @Test

@@ -277,6 +277,25 @@ class DropPlanTest {
                 double after = p.zoneEnd.get(indexOf(p, s2)) + DropPlan.CLEAR + DropPlan.ROUNDING;
                 assertTrue(after - shared <= DropPlan.BIG_LEG + 1e-9, tier + ": and the second " + (after - shared));
                 pairs++;
+                // fill()'s pairing budgets the same grow, on the pair itself (audit TQ1 step 4, final audit F8):
+                // handOn() pairs two lips only when two checkpoints fit between them, or when the one before the
+                // second stands within a grown leg of the one before the first. At 18 wide (65.5 apart, set back
+                // 9.75) that one is at s1 + 55.75, past s1 + 54.75, so fill() won't pair them; at 15 wide (64
+                // apart, 8.25) it is at s1 + 55.75, within s1 + 56.25, and it does. Without handOn's own budget
+                // the 18-wide pair would pair too (within s1 + 56.25), and only the goldens would show it.
+                double grownLeg = s1 - c1 + DropPlan.BIG_LEG - RasterV4.GROW;
+                if (tier.easy()) {
+                    assertTrue(b > grownLeg, tier + ": fixture: the pair (" + s1 + ", " + s2 + ") is past the grown "
+                            + "leg: " + b + " > " + grownLeg);
+                    assertFalse(p.handOn(s1, c1, p.zoneEnd.get(i1), 2, s2, c2), tier + ": fill() won't pair the"
+                            + " Big Drops at (" + s1 + ", " + s2 + "): the checkpoint they share, grown, is past the"
+                            + " leg");
+                } else {
+                    assertTrue(b <= grownLeg, tier + ": fixture: the pair (" + s1 + ", " + s2 + ") is within the grown "
+                            + "leg: " + b + " <= " + grownLeg);
+                    assertTrue(p.handOn(s1, c1, p.zoneEnd.get(i1), 2, s2, c2), tier + ": fill() pairs the Big Drops"
+                            + " at (" + s1 + ", " + s2 + "): the grow budget doesn't bind at 15 wide");
+                }
                 // where the budget changes the answer (audit TQ1): chains() keeps that shared checkpoint at most
                 // BIG_LEG - GROW past the one before the first lip, so a third Big Drop at the same gap, its flight
                 // zone ending on the same straight, needs its own checkpoint within a grown leg of it. At 18 wide

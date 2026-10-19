@@ -28,7 +28,9 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -61,16 +63,24 @@ public final class PrizeService {
     private static final String NOTHING_MADE = "That prize couldn't be made — nothing charged.";
     private static final String NOT_SAVED = "That couldn't be saved — nothing charged. Tell an admin.";
     private static final String NO_TRAIL = "Couldn't add that trail — nothing charged. Tell an admin.";
+    private static final String TRAIL_NOT_HERE = "That trail needs Paper 26.3.";
 
     /** Where a collector cap goes: on the head, on the head with the old helmet into the bag, or into the bag. */
     public enum CapPlacement { HEAD, SWAP, BAG }
 
     private final HomeCraftManagement plugin;
     private final PrizeDao dao;
+    /**
+     * The collector trails this server can't show, found once at enable (final audit F7): on 26.2 the Autumn
+     * Leaves trail's particle doesn't exist, so it is not sold or given there rather than charged for and never
+     * drawn. The collector self-test logs why, once. Owned rows keep loading, so one shows after an upgrade.
+     */
+    private final Set<String> trailsNotHere;
 
     public PrizeService(HomeCraftManagement plugin, PrizeDao dao) {
         this.plugin = plugin;
         this.dao = dao;
+        this.trailsNotHere = trailsNotHere(Collectors.ROWS, TrailService::particleUsable);
     }
 
     public PrizeDao dao() {
@@ -82,8 +92,9 @@ public final class PrizeService {
     /**
      * Whether a row appears at all: enabled, its plugins present, and — for a hat — a texture to
      * show (a hat with no texture is a Steve head, which is not a prize). A collector appears only
-     * while collectors are on sale and today (local) is inside its season; it is a dyed helmet, not
-     * a head, so the texture rule is not its.
+     * while collectors are on sale and today (local) is inside its season, and a collector trail only
+     * on a server that can show it ({@link #offered}); it is a dyed helmet, not a head, so the texture
+     * rule is not its.
      */
     public boolean visible(Prize p) {
         if (!p.enabled()) {
@@ -95,7 +106,7 @@ public final class PrizeService {
             }
         }
         if (p.collector() != null) {
-            return onSale(p, plugin.config().arcade().collectorsOnSale(), plugin.clock().today());
+            return offered(p, plugin.config().arcade().collectorsOnSale(), plugin.clock().today(), trailsNotHere);
         }
         if (p.type() == PrizeType.HAT && (p.texture() == null || p.texture().isBlank())) {
             return false;
@@ -110,6 +121,34 @@ public final class PrizeService {
      */
     static boolean onSale(Prize p, boolean collectorsOnSale, LocalDate today) {
         return p.collector() != null && collectorsOnSale && p.collector().inSeason(today);
+    }
+
+    /**
+     * Whether a collector is shown, sold and given now: {@link #onSale}, and not one of {@code notHere}, the
+     * collector trails this server can't show ({@link #trailsNotHere}). Hidden, it has no tile, a buy or a
+     * present is refused ("That isn't for sale right now."), and "Give a present" doesn't offer it.
+     */
+    static boolean offered(Prize p, boolean collectorsOnSale, LocalDate today, Set<String> notHere) {
+        return onSale(p, collectorsOnSale, today) && !notHere.contains(p.id());
+    }
+
+    /**
+     * The ids of the collector trails among {@code rows} whose particle {@code usable} refuses
+     * ({@link TrailService#particleUsable}): the Autumn Leaves trail on 26.2, none on 26.3.
+     */
+    static Set<String> trailsNotHere(List<Prize> rows, java.util.function.Predicate<String> usable) {
+        Set<String> out = new HashSet<>();
+        for (Prize p : rows) {
+            if (p.collector() != null && p.type() == PrizeType.TRAIL && !usable.test(p.particle())) {
+                out.add(p.id());
+            }
+        }
+        return Set.copyOf(out);
+    }
+
+    /** Why {@link #restore} won't give {@code p} back on this server ({@code notHere}), or null. */
+    static String notHereRefusal(Prize p, Set<String> notHere) {
+        return p != null && notHere.contains(p.id()) ? TRAIL_NOT_HERE : null;
     }
 
     /** The rows a player sees on one tab. */
@@ -723,10 +762,15 @@ public final class PrizeService {
      * game's inventory restore would wipe it), and a cap needs room by the placement rule: nothing
      * goes on the ground. With {@code fromName} set to someone other than the target, it is a present:
      * "A gift from" in the lore, the swap, and the whole moment. Logging who gave it is the caller's.
+     * A collector trail this server can't show is refused ({@link #notHereRefusal}).
      */
     public Outcome restore(Player target, Prize p, String fromName) {
         if (p == null || p.collector() == null) {
             return Outcome.fail("That isn't a collector.");
+        }
+        String notHere = notHereRefusal(p, trailsNotHere);
+        if (notHere != null) {
+            return Outcome.fail(notHere);
         }
         if (!homeFromGames(target)) {
             return Outcome.fail(target.getName() + " is in a game. Try again when they're back.");
@@ -836,7 +880,8 @@ public final class PrizeService {
      * The receiver's moment, where a first-person camera can see it: the title, a fanfare, a harmless
      * firework bursting right in front of them, hearts for a cap (a trail shows itself), and a line
      * saying where it went. One of our menus left open on their screen is closed first: on a Bedrock
-     * window a chest screen covers the whole view, and the moment would play behind it.
+     * window a chest screen covers the whole view, and the moment would play behind it. A game screen
+     * stays open, so the game goes on ({@link #hidesTheMoment}).
      */
     private void presentMoment(Player r, String fromName, Prize p, CapPlacement placed) {
         closeOurMenu(r);
@@ -859,8 +904,9 @@ public final class PrizeService {
 
     /**
      * Close the receiver's screen before their present's moment (review BK-1) when it is one of our
-     * menus, which holds nothing of theirs. Any other screen (a chest, another plugin's) is left open.
-     * A trail present calls this before its select, whose "trail is on" burst is part of the moment.
+     * menus other than a game screen (a live match or scored try would end), which holds nothing of
+     * theirs. Any other screen (a chest, another plugin's, a game's) is left open, and the moment plays
+     * over it. A trail present calls this before its select, whose "trail is on" burst is part of the moment.
      */
     private static void closeOurMenu(Player r) {
         try {
@@ -872,9 +918,14 @@ public final class PrizeService {
         }
     }
 
-    /** True for a screen of ours ({@link com.dierks.homecraft.gui.Menu}), which a present may close. */
+    /**
+     * True for a screen of ours ({@link com.dierks.homecraft.gui.Menu}), which a present may close, but
+     * never a game screen ({@link com.dierks.homecraft.gui.games.GameMenu}): closing one ends a friend
+     * match for both players, or a Daily board's scored try with no score (final audit F2).
+     */
     static boolean hidesTheMoment(org.bukkit.inventory.InventoryHolder holder) {
-        return holder instanceof com.dierks.homecraft.gui.Menu;
+        return holder instanceof com.dierks.homecraft.gui.Menu
+                && !(holder instanceof com.dierks.homecraft.gui.games.GameMenu);
     }
 
     /** "It's on your head!" and the rest, for the chat line after a collector is handed over. */

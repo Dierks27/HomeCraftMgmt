@@ -248,24 +248,43 @@ public final class PrizeSafetyListener implements Listener {
      * A prize bundle takes only candy (D15). Keyed to {@link BundleMeta}, not to the bag's id, so it guards any
      * prize bundle: cancelled when the clicked item is one and the cursor holds something that isn't candy, or
      * the cursor is one and the clicked slot holds something that isn't. Geyser sends Bedrock's bundle actions as
-     * these clicks. Picking the bag up or putting it down (nothing to insert) is left alone. In a Creative
-     * player's own inventory the "cursor" is the slot's new stack ({@link PrizeSafety#refusesCreativeSet}), so
-     * a child in Creative can still put her candy in her bag.
+     * these clicks. Picking the bag up or putting it down (nothing to insert) is left alone.
+     *
+     * <p>In a Creative player's own inventory the "cursor" is the slot's new stack, and the server no longer
+     * holds the bag while it is on her cursor, so nothing there is refused ({@link PrizeSafety#creativeSet}): a
+     * candy put in her bag is a move, and a bag set holding a block is set with only its candy. Her screen is
+     * sent her inventory again next tick, because her client already drew the stack it sent.
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBundleInsert(InventoryClickEvent event) {
+        if (event instanceof InventoryCreativeEvent creative) {
+            ItemStack cleaned = creativeCleaned(creative.getCursor());
+            if (cleaned != null) {
+                creative.setCursor(cleaned);
+                if (event.getWhoClicked() instanceof Player player) {
+                    tellOnlyCandy(player);
+                    plugin.getServer().getScheduler().runTask(plugin, () -> {
+                        if (player.isOnline()) {
+                            player.updateInventory();
+                        }
+                    });
+                }
+            }
+            return;
+        }
         ItemStack clicked = event.getCurrentItem();
         ItemStack cursor = event.getCursor();
-        boolean refused = event instanceof InventoryCreativeEvent
-                ? refusesCreativeSet(cursor)
-                : refusesInsert(clicked, cursor) || refusesInsert(cursor, clicked);
-        if (refused) {
+        if (refusesInsert(clicked, cursor) || refusesInsert(cursor, clicked)) {
             event.setCancelled(true);
             if (event.getWhoClicked() instanceof Player player) {
-                player.sendMessage(Text.of("&7Only candy goes in this bag."));
-                Sounds.refused(player);
+                tellOnlyCandy(player);
             }
         }
+    }
+
+    private static void tellOnlyCandy(Player player) {
+        player.sendMessage(Text.of("&7Only candy goes in this bag."));
+        Sounds.refused(player);
     }
 
     /** {@link PrizeSafety#refusesInsert} for real items: most clicks aren't bundles, so the type name goes first. */
@@ -277,13 +296,28 @@ public final class PrizeSafetyListener implements Listener {
         return PrizeSafety.refusesInsert(prize(bundle) && bundle.getItemMeta() instanceof BundleMeta, candy(inserted));
     }
 
-    /** {@link PrizeSafety#refusesCreativeSet} for the stack a Creative player sets in a slot. */
-    private static boolean refusesCreativeSet(ItemStack set) {
+    /**
+     * {@link PrizeSafety#creativeSet} for the stack a Creative player sets in a slot: a copy of a prize bundle
+     * holding only its candy when it held something else, or null to set the stack as it is. One whose items
+     * can't be read is set as it is: {@link #keepOnDeath} doesn't protect it, and a bag is never deleted.
+     */
+    private static ItemStack creativeCleaned(ItemStack set) {
         if (set == null || !set.getType().name().endsWith("BUNDLE") || !prize(set)) {
-            return false;
+            return null;
         }
-        return PrizeSafety.refusesCreativeSet(set.getItemMeta() instanceof BundleMeta,
-                PrizeSafety.holdsOnlyCandy(contents(set)));
+        try {
+            if (!(set.getItemMeta() instanceof BundleMeta bundle)
+                    || PrizeSafety.creativeSet(true, PrizeSafety.holdsOnlyCandy(contents(set)))
+                            != PrizeSafety.CreativeSet.CLEAN) {
+                return null;
+            }
+            bundle.setItems(PrizeSafety.onlyCandy(bundle.getItems(), PrizeSafetyListener::candy));
+            ItemStack cleaned = set.clone();
+            cleaned.setItemMeta(bundle);
+            return cleaned;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     // ---- workstations ----------------------------------------------------------------------

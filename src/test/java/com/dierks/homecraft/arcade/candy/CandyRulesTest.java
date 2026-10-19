@@ -451,24 +451,54 @@ class CandyRulesTest {
     }
 
     private static Floor floor() {
-        return new Floor(true, "OAK_PLANKS", true, false, true, false, false, true);
+        return floor(true, "OAK_PLANKS", true, false, true, false, false, true);
+    }
+
+    /** A floor with air in the two blocks above it. */
+    private static Floor floor(boolean solid, String name, boolean lowerPassable, boolean lowerLiquidOrFire,
+                               boolean upperPassable, boolean upperLiquidOrFire, boolean lavaBeside, boolean inSight) {
+        return new Floor(solid, name, lowerPassable, lowerLiquidOrFire, upperPassable, upperLiquidOrFire, lavaBeside,
+                inSight, "AIR", "AIR");
     }
 
     @Test
     void thePopsFromTheFloor() {
         assertTrue(CandyRules.popOk(floor()), "a room's floor");
-        assertFalse(CandyRules.popOk(new Floor(false, "AIR", true, false, true, false, false, true)), "no floor");
-        assertFalse(CandyRules.popOk(new Floor(true, "MAGMA_BLOCK", true, false, true, false, false, true)));
-        assertFalse(CandyRules.popOk(new Floor(true, "CAMPFIRE", true, false, true, false, false, true)));
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", false, false, true, false, false, true)), "a wall");
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", true, true, true, false, false, true)), "water on it");
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", true, false, false, false, false, true)), "low roof");
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", true, false, true, true, false, true)), "fire above");
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", true, false, true, false, true, true)), "lava beside");
-        assertFalse(CandyRules.popOk(new Floor(true, "STONE", true, false, true, false, false, false)), "out of sight");
+        assertFalse(CandyRules.popOk(floor(false, "AIR", true, false, true, false, false, true)), "no floor");
+        assertFalse(CandyRules.popOk(floor(true, "MAGMA_BLOCK", true, false, true, false, false, true)));
+        assertFalse(CandyRules.popOk(floor(true, "CAMPFIRE", true, false, true, false, false, true)));
+        assertFalse(CandyRules.popOk(floor(true, "STONE", false, false, true, false, false, true)), "a wall");
+        assertFalse(CandyRules.popOk(floor(true, "STONE", true, true, true, false, false, true)), "water on it");
+        assertFalse(CandyRules.popOk(floor(true, "STONE", true, false, false, false, false, true)), "low roof");
+        assertFalse(CandyRules.popOk(floor(true, "STONE", true, false, true, true, false, true)), "fire above");
+        assertFalse(CandyRules.popOk(floor(true, "STONE", true, false, true, false, true, true)), "lava beside");
+        assertFalse(CandyRules.popOk(floor(true, "STONE", true, false, true, false, false, false)), "out of sight");
+        assertTrue(CandyRules.popOk(new Floor(true, "GRASS_BLOCK", true, false, true, false, false, true,
+                "SHORT_GRASS", "AIR")), "grass on the floor is fine");
         assertEquals(0, (int) CandyRules.POP_STEPS.get(0), "the player's own floor first");
         assertEquals(Set.of(-1, 0, 1), new HashSet<>(CandyRules.POP_STEPS));
         assertEquals(64.6, CandyRules.popY(63), 1e-9, "0.6 above the floor");
+    }
+
+    /**
+     * K3: pass B, under spruce, asks only that the two blocks above the floor have no collision, and a berry bush,
+     * powder snow, a wither rose and a cobweb have none. Candy never pops into one (nor into a portal), below or
+     * above.
+     */
+    @Test
+    void candyNeverPopsIntoABerryBushOrPowderSnow() {
+        for (String block : List.of("SWEET_BERRY_BUSH", "POWDER_SNOW", "WITHER_ROSE", "COBWEB", "NETHER_PORTAL",
+                "END_PORTAL", "sweet_berry_bush")) {
+            assertFalse(CandyRules.popOk(new Floor(true, "GRASS_BLOCK", true, false, true, false, false, true,
+                    block, "AIR")), block + " on the floor");
+            assertFalse(CandyRules.popOk(new Floor(true, "GRASS_BLOCK", true, false, true, false, false, true,
+                    "AIR", block)), block + " above that");
+            assertTrue(CandyRules.inTheWay(block), block);
+        }
+        assertTrue(CandyRules.inTheWay("CAMPFIRE"), "every floor hazard too");
+        assertFalse(CandyRules.inTheWay("SHORT_GRASS"));
+        assertFalse(CandyRules.inTheWay("AIR"));
+        assertFalse(CandyRules.inTheWay(null), "not read");
     }
 
     // ---- the requeue -----------------------------------------------------------------------

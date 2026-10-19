@@ -103,13 +103,34 @@ class PrizeSafetyTest {
 
     /**
      * In Creative the client sends a slot's new stack, not a click, so a candy put in the bag arrives as the bag
-     * set again with the candy inside: that is allowed, and a bag set holding anything else is not.
+     * set again with the candy inside: a move.
      */
     @Test
-    void inCreativeTheBagSetWithCandyInIsAllowed() {
-        assertFalse(PrizeSafety.refusesCreativeSet(true, true), "her bag with a candy apple put in: allowed");
-        assertTrue(PrizeSafety.refusesCreativeSet(true, false), "her bag with a block put in: refused");
-        assertFalse(PrizeSafety.refusesCreativeSet(false, false), "a plain bundle, or any other stack: a move");
+    void inCreativeTheBagSetWithCandyInIsAMove() {
+        assertEquals(PrizeSafety.CreativeSet.MOVE, PrizeSafety.creativeSet(true, true),
+                "her bag with a candy apple put in");
+        assertEquals(PrizeSafety.CreativeSet.MOVE, PrizeSafety.creativeSet(false, false),
+                "a plain bundle, or any other stack");
+    }
+
+    /**
+     * HW2-DTL-1: in Creative the server no longer holds the bag while it is on her cursor (picking it up set its
+     * slot to air), so refusing the bag set with a block scooped into it would delete the bag. It comes back as
+     * the bag with only its candy, and nothing in Creative is ever refused.
+     */
+    @Test
+    void inCreativeABagSetWithABlockInComesBackWithOnlyItsCandy() {
+        assertEquals(PrizeSafety.CreativeSet.CLEAN, PrizeSafety.creativeSet(true, false), "her bag with a block in");
+        assertEquals(List.of(PrizeSafety.CreativeSet.MOVE, PrizeSafety.CreativeSet.CLEAN),
+                List.of(PrizeSafety.CreativeSet.values()), "no refusal in Creative: it would delete the bag");
+
+        List<String> bag = List.of("candy:red", "stone", "candy:golden", "dirt");
+        assertEquals(List.of("candy:red", "candy:golden"), PrizeSafety.onlyCandy(bag, s -> s.startsWith("candy:")),
+                "the bag with only its candy, in order");
+        assertEquals(List.of(), PrizeSafety.onlyCandy(List.of("stone"), s -> s.startsWith("candy:")),
+                "only a block in it: still the bag, empty");
+        assertEquals(List.of(), PrizeSafety.onlyCandy(null, s -> true), "nothing to read");
+        assertTrue(PrizeSafety.keepOnDeath(true, List.of(true, true)), "the cleaned bag is kept on death again");
     }
 
     /** Even past the insert guard, a prize bundle holding anything but candy gets no keep-inventory (E15). */

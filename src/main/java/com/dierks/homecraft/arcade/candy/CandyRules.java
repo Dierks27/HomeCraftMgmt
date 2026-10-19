@@ -97,6 +97,13 @@ public final class CandyRules {
 
     /** Blocks a candy never lands or pops on. */
     static final Set<String> HAZARDS = Set.of("CACTUS", "MAGMA_BLOCK", "CAMPFIRE", "SOUL_CAMPFIRE", "POWDER_SNOW");
+    /**
+     * Blocks with no collision that pass B's two blocks above the floor must not be either: they hurt or slow
+     * (a berry bush, a wither rose, a cobweb), sink and freeze (powder snow), or carry her off (a portal) as she
+     * walks in for the candy. Under spruce, where pass B runs, berry bushes and powder snow are common.
+     */
+    static final Set<String> IN_THE_WAY = Set.of("SWEET_BERRY_BUSH", "WITHER_ROSE", "POWDER_SNOW", "COBWEB",
+            "NETHER_PORTAL", "END_PORTAL", "END_GATEWAY");
 
     // ---- the counter keys (D14, D15) -------------------------------------------------------
 
@@ -446,17 +453,29 @@ public final class CandyRules {
      * @param upperPassable     the block above that; {@code upperLiquidOrFire} likewise
      * @param lavaBeside        lava beside the block on the floor
      * @param inSight           a ray from the eye to the block on the floor hits nothing before it
+     * @param lowerName         the block on the floor's material name; {@code upperName} the one above it (for
+     *                          {@link #inTheWay})
      */
     public record Floor(boolean solid, String name, boolean lowerPassable, boolean lowerLiquidOrFire,
-                        boolean upperPassable, boolean upperLiquidOrFire, boolean lavaBeside, boolean inSight) {
+                        boolean upperPassable, boolean upperLiquidOrFire, boolean lavaBeside, boolean inSight,
+                        String lowerName, String upperName) {
     }
 
-    /** Whether a candy may pop up from this floor: solid and safe, two clear blocks above it, no lava, in sight. */
+    /**
+     * Whether a candy may pop up from this floor: solid and safe, two clear blocks above it that are neither
+     * liquid, fire nor {@link #inTheWay}, no lava, in sight.
+     */
     public static boolean popOk(Floor f) {
         return f.solid() && !hazard(f.name())
-                && f.lowerPassable() && !f.lowerLiquidOrFire()
-                && f.upperPassable() && !f.upperLiquidOrFire()
+                && f.lowerPassable() && !f.lowerLiquidOrFire() && !inTheWay(f.lowerName())
+                && f.upperPassable() && !f.upperLiquidOrFire() && !inTheWay(f.upperName())
                 && !f.lavaBeside() && f.inSight();
+    }
+
+    /** A block with no collision a candy never pops into ({@link #IN_THE_WAY}), or a hazard, by its material name. */
+    public static boolean inTheWay(String materialName) {
+        return materialName != null && (hazard(materialName)
+                || IN_THE_WAY.contains(materialName.toUpperCase(Locale.ROOT)));
     }
 
     /** Where a pop starts: {@value #POP_HEIGHT} above the floor block's top. */
@@ -610,6 +629,28 @@ public final class CandyRules {
     /** Whether {@code cooldownMs} has passed since {@code last} (null: never). */
     public static boolean cooledDown(Long last, long now, long cooldownMs) {
         return last == null || now - last >= cooldownMs;
+    }
+
+    /** What a tap with a Candy Apple (Bedrock's eat fallback) or the bag (the toy) does. */
+    public enum TapStep {
+        /** Not ours: the click goes on as it was. */
+        PASS,
+        /**
+         * Ours, inside the cooldown: cancelled, and nothing else. Holding the button repeats the use, and a repeat
+         * left alone would start the item's own use: the bundle's, which empties it, or the server's own eat of
+         * the red apple (it can always be eaten), which takes a second apple on top of the fallback's.
+         */
+        CANCEL,
+        /** Ours: cancelled, then the treat or the toy. */
+        ACT
+    }
+
+    /** The tap's step: {@code ours} is {@link #eatsOnTap} or {@link #toyOnTap}; cancelled whenever it is ours. */
+    public static TapStep tapStep(boolean ours, Long last, long now, long cooldownMs) {
+        if (!ours) {
+            return TapStep.PASS;
+        }
+        return cooledDown(last, now, cooldownMs) ? TapStep.ACT : TapStep.CANCEL;
     }
 
     /** What to do about the Trick-or-Treat Bag now. */

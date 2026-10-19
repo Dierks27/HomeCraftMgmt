@@ -69,14 +69,37 @@ public final class PrizeSafety {
         return bundleIsPrize && !insertedIsCandy;
     }
 
+    /** What happens to a stack a Creative player sets in a slot of their own inventory. Never a refusal. */
+    enum CreativeSet {
+        /** Set as it is: anything but a prize bundle, or one holding nothing but candy. */
+        MOVE,
+        /** A prize bundle holding something else: set with only its candy ({@link #onlyCandy}). */
+        CLEAN
+    }
+
     /**
-     * The same guard in a Creative player's own inventory, where the client sends each slot's new stack rather
-     * than a click (and Geyser sends a Bedrock player's Creative moves the same way): a candy put in the bag
-     * arrives as the bag set again with the candy inside. So a prize bundle being set is refused only when it
-     * holds anything but candy, and anything else being set is a move, not an insert.
+     * The same guard in a Creative player's own inventory, where the client keeps the cursor to itself and sends
+     * each slot's new stack rather than a click (Geyser sends a Bedrock player's Creative moves the same way). A
+     * candy put in the bag arrives as the bag set again with the candy inside: a move. A bag set holding anything
+     * else (she scooped up a block with it) is never refused, because picking the bag up already set its slot to
+     * air: the server no longer holds it anywhere, so a refusal would delete the bag. It is set with only its
+     * candy instead, and the rest, a Creative stack, is gone.
      */
-    static boolean refusesCreativeSet(boolean setIsPrizeBundle, boolean holdsOnlyCandy) {
-        return setIsPrizeBundle && !holdsOnlyCandy;
+    static CreativeSet creativeSet(boolean setIsPrizeBundle, boolean holdsOnlyCandy) {
+        return setIsPrizeBundle && !holdsOnlyCandy ? CreativeSet.CLEAN : CreativeSet.MOVE;
+    }
+
+    /** What stays in a prize bundle set in Creative ({@link CreativeSet#CLEAN}): its candy, in order. */
+    static <T> List<T> onlyCandy(List<T> contents, Predicate<? super T> candy) {
+        List<T> out = new ArrayList<>();
+        if (contents != null) {
+            for (T t : contents) {
+                if (candy.test(t)) {
+                    out.add(t);
+                }
+            }
+        }
+        return out;
     }
 
     /**

@@ -9,6 +9,7 @@ import com.dierks.homecraft.arcade.candy.CandyRules.Floor;
 import com.dierks.homecraft.arcade.candy.CandyRules.HandOver;
 import com.dierks.homecraft.arcade.candy.CandyRules.Offset;
 import com.dierks.homecraft.arcade.candy.CandyRules.State;
+import com.dierks.homecraft.arcade.candy.CandyRules.TapStep;
 import com.dierks.homecraft.config.CandyConfig;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.storage.AchievementDao;
@@ -169,7 +170,16 @@ public final class CandyService implements Listener {
         /** Owed: no free slot. */
         FULL,
         /** It couldn't be read or saved (logged). */
-        FAILED
+        FAILED;
+
+        /**
+         * Whether the player stays owed, tried again every second: only while the bag waits for a game to end or
+         * for room. A read or a save that failed is tried again on their next join or {@code /hcm candy}, never
+         * every second against a failing database.
+         */
+        public boolean retriedEverySecond() {
+            return this == WAITING || this == FULL;
+        }
     }
 
     private final HomeCraftManagement plugin;
@@ -511,7 +521,7 @@ public final class CandyService implements Listener {
         Block upper = w.getBlockAt(x, floorY + 2, z);
         return new Floor(f.getType().isSolid(), f.getType().name(), lower.isPassable(),
                 lower.isLiquid() || fire(lower.getType()), upper.isPassable(), upper.isLiquid() || fire(upper.getType()),
-                lavaBeside(w, x, floorY + 1, z), true);
+                lavaBeside(w, x, floorY + 1, z), true, lower.getType().name(), upper.getType().name());
     }
 
     /** Lava in any of the 4 blocks beside; a neighbour in a chunk that isn't loaded counts as lava (never read). */
@@ -854,9 +864,20 @@ public final class CandyService implements Listener {
      * Try the Trick-or-Treat Bag now: on crossing the goal, 40 ticks after a join, on {@code /hcm candy}, and every
      * second for a player owed one. Only home from every game and with a free slot; the mark first, then the
      * give, so a failed write never hands out two. With no room, or in a game, nothing is marked: the player is
-     * owed one, told once to make room, and the admins hear once a shower.
+     * owed one, told once to make room, and the admins hear once a shower. A read or a save that fails drops the
+     * every-second retry ({@link BagResult#retriedEverySecond}).
      */
     public BagResult tryBag(Player p) {
+        BagResult r = bagNow(p);
+        if (r.retriedEverySecond()) {
+            owed.add(p.getUniqueId());
+        } else {
+            forgetOwed(p.getUniqueId());
+        }
+        return r;
+    }
+
+    private BagResult bagNow(Player p) {
         CandyConfig.Candy c = settings();
         UUID id = p.getUniqueId();
         long marked;
@@ -873,15 +894,12 @@ public final class CandyService implements Listener {
         BagStep step = CandyRules.bagStep(marked > 0, count, c.goal(), bagHome(p), room);
         switch (step) {
             case HAS_IT, NOT_YET -> {
-                forgetOwed(id);
                 return step == BagStep.HAS_IT ? BagResult.HAS_IT : BagResult.NOT_YET;
             }
             case WAIT_GAME -> {
-                owed.add(id);
                 return BagResult.WAITING;
             }
             case WAIT_ROOM -> {
-                owed.add(id);
                 if (toldMakeRoom.add(id)) {
                     p.sendMessage(Text.of("&6Make room in your bag for your Trick-or-Treat Bag!"));
                 }
@@ -911,6 +929,7 @@ public final class CandyService implements Listener {
             counters.addCounter(id, CandyRules.bagKey(c.year()), 1);
             return true;
         });
+        forgetOwed(id);
         return switch (r) {
             case GIVEN -> null;
             case FAILED -> "That couldn't be saved. Try again.";
@@ -918,32 +937,30 @@ public final class CandyService implements Listener {
         };
     }
 
-    /** The mark, then the bag, then the moment: the toast, the title and a burst in view. */
+    /**
+     * The mark, then the bag, then the moment: the toast, the title and a burst in view. The caller settles the
+     * owed set ({@link #tryBag}, {@link #giveBag}).
+     */
     private BagResult handOverBag(Player p, CandyConfig.Candy c, CandyRules.Mark mark) {
-        UUID id = p.getUniqueId();
         HandOver done = CandyRules.handOver(mark, () -> {
             Map<Integer, ItemStack> left = p.getInventory().addItem(CandyItems.bag(c.year(), c.goal()));
             return left.isEmpty();
         });
         switch (done) {
             case ALREADY -> {
-                forgetOwed(id);
                 return BagResult.HAS_IT;
             }
             case NOT_SAVED -> {
-                forgetOwed(id); // not every second against a failing database: on join and /hcm candy
                 plugin.getLogger().warning("Could not save " + p.getName() + "'s Trick-or-Treat Bag mark - no bag"
                         + " given; it is tried again on their next join or /hcm candy.");
                 return BagResult.FAILED;
             }
             case LOST -> {
-                forgetOwed(id);
                 plugin.getLogger().severe(p.getName() + "'s Trick-or-Treat Bag " + c.year() + " was marked but"
                         + " didn't fit - give it with /hcm candy bag " + p.getName() + ".");
                 return BagResult.FAILED;
             }
             default -> {
-                forgetOwed(id);
                 try {
                     p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
                     p.showTitle(Title.title(Text.of("&6Trick-or-Treat Bag!"),
@@ -1088,21 +1105,30 @@ public final class CandyService implements Listener {
         }
         long now = System.currentTimeMillis();
         if (bag) {
-            if (!CandyRules.toyOnTap(tap, true, true, homeFromGames(p))) {
+            TapStep step = CandyRules.tapStep(CandyRules.toyOnTap(tap, true, true, homeFromGames(p)),
+                    toyAt.get(p.getUniqueId()), now, TOY_COOLDOWN_MS);
+            if (step == TapStep.PASS) {
                 return;
             }
             cancel(event); // the bundle's own use would empty it
-            if (CandyRules.cooledDown(toyAt.get(p.getUniqueId()), now, TOY_COOLDOWN_MS)) {
+            if (step == TapStep.ACT) {
                 toyAt.put(p.getUniqueId(), now);
                 toy(p);
             }
             return;
         }
-        if (!CandyRules.eatsOnTap(Bedrock.is(p), p.getFoodLevel(), tap, true, true, homeFromGames(p))
-                || !CandyRules.cooledDown(eatAt.get(p.getUniqueId()), now, EAT_COOLDOWN_MS)) {
+        TapStep step = CandyRules.tapStep(
+                CandyRules.eatsOnTap(Bedrock.is(p), p.getFoodLevel(), tap, true, true, homeFromGames(p)),
+                eatAt.get(p.getUniqueId()), now, EAT_COOLDOWN_MS);
+        if (step == TapStep.PASS) {
             return;
         }
+        // Inside the cooldown too: a held tap repeats the use, and left alone the server would start its own eat of
+        // the red apple (it can always be eaten), taking a second apple on top of this one.
         cancel(event);
+        if (step == TapStep.CANCEL) {
+            return;
+        }
         ItemStack inHand = p.getInventory().getItem(EquipmentSlot.HAND);
         if (inHand == null || inHand.getAmount() <= 0 || !CandyItems.isCandy(inHand) || CandyItems.isGolden(inHand)) {
             return;

@@ -1,6 +1,8 @@
 package com.dierks.homecraft.arcade.candy;
 
 import com.dierks.homecraft.arcade.candy.CandyRules.BagStep;
+import com.dierks.homecraft.arcade.candy.CandyRules.TapStep;
+import com.dierks.homecraft.arcade.candy.CandyService.BagResult;
 import com.dierks.homecraft.games.world.KitGuardListener;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -85,6 +87,25 @@ class CandyServiceTest {
         assertEquals(3_000L, CandyService.TOY_COOLDOWN_MS);
     }
 
+    /**
+     * K6: a held tap repeats the use. Inside the cooldown a tap that is ours is still cancelled: left alone, the
+     * server would start its own eat of the red apple (it can always be eaten), and the Bedrock client, which
+     * never started one, sends no release, so a second apple would go 1.6 s later. The bag's toy works the same.
+     */
+    @Test
+    void aTapThatIsOursIsCancelledInsideTheCooldownToo() {
+        long eat = CandyService.EAT_COOLDOWN_MS;
+        assertEquals(TapStep.ACT, CandyRules.tapStep(true, null, 1_000, eat), "the first tap eats");
+        assertEquals(TapStep.CANCEL, CandyRules.tapStep(true, 1_000L, 1_050, eat), "the repeat: cancelled, no eat");
+        assertEquals(TapStep.CANCEL, CandyRules.tapStep(true, 1_000L, 2_599, eat));
+        assertEquals(TapStep.ACT, CandyRules.tapStep(true, 1_000L, 2_600, eat), "one apple per eat");
+        assertEquals(TapStep.PASS, CandyRules.tapStep(false, null, 1_000, eat), "not ours: left alone");
+        assertEquals(TapStep.PASS, CandyRules.tapStep(false, 1_000L, 1_050, eat),
+                "not ours inside the cooldown either (a hungry player, a chest)");
+        assertEquals(TapStep.CANCEL, CandyRules.tapStep(true, 1_000L, 2_000, CandyService.TOY_COOLDOWN_MS),
+                "the bag inside its cooldown: still no bundle use, which would empty it");
+    }
+
     // ---- the bag (D15; E17, E22) -----------------------------------------------------------
 
     @Test
@@ -97,6 +118,20 @@ class CandyServiceTest {
         assertEquals(BagStep.WAIT_GAME, CandyRules.bagStep(false, 31, 31, false, false), "a game before room");
         assertEquals(BagStep.WAIT_ROOM, CandyRules.bagStep(false, 35, 31, true, false), "never on the ground");
         assertEquals(BagStep.GIVE, CandyRules.bagStep(false, 1, 1, true, true), "the goal as set");
+    }
+
+    /**
+     * HW2-DTL-2: only a bag that waits for a game or for room is tried again every second. A read or a save that
+     * failed is tried again on the next join or {@code /hcm candy}, not every second (two queries and a WARN a
+     * player) against a failing database.
+     */
+    @Test
+    void onlyAWaitingBagIsTriedEverySecond() {
+        for (BagResult r : BagResult.values()) {
+            boolean waits = r == BagResult.WAITING || r == BagResult.FULL;
+            assertEquals(waits, r.retriedEverySecond(), r + (waits ? " stays owed" : " leaves the owed set"));
+        }
+        assertFalse(BagResult.FAILED.retriedEverySecond(), "a read or a save that failed");
     }
 
     @Test

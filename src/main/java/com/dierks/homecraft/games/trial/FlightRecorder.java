@@ -35,20 +35,25 @@ import java.util.Map;
  *       only d of 1 or 2 is kept (a fall off the track is no drop). Its length is the distance across the
  *       ground from the take-off to the first settled point (the move that first reached y1);</li>
  *   <li>the <i>take-off speed</i> is the distance across the ground a tick over the last ≤
- *       {@value #SPEED_TICKS} ticks before the take-off, in blocks a second (over the server's ticks
- *       between the moves, or the moves, whichever is more);</li>
+ *       {@value #SPEED_TICKS} ticks before the take-off, in blocks a second (over the ticks of riding
+ *       those moves covered, a merged one's all counted);</li>
  *   <li>a teleport, a reset or a dismount ({@link Run#drop}, or a move that doesn't start where the last
  *       one ended) forgets the open flight.</li>
  * </ul>
  *
  * <p><b>Merged moves</b> (the early audit's X5). Paper hands over a boat's move at most once a server tick,
- * where the boat ticks; a tick that got no packet from the rider moves nothing, and the next one moves the
- * boat for both. A move more than a tick after the last one is <i>merged</i>: it covers two ticks of riding or
- * more. When the move that left the take-off's level is merged, the take-off may be a tick early; when the
- * move that first reached y1 is merged, the landing may be a tick late; either adds a tick of ground travel
- * (about 2 blocks at 40 b/s) to the length. Such a flight still counts, but its length is no measurement:
- * it is kept out of the longest, the p90 and the all-time record, and the line says how many were
- * ("18 (2 lagged)"). Its take-off speed is measured on the ground before it and stands.
+ * where the boat ticks, for every packet from the rider since the last. A move is <i>merged</i> when it
+ * covers two ticks of riding or more: a tick that got no packet, then one that got two (a late packet); a
+ * tick that got two, then one with none (an early one); or a stall's late tick, which hands over every packet
+ * queued up while the server's tick count goes on by one only. So a move covers the server's ticks since the
+ * last move (less those that only make up for ticks an earlier move carried early), or, when it is more than
+ * {@value #MERGED} times the ground the last move covered a tick, as many ticks as it is times that (rounded),
+ * whichever is more; two such bursts with no tick between them are the boat changing pace, not lag. When the move that
+ * left the take-off's level is merged, the take-off may be a tick early; when the move that first reached y1
+ * is merged, the landing may be a tick late; either adds a tick of ground travel (about 2 blocks at 40 b/s)
+ * to the length. Such a flight still counts, but its length is no measurement: it is kept out of the
+ * longest, the p90 and the all-time record, and the line says how many were ("18 (2 lagged)"). Its take-off
+ * speed is measured on the ground before it, over the ticks those moves covered, and stands.
  *
  * <p><b>What a run keeps</b> ({@link Summary}), for each d: the count, the longest flight with its take-off
  * speed, the fastest take-off and the p90 flight length (the longest and the p90 of the flights measured
@@ -78,6 +83,17 @@ public final class FlightRecorder {
     static final double GAP = 1.0;
     /** A move longer than this across the ground (twice the 75 b/s cap a tick and more) is a teleport (blocks). */
     static final double MAX_STEP = 8.0;
+    /**
+     * A move more than this many times the ground the last one covered a tick covered more than one tick of
+     * riding (a boat's speed changes by about a tenth a tick: two ticks in the air cover 1.71 times the one
+     * before them, two on the ice twice it).
+     */
+    static final double MERGED = 1.5;
+    /**
+     * Under this much ground a tick (blocks; 5 b/s) a move's length says nothing of its ticks: a boat getting
+     * going from a standstill doubles its speed in a tick.
+     */
+    static final double MIN_PACE = 0.25;
     /** How many run summaries are kept in memory. */
     public static final int KEEP = 50;
     /** How many of them {@link #lines} shows. */
@@ -330,19 +346,27 @@ public final class FlightRecorder {
         final Flights one = new Flights();
         final Flights two = new Flights();
 
-        // the last moves' ends across the ground and their ticks, for the take-off speed (a ring)
+        // the last moves' ends across the ground, their server ticks and the ticks of riding each covered, for
+        // the take-off speed (a ring)
         private final double[] rx = new double[RING];
         private final double[] rz = new double[RING];
         private final long[] rt = new long[RING];
+        private final int[] rk = new int[RING];
         private int ringSize;
         private int ringNext;
-        // where the last move ended, at which server tick, and whether it was merged (a tick or more late)
+        // where the last move ended, at which server tick, and whether it was merged (two ticks of riding or more)
         private boolean has;
         private double lastX;
         private double lastY;
         private double lastZ;
         private long lastTick;
         private boolean lastMerged;
+        // the ground the last move covered a tick (NaN until there is one); the ticks of riding moves carried
+        // ahead of the server's ticks (an early packet, a stall's queue) that no tick with no move has made up
+        // yet; and how many of them the last move carried
+        private double pace = Double.NaN;
+        private int early;
+        private int lastEarly;
         /** The ground level the boat last settled at; NaN until it has. */
         private double level = Double.NaN;
         // the last move that ended at that level: the take-off, if the next fall is a flight; and whether the
@@ -382,7 +406,14 @@ public final class FlightRecorder {
             double px = has ? lastX : fx;
             double py = has ? lastY : fy;
             double pz = has ? lastZ : fz;
-            boolean merged = has && tick - lastTick > 1; // a tick with no move before it: two ticks of riding
+            double step = across(px, pz, tx, tz);
+            int ticks = 1; // of riding: a tick, or more for a merged move
+            if (has) {
+                ticks = covered(tick, step);
+            } else {
+                pace = step;
+            }
+            boolean merged = ticks > 1;
             boolean reachedMerged = has && lastMerged; // the move that ended at (px, py, pz)
             has = true;
             lastX = tx;
@@ -393,6 +424,7 @@ public final class FlightRecorder {
             rx[ringNext] = tx;
             rz[ringNext] = tz;
             rt[ringNext] = tick;
+            rk[ringNext] = ticks;
             ringNext = (ringNext + 1) % RING;
             ringSize = Math.min(RING, ringSize + 1);
             boolean settled = Math.abs(ty - py) <= SETTLE;
@@ -432,6 +464,34 @@ public final class FlightRecorder {
         }
 
         /**
+         * How many ticks of riding a move of {@code step} across the ground at server tick {@code tick} covered: 1,
+         * or more (merged), whichever of two counts is more. By the server's ticks since the last move: those
+         * with no move first make up for ticks earlier moves carried early, and any left had their packets come
+         * late, with this one. By its length: more than {@value #MERGED} times the last move's pace (from
+         * {@value #MIN_PACE} a tick) is as many ticks as it is times that, rounded. Ticks it covered beyond the
+         * server's since the last move came early. A second burst straight after one, with no tick between to
+         * make up the first, is no lag but the boat changing pace: it covers its server ticks, and the first's
+         * early ticks are forgotten. The pace and the early ticks are kept for the next move.
+         */
+        private int covered(long tick, double step) {
+            long gap = tick - lastTick;
+            long empty = Math.max(0, gap - 1);
+            long madeUp = Math.min(empty, early);
+            early -= (int) madeUp;
+            int byGap = (int) Math.min(1 + empty - madeUp, TICKS); // a second and more with no move: it stood
+            int byStep = pace >= MIN_PACE && step > MERGED * pace ? (int) Math.round(step / pace) : 1;
+            if (byStep > byGap && lastEarly > 0 && gap <= 1) {
+                early = Math.max(0, early - lastEarly);
+                byStep = 1;
+            }
+            int ticks = Math.max(byGap, byStep);
+            lastEarly = (int) Math.max(0, ticks - gap);
+            early = Math.min(early + lastEarly, RING); // bounded: old early ticks never explain away late ones for long
+            pace = step / ticks;
+            return ticks;
+        }
+
+        /**
          * The boat settled at {@code y1}, having first reached it at (x, z) ({@code late}: by a merged move): the
          * flight ends there.
          *
@@ -461,30 +521,33 @@ public final class FlightRecorder {
 
         /**
          * Blocks a second across the ground over the last ≤ {@value #SPEED_TICKS} ticks up to {@code tick}: from
-         * the oldest move in the ring at most that many ticks earlier (and at least one) to the newest, over the
-         * ticks between them or the moves, whichever is more. A merged move (two ticks of riding at the second)
-         * is over the ticks; two moves in one tick, which Paper doesn't hand over but a test can, are over the
-         * moves. NaN when there is no such move.
+         * the oldest move in the ring at most that many server ticks earlier (and at least one) to the newest,
+         * over the ticks of riding the moves between covered ({@link #covered}). Not over the server's ticks
+         * between them: a stall hands over three ticks of riding in one, and the ticks with no move that make up
+         * for it come after. A merged move counts its ticks; two moves in one tick, which Paper doesn't hand
+         * over but a test can, a tick each. NaN when there is no such move.
          */
         private double speedBefore(long tick) {
             int newest = (ringNext - 1 + RING) % RING;
             int best = -1;
-            int moves = 0;
+            int ticks = 0;
+            int riding = 0;
             for (int i = 1; i < ringSize; i++) {
                 int j = (newest - i + RING) % RING;
                 long ago = tick - rt[j];
                 if (ago > SPEED_TICKS) {
                     break;
                 }
+                riding += rk[(j + 1) % RING]; // the move from j's end on
                 if (ago >= 1) {
                     best = j;
-                    moves = i;
+                    ticks = riding;
                 }
             }
             if (best < 0) {
                 return Double.NaN;
             }
-            return across(rx[best], rz[best], rx[newest], rz[newest]) / Math.max(tick - rt[best], moves) * TICKS;
+            return across(rx[best], rz[best], rx[newest], rz[newest]) / ticks * TICKS;
         }
 
         /** A teleport, a reset or a dismount: the open flight is forgotten, and so is the ground it left. */
@@ -492,6 +555,9 @@ public final class FlightRecorder {
             flying = false;
             has = false;
             lastMerged = false;
+            pace = Double.NaN;
+            early = 0;
+            lastEarly = 0;
             at = false;
             left = false;
             level = Double.NaN;
@@ -541,7 +607,8 @@ public final class FlightRecorder {
 
         /**
          * The count (every flight), the longest with its take-off and the p90 length (nearest rank) of the flights
-         * measured cleanly, the fastest take-off of them all, and how many were merged.
+         * measured cleanly, the fastest take-off of them all (lagged ones too: see {@link Stat}), and how many were
+         * merged.
          */
         Stat stat() {
             int longest = -1;
@@ -575,12 +642,14 @@ public final class FlightRecorder {
     }
 
     /**
-     * One d's flights in a run.
+     * One d's flights in a run. A lagged flight's length is kept out of the longest and the p90, but its take-off
+     * speed is in the fastest: it is measured on the ground before the take-off, over the ticks of riding the
+     * moves there covered, so a merged move at either end of the flight never touches it.
      *
      * @param count        how many, merged ones too
      * @param longest      the longest measured cleanly, blocks across the ground (NaN with none)
      * @param longestSpeed its take-off speed, blocks a second (NaN unknown)
-     * @param fastest      the fastest take-off of them all, blocks a second (NaN unknown)
+     * @param fastest      the fastest take-off of them all, lagged ones too, blocks a second (NaN unknown)
      * @param p90          the 90th percentile length of those measured cleanly (nearest rank), blocks
      * @param lagged       how many were measured across a merged move (counted, never measured)
      */

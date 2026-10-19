@@ -87,6 +87,9 @@ final class TrialFakes {
                         case "isOnline" -> {
                             return true;
                         }
+                        case "getInventory" -> {
+                            return inventory(); // empty: a kit slot cleared is cleared of nothing
+                        }
                         case "sendMessage" -> {
                             if (args != null && args.length == 1 && args[0] instanceof Component c) {
                                 said.add(plain(c));
@@ -109,6 +112,13 @@ final class TrialFakes {
                         }
                     }
                 });
+    }
+
+    /** An empty inventory: every slot holds nothing, and what is put there is forgotten. */
+    private static org.bukkit.inventory.PlayerInventory inventory() {
+        return (org.bukkit.inventory.PlayerInventory) Proxy.newProxyInstance(Player.class.getClassLoader(),
+                new Class<?>[]{org.bukkit.inventory.PlayerInventory.class},
+                (proxy, method, args) -> defaultOf(method.getReturnType()));
     }
 
     private static String plain(Component c) {

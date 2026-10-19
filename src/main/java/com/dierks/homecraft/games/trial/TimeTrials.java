@@ -1399,7 +1399,11 @@ public final class TimeTrials implements Game {
      * up, and what Bedrock shows for it is less sure.
      */
     void landingSnow(TrialRun run, double x, double y, double z, int d) {
-        long now = System.nanoTime();
+        landingSnow(run, x, y, z, d, System.nanoTime());
+    }
+
+    /** {@link #landingSnow(TrialRun, double, double, double, int)} at {@code now} ({@code System.nanoTime()}). */
+    void landingSnow(TrialRun run, double x, double y, double z, int d, long now) {
         if (!snowDue(run, now)) {
             return;
         }

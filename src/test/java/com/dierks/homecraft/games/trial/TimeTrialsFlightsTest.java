@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.GamesBench;
+import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.util.Text;
 import org.junit.jupiter.api.Test;
 
 import org.bukkit.entity.Player;
@@ -26,10 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: {@code /hcm games boat flights} reads Time Trials' recorder, in plain words when nothing was
  * recorded and when Time Trials isn't there; a run's record ends once, as one INFO line naming the edition and
  * the course and never the player; and the line is then among the command's last runs. A solo warm-up's flights
- * are a line of their own, so the timed run's line holds the timed run's only (the early audit's X4). The
- * finish of a Mountain Run says its best jump in one quiet line under the time, and nothing when it has none;
- * a landing's puff of snow is 6 particles off a hop and 14 off a Big Drop, at most one a run every half a
- * second, never while the run is put back or moved or once it is over, and a puff that fails is said once.
+ * are a line of their own when it ends ("Start timed run"), so the timed run's line holds the timed run's only
+ * (the early audit's X4). The finish of a Mountain Run, solo or in a race, says its best jump in one quiet line
+ * right under the time, and nothing when it has none; a landing's puff of snow is 6 particles off a hop and 14
+ * off a Big Drop, at most one a run every half a second, never while the run is put back or moved or once it is
+ * over (a puff not due is not even tried), and a puff that fails is said once.
  */
 class TimeTrialsFlightsTest {
 
@@ -118,6 +121,13 @@ class TimeTrialsFlightsTest {
         return said.stream().map(LogRecord::getMessage).filter(m -> m.startsWith("Ice Boat flights")).toList();
     }
 
+    /** {@code TimeTrials.flight}'s start of the record: at a move of a run with none (it goes on with one). */
+    private static void flight(TrialRun run) {
+        if (run.flight == null) {
+            run.flight = new FlightRecorder().start(false, run.course);
+        }
+    }
+
     /** A run on {@code c} with its clock running since {@code nanos}. */
     private static TrialRun riding(Course c, boolean test, long nanos) {
         TrialRun run = new TrialRun(UUID.randomUUID(), c, test, 0);
@@ -133,18 +143,29 @@ class TimeTrialsFlightsTest {
         try {
             TimeTrials t = (TimeTrials) bench.games().game(TimeTrials.SPEC.id());
             Course road = MountainRunsV2.road();
-            TrialRun run = new TrialRun(UUID.randomUUID(), road, false, TimeTrials.COUNTDOWN_TICKS + 1);
+            UUID id = UUID.randomUUID();
+            List<String> told = new ArrayList<>();
+            Player p = TrialFakes.player(id, "rider", told);
+            TrialRun run = new TrialRun(id, road, false, TimeTrials.COUNTDOWN_TICKS + 1);
             assertTrue(Warmup.begin(run, 1_000, 180, road.start().point(), 0L), "fixture: warming up");
             List<LogRecord> said = said(() -> {
-                run.flight = new FlightRecorder().start(false, run.course); // its first move (TimeTrials.flight)
+                flight(run); // its first move
                 FlightRecorderTest.Ride warm = new FlightRecorderTest.Ride(run.flight).flat(30, 2.0);
                 warm.drop(2, 2.0, true);
                 warm.flat(20, 1.2);
-                t.warmups().over(run); // Warmups.end: the warm-up is over, back to the start for the 3-2-1
+                try {
+                    t.warmups().timed(p, run); // "Start timed run": the warm-up ends, back to the start for the 3-2-1
+                } catch (NullPointerException noServer) {
+                    // the trip back to the start is the last thing it does, finding the world: there is none in a test
+                    assertEquals("getWorld", noServer.getStackTrace()[0].getMethodName(), "only the trip: " + noServer);
+                }
+                assertEquals(List.of(Text.plain(Warmup.ended(true))), told,
+                        "the warm-up ended, as the player hears it");
                 assertNull(run.flight, "the warm-up's record is closed");
                 assertFalse(run.warmup, "and the run waits for its 3-2-1");
+                assertEquals(TrialRun.Phase.COUNTDOWN, run.phase);
 
-                run.flight = new FlightRecorder().start(false, run.course); // the timed run's first move
+                flight(run); // the timed run's first move: a fresh record only if the warm-up's was closed
                 FlightRecorderTest.Ride timed = new FlightRecorderTest.Ride(run.flight).flat(30, 2.0);
                 timed.drop(1, 2.0, true);
                 timed.flat(10, 1.0);
@@ -178,15 +199,18 @@ class TimeTrialsFlightsTest {
         assertNull(TimeTrials.bestJump(r.close(r.start(false, "road", "medium"), true)), "no flight, no line");
         assertNull(TimeTrials.bestJump(null), "no record (any other course), no line");
 
-        // through the finish: the line under the time, on a Mountain Run v2 only
+        // through the finish: the line under the time (a run on any other course has no record: no line, as
+        // bestJump(null) above; the record's gate is FlightRecorderTest#onlyAMountainRunOfAlgoFourOrLaterIsRecorded)
         GamesBench bench = new GamesBench(GamesBench.at(2026, 10, 19, 20, 0), List.of(TimeTrials.SPEC), "trials",
                 TimeTrialsSettings.defaults());
         try {
             TimeTrials t = (TimeTrials) bench.games().game(TimeTrials.SPEC.id());
-            assertEquals(List.of("Best jump: 13.4 blocks"), finishLines(t, MountainRunsV2.road(), true),
-                    "a Mountain Run v2 with a jump: its best, under the time");
-            assertEquals(List.of(), finishLines(t, MountainRunsV2.road(), false), "with none: no line");
-            assertEquals(List.of(), finishLines(t, MountainRuns.medium(), true), "0.36's Mountain Run: no line");
+            List<String> said = finishLines(t, MountainRunsV2.road(), true);
+            assertEquals("Best jump: 13.4 blocks", said.get(1), "a Mountain Run v2 with a jump: its best, right under"
+                    + " the time: " + said);
+            assertEquals(1, jumpLines(said).size(), "once: " + said);
+            List<String> none = finishLines(t, MountainRunsV2.road(), false);
+            assertEquals(List.of(), jumpLines(none), "with none: no line: " + none);
         } finally {
             bench.close();
         }
@@ -199,14 +223,12 @@ class TimeTrialsFlightsTest {
         Player p = TrialFakes.player(id, "rider", said);
         long start = 7_000_000_000L;
         TrialRun run = riding(c, true, start);
-        if (FlightRecorder.records(c)) {
-            run.flight = new FlightRecorder().start(false, c);
-            FlightRecorderTest.Ride ride = new FlightRecorderTest.Ride(run.flight).flat(30, 2.0);
-            if (jump) {
-                ride.drop(2, 2.0, true);
-            }
-            ride.flat(20, 1.2);
+        run.flight = new FlightRecorder().start(false, c);
+        FlightRecorderTest.Ride ride = new FlightRecorderTest.Ride(run.flight).flat(30, 2.0);
+        if (jump) {
+            ride.drop(2, 2.0, true);
         }
+        ride.flat(20, 1.2);
         try {
             t.finish(p, run, start + 75_000_000_000L);
         } catch (NullPointerException noServer) {
@@ -215,7 +237,61 @@ class TimeTrialsFlightsTest {
         }
         assertTrue(said.get(0).startsWith(c.name() + ": "), "the time first: " + said);
         assertNull(run.flight, "the record closed at the finish");
+        return said;
+    }
+
+    private static List<String> jumpLines(List<String> said) {
         return said.stream().filter(l -> l.contains("jump")).toList();
+    }
+
+    @Test
+    void aRaceFinishSaysTheBestJumpRightUnderTheRaceTime() throws Exception {
+        GamesBench bench = new GamesBench(GamesBench.at(2026, 10, 19, 20, 0), List.of(TimeTrials.SPEC), "trials",
+                TimeTrialsSettings.defaults());
+        try {
+            TimeTrials t = (TimeTrials) bench.games().game(TimeTrials.SPEC.id());
+            RaceBench race = new RaceBench(t);
+            Course v2 = MountainRunsV2.road();
+            bench.dao().saveCourse(new GamesDao.CourseRow(v2.id(), "trials", v2.kind().id(), v2.name(), v2.world(),
+                    v2.enabled(), CourseCodec.encode(v2), v2.rev(), 0, 0), false);
+            Course road = t.course(v2.id()); // a Time Trials course, so the race counts
+            assertTrue(FlightRecorder.records(road), "fixture: a Mountain Run v2");
+            Player ava = bench.player("Ava");
+            Player ben = bench.player("Ben");
+            TrialFakes.Link link = new TrialFakes.Link();
+            link.goTick = race.tick + 1;
+            for (Player p : List.of(ava, ben)) {
+                race.add(p);
+                assertNull(race.seat(p.getUniqueId(), road, road, road.start(), null, link), "on the grid");
+            }
+            race.tick(); // Go
+            List<TrialRun> runs = new ArrayList<>();
+            for (Player p : List.of(ava, ben)) {
+                TrialRun run = t.run(p.getUniqueId());
+                assertTrue(run.running(), "racing");
+                runs.add(run);
+                flight(run);
+                FlightRecorderTest.Ride ride = new FlightRecorderTest.Ride(run.flight).flat(30, 2.0);
+                if (p == ava) {
+                    ride.drop(2, 2.0, true); // Ava flies a Big Drop; Ben's run has none
+                }
+                ride.flat(20, 1.2);
+            }
+            race.cross(ava.getUniqueId(), 150_000); // its 74 targets 2 s apart: under the leg speed rule
+            race.cross(ben.getUniqueId(), 151_000);
+            List<String> heard = List.of(bench.heard(ava.getUniqueId()).split("\n"));
+            int time = heard.indexOf(road.name() + ": 2:30.0");
+            assertTrue(time >= 0, "the race time: " + heard);
+            assertTrue(heard.stream().noneMatch(l -> l.contains("didn't count")), "fixture: a counted race: " + heard);
+            assertEquals("Best jump: 13.4 blocks", heard.get(time + 1), "her best jump, right under it: " + heard);
+            assertEquals(1, jumpLines(heard).size(), "once: " + heard);
+            List<String> benHeard = List.of(bench.heard(ben.getUniqueId()).split("\n"));
+            assertTrue(benHeard.contains(road.name() + ": 2:31.0"), "his race time: " + benHeard);
+            assertEquals(List.of(), jumpLines(benHeard), "no flight, no line: " + benHeard);
+            assertTrue(runs.stream().allMatch(r -> r.flight == null), "each record closed at the line");
+        } finally {
+            bench.close();
+        }
     }
 
     @Test
@@ -259,11 +335,25 @@ class TimeTrialsFlightsTest {
             TimeTrials t = (TimeTrials) bench.games().game(TimeTrials.SPEC.id());
             TrialRun a = riding(MountainRunsV2.road(), false, 0);
             TrialRun b = riding(MountainRunsV2.road(), false, 0);
+            TrialRun moved = riding(MountainRunsV2.road(), false, 0);
+            moved.suspended = true; // being put back
+            TrialRun done = riding(MountainRunsV2.road(), false, 0);
+            done.phase = TrialRun.Phase.DONE;
+            long never = a.snowAt;
+            long now = 90_000_000_000L;
             // no server in a test: finding the world throws, as a broken one would
             List<LogRecord> said = said(() -> {
-                t.landingSnow(a, 6210.5, 168, 2900.5, 2);
-                t.landingSnow(b, 6210.5, 168, 2900.5, 1);
-                t.landingSnow(a, 6230.5, 167, 2900.5, 1); // within half a second: not even tried
+                t.landingSnow(a, 6210.5, 168, 2900.5, 2, now);
+                assertEquals(now, a.snowAt, "tried: its next puff is half a second from now");
+                t.landingSnow(b, 6210.5, 168, 2900.5, 1, now);
+                t.landingSnow(a, 6230.5, 167, 2900.5, 1, now + TimeTrials.SNOW_EVERY - 1);
+                assertEquals(now, a.snowAt, "within half a second: not even tried");
+                t.landingSnow(a, 6250.5, 166, 2900.5, 1, now + TimeTrials.SNOW_EVERY);
+                assertEquals(now + TimeTrials.SNOW_EVERY, a.snowAt, "half a second on: tried again");
+                t.landingSnow(moved, 6210.5, 168, 2900.5, 2, now);
+                assertEquals(never, moved.snowAt, "none while the run is put back: not tried");
+                t.landingSnow(done, 6210.5, 168, 2900.5, 2, now);
+                assertEquals(never, done.snowAt, "none after the finish: not tried");
             });
             List<LogRecord> warnings = said.stream().filter(r -> r.getLevel() == Level.WARNING).toList();
             assertEquals(1, warnings.size(), "said once: " + said.stream().map(LogRecord::getMessage).toList());

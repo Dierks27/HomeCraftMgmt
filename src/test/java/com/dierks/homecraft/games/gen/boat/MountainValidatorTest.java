@@ -714,10 +714,23 @@ class MountainValidatorTest {
                 "checkpoint " + (i + 1) + " and checkpoint " + (i + 2) + " are 66.2 apart; at most 66.0");
     }
 
+    /**
+     * {@link #wide} with its one Big Drop, built: the v5 rules hold a leg across a Big Drop to 66 and every other
+     * leg to 60, per leg, so a plan holding a Big Drop (every real v5 plan does) must still keep 60 on its hop and
+     * flat legs (the early audit's TQ3).
+     */
+    private static Plan withABigDrop(HandMountain m) {
+        Plan p = m.plan();
+        assertEquals(2, m.lips.get(0)[2], "fixture: the road holds a Big Drop, its first drop");
+        assertEquals(1, m.lips.stream().filter(l -> l[2] >= 2).count(), "fixture: one Big Drop");
+        passes(p, "medium", "fixture: as built, the v5 road with its Big Drop is proven");
+        return p;
+    }
+
     @Test
     void aHopLegOverSixtyIsStillRefusedInV5() {
-        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
-        Plan p = m.plan();
+        HandMountain m = wide(1, MountainValidator.WIDE_ALGO);
+        Plan p = withABigDrop(m);
         int last = HandRun.course(p).checkpoints().size() - 1;
         Course.Mark before = HandRun.course(p).checkpoints().get(last);
         Course.Mark f = HandRun.course(p).finish();
@@ -730,8 +743,8 @@ class MountainValidatorTest {
 
     @Test
     void aFlatLegOverSixtyAlongIsStillRefusedInV5() {
-        HandMountain m = wide(0, MountainValidator.WIDE_ALGO);
-        Plan p = m.plan();
+        HandMountain m = wide(1, MountainValidator.WIDE_ALGO);
+        Plan p = withABigDrop(m);
         int i = lastTraverseFill(m, p, 0);
         assertEquals(List.of("fill", "fill"), m.kinds.subList(i + 1, i + 3), "fixture: three fills in a row");
         Course.Mark a = HandRun.course(p).checkpoints().get(i);

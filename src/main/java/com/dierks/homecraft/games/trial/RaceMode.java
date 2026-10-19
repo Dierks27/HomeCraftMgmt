@@ -444,9 +444,10 @@ final class RaceMode {
     /**
      * A racer crossed the line: judged as a solo run is (fair play, the shortest believable time, the
      * speed check from the grid spot), stale only when the base course changed; reported to the link;
-     * for a party race, also the course's normal finish, once; then parked, or home at the line.
+     * for a party race, also the course's normal finish, once; then parked, or home at the line. {@code jump}
+     * is a Mountain Run's "Best jump" line under the time (MOUNTAIN-V21-SPEC D18), or {@code null} for none.
      */
-    void finish(Player p, TrialRun run, long nanos) {
+    void finish(Player p, TrialRun run, long nanos, String jump) {
         RaceRun rr = run.race;
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
@@ -466,6 +467,9 @@ final class RaceMode {
             return; // this race's line was crossed already
         }
         p.sendMessage(Text.of("&b" + rr.base.name() + ": &f" + TrialText.time(ms)));
+        if (jump != null) {
+            p.sendMessage(Text.of(jump)); // MOUNTAIN-V21-SPEC D18: a Mountain Run's longest jump, quietly
+        }
         if (!verdict.counts()) {
             p.sendMessage(Text.of(voidLine(verdict.reason())));
             TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);

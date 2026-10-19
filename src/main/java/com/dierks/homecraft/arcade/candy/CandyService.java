@@ -1451,11 +1451,15 @@ public final class CandyService implements Listener {
         return n;
     }
 
+    /** What {@code /hcm candy add} did: the new total, and the goal check's result (null below the goal). */
+    public record Added(long total, BagResult bag) {
+    }
+
     /**
      * {@code /hcm candy add <player> <n>}: add {@code n} (the caller keeps it to 1-200 and logs it), then the goal
-     * check, so the bag can be tested without collecting 31 by hand. The new total, or -1 when it couldn't be saved.
+     * check, so the bag can be tested without collecting 31 by hand. Null when it couldn't be saved (logged).
      */
-    public long add(Player target, int n) {
+    public Added add(Player target, int n) {
         CandyConfig.Candy c = settings();
         UUID id = target.getUniqueId();
         long after;
@@ -1463,14 +1467,12 @@ public final class CandyService implements Listener {
             after = counters.addCounter(id, CandyRules.counterKey(c.year()), n);
         } catch (SQLException e) {
             plugin.getLogger().warning("Could not add candy apples for " + target.getName() + ": " + e.getMessage());
-            return -1;
+            return null;
         }
         found.put(id, after);
-        if (after >= c.goal()) {
-            tryBag(target);
-        }
+        BagResult bag = after >= c.goal() ? tryBag(target) : null;
         showBar(target, after, PICKUP_BAR_SECONDS);
-        return after;
+        return new Added(after, bag);
     }
 
     // ---- helpers ---------------------------------------------------------------------------

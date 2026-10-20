@@ -2,6 +2,7 @@ package com.dierks.homecraft.muffler;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.util.Keys;
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import org.bukkit.World;
 import org.bukkit.entity.Bee;
 import org.bukkit.entity.Entity;
@@ -9,7 +10,6 @@ import org.bukkit.entity.Minecart;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
-import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
@@ -34,10 +34,17 @@ import java.util.function.Supplier;
  * un-silenced. A minecart an admin silenced by hand, or a villager another feature keeps quiet, is
  * never touched.
  *
- * <p><b>Survives restarts and unloaded chunks.</b> The silent flag and the tag are saved with the
- * entity. A tagged entity seen again — loaded at start-up, or when its chunk loads later — is
- * taken back into the list, and the next pass decides it: still in a silencing box, it stays
- * quiet; otherwise it gets its voice back. On shutdown every loaded one is un-silenced.
+ * <p><b>Survives restarts, unloaded chunks and beehives.</b> The silent flag and the tag are saved
+ * with the entity. A tagged entity that turns up again — loaded at start-up, its chunk loading,
+ * or a bee coming back out of a hive as a brand-new entity (new UUID, same flag and tag) — is
+ * taken back into the list the moment it is added to the world, and the next pass decides it:
+ * still in a silencing box, it stays quiet; otherwise it gets its voice back. A tagged entity a
+ * pass finds is always ours, whatever list it is or isn't on. On shutdown every loaded one is
+ * un-silenced.
+ *
+ * <p><b>Inside means its position.</b> An entity counts when its position is in the box — the
+ * same rule as every other sound ({@link Muffler#contains}) — not when its hitbox merely touches
+ * the edge.
  */
 final class EntityHusher implements Listener {
 
@@ -92,13 +99,16 @@ final class EntityHusher implements Listener {
                     continue;
                 }
                 World w = plugin.getServer().getWorld(m.pos().world());
-                if (w == null || !w.isChunkLoaded(m.pos().x() >> 4, m.pos().z() >> 4)) {
+                if (w == null) {
                     continue;
                 }
+                // Only loaded entities come back, and nothing is loaded by asking — so a box that
+                // spills into chunks around an unloaded muffler still covers the loaded part.
                 int r = m.radius();
                 BoundingBox box = new BoundingBox(m.pos().x() - r, m.pos().y() - r, m.pos().z() - r,
                         m.pos().x() + r + 1, m.pos().y() + r + 1, m.pos().z() + r + 1);
-                for (Entity e : w.getNearbyEntities(box, e -> kinds.contains(kindOf(e)))) {
+                for (Entity e : w.getNearbyEntities(box,
+                        e -> kinds.contains(kindOf(e)) && m.contains(e.getX(), e.getY(), e.getZ()))) {
                     if (hush(e)) {
                         keep.add(e.getUniqueId());
                     }
@@ -115,40 +125,57 @@ final class EntityHusher implements Listener {
             if (e.isValid()) {
                 release(e); // left the box, or the muffler changed or went away
             }
-            // An invalid one is dead, or in a chunk that unloaded: it keeps its tag and is taken
-            // back (and decided again) when it loads.
+            // An invalid one is dead, in a chunk that unloaded, or a bee gone into its hive: it
+            // keeps its tag and is taken back (and decided again) when it is added to the world.
             it.remove();
         }
     }
 
+    /** Every add to the world: chunk loads, and bees leaving a hive (which no chunk event reports). */
     @EventHandler
-    public void onEntitiesLoad(EntitiesLoadEvent event) {
-        for (Entity e : event.getEntities()) {
-            adopt(e);
-        }
+    public void onAdd(EntityAddToWorldEvent event) {
+        adopt(event.getEntity());
     }
 
     /** Silence one entity; false when it was already silent for someone else's reasons. */
     private boolean hush(Entity e) {
         UUID id = e.getUniqueId();
-        if (hushed.containsKey(id)) {
-            hushed.put(id, e);
-            if (!e.isSilent()) {
-                e.setSilent(true);
+        switch (claim(hushed.containsKey(id), isTagged(e), e.isSilent())) {
+            case OURS -> {
+                hushed.put(id, e); // the tag says ours, even if this exact entity was never on the list
+                if (!e.isSilent()) {
+                    e.setSilent(true);
+                }
+                return true;
             }
-            return true;
+            case NEW -> {
+                e.setSilent(true);
+                e.getPersistentDataContainer().set(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE, (byte) 1);
+                hushed.put(id, e);
+                return true;
+            }
+            default -> {
+                return false; // not ours: an admin or another feature made it silent
+            }
         }
-        if (e.isSilent()) {
-            return false; // not ours: an admin or another feature made it silent
+    }
+
+    /** Whose silence an entity a pass finds in a silencing box is. */
+    enum Claim { OURS, NEW, NOT_OURS }
+
+    /**
+     * On the list or carrying our tag: ours (a bee back out of its hive is a new entity with our
+     * tag on it). Otherwise silent already: someone else's, never touched. Otherwise: ours to silence.
+     */
+    static Claim claim(boolean tracked, boolean tagged, boolean alreadySilent) {
+        if (tracked || tagged) {
+            return Claim.OURS;
         }
-        e.setSilent(true);
-        e.getPersistentDataContainer().set(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE, (byte) 1);
-        hushed.put(id, e);
-        return true;
+        return alreadySilent ? Claim.NOT_OURS : Claim.NEW;
     }
 
     private void release(Entity e) {
-        if (e.getPersistentDataContainer().has(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE)) {
+        if (isTagged(e)) {
             e.getPersistentDataContainer().remove(Keys.MUFFLER_HUSHED);
             e.setSilent(false);
         }
@@ -156,9 +183,13 @@ final class EntityHusher implements Listener {
 
     /** Take back an entity this silenced before (a restart, a chunk loading). */
     private void adopt(Entity e) {
-        if (e.getPersistentDataContainer().has(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE)) {
+        if (kindOf(e) != null && isTagged(e)) {
             hushed.put(e.getUniqueId(), e);
         }
+    }
+
+    private static boolean isTagged(Entity e) {
+        return e.getPersistentDataContainer().has(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE);
     }
 
     /** The kind of entity a muffler can silence, or null for anything else. */

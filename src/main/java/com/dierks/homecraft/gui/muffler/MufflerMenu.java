@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.muffler.EntityHush;
 import com.dierks.homecraft.muffler.MuffleLevel;
 import com.dierks.homecraft.muffler.Muffler;
 import com.dierks.homecraft.muffler.MufflerPos;
@@ -32,7 +33,8 @@ import java.util.UUID;
  *  row 6  .  .  [what it can't hush]  .  [close]  .  [clear all]  .  .
  * </pre>
  *
- * Every group button steps Normal → Quieter → Silent (right-click steps back). Anyone may open a
+ * Every group button steps Normal → Quieter → Silent (right-click steps back), except Minecarts,
+ * which can only be switched off: Normal ↔ Silent. Anyone may open a
  * muffler and see what it hushes; only its owner or an admin may change it. Each click re-reads
  * the muffler, so two people with the menu open never undo each other's change.
  */
@@ -63,14 +65,22 @@ public final class MufflerMenu extends Menu {
         boolean edit = svc.canEdit(player, m);
 
         set(0, info(svc, m, edit), null);
-        if (!svc.working()) {
+        if (svc.entitiesOnly()) {
+            set(1, Menus.icon(Material.ORANGE_CONCRETE, "&6Only minecarts and bees right now",
+                    "&7" + svc.problem(), "&7Everything else is saved and starts", "&7working as soon as that's fixed."), null);
+        } else if (!svc.working()) {
             set(1, Menus.icon(Material.RED_CONCRETE, "&cNot hushing anything right now",
                     "&7" + svc.problem(), "&7Your choices are saved and start", "&7working as soon as that's fixed."), null);
         }
+        // Minecarts and bees silenced as entities only rumble or buzz again once each player's
+        // game reloads them — say so wherever a click can give them their voice back.
+        boolean loops = !EntityHush.kindsSilencedBy(m.withEnabled(true)).isEmpty();
         set(2, m.enabled()
                 ? Menus.icon(Material.LIME_DYE, "&aMuffler: ON", lore("&7Hushing what you picked below.",
                         edit ? "&8Click to switch it off." : null))
-                : Menus.icon(Material.GRAY_DYE, "&7Muffler: OFF", lore("&7Everything plays normally.",
+                : Menus.icon(Material.GRAY_DYE, "&7Muffler: OFF", lore("&7Sounds play normally again.",
+                        loops ? "&8Rumbling carts and buzzing bees come back" : null,
+                        loops ? "&8after you walk away and return." : null,
                         "&7Your choices are kept.", edit ? "&8Click to switch it on." : null)),
                 e -> change(cur -> cur.withEnabled(!cur.enabled())));
         set(3, Menus.count(Menus.icon(Material.SPYGLASS, "&eRange: &f" + m.radius() + " &eblock" + (m.radius() == 1 ? "" : "s"),
@@ -165,7 +175,8 @@ public final class MufflerMenu extends Menu {
         lore.add("&7Choices: &f" + m.groups().size() + " group" + (m.groups().size() == 1 ? "" : "s")
                 + "&7, &f" + m.sounds().size() + " single sound" + (m.sounds().size() == 1 ? "" : "s"));
         lore.add("");
-        lore.add(!svc.working() ? "&cNot hushing anything — see the red tile."
+        lore.add(svc.entitiesOnly() ? "&6Only Silent minecarts and bees work — see the orange tile."
+                : !svc.working() ? "&cNot hushing anything — see the red tile."
                 : m.enabled() ? "&aWorking." : "&7Switched off.");
         if (!edit) {
             lore.add("&8Only " + owner + " can change this muffler.");

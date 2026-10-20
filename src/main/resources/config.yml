@@ -1175,10 +1175,13 @@ recipes:
 #  change things; break it and the item remembers its settings.
 #  It hushes sounds MADE inside its box (every block within the range, in
 #  each direction), for everyone who hears them, wherever they stand.
-#  Needs ProtocolLib. Without it mufflers still place and save, but hush
-#  nothing (the menu says so). It works in every world: quiet isn't part
-#  of the economy. Sounds each player's own game makes — rain, music,
-#  furnaces, portals, their own footsteps — can't be reached by any plugin.
+#  Silent on Minecarts or Bees also stops minecarts rumbling and bees
+#  buzzing, by silencing the carts and bees inside the box.
+#  Needs ProtocolLib. Without it mufflers still place and save, but can
+#  only silence minecarts and bees (the menu says so). It works in every
+#  world: quiet isn't part of the economy. Sounds each player's own game
+#  makes — rain, music, furnaces, portals, their own footsteps — can't be
+#  reached by any plugin.
 # ---------------------------------------------------------------------
 sound_muffler:
   enabled: true                 # false: mufflers stay placed but hush nothing

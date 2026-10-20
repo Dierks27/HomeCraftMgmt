@@ -87,6 +87,43 @@ class EntityHushTest {
     }
 
     @Test
+    void aSilentPickOfAnotherLoopSilencesTheKindToo() {
+        Muffler rider = at(0).withSound("minecraft:entity.minecart.inside", MuffleLevel.SILENT);
+        assertTrue(EntityHush.silences(rider, EntityHush.Kind.MINECART),
+                "the rider's rumble can only be stopped by silencing the cart");
+        Muffler angry = at(0).withSound("minecraft:entity.bee.loop_aggressive", MuffleLevel.SILENT);
+        assertTrue(EntityHush.silences(angry, EntityHush.Kind.BEE));
+        Muffler allowOther = at(0).withSound("minecraft:entity.minecart.inside", MuffleLevel.ALLOW);
+        assertFalse(EntityHush.silences(allowOther, EntityHush.Kind.MINECART));
+        Muffler quieterOther = at(0).withSound("minecraft:entity.bee.loop_aggressive", MuffleLevel.QUIETER);
+        assertFalse(EntityHush.silences(quieterOther, EntityHush.Kind.BEE), "only Silent silences");
+    }
+
+    @Test
+    void soundsAreTiedToTheEntityThatMakesThem() {
+        assertEquals(EntityHush.Kind.BEE, EntityHush.Kind.ofKey("minecraft:entity.bee.sting"));
+        assertEquals(EntityHush.Kind.MINECART, EntityHush.Kind.ofKey("minecraft:entity.minecart.inside"));
+        assertNull(EntityHush.Kind.ofKey("minecraft:block.beehive.work"), "a hive is a block, not a bee");
+        assertNull(EntityHush.Kind.ofKey("minecraft:entity.beetle.x"), "the prefix ends with a dot");
+        assertNull(EntityHush.Kind.ofKey(null));
+        assertEquals(EntityHush.Kind.MINECART, EntityHush.Kind.ofAnyLoop("minecraft:entity.minecart.inside.underwater"));
+        assertEquals(EntityHush.Kind.BEE, EntityHush.Kind.ofAnyLoop("minecraft:entity.bee.loop"));
+        assertNull(EntityHush.Kind.ofAnyLoop("minecraft:entity.bee.sting"));
+    }
+
+    @Test
+    void aTaggedEntityIsAlwaysOursAndAnotherSilentOneNever() {
+        assertEquals(EntityHusher.Claim.OURS, EntityHusher.claim(false, true, true),
+                "a bee back out of its hive: new UUID, our tag, still silent — ours, so it can be given back");
+        assertEquals(EntityHusher.Claim.OURS, EntityHusher.claim(true, true, true));
+        assertEquals(EntityHusher.Claim.OURS, EntityHusher.claim(true, false, false),
+                "on our list but un-silenced by someone: still ours, silenced again");
+        assertEquals(EntityHusher.Claim.NOT_OURS, EntityHusher.claim(false, false, true),
+                "silent by /data or another plugin: never touched");
+        assertEquals(EntityHusher.Claim.NEW, EntityHusher.claim(false, false, false));
+    }
+
+    @Test
     void theMinecartsButtonOnlyGoesNormalAndSilent() {
         SoundGroups.SoundGroup carts = SoundGroups.byId("minecarts");
         assertFalse(carts.quieter());

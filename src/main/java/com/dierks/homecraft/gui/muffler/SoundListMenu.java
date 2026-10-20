@@ -29,7 +29,8 @@ import java.util.Map;
  *   <li><b>Find a sound</b> — every sound in the game whose key holds the words typed.</li>
  *   <li><b>Single sounds</b> — the ones already picked on this muffler.</li>
  * </ul>
- * A click steps the sound's own pick: not picked → Quieter → Silent → Always play → not picked.
+ * A click steps the sound's own pick: not picked → Quieter → Silent → Always play → not picked
+ * (no Quieter for a minecart's or bee's own loops, which can only be switched off).
  * A pick beats the sound's group, which is what "Always play" is for.
  */
 final class SoundListMenu extends Menu {
@@ -119,7 +120,7 @@ final class SoundListMenu extends Menu {
                 }
                 MuffleLevel now = cur.sounds().get(key);
                 MuffleLevel next = step(now, e.isRightClick());
-                if (next == MuffleLevel.QUIETER && EntityHush.Kind.ofLoop(key) != null) {
+                if (next == MuffleLevel.QUIETER && EntityHush.Kind.ofAnyLoop(key) != null) {
                     next = step(next, e.isRightClick()); // a loop can be switched off, not turned down
                 }
                 Muffler changed = cur.withSound(key, next);
@@ -188,12 +189,23 @@ final class SoundListMenu extends Menu {
             SoundGroups.SoundGroup g = m.decidingGroup(key);
             lore.add("&7From " + (g == null ? "its group" : g.name()) + ": " + describe(fromGroup, m));
         }
-        lore.add("&7Now: " + (effective == null || effective == MuffleLevel.ALLOW ? "&fplays normally" : describe(effective, m)));
-        EntityHush.Kind loop = EntityHush.Kind.ofLoop(key);
+        // A silenced minecart or bee makes no sound at all, whatever this sound's own setting says.
+        EntityHush.Kind maker = EntityHush.Kind.ofKey(key);
+        boolean whole = maker != null && EntityHush.silences(m, maker);
+        if (whole) {
+            effective = MuffleLevel.SILENT;
+            lore.add("&7Now: &cSilent &7(the whole " + maker.noun() + " is silenced)");
+            if (pick == MuffleLevel.ALLOW || pick == MuffleLevel.QUIETER) {
+                lore.add("&8That pick can't apply while the " + maker.noun() + " itself is silent.");
+            }
+        } else {
+            lore.add("&7Now: " + (effective == null || effective == MuffleLevel.ALLOW ? "&fplays normally" : describe(effective, m)));
+        }
+        EntityHush.Kind loop = EntityHush.Kind.ofAnyLoop(key);
         if (loop != null) {
             lore.add("&8Each player's game makes this one: Silent");
-            lore.add("&8quiets the whole " + (loop == EntityHush.Kind.MINECART ? "minecart" : "bee")
-                    + ", and Quieter can't apply.");
+            lore.add("&8quiets the whole " + loop.noun() + ", and Quieter can't apply.");
+            lore.add("&8Off Silent, it returns after you walk away and back.");
         }
         if (edit) {
             lore.add("");

@@ -96,7 +96,7 @@ from 33 groups (chickens, villagers, pistons, dispensers, doors, minecarts and m
 single sound, including ones it has just heard nearby. Then pick how much: **Quieter** or
 **Silent**. Sounds made inside its box are hushed for everyone, wherever they stand. Silent
 also stops the rumble of minecarts rolling and the buzz of bees flying. Needs **ProtocolLib**
-(minecarts and bees work without it).
+(silencing the minecarts and bees themselves works without it).
 
 ### Data-driven and safe to upgrade
 - **Config-driven:** recipes, skins, prices, odds, prizes, quests and achievements all live in
@@ -4312,8 +4312,10 @@ choice changes or the muffler is broken.
 - **Only its own carts.** A cart someone silenced by other means (`/data`, another plugin) is
   never touched. Carts the muffler silenced carry a tag, which survives restarts and unloaded
   chunks, so they are always given back. On shutdown every loaded one is given its voice back
-  (one left in an unloaded chunk is sorted out the next time it loads).
-- It works **without ProtocolLib**: the silent flag is plain Bukkit.
+  (one left in an unloaded chunk, or a bee inside a beehive, is sorted out the moment it
+  comes back).
+- Silencing the minecarts and bees themselves works **without ProtocolLib**: the silent flag
+  is plain Bukkit. Hive sounds and everything else still need ProtocolLib.
 
 This was checked against Mojang's own 26.3 client: the rolling and riding sounds, and the bee
 loops, refuse to play for a silent entity and are stopped the tick it becomes silent.
@@ -4347,7 +4349,8 @@ of them. The copy's seed carries a mark so it isn't hushed a second time.
 
 It fails safe. A packet the muffler can't read (a future Minecraft change, a sound ProtocolLib
 can't convert) goes through untouched and is logged once. **Without ProtocolLib**, mufflers
-still place, save and show their menu, with a red tile saying why nothing is hushed.
+still place, save and show their menu, with a tile saying that only minecarts and the bees
+themselves can be silenced until ProtocolLib is there.
 
 A piston, fire, a wither or flowing water can't move or destroy a muffler, and explosions skip
 it like every HomeCraft block. If one vanishes without being broken (WorldEdit, `/setblock`),

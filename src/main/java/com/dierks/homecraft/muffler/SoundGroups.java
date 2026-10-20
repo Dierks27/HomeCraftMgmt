@@ -85,7 +85,8 @@ public final class SoundGroups {
         g.add(group("bees", "Bees", "BEE_SPAWN_EGG", 14,
                 List.of("Hives, pollinating and stings.",
                         "&8Silent also stops their buzz in flight;",
-                        "&8Quieter can't turn the buzz down."),
+                        "&8Quieter can't turn the buzz down. Off Silent,",
+                        "&8the buzz returns after you walk away and back."),
                 "entity.bee.*", "block.beehive.*"));
         g.add(group("horses", "Horses & Llamas", "HORSE_SPAWN_EGG", 15,
                 List.of("Horses, donkeys, mules, llamas and camels."),
@@ -162,7 +163,9 @@ public final class SoundGroups {
                 List.of("The rumble of minecarts rolling on rails —",
                         "hopper carts under a farm too.",
                         "&8Each player's game makes this sound, so a",
-                        "&8muffler can switch it off, not turn it down."),
+                        "&8muffler can switch it off, not turn it down.",
+                        "&8Back to Normal: the rumble returns after you",
+                        "&8walk away and come back."),
                 "entity.minecart.*"));
 
         // Row 5 — machines and blocks.

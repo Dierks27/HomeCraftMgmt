@@ -92,9 +92,11 @@ and get paid by distance and how you travelled (on foot pays more than by elytra
 
 ### Sound Mufflers — hush the noisy stuff
 A block you put next to a noisy farm. Its menu opens the moment it's placed. Pick what to hush
-from 32 groups (chickens, villagers, pistons, dispensers, doors and more) or any single sound,
-including ones it has just heard nearby. Then pick how much: **Quieter** or **Silent**. Sounds
-made inside its box are hushed for everyone, wherever they stand. Needs **ProtocolLib**.
+from 33 groups (chickens, villagers, pistons, dispensers, doors, minecarts and more) or any
+single sound, including ones it has just heard nearby. Then pick how much: **Quieter** or
+**Silent**. Sounds made inside its box are hushed for everyone, wherever they stand. Silent
+also stops the rumble of minecarts rolling and the buzz of bees flying. Needs **ProtocolLib**
+(minecarts and bees work without it).
 
 ### Data-driven and safe to upgrade
 - **Config-driven:** recipes, skins, prices, odds, prizes, quests and achievements all live in
@@ -4281,7 +4283,7 @@ never stops clicking.
 | **Heard nearby** | Every sound made in the box in the last 10 minutes, newest first. The quick way to find the noise: stand by the farm, open this, click the culprit |
 | **Find a sound** | Type part of a name (`chicken`, `piston`, `zombie door`) and pick from every sound in the game |
 | **Single sounds** | The sounds picked one at a time |
-| **The 32 group buttons** | Normal → Quieter → Silent (right-click steps back): farm animals, pets, villagers, golems, every kind of monster, other players, footsteps, fishing, pistons, dispensers, doors and gates, buttons and levers, note blocks, bells, chests, workstations, beacons |
+| **The 33 group buttons** | Normal → Quieter → Silent (right-click steps back): farm animals, pets, villagers, golems, every kind of monster, other players, footsteps, fishing, pistons, dispensers, doors and gates, buttons and levers, note blocks, bells, chests, workstations, beacons. **Minecarts** is Normal ↔ Silent only (see below) |
 | **Clear every choice** | Back to hushing nothing (asks first) |
 
 A single sound steps **Quieter → Silent → Always play → not picked**. A single pick beats its
@@ -4289,14 +4291,41 @@ group, so you can make Villagers Silent and set their trading sound to **Always 
 two mufflers overlap, the stronger choice wins: Silent beats Quieter, two Quieters give the
 quieter volume, and a neighbour's "Always play" can't undo your Silent.
 
+### Minecarts rolling and bees buzzing
+
+The rumble of a rolling minecart (hopper carts under a chicken farm, say) and the buzz of a
+flying bee are started by each player's own game, so no sound packet carries them. What every
+player's game does respect is an entity's **silent** flag, which the server sets. So when a
+muffler has **Minecarts** (or **Bees**) on **Silent**, it marks every minecart (or bee) inside
+its box silent, checking every half second, and clears the mark when the cart rolls out, the
+choice changes or the muffler is broken.
+
+- **Silent only.** Silent is all or nothing for an entity, so there is no Quieter for the
+  rumble: Minecarts steps Normal ↔ Silent. Bees on Quieter turns their other sounds down but
+  can't touch the buzz; Bees on Silent stops it.
+- **It quiets the whole entity:** a silent cart also makes no hurt or break sound, and a silent
+  bee no sting or death sound.
+- **Quiet straight away, back later.** A cart that is already rumbling goes quiet within a
+  moment of being silenced. When a cart gets its voice back (it rolled out of the box, or you
+  set Minecarts back to Normal), the rumble returns once the player's game loads that cart
+  again: walk out of view and back, or rejoin. That is how Minecraft's own sound engine works.
+- **Only its own carts.** A cart someone silenced by other means (`/data`, another plugin) is
+  never touched. Carts the muffler silenced carry a tag, which survives restarts and unloaded
+  chunks, so they are always given back. On shutdown every loaded one is given its voice back
+  (one left in an unloaded chunk is sorted out the next time it loads).
+- It works **without ProtocolLib**: the silent flag is plain Bukkit.
+
+This was checked against Mojang's own 26.3 client: the rolling and riding sounds, and the bee
+loops, refuse to play for a silent entity and are stopped the tick it becomes silent.
+
 ### What no muffler can hush
 
 Some sounds are made by each player's own game, and the server never sends them, so no
 plugin can reach them: rain and thunder, music and jukeboxes, furnaces and campfires
-crackling, portals humming, lava popping, minecarts rolling, bees buzzing in flight, and a
-player's **own** footsteps, clicks and pickups (other players hear yours, and those can be
-hushed). The menu says this too. The rule of thumb: **anything that shows up in "Heard
-nearby" can be hushed.**
+crackling, portals humming, lava popping, and a player's **own** footsteps, clicks and
+pickups (other players hear yours, and those can be hushed). The menu says this too. The rule
+of thumb: **anything that shows up in "Heard nearby" can be hushed**, plus minecarts and bees
+through Silent.
 
 ### How it works
 
@@ -4357,6 +4386,9 @@ block without settings gets fresh ones.
    same choices are there.
 7. A second player right-clicks it: they can look, but a click says only the owner can change it.
 8. Push it with a piston: the piston doesn't fire. Set it on fire: it doesn't burn.
+9. Put the muffler by a hopper minecart on rails and set **Minecarts** to Silent: the rumble
+   stops within a second. Set it back to Normal, walk out of view and back: the rumble returns.
+   Push a cart out of the box: it stays quiet until it reloads, then rumbles again.
 
 ---
 

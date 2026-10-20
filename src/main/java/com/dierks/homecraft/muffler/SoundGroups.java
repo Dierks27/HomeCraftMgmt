@@ -165,7 +165,8 @@ public final class SoundGroups {
                         "&8Each player's game makes this sound, so a",
                         "&8muffler can switch it off, not turn it down.",
                         "&8Back to Normal: the rumble returns after you",
-                        "&8walk away and come back."),
+                        "&8walk away and come back. TNT minecarts are",
+                        "&8never silenced: their fuse hiss is a warning."),
                 "entity.minecart.*"));
 
         // Row 5 — machines and blocks.

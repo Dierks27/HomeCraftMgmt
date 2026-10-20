@@ -7,17 +7,22 @@ import org.bukkit.World;
 import org.bukkit.entity.Bee;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Minecart;
+import org.bukkit.entity.minecart.ExplosiveMinecart;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityEnterBlockEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,12 +40,16 @@ import java.util.function.Supplier;
  * never touched.
  *
  * <p><b>Survives restarts, unloaded chunks and beehives.</b> The silent flag and the tag are saved
- * with the entity. A tagged entity that turns up again — loaded at start-up, its chunk loading,
- * or a bee coming back out of a hive as a brand-new entity (new UUID, same flag and tag) — is
- * taken back into the list the moment it is added to the world, and the next pass decides it:
- * still in a silencing box, it stays quiet; otherwise it gets its voice back. A tagged entity a
- * pass finds is always ours, whatever list it is or isn't on. On shutdown every loaded one is
- * un-silenced.
+ * with the entity. A tagged entity that turns up again (loaded at start-up, or its chunk loading)
+ * is decided the moment it is added to the world, in the same tick, before any player's game can
+ * start its sound loop on a stale flag: still in a silencing box, it is taken back into the list;
+ * otherwise it gets its voice back there and then. A bee is given its voice back as it enters a
+ * hive, so it is stored, and later comes out, with its buzz; if it comes out inside a silencing box
+ * the next pass quiets it again. A tagged entity a pass finds is always ours, whatever list it is
+ * or isn't on. On shutdown every loaded one is un-silenced.
+ *
+ * <p><b>Never TNT minecarts.</b> A silent TNT minecart primes without its fuse hiss — the warning
+ * that it is about to explode — so those are never silenced.
  *
  * <p><b>Inside means its position.</b> An entity counts when its position is in the box — the
  * same rule as every other sound ({@link Muffler#contains}) — not when its hitbox merely touches
@@ -131,10 +140,45 @@ final class EntityHusher implements Listener {
         }
     }
 
-    /** Every add to the world: chunk loads, and bees leaving a hive (which no chunk event reports). */
+    /**
+     * Every add to the world (chunk loads, a bee leaving a hive): a tagged entity is decided now,
+     * not at the next pass, so its voice is back before any player's game adds it silent and loses
+     * the loop until the next time it reloads.
+     */
     @EventHandler
     public void onAdd(EntityAddToWorldEvent event) {
-        adopt(event.getEntity());
+        Entity e = event.getEntity();
+        EntityHush.Kind kind = kindOf(e);
+        if (kind == null || !isTagged(e)) {
+            return;
+        }
+        if (enabled.getAsBoolean() && EntityHush.shouldSilence(mufflersIn(e.getWorld().getName()), kind,
+                e.getX(), e.getY(), e.getZ())) {
+            hushed.put(e.getUniqueId(), e);
+        } else {
+            release(e);
+            hushed.remove(e.getUniqueId());
+        }
+    }
+
+    /** A bee going into its hive is stored with its voice, so it comes back out buzzing. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEnterBlock(EntityEnterBlockEvent event) {
+        Entity e = event.getEntity();
+        if (isTagged(e)) {
+            release(e);
+            hushed.remove(e.getUniqueId());
+        }
+    }
+
+    private List<Muffler> mufflersIn(String world) {
+        List<Muffler> out = new ArrayList<>();
+        for (Muffler m : mufflers.get()) {
+            if (m.pos().world().equals(world)) {
+                out.add(m);
+            }
+        }
+        return out;
     }
 
     /** Silence one entity; false when it was already silent for someone else's reasons. */
@@ -181,7 +225,7 @@ final class EntityHusher implements Listener {
         }
     }
 
-    /** Take back an entity this silenced before (a restart, a chunk loading). */
+    /** Take back an entity this silenced before, already loaded when the plugin starts. */
     private void adopt(Entity e) {
         if (kindOf(e) != null && isTagged(e)) {
             hushed.put(e.getUniqueId(), e);
@@ -192,8 +236,11 @@ final class EntityHusher implements Listener {
         return e.getPersistentDataContainer().has(Keys.MUFFLER_HUSHED, PersistentDataType.BYTE);
     }
 
-    /** The kind of entity a muffler can silence, or null for anything else. */
+    /** The kind of entity a muffler can silence, or null for anything else (TNT minecarts included). */
     static EntityHush.Kind kindOf(Entity e) {
+        if (e instanceof ExplosiveMinecart) {
+            return null; // its fuse hiss is a warning, never hushed
+        }
         if (e instanceof Minecart) {
             return EntityHush.Kind.MINECART;
         }

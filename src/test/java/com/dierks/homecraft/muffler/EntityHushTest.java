@@ -123,6 +123,28 @@ class EntityHushTest {
         assertEquals(EntityHusher.Claim.NEW, EntityHusher.claim(false, false, false));
     }
 
+    /** A stand-in entity of the given Bukkit type: enough for instanceof, nothing else is called. */
+    private static org.bukkit.entity.Entity fake(Class<? extends org.bukkit.entity.Entity> type) {
+        return (org.bukkit.entity.Entity) java.lang.reflect.Proxy.newProxyInstance(
+                EntityHushTest.class.getClassLoader(), new Class<?>[] {type}, (proxy, method, args) -> {
+                    throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    @Test
+    void tntMinecartsAreNeverSilencedEveryOtherCartAndBeesAre() {
+        assertNull(EntityHusher.kindOf(fake(org.bukkit.entity.minecart.ExplosiveMinecart.class)),
+                "a silent TNT minecart would prime without its fuse hiss");
+        for (Class<? extends org.bukkit.entity.Entity> cart : List.of(
+                org.bukkit.entity.minecart.HopperMinecart.class, org.bukkit.entity.minecart.RideableMinecart.class,
+                org.bukkit.entity.minecart.StorageMinecart.class, org.bukkit.entity.minecart.PoweredMinecart.class,
+                org.bukkit.entity.minecart.SpawnerMinecart.class, org.bukkit.entity.minecart.CommandMinecart.class)) {
+            assertEquals(EntityHush.Kind.MINECART, EntityHusher.kindOf(fake(cart)), cart.getSimpleName());
+        }
+        assertEquals(EntityHush.Kind.BEE, EntityHusher.kindOf(fake(org.bukkit.entity.Bee.class)));
+        assertNull(EntityHusher.kindOf(fake(org.bukkit.entity.Chicken.class)));
+    }
+
     @Test
     void theMinecartsButtonOnlyGoesNormalAndSilent() {
         SoundGroups.SoundGroup carts = SoundGroups.byId("minecarts");

@@ -198,6 +198,10 @@ final class SoundListMenu extends Menu {
             if (pick == MuffleLevel.ALLOW || pick == MuffleLevel.QUIETER) {
                 lore.add("&8That pick can't apply while the " + maker.noun() + " itself is silent.");
             }
+        } else if (EntityHush.Kind.ofAnyLoop(key) != null) {
+            // Only silencing the whole minecart or bee touches its own loops, and it isn't.
+            effective = null;
+            lore.add("&7Now: &fplays normally");
         } else {
             lore.add("&7Now: " + (effective == null || effective == MuffleLevel.ALLOW ? "&fplays normally" : describe(effective, m)));
         }
@@ -206,6 +210,10 @@ final class SoundListMenu extends Menu {
             lore.add("&8Each player's game makes this one: Silent");
             lore.add("&8quiets the whole " + loop.noun() + ", and Quieter can't apply.");
             lore.add("&8Off Silent, it returns after you walk away and back.");
+            if (!whole && m.levelFor(loop.loop()) == MuffleLevel.ALLOW) {
+                lore.add("&8The " + loop.noun() + "'s main loop is on Always play, so the");
+                lore.add("&8" + loop.noun() + " itself isn't silenced.");
+            }
         }
         if (edit) {
             lore.add("");

@@ -24,8 +24,9 @@ public final class EntityHush {
     /** An entity whose own sound loops a muffler can stop. */
     public enum Kind {
         /**
-         * Every minecart: plain, hopper, chest, furnace, TNT, spawner and command block. The
-         * rumble bystanders hear decides; a rider hears the two "inside" loops.
+         * Minecarts: plain, hopper, chest, furnace, spawner and command block — never TNT, whose
+         * fuse hiss is a warning. The rumble bystanders hear decides; a rider hears the two
+         * "inside" loops.
          */
         MINECART("minecart", "minecraft:entity.minecart.",
                 "minecraft:entity.minecart.riding",

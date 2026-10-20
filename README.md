@@ -4286,7 +4286,8 @@ never stops clicking.
 | **The 33 group buttons** | Normal → Quieter → Silent (right-click steps back): farm animals, pets, villagers, golems, every kind of monster, other players, footsteps, fishing, pistons, dispensers, doors and gates, buttons and levers, note blocks, bells, chests, workstations, beacons. **Minecarts** is Normal ↔ Silent only (see below) |
 | **Clear every choice** | Back to hushing nothing (asks first) |
 
-A single sound steps **Quieter → Silent → Always play → not picked**. A single pick beats its
+A single sound steps **Quieter → Silent → Always play → not picked** (a minecart's or bee's
+own loops skip Quieter: see below). A single pick beats its
 group, so you can make Villagers Silent and set their trading sound to **Always play**. Where
 two mufflers overlap, the stronger choice wins: Silent beats Quieter, two Quieters give the
 quieter volume, and a neighbour's "Always play" can't undo your Silent.
@@ -4303,8 +4304,10 @@ choice changes or the muffler is broken.
 - **Silent only.** Silent is all or nothing for an entity, so there is no Quieter for the
   rumble: Minecarts steps Normal ↔ Silent. Bees on Quieter turns their other sounds down but
   can't touch the buzz; Bees on Silent stops it.
-- **It quiets the whole entity:** a silent cart also makes no hurt or break sound, and a silent
-  bee no sting or death sound.
+- **It quiets the whole entity:** a silent cart also makes no splash and a rider hears nothing
+  either; a silent bee makes no sting, hurt or death sound. **TNT minecarts are never
+  silenced**, because a silent TNT cart would prime without its fuse hiss, and that hiss is
+  the warning that it's about to explode.
 - **Quiet straight away, back later.** A cart that is already rumbling goes quiet within a
   moment of being silenced. When a cart gets its voice back (it rolled out of the box, or you
   set Minecarts back to Normal), the rumble returns once the player's game loads that cart
@@ -4312,8 +4315,9 @@ choice changes or the muffler is broken.
 - **Only its own carts.** A cart someone silenced by other means (`/data`, another plugin) is
   never touched. Carts the muffler silenced carry a tag, which survives restarts and unloaded
   chunks, so they are always given back. On shutdown every loaded one is given its voice back
-  (one left in an unloaded chunk, or a bee inside a beehive, is sorted out the moment it
-  comes back).
+  (one left in an unloaded chunk is sorted out the moment it loads again). A bee gets its
+  voice back as it flies into a hive, so it comes back out buzzing, and is quieted again
+  straight away if it comes out inside a box that still silences bees.
 - Silencing the minecarts and bees themselves works **without ProtocolLib**: the silent flag
   is plain Bukkit. Hive sounds and everything else still need ProtocolLib.
 

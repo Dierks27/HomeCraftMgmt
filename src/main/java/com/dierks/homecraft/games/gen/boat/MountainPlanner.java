@@ -29,23 +29,29 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Mountain Run v2's search (MOUNTAIN-V2-SPEC §5.2, BoatPlanner ALGO 4), on the planner thread: cheap
- * candidates first, the expensive build only for the best of them, and a safe layout that is never
- * missing.
+ * Mountain Run v2's search (MOUNTAIN-V2-SPEC §5.2, BoatPlanner ALGO {@value #ALGO}: the wide road,
+ * MOUNTAIN-V21-SPEC), on the planner thread: cheap candidates first, the expensive build only for the best of
+ * them, and a safe layout that is never missing.
  *
- * <p><b>Stage A</b> (milliseconds each, up to {@value #CANDIDATES}): a {@link Frame}, a {@link Skeleton},
- * the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore}, each from its own fork of the
- * seed ({@code frame:i}, {@code route:i}, {@code drops:i}); a candidate is kept when every flow gate holds
- * (the model time in the tier's window among them) and its corridors keep their clearance. It stops early
- * once {@value #KEPT} kept candidates score {@value #EARLY} or more, and goes on past {@value #CANDIDATES}
- * (up to {@value #CANDIDATES_MAX}) only while none is kept.
+ * <p><b>Per version.</b> What a layout is made of comes from its {@link MountainTier}
+ * ({@link MountainTier#of(BoatStyle, String, int)}), whose algo every step reads ({@link MountainTier#wide});
+ * {@link #made(PlanInput)} is today's {@value #ALGO}, and {@link #made(PlanInput, int)} at 4 still makes 0.37.0's
+ * layouts block for block (the frozen fixtures' test; no tag of algo 4 is ever made again by the engine:
+ * {@code BoatPlanner.rederive} refuses it).
  *
- * <p><b>Stage B</b> (about a second each): the kept candidates by score (ties by number), at most
- * {@value #KEPT}: the pieces ({@code pieces:i}, each kept only while the checkpoints still fit round it),
- * the raster, the checkpoints, the mountain ({@code scenery:i}), the plan, and the proof
- * ({@link MountainValidator}); the first proven plan is the layout. A refused build is tried again without
- * the pieces nearest where its proof failed. Then fewer pieces (REDUCED), then none (BASIC), on the best
- * candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven skeleton per style, tier and
+ * <p><b>Stage A</b> (milliseconds each, up to {@value #CANDIDATES} ({@value #CANDIDATES_WIDE} on the wide road)): a
+ * {@link Frame}, a {@link Skeleton}, the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore},
+ * each from its own fork of the seed ({@code frame:i}, {@code route:i}, {@code drops:i}); a candidate is kept when
+ * every flow gate holds (the model time in the tier's window among them) and its corridors keep their clearance.
+ * It stops early once {@value #KEPT} kept candidates score {@value #EARLY} or more, and goes on past them (up to
+ * {@value #CANDIDATES_MAX}) only while none is kept.
+ *
+ * <p><b>Stage B</b> (about a second each): the kept candidates by score (on the wide road the evener fall first,
+ * {@link #stageBOrder}; ties by number), at most {@value #KEPT}: the pieces ({@code pieces:i}, each kept only
+ * while the checkpoints still fit round it), the raster, the checkpoints, the mountain ({@code scenery:i}), the
+ * plan, and the proof ({@link MountainValidator}); the first proven plan is the layout. A refused build is tried
+ * again without the pieces nearest where its proof failed. Then fewer pieces (REDUCED), then none (BASIC), on the
+ * best candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven skeleton per style, tier and
  * mirror ({@link #safe}).
  *
  * <p><b>Work</b> ({@link #BUDGET} units): a Stage A candidate 1, a Stage B attempt {@value #UNIT_B},
@@ -57,10 +63,20 @@ import java.util.regex.Pattern;
  */
 final class MountainPlanner {
 
-    /** The version: Mountain Run v2. */
-    static final int ALGO = 4;
+    /**
+     * The version: Mountain Run v2. 5 is the wide road, 0.37.1 (the Winding Road 14-18 wide, more drops, snow); 4
+     * was 0.37.0's 7-9 wide road.
+     */
+    static final int ALGO = 5;
     /** Stage A candidates, those Stage B tries, and the score that ends Stage A early. */
     static final int CANDIDATES = 48;
+    /**
+     * The wide road's: Stage A looks at twice as many before it stops, so Stage B has the evener falls to choose from
+     * and the hard road (its approach of 46 keeps fewer) as many kept as before (0.37.1).
+     */
+    static final int CANDIDATES_WIDE = 96;
+    /** Stage B builds the wide road's kept candidates whose every band falls this much first (§6.2's spread). */
+    static final int EVEN_FALL = 5;
     /**
      * While none of the first {@value #CANDIDATES} is kept, Stage A goes on up to this many: the hard road
      * (descent 44 or more under the checkpoint rules) keeps about one candidate in 60. Within the budget:
@@ -107,6 +123,13 @@ final class MountainPlanner {
         String how;
         /** Pieces a failed proof's retry left out (the ones nearest where it failed), 0 for none. */
         int leftOut;
+        /** The blocks of its raster (ice, walls, pieces, markers, the stand) before the mountain's (the soak's). */
+        int rasterBlocks;
+        /**
+         * Why each Stage B build before it fell through, in order (the soak's tally, MOUNTAIN-V21-SPEC §6.1):
+         * the first line of a refused proof, or what didn't come together; never part of the plan.
+         */
+        List<String> refused = List.of();
 
         Made(PlanInput in, MountainTier tier, Candidate cand, PiecesV4 pieces, RasterV4 raster,
              List<RasterV4.Spot> checkpoints, Plan plan, int trees, double seconds) {
@@ -142,7 +165,7 @@ final class MountainPlanner {
                     case BULB -> bulbs++;
                 }
             }
-            out.add(in.slot().name() + " v" + ALGO + " " + tier.id + ": " + tier.style.title() + ", "
+            out.add(in.slot().name() + " v" + tier.algo + " " + tier.id + ": " + tier.style.title() + ", "
                     + String.format(Locale.ROOT, "%,d", Math.round(sk.finish - sk.start)) + " blocks, " + sk.frame.bands
                     + " bands (" + hairpins + " hairpins, " + elbows + " elbows, " + bulbs + " bulbs), " + how);
             out.add(cand.flow().summary() + String.format(Locale.ROOT, " - model T_m %.1f s", modelMs(seconds) / 1000.0));
@@ -160,7 +183,8 @@ final class MountainPlanner {
                 for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
                     dealt += pieces.dealt(k);
                 }
-                pieceLine.append("pieces ").append(pieces.list.size()).append(" of ").append(dealt).append(" (pits ")
+                pieceLine.append("pieces ").append(pieces.list.size()).append(" of ").append(dealt)
+                        .append(tier.wide() ? " (snow drifts " : " (pits ")
                         .append(of(pieces, PiecesV4.Kind.SAND_PIT)).append(", splits ")
                         .append(of(pieces, PiecesV4.Kind.SPLIT)).append(", caves ")
                         .append(of(pieces, PiecesV4.Kind.CAVE)).append(", tunnels ")
@@ -216,8 +240,16 @@ final class MountainPlanner {
 
     // ---- the search ---------------------------------------------------------------------------------------
 
-    /** The proven Mountain Run v2 for {@code in}. */
+    /** The proven Mountain Run v2 for {@code in}, by today's planner ({@value #ALGO}). */
     static Made made(PlanInput in) throws GenFailed {
+        return made(in, ALGO);
+    }
+
+    /**
+     * The proven Mountain Run v2 for {@code in} as boat planner {@code algo} makes it (the tables of
+     * {@link MountainTier#of(BoatStyle, String, int)} and the rules they switch): 4 is 0.37.0's, block for block.
+     */
+    static Made made(PlanInput in, int algo) throws GenFailed {
         Box half = in.half();
         if (half.sizeX() != SIZE_X || half.sizeY() != SIZE_Y || half.sizeZ() != SIZE_Z) {
             throw new GenFailed("the area " + half.describe() + " isn't a Mountain Run v2 half: it is " + SIZE_X
@@ -228,7 +260,7 @@ final class MountainPlanner {
         }
         String level = in.slot().normalise(in.tierOrMix());
         BoatStyle style = BoatStyle.of(in.seed());
-        MountainTier tier = MountainTier.of(style, level);
+        MountainTier tier = MountainTier.of(style, level, algo);
         if (tier == null) {
             throw new GenFailed("'" + in.tierOrMix() + "' isn't an Ice Boat tier (easy, medium or hard)");
         }
@@ -240,7 +272,7 @@ final class MountainPlanner {
         int good = 0;
         for (int i = 0; i < CANDIDATES_MAX; i++) {
             in.checkCancelled();
-            if (work + 1 > budget - SAFE_RESERVE || (i >= CANDIDATES && !kept.isEmpty())) {
+            if (work + 1 > budget - SAFE_RESERVE || (i >= candidates(tier) && !kept.isEmpty())) {
                 break;
             }
             work++;
@@ -254,12 +286,12 @@ final class MountainPlanner {
                 break;
             }
         }
-        kept.sort((a, b) -> a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
-                : Integer.compare(a.index(), b.index()));
+        kept.sort(MountainPlanner::stageBOrder);
         // Stage B: every piece on the best, then fewer, then none
         int[][] steps = {{FULL, Math.min(KEPT, kept.size())}, {REDUCED, Math.min(2, kept.size())},
                 {BASIC, Math.min(1, kept.size())}};
         int tries = 0;
+        List<String> refused = new ArrayList<>();
         for (int[] step : steps) {
             for (int k = 0; k < step[1]; k++) {
                 in.checkCancelled();
@@ -270,8 +302,9 @@ final class MountainPlanner {
                 tries++;
                 Candidate c = kept.get(k);
                 Made m = attempt(in, tier, c, root.fork("pieces:" + c.index() + ":" + step[0]),
-                        root.fork("scenery:" + c.index()), step[0]);
+                        root.fork("scenery:" + c.index()), step[0], refused);
                 if (m != null) {
+                    m.refused = List.copyOf(refused);
                     m.work = work;
                     m.how = "candidate " + (c.index() + 1) + " (" + kept.size() + " kept), build " + tries
                             + (step[0] == FULL ? "" : step[0] == REDUCED ? " (fewer pieces)" : " (no pieces)")
@@ -286,10 +319,46 @@ final class MountainPlanner {
         if (safe == null) {
             throw new GenFailed("no " + tier + " Mountain Run found for seed " + GenSeed.shortHex(in.seed()));
         }
+        safe.refused = List.copyOf(refused);
         safe.work = work + SAFE_RESERVE;
         safe.how = "the safe " + (tier.slalom() ? "slalom" : "road") + " after " + kept.size() + " candidates and "
                 + tries + " builds";
         return safe;
+    }
+
+    /** Stage A's candidates before it stops with any kept: {@link #CANDIDATES_WIDE} on the wide road. */
+    static int candidates(MountainTier tier) {
+        return tier.wide() && tier.road() ? CANDIDATES_WIDE : CANDIDATES;
+    }
+
+    /** The least fall of any band of {@code c}'s drops but the finish's. */
+    static int leastBand(Candidate c) {
+        Skeleton sk = c.sk();
+        int[] f = new int[sk.frame.bands + 1];
+        for (DropPlan.Drop d : c.drops().drops) {
+            f[Math.min(sk.tagAt(d.s()).band(), sk.frame.bands)] += d.drop();
+        }
+        int least = Integer.MAX_VALUE;
+        for (int k = 0; k < sk.frame.bands; k++) {
+            least = Math.min(least, f[k]);
+        }
+        return least;
+    }
+
+    /**
+     * Stage B's order: on the wide road the evener fall first (the least band's fall, counted up to
+     * {@value #EVEN_FALL}), then the flow score, then the number; algo 4 and the Slalom by score and number alone.
+     */
+    static int stageBOrder(Candidate a, Candidate b) {
+        if (a.sk().tier.wide() && a.sk().tier.road()) {
+            int la = Math.min(EVEN_FALL, leastBand(a));
+            int lb = Math.min(EVEN_FALL, leastBand(b));
+            if (la != lb) {
+                return Integer.compare(lb, la);
+            }
+        }
+        return a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
+                : Integer.compare(a.index(), b.index());
     }
 
     /** Stage A candidate {@code i}: frame, route, drops and flow; {@code null} unless every gate holds. */
@@ -371,18 +440,29 @@ final class MountainPlanner {
      */
     static Made attempt(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
                         int richness) throws GenFailed {
+        return attempt(in, tier, c, pieceStream, scenery, richness, new ArrayList<>());
+    }
+
+    /** {@link #attempt}, adding to {@code refused} why each of its builds fell through ({@link Made#refused}). */
+    static Made attempt(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
+                        int richness, List<String> refused) throws GenFailed {
         try {
             Base base = base(in, c);
             if (base == null) {
+                refused.add("no base: its raster or its checkpoint chain");
                 return null;
             }
             Made m = build(in, tier, c, base, pieces(in, c, base, pieceStream, richness), scenery);
             if (m == null) {
+                refused.add("the build didn't come together");
                 return null;
             }
             cancel(in);
             List<String> problems = proof(m.plan, tier.id, in);
             cancel(in);
+            if (!problems.isEmpty()) {
+                refused.add(problems.get(0));
+            }
             // a refused plan with pieces is built again without those nearest where the proof failed, so a piece
             // that upsets a checkpoint costs that piece, not the whole deck (the fewer-pieces build that follows
             // would put it in the same place)
@@ -393,6 +473,7 @@ final class MountainPlanner {
                 }
                 Made again = build(in, tier, c, base, fewer, scenery);
                 if (again == null) {
+                    refused.add("the build didn't come together");
                     break;
                 }
                 again.leftOut = m.leftOut + m.pieces.list.size() - fewer.list.size();
@@ -400,11 +481,15 @@ final class MountainPlanner {
                 cancel(in);
                 problems = proof(m.plan, tier.id, in);
                 cancel(in);
+                if (!problems.isEmpty()) {
+                    refused.add(problems.get(0));
+                }
             }
             return problems.isEmpty() ? m : null;
         } catch (Cancelled e) {
             throw new GenFailed("cancelled");
         } catch (RuntimeException e) {
+            refused.add("an error: " + e);
             return null;
         }
     }
@@ -533,6 +618,7 @@ final class MountainPlanner {
         raster.stand();
         signs(raster, cps, pieces);
         cancel(in);
+        int rasterBlocks = raster.vox.size();
         int trees = MountainScenery.draw(scenery, raster);
         cancel(in);
         List<String> palette = new ArrayList<>();
@@ -563,9 +649,11 @@ final class MountainPlanner {
         }
         long refMs = starRefMs(ride.seconds(), min);
         cancel(in);
-        Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
+        Plan plan = Plan.of(slot.id(), tier.algo, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
                 new PlannedTrial(course, refMs), List.of(), 0);
-        return new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
+        Made m = new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
+        m.rasterBlocks = rasterBlocks;
+        return m;
     }
 
     private static void cancel(PlanInput in) {
@@ -659,8 +747,9 @@ final class MountainPlanner {
 
     /**
      * The signs (§7.1): the start's, before every lip (the Final Drop's its own, a staircase's THE CLIFFS),
-     * piece, hairpin, chicane, bend with run-off sand and gate set, and HALFWAY by the checkpoint nearest half
-     * way down ({@link #halfwaySign}).
+     * piece, hairpin, chicane, bend with a run-off and gate set, and HALFWAY by the checkpoint nearest half
+     * way down ({@link #halfwaySign}). The wide road's slow ground is snow, and its signs say so (SNOW DRIFT!,
+     * SNOWY BEND); algo 4's say sand.
      */
     static void signs(RasterV4 t, List<RasterV4.Spot> cps, PiecesV4 pieces) {
         Skeleton sk = t.sk;
@@ -690,7 +779,7 @@ final class MountainPlanner {
         }
         for (PiecesV4.Piece p : pieces.list) {
             List<String> lines = switch (p.kind) {
-                case SAND_PIT -> GenCopy.boatSandPit();
+                case SAND_PIT -> sk.tier.wide() ? GenCopy.boatSnowDrift() : GenCopy.boatSandPit();
                 case SPLIT -> GenCopy.boatSplit();
                 case CAVE -> GenCopy.boatIceCave();
                 case TUNNEL -> GenCopy.boatTunnel();
@@ -721,7 +810,8 @@ final class MountainPlanner {
             } else if (sandy && e.s0 - tight > RasterV4.SIGN_BEFORE && e.s0 > sk.start && e.s0 < sk.finish) {
                 // any other bend with run-off sand (an elbow, a bend: R under 40), as v3 signed them (audit
                 // MTN-R3-02); a second one straight after the first is the same turn
-                t.sign(e.s0 - RasterV4.SIGN_BEFORE, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatSandyBend(), used);
+                t.sign(e.s0 - RasterV4.SIGN_BEFORE, e.s0 - RasterV4.SIGN_NEAR,
+                        sk.tier.wide() ? GenCopy.boatSnowyBend() : GenCopy.boatSandyBend(), used);
             }
             tight = sandy ? e.s1() : tight;
         }
@@ -805,7 +895,7 @@ final class MountainPlanner {
 
     // ---- the safe layouts ---------------------------------------------------------------------------------
 
-    /** The safe candidates, made once per style, tier and mirror. */
+    /** The safe candidates, made once per algo, style, tier and mirror. */
     private static final Map<String, Candidate> SAFE = new ConcurrentHashMap<>();
 
     /** The safe layouts' fixed streams start here: stream {@code SAFE_BASE + j}, Stage A candidate 0. */
@@ -815,9 +905,16 @@ final class MountainPlanner {
      * Which fixed stream each safe layout is, by style (road, slalom), tier (easy, medium, hard) and mirror
      * (its start at the west end, the east): the first stream whose candidate passes every flow gate with
      * that mirror and is proven (MountainPlannerTest holds all twelve to it, in both halves and off the
-     * shipped range, and names the next good stream should a change to the generator move one).
+     * shipped range, and names the next good stream should a change to the generator move one). Today's
+     * planner's ({@value #ALGO}); {@link #SAFE_STREAMS_V4} is algo 4's. Re-searched for 0.37.1, when all twelve
+     * of algo 4's had moved: road easy west's first passing stream, 26, is refused by the proof (a side pocket),
+     * so it is 29, the next that passes.
      */
     static final int[][][] SAFE_STREAMS = {
+            {{29, 7}, {10, 47}, {128, 3}},
+            {{14, 3}, {26, 4}, {32, 41}}};
+    /** Algo 4's {@link #SAFE_STREAMS} (0.37.0), frozen. */
+    static final int[][][] SAFE_STREAMS_V4 = {
             {{10, 0}, {22, 0}, {247, 76}},
             {{1, 2}, {1, 0}, {5, 0}}};
 
@@ -838,20 +935,20 @@ final class MountainPlanner {
 
     /** The safe candidate of {@code tier} with its start at the west end or the east ({@link #SAFE_STREAMS}). */
     static Candidate safeCandidate(MountainTier tier, boolean west) {
-        return SAFE.computeIfAbsent(tier.style.id() + ":" + tier.id + ":" + west, k -> {
+        return SAFE.computeIfAbsent(tier.algo + ":" + tier.style.id() + ":" + tier.id + ":" + west, k -> {
             Candidate c = candidate(new GenRandom(SAFE_BASE + safeStream(tier, west)), tier, 0);
             return c != null && c.sk().frame.west == west ? c : findSafe(tier, west, 0);
         });
     }
 
-    /** The table's stream for {@code tier} and the mirror. */
+    /** The table's stream for {@code tier} (of its algo) and the mirror. */
     static int safeStream(MountainTier tier, boolean west) {
         int t = switch (tier.id) {
             case "easy" -> 0;
             case "medium" -> 1;
             default -> 2;
         };
-        return SAFE_STREAMS[tier.slalom() ? 1 : 0][t][west ? 0 : 1];
+        return (tier.wide() ? SAFE_STREAMS : SAFE_STREAMS_V4)[tier.slalom() ? 1 : 0][t][west ? 0 : 1];
     }
 
     /**

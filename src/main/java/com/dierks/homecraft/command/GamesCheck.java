@@ -31,8 +31,9 @@ import java.util.regex.Pattern;
  * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); the Clubhouse; what players can
  * see (each Games world void or not, something under its spawn, and every pair of the games' places
  * in sight of each other at the view distance the server really uses: WARNs only, {@link SightCheck});
- * every hand-built course is ready and its world loaded; the website feed; and how to take games of
- * chance away from one player.
+ * every hand-built course is ready and its world loaded, and a parkour one's points are on a block (a
+ * WARN for each course with one in the air); the website feed; and how to take games of chance away
+ * from one player.
  */
 public final class GamesCheck {
 
@@ -194,11 +195,23 @@ public final class GamesCheck {
     /**
      * One hand-built course.
      *
-     * @param golf     a golf course (else a time trial)
-     * @param problems what stops it being played (its own validator's words)
+     * @param golf      a golf course (else a time trial)
+     * @param problems  what stops it being played (its own validator's words)
+     * @param offGround a parkour course's points that aren't on a block ("checkpoint 2", "the finish":
+     *                  {@code trial/Footing}), set while flying; they still work, but hang in the air
      */
     public record Course(String id, boolean golf, String world, boolean enabled, boolean worldLoaded,
-                         List<String> problems) {
+                         List<String> problems, List<String> offGround) {
+
+        public Course {
+            offGround = offGround == null ? List.of() : List.copyOf(offGround);
+        }
+
+        /** A course with every point on a block (or one that isn't parkour). */
+        public Course(String id, boolean golf, String world, boolean enabled, boolean worldLoaded,
+                      List<String> problems) {
+            this(id, golf, world, enabled, worldLoaded, problems, List.of());
+        }
     }
 
     /**
@@ -686,13 +699,31 @@ public final class GamesCheck {
             }
             if (problems.isEmpty()) {
                 out.add(Line.ok(kind + " '" + c.id() + "' is ready" + (c.enabled() ? "" : " (switched off)")));
-                continue;
+            } else {
+                String fix = "finish it with /hcm games " + (c.golf() ? "golf " : "course ") + c.id()
+                        + (c.enabled() ? ", or switch it off" : "");
+                out.add(c.enabled() ? Line.fail(kind + " '" + c.id() + "': " + String.join("; ", problems), fix)
+                        : Line.warn(kind + " '" + c.id() + "' (switched off): " + String.join("; ", problems), fix));
             }
-            String fix = "finish it with /hcm games " + (c.golf() ? "golf " : "course ") + c.id()
-                    + (c.enabled() ? ", or switch it off" : "");
-            out.add(c.enabled() ? Line.fail(kind + " '" + c.id() + "': " + String.join("; ", problems), fix)
-                    : Line.warn(kind + " '" + c.id() + "' (switched off): " + String.join("; ", problems), fix));
+            if (!c.offGround().isEmpty()) {
+                out.add(offGround(c));
+            }
         }
+    }
+
+    /**
+     * A hand-built parkour course's points that aren't on a block (set while flying): a WARN, since a player on
+     * the pad below is that much further from one, and may have to jump for it.
+     */
+    static Line offGround(Course c) {
+        List<String> what = c.offGround();
+        boolean one = what.size() == 1;
+        String list = one ? what.get(0) : String.join(", ", what.subList(0, what.size() - 1)) + " and "
+                + what.get(what.size() - 1);
+        return Line.warn("Course '" + c.id() + "': " + list + (one ? " isn't" : " aren't") + " on a block (nothing "
+                        + "solid within half a block under " + (one ? "it" : "them") + "), so a player reaches "
+                        + (one ? "it" : "each") + " only within its radius of that spot in the air",
+                "try it on foot with /hcm games course " + c.id() + " test, or set it again standing on its pad");
     }
 
     /** Race Night's rows (EVENTS-DROPPER-SPEC §A.11): nothing when it isn't there. */

@@ -20,6 +20,7 @@ import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.SoftReference;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -28,13 +29,14 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Mountain Run v2's planner (MOUNTAIN-V2-SPEC §5.2, §15; BoatPlanner algo 4): pinned layouts for three
+ * Mountain Run v2's planner (MOUNTAIN-V2-SPEC §5.2, §15; BoatPlanner algo 5): pinned layouts for three
  * seeds of each style at each tier, every one proven; the same seed twice the same blocks; the same blocks
  * wherever the half is; the twelve safe layouts proven in both halves and off the shipped range; the work
  * budget and cancels; the summary; and BoatPlanner's dispatch between the mountain and the spiral.
@@ -49,39 +51,47 @@ class MountainPlannerTest {
     static final long[] ROADS = {2, 4, 5};
     static final long[] SLALOMS = {1, 3, 8};
 
-    private static final Map<String, MountainPlanner.Made> MADE = new ConcurrentHashMap<>();
+    /**
+     * The plans made so far, kept while memory allows: a plan with its raster is tens of MB, and the pinned ones
+     * with the other classes' (RasterV4Test, MountainSoakTest) would fill the test JVM's heap before the engine's
+     * suites plan theirs. One the JVM drops is made again when asked, the same block for block.
+     */
+    private static final Map<String, SoftReference<MountainPlanner.Made>> MADE = new ConcurrentHashMap<>();
 
     static PlanInput input(Box half, long seed, String tier) {
         return new PlanInput(Slots.ICE_BOAT, half, half == HALF_B ? 'B' : 'A', 20725, 0, seed, tier, 6, 0, null);
     }
 
     static MountainPlanner.Made made(Box half, long seed, String tier) {
-        return MADE.computeIfAbsent(half.minX() + ":" + half.minZ() + ":" + seed + ":" + tier, k -> {
+        String key = half.minX() + ":" + half.minZ() + ":" + seed + ":" + tier;
+        SoftReference<MountainPlanner.Made> kept = MADE.get(key);
+        MountainPlanner.Made m = kept == null ? null : kept.get();
+        if (m == null) {
             try {
-                return MountainPlanner.made(input(half, seed, tier));
+                m = MountainPlanner.made(input(half, seed, tier));
             } catch (GenFailed e) {
                 throw new AssertionError(tier + " seed " + seed + ": " + e.getMessage(), e);
             }
-        });
+            MADE.put(key, new SoftReference<>(m));
+        }
+        return m;
     }
 
     // ---- the pinned layouts --------------------------------------------------------------------------------
 
     @Test
     void goldenHashesPinThreeSeedsPerStyleAndTier() {
-        // A change here means the planner makes different layouts: Mountain Run v2 is unreleased (it ships
-        // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead. Re-pinned for audit M00
-        // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved. Then
-        // once for the FX-MTN fixes: every road moved (the tier's pieces placed on bends too, MTN-R3-00; SANDY
-        // BEND signs, R3-02; the chicane sign's hand, MTN00; road medium 4 and 5 also by the chicane cap, MTN01);
-        // the slaloms didn't.
+        // A change here means the planner makes different layouts. Re-pinned for 0.37.1 (boat planner ALGO 5,
+        // MOUNTAIN-V21-SPEC §5.3: the wide road, more drops, snow, arrows, crowns; the mini soak's steps S and F
+        // and the deck fix): all 18 moved. From here on, a layout change bumps ALGO; 0.37.1 is public. Algo 4's
+        // 0.37.0 layouts stay pinned by V4FixturesTest.
         String golden = """
-                road easy fd007631bde5 43d2dd016bcb 8ee1381b7442
-                road medium f277c9be3f41 475f73605cc8 4da8daecf8f3
-                road hard 9fe15e052a31 2f304cc00fd1 643a210adc0f
-                slalom easy e5437e73e554 52be95a3b5fd 0df883d71e01
-                slalom medium f874b0413052 c1208132055e 2a1bdd16f106
-                slalom hard fe19c45a486d e6cb568e821d 92c0cf205316
+                road easy 04b2a10d0b99 a6146922caa3 13289885ab1e
+                road medium e9def12de2bb 8f8141983cc7 3773810ce9c9
+                road hard 83cf4ec92603 164ab155d33b 52a5a49a23a4
+                slalom easy 8bc76bff8dbe 3a3b28dcf6bd 545d75e7299d
+                slalom medium ab6aac52f36f 0d1e41c80d80 f7a7668e3264
+                slalom hard b30cb0ca5812 3418e97868be 5d4ac29c82f8
                 """;
         StringBuilder got = new StringBuilder();
         for (BoatStyle style : BoatStyle.values()) {
@@ -95,7 +105,7 @@ class MountainPlannerTest {
             }
         }
         assertEquals(golden, got.toString(), "every style, tier and seed (if this changed, re-pin or bump ALGO)");
-        assertEquals(4, BoatPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(5, BoatPlanner.ALGO, "the version these hashes were pinned at");
     }
 
     @Test
@@ -109,7 +119,7 @@ class MountainPlannerTest {
                     assertEquals(List.of(), MountainValidator.problems(p, tier), name + ": proven");
                     assertEquals(List.of(), BoatValidator.problems(p, input(HALF_A, seed, tier)),
                             name + ": and by the engine's own dispatch");
-                    assertEquals(BoatPlanner.ALGO, p.algo(), name + ": algo 4");
+                    assertEquals(BoatPlanner.ALGO, p.algo(), name + ": algo 5");
                     assertTrue(p.ops().size() <= MountainValidator.MAX_OPS, name + ": " + p.ops().size() + " blocks");
                     Course c = ((PlannedTrial) p.course()).course();
                     assertTrue(c.checkpoints().size() <= MountainValidator.MAX_CHECKPOINTS,
@@ -130,9 +140,35 @@ class MountainPlannerTest {
                     assertTrue(ref >= c.minSeconds() * 1000L + 1000, name + ": over the shortest time");
                     assertEquals(MountainPlanner.modelMs(m.seconds), ref * 5 / 4, name + ": T_m back from it exactly");
                     assertTrue(p.work() > 0 && p.work() <= MountainPlanner.BUDGET, name + ": work " + p.work());
+                    // the wide road (MOUNTAIN-V21-SPEC §5.3): the lane keeps its width, Big Drops stand on the
+                    // axis, and every leg keeps 60 or 66 across a Big Drop
+                    assertEquals(List.of(), m.raster.narrowAt(), name + ": the lane is " + mt.width + " wide from the"
+                            + " pit to the finish, every Big Drop's lip clear");
+                    assertEquals(List.of(), bigLipsOffTheAxis(m), name + ": every 2-block lip, and the checkpoint"
+                            + " before it, on an axis-aligned straight");
+                    for (double[] leg : RasterV4Test.legs(m)) {
+                        assertTrue(leg[2] <= leg[3], name + ": the leg from " + Math.round(leg[0]) + " is " + leg[2]
+                                + " across; at most " + leg[3]);
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * {@code m}'s 2-block lips off an axis-aligned straight, or whose checkpoint before them is (D2: a Big Drop
+     * stands only where its checkpoint is the smallest), as s along; none on a wide road.
+     */
+    static List<Double> bigLipsOffTheAxis(MountainPlanner.Made m) {
+        DropPlan dp = m.cand.drops();
+        DropPlan.Planner at = new DropPlan.Planner(new GenRandom(0), dp.sk);
+        List<Double> out = new ArrayList<>();
+        for (DropPlan.Drop d : dp.drops) {
+            if (d.drop() >= 2 && !(at.axis(d.s()) && at.axis(d.s() - at.before(d.s(), d.drop())))) {
+                out.add(d.s());
+            }
+        }
+        return out;
     }
 
     @Test
@@ -247,7 +283,14 @@ class MountainPlannerTest {
         // audit MTN-R3-00: most of the §5.3 deck went unplaced (only the lips' straights were free, the free list
         // never shrank, pits and boosts were dealt last); now wide bends take pieces too, the deck is dealt the
         // scarcest first, a card takes the tightest stretch it fits and, failing that, its shortest length. The
-        // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's
+        // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's. What a deck
+        // places is gathered and asserted at the end, every tier's at once (the wide road's are tuned by
+        // MOUNTAIN-V21-SPEC §6.4's steps D and F; after F the mini soak put a forest on 78% of the hard roads dealt
+        // one and 38-50% of the medium ones, so a forest is asked of most seeds, not of each, as §5.3 allows). The
+        // wide road's deck fix (0.37.1: a split and a drift taper over 4, the chain is asked about 16 spots of a card)
+        // took the mini soak from 66 / 61 / 70% to 89 / 81 / 90% of the easy, medium and hard decks, and a forest
+        // onto 82% of the medium roads dealt one
+        List<String> missed = new ArrayList<>();
         for (String tier : List.of("easy", "medium", "hard")) {
             List<Long> seeds = new ArrayList<>();
             for (long seed : ROADS) {
@@ -262,6 +305,7 @@ class MountainPlannerTest {
             int dealt = 0;
             int twoPits = 0;
             int twoSplits = 0;
+            int forests = 0;
             for (long seed : seeds) {
                 MountainPlanner.Made m = made(HALF_A, seed, tier);
                 PiecesV4 p = m.pieces;
@@ -273,46 +317,136 @@ class MountainPlannerTest {
                     here += p.count(k);
                     deck += p.dealt(k);
                 }
-                assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (pits "
+                assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (snow drifts "
                         + p.count(PiecesV4.Kind.SAND_PIT) + "/" + p.dealt(PiecesV4.Kind.SAND_PIT) + ", "),
                         name + ": the summary says what was placed of what was dealt: "
                                 + m.finished().summary().get(2));
-                assertTrue(deck > 0 && here * 2 >= deck, name + ": " + here + " of a deck of " + deck);
-                assertTrue(p.count(PiecesV4.Kind.SAND_PIT) >= 1, name + ": a sand pit");
-                assertTrue(p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) >= 1,
-                        name + ": a cave or a tunnel");
-                if (!tier.equals("easy")) {
-                    assertTrue(p.count(PiecesV4.Kind.FOREST) >= 1, name + ": a forest");
-                    assertTrue(p.count(PiecesV4.Kind.SPLIT) >= 1, name + ": a split");
+                assertTrue(deck > 0, name + ": a deck");
+                StringBuilder of = new StringBuilder();
+                for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                    if (p.dealt(k) > 0) {
+                        of.append(of.isEmpty() ? " (" : ", ").append(k.word).append(' ').append(p.count(k)).append('/')
+                                .append(p.dealt(k));
+                    }
                 }
-                if (tier.equals("medium")) {
-                    assertTrue(p.count(PiecesV4.Kind.BOOST) >= 1, name + ": a boost strip");
+                String placedOf = of.append(')').toString();
+                if (here * 2 < deck) {
+                    missed.add(name + ": " + here + " of a deck of " + deck + placedOf);
+                }
+                if (p.count(PiecesV4.Kind.SAND_PIT) < 1) {
+                    missed.add(name + ": no snow drift" + placedOf);
+                }
+                if (p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) < 1) {
+                    missed.add(name + ": no cave or tunnel" + placedOf);
+                }
+                if (!tier.equals("easy")) {
+                    // a split on every medium and hard seed, and a forest on most (§5.3, after §6.4's step F)
+                    forests += p.count(PiecesV4.Kind.FOREST) > 0 ? 1 : 0;
+                    if (p.count(PiecesV4.Kind.SPLIT) < 1) {
+                        missed.add(name + ": no split" + placedOf);
+                    }
+                }
+                // a medium boost strip (0-1 on the wide road, D8) stands on straights only, ends 40 or more
+                // before the next arc and never within 30 before a lip
+                Skeleton sk = m.cand.sk();
+                for (PiecesV4.Piece b : p.list) {
+                    if (b.kind != PiecesV4.Kind.BOOST) {
+                        continue;
+                    }
+                    for (double s = b.s1; s <= b.s2; s += 0.5) {
+                        assertTrue(!sk.line.elementAt(s).arc(), name + ": the boost " + b.s1 + "-" + b.s2
+                                + " is on a straight at " + s);
+                    }
+                    double arc = PiecesV4.nextArcStart(sk, b.s2);
+                    assertTrue(arc - b.s2 >= PiecesV4.BOOST_ARC_GAP, name + ": the boost ends " + (arc - b.s2)
+                            + " before the next arc, at least " + PiecesV4.BOOST_ARC_GAP);
+                    for (DropPlan.Drop d : m.cand.drops().drops) {
+                        assertTrue(!(b.s2 > d.s() - 30 && b.s1 < d.s()), name + ": the boost " + b.s1 + "-" + b.s2
+                                + " ends 30 or more before the lip at " + d.s());
+                    }
                 }
                 placed += here;
                 dealt += deck;
                 twoPits += p.count(PiecesV4.Kind.SAND_PIT) >= 2 ? 1 : 0;
                 twoSplits += p.count(PiecesV4.Kind.SPLIT) >= 2 ? 1 : 0;
             }
-            assertTrue(placed * 4 >= dealt * 3, "road " + tier + ": " + placed + " pieces of " + dealt + " dealt");
-            if (tier.equals("hard")) {
-                assertTrue(twoPits * 2 > seeds.size(), "hard: two sand pits or more in most: " + twoPits);
-                assertTrue(twoSplits * 2 > seeds.size(), "hard: two splits in most: " + twoSplits);
+            if (placed * 4 < dealt * 3) {
+                missed.add("road " + tier + ": " + placed + " pieces of " + dealt + " dealt, under three in four");
             }
+            if (!tier.equals("easy") && forests * 2 <= seeds.size()) {
+                missed.add("road " + tier + ": a forest on only " + forests + " of " + seeds.size()
+                        + " seeds, not most");
+            }
+            if (tier.equals("hard") && twoPits * 2 <= seeds.size()) {
+                missed.add("road hard: two snow drifts or more in only " + twoPits + " of " + seeds.size());
+            }
+            if (tier.equals("hard") && twoSplits * 2 <= seeds.size()) {
+                missed.add("road hard: two splits in only " + twoSplits + " of " + seeds.size());
+            }
+        }
+        assertEquals(List.of(), missed, "every road tier's deck placed as §5.3 asks");
+    }
+
+    @Test
+    void theWideRoadLooksAtNinetySixAndBuildsTheEvenerFallFirst() {
+        // the deck fix (0.37.1): on the wide road Stage A looks at 96 before it stops with any kept, and Stage B
+        // builds the kept candidates whose every band falls 5 or more first, then by flow (§6.2's spread)
+        for (String id : List.of("easy", "medium", "hard")) {
+            assertEquals(96, MountainPlanner.candidates(MountainTier.of(BoatStyle.ROAD, id)), id + ": the wide road");
+            assertEquals(48, MountainPlanner.candidates(MountainTier.of(BoatStyle.SLALOM, id)), id + ": the slalom");
+            MountainTier v4 = MountainTier.of(BoatStyle.ROAD, id, MountainValidator.FIRST_ALGO);
+            assertEquals(48, MountainPlanner.candidates(v4), id + ": algo 4's road");
+        }
+        for (int algo : new int[]{MountainPlanner.ALGO, MountainValidator.FIRST_ALGO}) {
+            MountainTier tier = MountainTier.of(BoatStyle.ROAD, "medium", algo);
+            List<MountainPlanner.Candidate> kept = new ArrayList<>();
+            for (long seed = 2; seed <= 5 && kept.size() < 6; seed++) {
+                GenRandom root = new GenRandom(seed);
+                for (int i = 0; i < 96 && kept.size() < 6; i++) {
+                    MountainPlanner.Candidate c = MountainPlanner.candidate(root, tier, i);
+                    if (c != null) {
+                        kept.add(c);
+                    }
+                }
+            }
+            assertTrue(kept.size() >= 3, tier + ": fixture: candidates kept " + kept.size());
+            List<MountainPlanner.Candidate> sorted = new ArrayList<>(kept);
+            sorted.sort(MountainPlanner::stageBOrder);
+            List<MountainPlanner.Candidate> byFlow = new ArrayList<>(kept);
+            byFlow.sort((a, b) -> a.flow().total != b.flow().total ? Double.compare(b.flow().total, a.flow().total)
+                    : Integer.compare(a.index(), b.index()));
+            if (!tier.wide()) {
+                assertEquals(byFlow, sorted, tier + " v4: algo 4 builds by flow score alone, as in 0.37.0");
+                continue;
+            }
+            boolean mixed = false;
+            for (int k = 1; k < sorted.size(); k++) {
+                int la = Math.min(MountainPlanner.EVEN_FALL, MountainPlanner.leastBand(sorted.get(k - 1)));
+                int lb = Math.min(MountainPlanner.EVEN_FALL, MountainPlanner.leastBand(sorted.get(k)));
+                assertTrue(la >= lb, tier + ": the evener fall first, " + la + " before " + lb);
+                if (la == lb) {
+                    assertTrue(sorted.get(k - 1).flow().total >= sorted.get(k).flow().total, tier + ": then the flow");
+                }
+                mixed |= la != lb;
+            }
+            assertTrue(mixed, tier + ": fixture: kept candidates of more than one least band");
         }
     }
 
     @Test
     void aTightBendWithRunOffSandHasASandyBendSign() {
-        // audit MTN-R3-02: v3 signed every run-off bend; v2 signed only hairpins and chicanes
+        // audit MTN-R3-02: v3 signed every run-off bend; v2 signed only hairpins and chicanes. The wide road's
+        // run-offs are snow, and its sign is SNOWY BEND (algo 4's SANDY BEND)
         int bends = 0;
         for (String tier : List.of("easy", "medium", "hard")) {
             for (long seed : ROADS) {
                 MountainPlanner.Made m = made(HALF_A, seed, tier);
                 Skeleton sk = m.cand.sk();
                 String name = "road " + tier + " seed " + seed;
+                List<String> bendSign = m.tier.wide() ? GenCopy.boatSnowyBend() : GenCopy.boatSandyBend();
                 List<Double> sandy = new ArrayList<>();
                 for (SignText t : m.finished().signs()) {
-                    if (t.lines().equals(GenCopy.boatSandyBend())) {
+                    if (t.lines().equals(bendSign)) {
                         sandy.add(along(m, t));
                     }
                 }
@@ -329,11 +463,12 @@ class MountainPlannerTest {
                 }
                 for (double w : want) {
                     assertTrue(sandy.stream().anyMatch(u -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
-                            name + ": a SANDY BEND sign before the tight bend at " + Math.round(w));
+                            name + ": a " + bendSign.get(0) + " sign before the tight bend at " + Math.round(w));
                 }
                 for (double u : sandy) {
                     assertTrue(want.stream().anyMatch(w -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
-                            name + ": the SANDY BEND sign at " + Math.round(u) + " stands before a tight bend");
+                            name + ": the " + bendSign.get(0) + " sign at " + Math.round(u)
+                                    + " stands before a tight bend");
                 }
                 bends += want.size();
             }
@@ -342,11 +477,16 @@ class MountainPlannerTest {
     }
 
     @Test
-    void aRefusedBuildLeavesOutOnlyThePiecesNearWhereItFailed() {
+    void aRefusedBuildLeavesOutOnlyThePiecesNearWhereItFailed() throws GenFailed {
         // hard road 9046: the best-fit sand pit at 2536-2564 pushed checkpoint 58 up against a 1-block lip and the
         // proof refused the run ("no way along the track at one level from checkpoint 58 to checkpoint 59"); the
-        // fewer-pieces build put the pit in the same place, so the road shipped with no pieces at all
-        MountainPlanner.Made m = made(HALF_A, 9046, "hard");
+        // fewer-pieces build put the pit in the same place, so the road shipped with no pieces at all. The wide
+        // road (algo 5) gave no such case in hard roads 1-799 and easy roads 1-999: its first builds were refused
+        // only for side pockets no piece made (easy) or had no checkpoint chain. The leave-out (attempt, near,
+        // PiecesV4.without) is the same code for every algo, so it is pinned on algo 4's 9046, which the same
+        // code still makes block for block (V4FixturesTest)
+        MountainPlanner.Made m = MountainPlanner.made(input(HALF_A, 9046, "hard"), MountainValidator.FIRST_ALGO);
+        assertFalse(m.tier.wide(), "fixture: algo 4's road");
         Plan p = m.finished();
         assertEquals(List.of(), MountainValidator.problems(p, "hard"), "proven");
         assertTrue(m.how.contains("build 1 (1 piece left out for the proof)"),
@@ -357,7 +497,7 @@ class MountainPlannerTest {
             dealt += m.pieces.dealt(k);
         }
         assertEquals(dealt - 1, m.pieces.list.size(), "the rest of the deck kept: " + p.summary().get(2));
-        MountainTier mt = MountainTier.of(BoatStyle.ROAD, "hard");
+        MountainTier mt = m.tier;
         assertTrue(m.seconds >= mt.tMin && m.seconds <= mt.tMax, "T_m " + m.seconds + " in the window");
         // where a problem points: between the checkpoints it names, or round the blocks it names, a leg either way
         RasterV4.Spot a = m.checkpoints.get(57);
@@ -431,11 +571,11 @@ class MountainPlannerTest {
     void theSummarySaysWhatWasMade() {
         Plan road = made(HALF_A, 2, "medium").finished();
         List<String> s = road.summary();
-        assertTrue(s.get(0).startsWith("Ice Boat v4 medium: Winding Road, "), "style and tier: " + s.get(0));
+        assertTrue(s.get(0).startsWith("Ice Boat v5 medium: Winding Road, "), "style and tier: " + s.get(0));
         assertTrue(s.get(0).contains(" bands (") && s.get(0).contains("hairpins"), "its bands and links: " + s.get(0));
         assertTrue(s.get(1).startsWith("flow 0.") && s.get(1).contains("model T_m "), "the flow line: " + s.get(1));
-        assertTrue(s.get(2).startsWith("drops ") && s.get(2).contains("Final Drop") && s.get(2).contains("pits "),
-                "drops and pieces: " + s.get(2));
+        assertTrue(s.get(2).startsWith("drops ") && s.get(2).contains("Final Drop")
+                && s.get(2).contains("snow drifts "), "drops and pieces: " + s.get(2));
         assertTrue(s.get(3).contains("checkpoints") && s.get(3).contains("stand at the bottom"), "the course: " + s.get(3));
         assertTrue(s.get(4).startsWith("reference ") && s.get(4).contains("0.8 of T_m"), "the times: " + s.get(4));
         List<String> slalom = made(HALF_A, 1, "medium").finished().summary();
@@ -444,15 +584,76 @@ class MountainPlannerTest {
 
     // ---- the HALFWAY! sign and the "Halfway!" title (audit M00) ------------------------------------------
 
+    /** A case a {@link #HALFWAY_SEEDS} seed shows (audits M00 and MTN03), checked so a re-pin can't lose it. */
+    enum Halfway {
+        /** The checkpoint half way along the line ({@link #halfwayAlong}, the sign's before M00) isn't the title's. */
+        APART,
+        /** The title's rule before M00 ({@link #halfwayFromStart}): the pole heard it at the sign, a grid spot not. */
+        GRID,
+        /**
+         * Another sign has the title checkpoint's own spot, so HALFWAY! stands a few blocks along (MTN03): placed 3
+         * or more along from its checkpoint, where a sign on its own spot is placed within 2 (each measures up to
+         * about half a block off where it was placed).
+         */
+        MOVED
+    }
+
     /**
-     * The seeds the audit found the sign and the title a checkpoint apart on (easy road 5 and 19, medium slalom
-     * 26, hard road 13 and 16), the grid that moved the title (medium road 2), and the one with no sign at all
-     * (medium slalom 23), besides every pinned layout; and easy slalom 20, whose checkpoint's own spot is taken
-     * by another sign, so its HALFWAY! stands a few blocks along (audit MTN03: no plan of 600 went without).
+     * The seeds that show the audits' cases at algo 5, besides every pinned layout, each with the cases it is
+     * checked to show (final audit F9: re-searched for 0.37.1, MOUNTAIN-V21-SPEC §5.3). APART: easy road 6, medium
+     * slalom 26, hard road 6 and easy slalom 20, where a sign by the checkpoint half way along the line would stand
+     * a checkpoint from the title. GRID: medium road 10, where half way measured from the start (which a race moves
+     * to each racer's spot) is the title's checkpoint at pole but another from grid spots 11 and 12, so racers in
+     * one race heard "Halfway!" at different checkpoints. MOVED: medium slalom 23 (the one with no sign at all
+     * before MTN03), hard road 13, hard road 16 and easy slalom 20, whose checkpoint's own spot another sign has, so
+     * its HALFWAY! stands a few blocks along (MTN03: no plan of 600 went without). Hard road 16 is also where the
+     * sign's checkpoint before M00 (35, half way along the line) and the title's before M00 (34, from every grid
+     * spot) still disagree, so a revert of both M00 rules fails there as well as at medium road 10's grid. At algo 4
+     * the APART seeds were easy road 5 and 19, hard road 13 and 16 and medium slalom 26, and the grid one medium
+     * road 2; at algo 5 only medium slalom 26 still shows its case, so the others were searched again (easy and
+     * hard road seeds 1-100 for APART, medium road seeds 1-60 for the grid). Of the old seeds only easy road 19
+     * shows no case at algo 5 (checkpoint 27 every way, its sign on its own spot), and it was dropped.
      */
-    static final List<Object[]> HALFWAY_SEEDS = List.of(new Object[]{"easy", 19L}, new Object[]{"medium", 23L},
-            new Object[]{"medium", 26L}, new Object[]{"hard", 13L}, new Object[]{"hard", 16L},
-            new Object[]{"easy", 20L});
+    static final List<Object[]> HALFWAY_SEEDS = List.of(
+            new Object[]{"easy", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 26L, Set.of(Halfway.APART)},
+            new Object[]{"hard", 6L, Set.of(Halfway.APART)}, new Object[]{"medium", 10L, Set.of(Halfway.GRID)},
+            new Object[]{"medium", 23L, Set.of(Halfway.MOVED)}, new Object[]{"hard", 13L, Set.of(Halfway.MOVED)},
+            new Object[]{"hard", 16L, Set.of(Halfway.MOVED)}, new Object[]{"easy", 20L, Set.of(Halfway.APART,
+                    Halfway.MOVED)});
+
+    /** The checkpoint whose centreline s is nearest half way from the start to the finish: the sign's before M00. */
+    static int halfwayAlong(MountainPlanner.Made m) {
+        Skeleton sk = m.cand.sk();
+        double mid = (sk.start + sk.finish) / 2;
+        int best = 0;
+        for (int i = 1; i < m.checkpoints.size(); i++) {
+            if (Math.abs(m.checkpoints.get(i).s() - mid) < Math.abs(m.checkpoints.get(best).s() - mid)) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The "Halfway!" title's checkpoint before M00: the one nearest half the mark-to-mark distance, measured from
+     * the course's start, which a race moves to each racer's grid spot.
+     */
+    static int halfwayFromStart(Course c) {
+        List<Course.Mark> cps = c.checkpoints();
+        double[] at = new double[cps.size()];
+        at[0] = c.start().point().distance(cps.get(0).center());
+        for (int i = 1; i < cps.size(); i++) {
+            at[i] = at[i - 1] + cps.get(i - 1).center().distance(cps.get(i).center());
+        }
+        double mid = (at[at.length - 1] + cps.get(cps.size() - 1).center().distance(c.finish().center())) / 2;
+        int best = 0;
+        for (int i = 1; i < at.length; i++) {
+            if (Math.abs(at[i] - mid) < Math.abs(at[best] - mid)) {
+                best = i;
+            }
+        }
+        return best;
+    }
 
     @Test
     void theHalfwaySignStandsByTheCheckpointEveryRacerHearsHalfwayAt() {
@@ -468,7 +669,10 @@ class MountainPlannerTest {
             String tier = (String) run[0];
             long seed = (Long) run[1];
             String name = tier + " " + BoatStyle.of(seed).id() + " seed " + seed;
-            Plan p = made(HALF_A, seed, tier).finished();
+            @SuppressWarnings("unchecked")
+            Set<Halfway> cases = run.length > 2 ? (Set<Halfway>) run[2] : Set.of();
+            MountainPlanner.Made m = made(HALF_A, seed, tier);
+            Plan p = m.finished();
             PlannedTrial pt = (PlannedTrial) p.course();
             Course c = pt.course().withGen(new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, seed,
                     'A', p.hash(), pt.refMs(), 2, 3, List.of(), List.of(), 0, 7));
@@ -486,12 +690,30 @@ class MountainPlannerTest {
             int title = BoatHype.halfway(c);
             assertEquals(near, title, name + ": the sign stands by the checkpoint the \"Halfway!\" title shows at");
             assertEquals(BoatHype.HALFWAY, BoatHype.checkpointTitle(c, title), name + ": \"Halfway!\" there");
+            if (cases.contains(Halfway.APART)) {
+                assertNotEquals(halfwayAlong(m), title, name + ": fixture: half way along the line is checkpoint "
+                        + halfwayAlong(m) + ", not the title's " + title);
+            }
+            if (cases.contains(Halfway.MOVED)) {
+                double off = along(m, sign) - m.checkpoints.get(title).s();
+                // between the own spot's window (offsets -2..+2) and the first move (+/-3): the measured s is up
+                // to about half a block off the offset asked for (hard road 16, moved +3, measures 2.99)
+                assertTrue(Math.abs(off) > 2.5, name + ": fixture: the sign stands " + off + " along from its "
+                        + "checkpoint, whose own spot another sign has");
+            }
             RaceGrid.Grid grid = RaceGrid.forCourse(c, new PlanSurface(p), RaceGrid.MAX_SPOTS);
             assertTrue(grid.size() >= 2, name + ": fixture: a grid");
+            Set<Integer> fromStart = new HashSet<>();
             for (int k = 0; k < grid.size(); k++) {
                 Course raced = RaceTrack.raced(c, grid.spot(k), 0);
                 assertEquals(title, BoatHype.halfway(raced), name + ": grid spot " + (k + 1) + " hears it there too");
                 assertTrue(BoatHype.loud(raced, title), name + ": loud from grid spot " + (k + 1));
+                fromStart.add(halfwayFromStart(raced));
+            }
+            if (cases.contains(Halfway.GRID)) {
+                assertEquals(title, halfwayFromStart(RaceTrack.raced(c, grid.spot(0), 0)), name
+                        + ": fixture: measured from the start, the pole heard it at the sign's checkpoint");
+                assertTrue(fromStart.size() > 1, name + ": fixture: and the grid at " + fromStart);
             }
         }
     }
@@ -608,10 +830,14 @@ class MountainPlannerTest {
     @Test
     void everyStaircaseHasItsOwnCliffsSignWithItsOwnCountAndHeight() {
         // hard road 7 (two staircases of 3) and 41 (two of 2) had theirs next to each other in the drop list:
-        // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01)
+        // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01). On
+        // the wide road every drop may be a Big Drop (MOUNTAIN-V21-SPEC D3), so a staircase is nearly always all
+        // 2s: hard road 43 has one of hops (beside one of Big Drops; after the deck fix, 0.37.1, hard road 10's
+        // are both of Big Drops, and so are those of the hard roads before 43)
         assertEquals(List.of("THE CLIFFS!", "3 big drops!"), GenCopy.boatCliffs(3, true), "every step a 2-block drop");
         assertEquals(List.of("THE CLIFFS!", "2 drops ahead!"), GenCopy.boatCliffs(2, false), "a hop among them");
-        List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L}));
+        List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L},
+                new Object[]{"hard", 43L}));
         for (BoatStyle style : BoatStyle.values()) {
             for (String tier : List.of("easy", "medium", "hard")) {
                 for (long seed : style == BoatStyle.ROAD ? ROADS : SLALOMS) {
@@ -668,14 +894,14 @@ class MountainPlannerTest {
                 "F-F misses the staircase: " + FlowScore.of(sk, none).missing);
     }
 
-    // ---- BoatPlanner: algo 4 in the mountain's half, the spiral elsewhere --------------------------------
+    // ---- BoatPlanner: algo 5 in the mountain's half, the spiral elsewhere --------------------------------
 
     @Test
     void theBoatPlannerMakesTheMountainInItsHalfAndTheSpiralElsewhere() throws GenFailed {
         BoatPlanner planner = new BoatPlanner();
-        assertEquals(4, planner.algo(), "the planner is algo 4");
+        assertEquals(5, planner.algo(), "the planner is algo 5");
         Plan mountain = planner.plan(input(HALF_A, 2, "medium"));
-        assertEquals(4, mountain.algo(), "a 480 x 176 x 640 half gets Mountain Run v2");
+        assertEquals(5, mountain.algo(), "a 480 x 176 x 640 half gets Mountain Run v2, the wide road");
         assertEquals(made(HALF_A, 2, "medium").finished().hash(), mountain.hash(), "the same as MountainPlanner's");
         Box legacy = LegacyBoxes.half(Slots.ICE_BOAT, 'A');
         Plan spiral = planner.plan(new PlanInput(Slots.ICE_BOAT, legacy, 'A', 20725, 0, 31, "medium", 6, 0, null));
@@ -685,16 +911,24 @@ class MountainPlannerTest {
 
     @Test
     void aTagIsMadeAgainByItsOwnAlgo() throws GenFailed {
+        // MOUNTAIN-V21-SPEC §5.3 and D13: a tag of 5 (every live wide road's, the boot path) is made again; a tag
+        // of 4 (0.37.0's 7-9 wide road) is refused by this planner as any other algo is, and so is a later one
         BoatPlanner planner = new BoatPlanner();
         Plan live = made(HALF_A, 2, "medium").finished();
-        GenTag tag = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 4, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+        GenTag tag = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(live.hash(), planner.rederive(input(HALF_A, 0, "medium"), tag).hash(), "the stored tier");
         assertEquals(live.hash(), planner.rederive(input(HALF_A, 0, "hard"), tag).hash(), "any tier asked");
+        GenTag v4 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 4, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+                List.of(), List.of(), 0);
+        GenFailed refused = assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), v4),
+                "an algo-4 layout isn't made again by the algo-5 planner (D13)");
+        assertTrue(refused.getMessage().contains("made by boat planner v4, this is v5"),
+                "it says which planner made it: " + refused.getMessage());
         GenTag old = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 2, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), old), "an algo-2 loop isn't");
-        GenTag next = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
+        GenTag next = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 6, 20725, 0, 2, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
         assertThrows(GenFailed.class, () -> planner.rederive(input(HALF_A, 0, "medium"), next), "nor a later one");
     }
@@ -710,6 +944,10 @@ class MountainPlannerTest {
         GenTag v3 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 3, 20725, 0, 2, 'A', live.hash(), 18_100, 2, 3,
                 List.of(), List.of(), 0);
         assertEquals(18_100, BoatPlanner.modelMs(v3), "an older tag's reference is its time");
+        GenTag v5 = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, 5, 20725, 0, 2, 'A', live.hash(), ref, 2, 3,
+                List.of(), List.of(), 0);
+        assertEquals(MountainPlanner.modelMs(made(HALF_A, 2, "medium").seconds), BoatPlanner.modelMs(v5),
+                "an algo-5 tag (the wide road's, this plan's own) gets its T_m back the same way (D12's modelMs)");
         assertEquals(0, BoatPlanner.modelMs(null), "no tag, no time");
     }
 }

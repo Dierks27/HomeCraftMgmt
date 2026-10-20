@@ -118,4 +118,14 @@ public interface GenHost {
     default String playerName(UUID player) {
         return player == null ? "someone" : player.toString().substring(0, 8);
     }
+
+    /**
+     * The slipperiness of {packed ice, plain ice, blue ice, snow block, smooth sandstone} on this server
+     * (MOUNTAIN-V21-SPEC D14), for Ice Boat's status: the live check of the friction the boat planner's model
+     * assumes. A status-only read on the main thread; the planner never sees it. {@code null} when it can't be
+     * read (tests).
+     */
+    default float[] iceFacts() {
+        return null;
+    }
 }

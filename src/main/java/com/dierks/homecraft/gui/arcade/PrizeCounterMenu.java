@@ -1,6 +1,8 @@
 package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.PrizeItems;
+import com.dierks.homecraft.config.PluginConfig.Collector;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
@@ -14,8 +16,10 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The Prize Counter (§3.9): the known-outcome half of the Arcade, one screen per tab.
@@ -25,6 +29,10 @@ import java.util.List;
  * "1 left today", "You have this!". Expensive rows show even when you cannot afford them, with a
  * progress bar ("180 / 400"), because something to save up for is the point of a sink. Anything
  * costing {@value #CONFIRM_AT}+ tokens asks "are you sure?" first, because children misclick.
+ *
+ * <p>A collector's tile is a plain buy for yourself, like every other tile, so a child tapping her
+ * own cap to look at it can never reach a present. Presents have their own entry, "Give a present"
+ * at slot 8 of the Cosmetics tab ({@link GiftPickerMenu}), shown only while one can be given.
  */
 public final class PrizeCounterMenu extends Menu {
 
@@ -33,6 +41,10 @@ public final class PrizeCounterMenu extends Menu {
     private static final int GRID_START = 9;
     private static final int GRID_SIZE = 36;
     private static final int[] TAB_SLOTS = {2, 3, 4, 5, 6, 7};
+    /** The Cosmetics tab's "Give a present" tile: top right, filler before. */
+    static final int GIFT_SLOT = 8;
+    /** "31 Oct": the last day a collector is on sale. */
+    private static final DateTimeFormatter UNTIL = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH);
 
     private final Player player;
     private final Runnable back;
@@ -71,6 +83,11 @@ public final class PrizeCounterMenu extends Menu {
             boolean current = t == tab;
             set(TAB_SLOTS[i], tabIcon(plugin, player, t, current),
                     current ? null : e -> new PrizeCounterMenu(plugin, player, back, t, 0).open(player));
+        }
+        if (tab == PrizeTab.COSMETICS && GiftPickerMenu.entryShown(plugin)) {
+            set(GIFT_SLOT, Menus.icon(Material.CAKE, "&dGive a present",
+                            "&7Buy a Halloween collector", "&7for someone who's online."),
+                    e -> new GiftPickerMenu(plugin, player, this::reopen).open(player));
         }
 
         List<Prize> rows = plugin.prizes().visible(player, tab);
@@ -138,6 +155,9 @@ public final class PrizeCounterMenu extends Menu {
         for (String line : p.description()) {
             lore.add("&7" + line);
         }
+        if (p.collector() != null) {
+            lore.addAll(collectorLines(p.collector()));
+        }
         if (p.type() == PrizeType.HOME_SLOT && plugin.homes() != null) {
             // The result, for this viewer: what they have and what they'd have.
             int have = plugin.homes().total(player);
@@ -170,6 +190,12 @@ public final class PrizeCounterMenu extends Menu {
         if (limit != null && !owned) {
             lore.add("&e" + limit);
         }
+        if (p.collector() != null && p.collector().look() != null) {
+            // A collector cap is a dyed helmet, not a head, so it is the same picture on both editions.
+            // Its untagged look, named before the look goes on, and no glint: one would hide the dye
+            // and the trim, which are the point (a menu never shows a tagged item).
+            return PrizeItems.capLook(p.collector().look(), name, lore);
+        }
         // A head only for Java players: Bedrock shows an unregistered custom head as a plain one.
         boolean heads = !com.dierks.homecraft.util.Bedrock.is(player);
         String texture = !p.icon().texture().isBlank() ? p.icon().texture()
@@ -186,6 +212,21 @@ public final class PrizeCounterMenu extends Menu {
             icon.setItemMeta(meta);
         }
         return Menus.glint(icon, available && afford);
+    }
+
+    /**
+     * A collector's lines after its description: the year it belongs to, that it is kept, and the last
+     * day it is sold ("On sale until 31 Oct"). The year is in the name as well, for Bedrock's sake.
+     */
+    static List<String> collectorLines(Collector c) {
+        List<String> out = new ArrayList<>();
+        // Every collector so far is Halloween's, as on the cap's own lore (PrizeItems.collectorLore).
+        out.add("&6Halloween " + c.year() + " collector");
+        out.add("&aYours for good!");
+        if (c.to() != null) {
+            out.add("&7On sale until " + UNTIL.format(c.to()));
+        }
+        return out;
     }
 
     private static String bar(int have, int need) {

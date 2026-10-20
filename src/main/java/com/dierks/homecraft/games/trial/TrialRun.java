@@ -70,6 +70,14 @@ final class TrialRun {
      * reaches this, so the "Checkpoint 37/74 · 1:12.4" line can be read ({@code TimeTrials.QUIET_HOLD}).
      */
     int barHold;
+    /**
+     * The Ice Boat flight recorder's record of this run (MOUNTAIN-V21-SPEC D17, {@link FlightRecorder}): on a
+     * Mountain Run v2, from the boat's first move with the clock running; {@code null} on any other course and
+     * once the run's line has been written.
+     */
+    FlightRecorder.Run flight;
+    /** When a landing last puffed snow ({@code System.nanoTime()}; MOUNTAIN-V21-SPEC D18): one a half second. */
+    long snowAt = Long.MIN_VALUE / 2;
 
     // ---- the warm-up (owner decision D3; C1 contract, WP-R1 and WP-D play it) ------------------
 
@@ -101,6 +109,13 @@ final class TrialRun {
 
     /** Race mode (EVENTS-DROPPER-SPEC §A.4.11): the racer's side of a race, or {@code null} for a normal run. */
     RaceRun race;
+
+    /**
+     * When this player's own "Go!" was ({@code System.nanoTime()}), or {@link Long#MIN_VALUE} before it. A solo
+     * run's is its clock's start; a racer released after the shared Go (not in place yet, or put back on the
+     * spot) starts on the shared clock, so theirs is later. Only a void's log line reads it ({@link #sinceGoMs}).
+     */
+    long goNanos = Long.MIN_VALUE;
 
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
@@ -153,5 +168,14 @@ final class TrialRun {
     /** Milliseconds on the clock at {@code nanos}. */
     long elapsedMs(long nanos) {
         return progress == null ? 0 : Math.max(0, (nanos - progress.startNanos()) / 1_000_000L);
+    }
+
+    /**
+     * Milliseconds since this player's own Go at {@code nanos} ({@link #goNanos}), for "at Go" or "3.2 s in" in a
+     * void's log line: a racer released late already has time on the shared clock at their Go. The clock's time
+     * when there has been no Go.
+     */
+    long sinceGoMs(long nanos) {
+        return goNanos == Long.MIN_VALUE ? elapsedMs(nanos) : Math.max(0, (nanos - goNanos) / 1_000_000L);
     }
 }

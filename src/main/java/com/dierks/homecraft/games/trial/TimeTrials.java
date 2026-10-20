@@ -33,6 +33,8 @@ import com.dierks.homecraft.gui.games.trial.CourseListMenu;
 import com.dierks.homecraft.gui.games.trial.CourseMenu;
 import com.dierks.homecraft.gui.games.trial.ResultMenu;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.storage.GenMetaDao;
+import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import net.kyori.adventure.title.Title;
@@ -41,11 +43,13 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
@@ -74,7 +78,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -163,6 +169,17 @@ public final class TimeTrials implements Game {
     static final long RESULT_EVERY = 10;
     /** A teleport this close to the one the run asked for is the run's own. */
     private static final double MATCH = 0.05;
+    /** MOUNTAIN-V21-SPEC D18: the snow kicked up where a boat lands off a hop, and off a Big Drop (particles). */
+    static final int SNOW_HOP = 6;
+    static final int SNOW_BIG = 14;
+    /** D18: a run's landings puff snow at most this often (half a second, in nanos). */
+    static final long SNOW_EVERY = 500_000_000L;
+    /** D18: the puff's spread across the ice and up from it (blocks), and its particles' speed. */
+    private static final double SNOW_SPREAD = 0.35;
+    private static final double SNOW_RISE = 0.05;
+    private static final double SNOW_SPEED = 0.08;
+    /** The sprint modifier keys the watch has read as sprinting and warned about: one warning a key. */
+    private static final Set<String> SPRINT_KEYS_WARNED = ConcurrentHashMap.newKeySet();
 
     /** The general rules, shown on the course list. */
     private static final List<String> RULES = List.of(
@@ -194,11 +211,18 @@ public final class TimeTrials implements Game {
 
     /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
     private final PreviewTests previews = new PreviewTests();
+    /** MOUNTAIN-V21-SPEC D17: how far Ice Boats really fly off a Mountain Run's drops (it measures, nothing more). */
+    private final FlightRecorder flights;
+    /** D18: the snow block's data for the landing's puff, made on first use (no server in a test). */
+    private BlockData snowData;
+    /** D18: a puff failed once and was logged; later failures are quiet. */
+    private boolean snowFailed;
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
         this.store = new CourseStore(() -> ctx.games().dao(), line -> log().warning(line));
         this.admin = new CourseAdmin(this);
+        this.flights = new FlightRecorder(new FlightStore());
     }
 
     /**
@@ -454,6 +478,7 @@ public final class TimeTrials implements Game {
         riders.stop(); // WP-CH
         for (TrialRun run : new ArrayList<>(runs.values())) {
             Player p = online(run.player); // guarded: never a throw out of a stop (and no server in a test)
+            flightsEnd(run, false);
             removeBoat(run, p);
             drops.end(run, p);
         }
@@ -1124,6 +1149,7 @@ public final class TimeTrials implements Game {
             Session s = p == null ? null : sessions().session(p);
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
+                flightsEnd(run, false); // D17
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
                 drops.end(run, p);
@@ -1179,6 +1205,7 @@ public final class TimeTrials implements Game {
             return;
         }
         run.progress = new Progress(run.course, here, System.nanoTime());
+        run.goNanos = run.progress.startNanos();
         run.phase = TrialRun.Phase.RUNNING;
         title(p, "&aGo!", "", 15);
         ping(p, 2.0f);
@@ -1218,31 +1245,142 @@ public final class TimeTrials implements Game {
         if (run.voided != null || run.warmup) { // WP-R1 (D3): nothing in a warm-up counts anyway
             return;
         }
-        String why = p.getGameMode() != GameMode.ADVENTURE ? FairPlay.GAME_MODE
-                : p.getAllowFlight() || p.isFlying() ? FairPlay.FLYING
-                : !p.getActivePotionEffects().isEmpty() ? FairPlay.EFFECT
-                : FairPlay.movement(p.getWalkSpeed(), movementStats(p));
+        String why = voidWhy(p);
         if (why != null) {
             run.voided = why;
             p.sendMessage(Text.of("&cThis run won't count &7- " + why + ". Finish it for fun, or use Leave game."));
             Sounds.miss(p);
+            logVoid(p, run, why);
         }
     }
 
-    /** The movement attributes the watch reads: base values and modifier keys. */
+    /**
+     * A void's one console line, once a run (run.voided is set by then): who, where, why, when it fired ("at Go"
+     * or "3.2 s in", from the player's own Go: {@link TrialRun#sinceGoMs}) and whether they were sprinting, then
+     * everything the watch read. The watch runs inside the
+     * tick loop, so a diagnostic that fails says so on that same line and never breaks the run.
+     */
+    private void logVoid(Player p, TrialRun run, String why) {
+        String what = (run.race != null ? "race" : "run") + " on " + run.course.id() + " won't count - " + why;
+        try {
+            log().info("Time trials: " + p.getName() + (Bedrock.is(p) ? " (Bedrock)" : "") + "'s " + what + " ("
+                    + FairPlay.when(run.sinceGoMs(System.nanoTime())) + ", sprinting "
+                    + (p.isSprinting() ? "yes" : "no") + ") | " + String.join(" | ", movementState(p)));
+        } catch (RuntimeException | LinkageError e) {
+            log().info("Time trials: " + p.getName() + "'s " + what + " (its details could not be read: " + e + ")");
+        }
+    }
+
+    /**
+     * The watch's reason, with what exactly tripped it: "your game mode changed (survival)", "flying (flight
+     * allowed)", "a potion effect (minecraft:speed 1 for 11999 ticks)", "your movement changed
+     * (minecraft:gravity: modifier someplugin:floaty)"; {@code null} when the run is fine.
+     */
+    static String voidWhy(Player p) {
+        if (p.getGameMode() != GameMode.ADVENTURE) {
+            return FairPlay.GAME_MODE + " (" + p.getGameMode().name().toLowerCase(Locale.ROOT) + ")";
+        }
+        if (p.getAllowFlight() || p.isFlying()) {
+            return FairPlay.FLYING + (p.isFlying() ? "" : " (flight allowed)");
+        }
+        if (!p.getActivePotionEffects().isEmpty()) {
+            return FairPlay.EFFECT + " (" + effects(p) + ")";
+        }
+        FairPlay.Finding f = FairPlay.finding(p.getWalkSpeed(), movementStats(p));
+        return f == null ? null : f.line();
+    }
+
+    /** "minecraft:speed 1 for 11999 ticks, minecraft:night_vision 0 for ever". */
+    private static String effects(Player p) {
+        List<String> out = new ArrayList<>();
+        for (org.bukkit.potion.PotionEffect e : p.getActivePotionEffects()) {
+            out.add(e.getType().getKey() + " " + e.getAmplifier() + " for "
+                    + (e.isInfinite() ? "ever" : e.getDuration() + " ticks"));
+        }
+        return String.join(", ", out);
+    }
+
+    /**
+     * Everything the fair-play watch reads on {@code p}, a line each ({@code /hcm games movement} and a void's log
+     * line): game mode, flight and sprinting; walk speed; effects; each watched attribute's base, value and every
+     * modifier on it (id, amount, operation), with VOIDS on what would void a run; then every other attribute
+     * that carries a modifier ("not watched"); then the verdict the watch would give now.
+     */
+    public static List<String> movementState(Player p) {
+        List<String> out = new ArrayList<>();
+        out.add((Bedrock.is(p) ? "Bedrock" : "Java") + ", game mode " + p.getGameMode().name().toLowerCase(Locale.ROOT)
+                + ", allow flight " + p.getAllowFlight() + ", flying " + p.isFlying() + ", sprinting " + p.isSprinting()
+                + ", sneaking " + p.isSneaking());
+        out.add("walk speed " + FairPlay.num(p.getWalkSpeed()) + " (usual " + FairPlay.num(FairPlay.DEFAULT_WALK_SPEED)
+                + "), fly speed " + FairPlay.num(p.getFlySpeed()));
+        out.add("effects: " + (p.getActivePotionEffects().isEmpty() ? "none" : effects(p)));
+        for (Attribute a : io.papermc.paper.registry.RegistryAccess.registryAccess()
+                .getRegistry(io.papermc.paper.registry.RegistryKey.ATTRIBUTE)) {
+            AttributeInstance in = p.getAttribute(a);
+            if (in == null) {
+                continue;
+            }
+            String key = a.getKey().toString();
+            Double usual = FairPlay.PLAYER_BASES.get(key);
+            if (usual == null && in.getModifiers().isEmpty()) {
+                continue; // not watched and untouched
+            }
+            StringBuilder line = new StringBuilder(key).append(" base ").append(FairPlay.num(in.getBaseValue()));
+            if (usual == null) {
+                line.append(" (not watched)");
+            } else if (!(Math.abs(in.getBaseValue() - usual) <= 1e-6)) {
+                line.append(" VOIDS (usual ").append(FairPlay.num(usual)).append(')');
+            }
+            line.append(", value ").append(FairPlay.num(in.getValue()));
+            String renamed = FairPlay.sprintRead(key, modifiers(in), p.isSprinting()).renamed();
+            for (AttributeModifier m : in.getModifiers()) {
+                String id = m.getKey().toString();
+                line.append("; ").append(id).append(' ').append(FairPlay.num(m.getAmount())).append(' ')
+                        .append(m.getOperation().name().toLowerCase(Locale.ROOT));
+                if (id.equals(renamed)) {
+                    line.append(" (read as sprinting)");
+                } else if (usual != null && !FairPlay.allowed(key, id)) {
+                    line.append(" VOIDS");
+                }
+            }
+            out.add(line.toString());
+        }
+        String why = voidWhy(p);
+        out.add("the watch now: " + (why == null ? "fine" : why));
+        return out;
+    }
+
+    /**
+     * The movement attributes the watch reads: base values and modifier keys, with the sprint fallback
+     * ({@link FairPlay#sprintRead}): a server that keys vanilla's sprint modifier otherwise has it read as
+     * sprinting, and its real key is logged once as a warning.
+     */
     private static List<FairPlay.Stat> movementStats(Player p) {
         List<FairPlay.Stat> out = new ArrayList<>(5);
+        boolean sprinting = p.isSprinting();
         for (Attribute a : List.of(Attribute.MOVEMENT_SPEED, Attribute.JUMP_STRENGTH, Attribute.STEP_HEIGHT,
                 Attribute.GRAVITY, Attribute.SAFE_FALL_DISTANCE)) {
             AttributeInstance in = p.getAttribute(a);
             if (in == null) {
                 continue;
             }
-            List<String> modifiers = new ArrayList<>();
-            for (AttributeModifier m : in.getModifiers()) {
-                modifiers.add(m.getKey().toString());
+            String key = a.getKey().toString();
+            FairPlay.SprintRead read = FairPlay.sprintRead(key, modifiers(in), sprinting);
+            if (read.renamed() != null && SPRINT_KEYS_WARNED.add(read.renamed())) {
+                Logger.getLogger("HomeCraftManagement").warning("Time trials: this server's sprint modifier is "
+                        + read.renamed() + ", not " + FairPlay.SPRINTING + "; the fair-play watch reads it as "
+                        + "sprinting (the same shape, +30% of the total, only while sprinting)");
             }
-            out.add(new FairPlay.Stat(a.getKey().toString(), in.getBaseValue(), modifiers));
+            out.add(new FairPlay.Stat(key, in.getBaseValue(), read.keys()));
+        }
+        return out;
+    }
+
+    /** An attribute's modifiers as the pure rules read them: key, Bukkit operation, amount. */
+    private static List<FairPlay.Modifier> modifiers(AttributeInstance in) {
+        List<FairPlay.Modifier> out = new ArrayList<>();
+        for (AttributeModifier m : in.getModifiers()) {
+            out.add(new FairPlay.Modifier(m.getKey().toString(), m.getOperation().name(), m.getAmount()));
         }
         return out;
     }
@@ -1317,6 +1455,7 @@ public final class TimeTrials implements Game {
             return;
         }
         Location to = e.getTo();
+        flight(p, run, e.getFrom(), to); // D17: before the move can end the run at the finish
         if (!advance(p, run, to)) {
             return;
         }
@@ -1325,6 +1464,161 @@ public final class TimeTrials implements Game {
         double floor = FairPlay.boatFloor(run.course, run.progress.lastCheckpoint());
         if (!Double.isNaN(floor) && to.getY() < floor) {
             run.backDue = true;
+        }
+    }
+
+    /**
+     * The flight recorder (MOUNTAIN-V21-SPEC D17): a boat's move on a Mountain Run v2 (boat planner algo 4 on,
+     * {@link FlightRecorder#records}), the record begun at the run's first move with the clock running. A few
+     * doubles of arithmetic and nothing allocated; it changes nothing about the ride. Its landings puff snow
+     * ({@link #landingSnow}, D18).
+     */
+    private void flight(Player p, TrialRun run, Location from, Location to) {
+        if (run.flight == null) {
+            if (!FlightRecorder.records(run.course)) {
+                return;
+            }
+            run.flight = flights.start(Bedrock.is(p), run.course, (f, x, y, z, d) -> landingSnow(run, x, y, z, d));
+        }
+        run.flight.move(from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ(),
+                Bukkit.getCurrentTick());
+    }
+
+    /**
+     * The run's flight record ends ({@code finished}: at the finish; else it left, was replaced or the game
+     * stopped): one INFO line for the console, the edition and the course, never the player's name. Once.
+     *
+     * @return the run's summary, or {@code null} when it had no record (or its line was written already)
+     */
+    FlightRecorder.Summary flightsEnd(TrialRun run, boolean finished) {
+        FlightRecorder.Run f = run.flight;
+        if (f == null) {
+            return null;
+        }
+        run.flight = null;
+        FlightRecorder.Summary s = flights.close(f, finished);
+        log().info(s.line());
+        return s;
+    }
+
+    /**
+     * A boat came down off a Mountain Run's drop (MOUNTAIN-V21-SPEC D18, {@link FlightRecorder.Landing}): a small
+     * puff of kicked-up snow on the ice where it landed, {@link #snowPuff} particles, seen by the players near
+     * it. Nothing else: no sound, no action bar, no title. At most one a run every half a second, and none while
+     * the run is being put back or moved or once it is over ({@link #snowDue}). It never breaks a run: a failure
+     * is logged once.
+     *
+     * <p><b>Why the snow block's BLOCK particle</b> (block crack), not SNOWFLAKE: it is what vanilla itself shows
+     * where anything lands (the landed-on block's crack particles, kicked up and falling back), so a puff of it
+     * reads as snow spray off the ice, not an effect; and Geyser draws it on Bedrock as Bedrock's own crack
+     * particle of the same block. SNOWFLAKE is powder snow's drifting flake: it floats down rather than sprays
+     * up, and what Bedrock shows for it is less sure.
+     */
+    void landingSnow(TrialRun run, double x, double y, double z, int d) {
+        landingSnow(run, x, y, z, d, System.nanoTime());
+    }
+
+    /** {@link #landingSnow(TrialRun, double, double, double, int)} at {@code now} ({@code System.nanoTime()}). */
+    void landingSnow(TrialRun run, double x, double y, double z, int d, long now) {
+        if (!snowDue(run, now)) {
+            return;
+        }
+        run.snowAt = now;
+        try {
+            World w = Bukkit.getWorld(run.course.world());
+            if (w == null) {
+                return;
+            }
+            if (snowData == null) {
+                snowData = Material.SNOW_BLOCK.createBlockData();
+            }
+            w.spawnParticle(Particle.BLOCK, x, y + 0.1, z, snowPuff(d), SNOW_SPREAD, SNOW_RISE, SNOW_SPREAD,
+                    SNOW_SPEED, snowData);
+        } catch (RuntimeException | LinkageError e) {
+            if (!snowFailed) {
+                snowFailed = true;
+                log().warning("Ice Boat landing snow failed (said once; the runs go on): " + e);
+            }
+        }
+    }
+
+    /**
+     * Whether a landing at {@code nanos} may puff snow (D18): on a Mountain Run v2 only, while the run rides (not
+     * after the finish, not while it is being put back or moved by anyone), and half a second or more after its
+     * last puff.
+     */
+    static boolean snowDue(TrialRun run, long nanos) {
+        return run != null && FlightRecorder.records(run.course) && run.running() && !run.suspended
+                && run.expect == null && !run.backDue && nanos - run.snowAt >= SNOW_EVERY;
+    }
+
+    /** The puff's size: {@value #SNOW_HOP} particles off a hop, {@value #SNOW_BIG} off a Big Drop. */
+    static int snowPuff(int d) {
+        return d >= 2 ? SNOW_BIG : SNOW_HOP;
+    }
+
+    /**
+     * The finish summary's quiet line on a Mountain Run v2 (D18): "&amp;7Best jump: &amp;f12.4 blocks", the run's
+     * longest flight measured cleanly ({@link FlightRecorder.Summary#best}); {@code null} (no line) when it has
+     * none, or no record at all (any other course).
+     */
+    static String bestJump(FlightRecorder.Summary s) {
+        if (s == null || Double.isNaN(s.best())) {
+            return null;
+        }
+        return "&7Best jump: &f" + FlightRecorder.tenth(s.best()) + " blocks";
+    }
+
+    /** The flight recorder's lines for {@code /hcm games boat flights} (D17). */
+    List<String> flightLines() {
+        return flights.lines();
+    }
+
+    /**
+     * {@code /hcm games boat flights} (MOUNTAIN-V21-SPEC D17): the Ice Boat jumps measured on Mountain Run rides,
+     * inside Time Trials' guard; a plain line when Time Trials isn't there.
+     */
+    public static List<String> flightLines(GamesService games) {
+        TimeTrials t = games != null && games.game(SPEC.id()) instanceof TimeTrials tt ? tt : null;
+        if (t == null) {
+            return List.of("&7Time Trials isn't running, so no Ice Boat jumps have been measured.");
+        }
+        return games.guard(t, t::flightLines, List.of("&cThe flight recorder couldn't be read - check the console."));
+    }
+
+    /**
+     * Where the flight recorder keeps the all-time longest jumps: {@code hcm_meta} under
+     * {@value FlightRecorder#KEY}, on the main thread like every DAO. No database (a test), or one that fails:
+     * nothing is read or written, and a failed write is a warning.
+     */
+    private final class FlightStore implements FlightRecorder.Store {
+
+        private GenMetaDao meta() {
+            HomeCraftManagement plugin = ctx.plugin();
+            return plugin == null || plugin.database() == null ? null : new GenMetaDao(plugin.database());
+        }
+
+        @Override
+        public String get(String key) {
+            try {
+                GenMetaDao meta = meta();
+                return meta == null ? null : meta.get(key);
+            } catch (SQLException | RuntimeException e) {
+                log().warning("Ice Boat flights: could not read " + key + ": " + e.getMessage());
+                return null;
+            }
+        }
+
+        @Override
+        public void set(String key, String value) {
+            try {
+                GenMetaDao meta = meta();
+                if (meta != null) {
+                    meta.set(key, value);
+                }
+            } catch (SQLException | RuntimeException e) {
+                log().warning("Ice Boat flights: could not keep " + key + ": " + e.getMessage());
+            }
         }
     }
 
@@ -1413,6 +1707,9 @@ public final class TimeTrials implements Game {
         if (run.running() && e.getCause() != PlayerTeleportEvent.TeleportCause.DISMOUNT) {
             run.suspended = true; // nothing counts from where they were put; the run sends them back
             run.lastReset = Bukkit.getCurrentTick();
+            if (run.flight != null) {
+                run.flight.drop(); // D17: a flight in the air when they were moved is no flight
+            }
         }
     }
 
@@ -1514,6 +1811,9 @@ public final class TimeTrials implements Game {
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */
     boolean move(Player p, TrialRun run, Location at) {
+        if (run.flight != null) {
+            run.flight.drop(); // D17: a reset (or back to the start) ends no flight
+        }
         run.expect = at;
         run.suspended = true;
         boolean ok = run.course.kind() == TrialKind.BOAT ? reseat(p, run, at) : sessions().teleport(p, at);
@@ -1603,6 +1903,9 @@ public final class TimeTrials implements Game {
         }
         run.boat = null;
         boats.remove(b.getUniqueId());
+        if (run.flight != null) {
+            run.flight.drop(); // D17: out of the boat, the open flight is dropped
+        }
         Runnable boatGone = () -> {
             b.eject();
             b.remove();
@@ -1625,13 +1928,14 @@ public final class TimeTrials implements Game {
                 return;
             }
             case RACE -> {
-                race.finish(p, run, nanos);
+                race.finish(p, run, nanos, bestJump(flightsEnd(run, true))); // D17, D18
                 return;
             }
             default -> {
                 // a solo run: as it always was
             }
         }
+        String jump = bestJump(flightsEnd(run, true)); // D17, D18
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
@@ -1640,11 +1944,16 @@ public final class TimeTrials implements Game {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
+        verdict = FairPlay.explained(verdict, run.course, run.progress.startNanos(), run.progress.times(), tooFast, ms,
+                run.course.minSecondsOr(s.minSeconds())); // which leg, how fast: the line and the log say
         verdict = withRider(p, run, verdict); // WP-CH: rider_runs_count false makes a ride just for fun
         String name = run.course.name();
         GenTag tag = run.course.gen();
         String code = tag == null ? null : DailyLookup.code(games(), tag);
         p.sendMessage(Text.of("&b" + name + ": &f" + TrialText.time(ms)));
+        if (jump != null) {
+            p.sendMessage(Text.of(jump)); // D18: a Mountain Run's longest jump, quietly
+        }
         if (code != null) {
             p.sendMessage(Text.of("&7" + GenCopy.courseCode(code))); // so players can ask for it back
         }
@@ -1658,6 +1967,8 @@ public final class TimeTrials implements Game {
                 sound(() -> Sounds.received(p));
             }
             case VOID, STALE -> {
+                log().info("Time trials: " + p.getName() + (Bedrock.is(p) ? " (Bedrock)" : "") + "'s run on "
+                        + run.course.id() + " in " + TrialText.time(ms) + " didn't count - " + verdict.reason());
                 p.sendMessage(Text.of("&cThat run didn't count. &7(" + verdict.reason() + ")"));
                 title(p, "&f" + TrialText.time(ms), "&cThat run didn't count", 40);
                 sound(() -> Sounds.miss(p));
@@ -1894,6 +2205,7 @@ public final class TimeTrials implements Game {
     void end(Player player) {
         TrialRun run = runs.remove(player.getUniqueId());
         if (run != null) {
+            flightsEnd(run, false); // D17: a no-op after the finish wrote its line
             removeBoat(run, player);
             drops.end(run, player);
         }
@@ -1972,7 +2284,10 @@ public final class TimeTrials implements Game {
 
     /** Replace the player's run (race mode's re-grid: a new course from a new spot, the same race). */
     void replaceRun(TrialRun run) {
-        runs.put(run.player, run);
+        TrialRun old = runs.put(run.player, run);
+        if (old != null && old != run) {
+            flightsEnd(old, false); // D17: the old run's record ends with it
+        }
     }
 
     /** Every live run. */

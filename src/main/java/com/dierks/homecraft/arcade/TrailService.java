@@ -25,16 +25,35 @@ import java.util.UUID;
 
 /**
  * Particle trails bought from the Prize Counter: time-limited, one switched on at a time, and
- * quiet — a couple of particles at the feet, only while the player is actually walking, so a
- * trail is something you notice following a friend and not a cloud around everybody standing
- * at the Mall. Toggled with {@code /hcm trail} (and from the Wallet).
+ * quiet — a couple of particles at the feet (leaves fall from the shoulders), only while the
+ * player is actually walking, so a trail is something you notice following a friend and not a
+ * cloud around everybody standing at the Mall. Toggled with {@code /hcm trail}, and from the
+ * Wallet, whose tile steps through the trails you own and then off.
  */
 public final class TrailService implements Listener {
 
     /** At most one puff per this many milliseconds per player. */
     private static final long PUFF_MS = 150;
+    /** The "your trail is on!" burst: this many particles, with this spread. */
+    private static final int BURST_COUNT = 12;
+    private static final double BURST_SPREAD = 0.6;
 
-    private record Active(String prizeId, Particle particle, long expiresAt) {
+    private record Active(String prizeId, Particle particle, long expiresAt, Puff puff) {
+    }
+
+    /** One puff of a trail: how far above the feet, how many particles, and their spread. */
+    record Puff(double y, int count, double dx, double dy, double dz) {
+    }
+
+    /** Every trail but leaves: a couple of particles just above the feet. */
+    private static final Puff AT_FEET = new Puff(0.15, 2, 0.15, 0.05, 0.15);
+    /** Leaves fall from the shoulders: at the feet they would land at once (kid-bedrock #3). */
+    private static final Puff FROM_SHOULDERS = new Puff(1.3, 1, 0.3, 0.1, 0.3);
+
+    /** How a trail of this particle puffs: from shoulder height for any particle ending in _LEAVES. */
+    static Puff puff(String particle) {
+        return particle != null && particle.trim().toUpperCase(Locale.ROOT).endsWith("_LEAVES")
+                ? FROM_SHOULDERS : AT_FEET;
     }
 
     private final HomeCraftManagement plugin;
@@ -122,7 +141,58 @@ public final class TrailService implements Listener {
         return "&aTrail on: &f" + mine.get(0).prize().display();
     }
 
-    /** Switch on one particular trail by prize id. */
+    /**
+     * The Wallet's trail tile: off → the first owned trail → the next one … → off again. With one
+     * trail it is the same as {@link #toggle}.
+     *
+     * @return a message for the player
+     */
+    public String cycle(Player player) {
+        List<Owned> mine = owned(player);
+        if (mine.isEmpty()) {
+            return "&7You don't have a trail. Get one at the Prize Counter!";
+        }
+        List<String> ids = new ArrayList<>();
+        String on = null;
+        for (Owned o : mine) {
+            ids.add(o.prize().id());
+            if (o.on()) {
+                on = o.prize().id();
+            }
+        }
+        String next = next(ids, on);
+        if (next != null) {
+            return select(player, next);
+        }
+        try {
+            dao.enableOnly(player.getUniqueId(), null);
+        } catch (SQLException e) {
+            return "&cCouldn't change your trail — try again.";
+        }
+        load(player);
+        return "&7Trail off.";
+    }
+
+    /**
+     * The trail {@link #cycle} switches to after {@code on} among the {@code owned} ids (in order), or
+     * null for off: none on → the first; the last → off; one no longer owned → the first.
+     */
+    static String next(List<String> owned, String on) {
+        if (owned == null || owned.isEmpty()) {
+            return null;
+        }
+        if (on == null) {
+            return owned.get(0);
+        }
+        for (int i = 0; i < owned.size(); i++) {
+            if (owned.get(i).equalsIgnoreCase(on)) {
+                return i + 1 < owned.size() ? owned.get(i + 1) : null;
+            }
+        }
+        return owned.get(0);
+    }
+
+    /** Switch on one particular trail by prize id, with its "your trail is on!" burst. */
     public String select(Player player, String prizeId) {
         for (Owned o : owned(player)) {
             if (o.prize().id().equalsIgnoreCase(prizeId)) {
@@ -132,10 +202,34 @@ public final class TrailService implements Listener {
                     return "&cCouldn't change your trail — try again.";
                 }
                 load(player);
+                burst(player);
                 return "&aTrail on: &f" + o.prize().display();
             }
         }
         return "&7You don't have that trail.";
+    }
+
+    /**
+     * "Your trail is on!" (kid-bedrock #3): a trail puffs where the player was, behind a first-person
+     * camera, so switching one on shows 12 of its particles once, in front of their eyes, to them only.
+     * Every collector trail's grant is followed by a select, so a present or a buy gets it too.
+     */
+    private void burst(Player player) {
+        Active a = active.get(player.getUniqueId());
+        if (a == null) {
+            return;
+        }
+        try {
+            player.spawnParticle(a.particle(), burstAt(player.getEyeLocation()), BURST_COUNT,
+                    BURST_SPREAD, BURST_SPREAD, BURST_SPREAD, 0.0);
+        } catch (RuntimeException ignored) {
+            // cosmetic: a particle that needs data shows nothing here, as on the move
+        }
+    }
+
+    /** Where the burst shows: 1.5 blocks along the look from the eyes, and 0.8 up. */
+    static Location burstAt(Location eye) {
+        return eye.clone().add(eye.getDirection().multiply(1.5)).add(0, 0.8, 0);
     }
 
     /** Refresh the in-memory switched-on trail for a player. */
@@ -150,7 +244,7 @@ public final class TrailService implements Listener {
             active.remove(player.getUniqueId());
             return;
         }
-        active.put(player.getUniqueId(), new Active(on.prize().id(), particle, on.expiresAt()));
+        active.put(player.getUniqueId(), new Active(on.prize().id(), particle, on.expiresAt(), puff(particle.name())));
     }
 
     private Particle particle(String name) {
@@ -162,6 +256,22 @@ public final class TrailService implements Listener {
         } catch (IllegalArgumentException e) {
             plugin.getLogger().warning("Trail particle '" + name + "' is not a particle — that trail shows nothing.");
             return null;
+        }
+    }
+
+    /**
+     * Whether a trail of particle {@code name} can show on this server: a particle it has, needing no data
+     * (final audit F7). The Autumn Leaves trail's ORANGE_POPLAR_LEAVES is new in the 26.3 API, so on 26.2 it
+     * is not, and that collector is not sold or given there ({@link PrizeService#visible}).
+     */
+    static boolean particleUsable(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        try {
+            return Particle.valueOf(name.trim().toUpperCase(Locale.ROOT)).getDataType() == Void.class;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
@@ -203,7 +313,9 @@ public final class TrailService implements Listener {
         }
         lastPuff.put(player.getUniqueId(), now);
         try {
-            player.getWorld().spawnParticle(a.particle(), from.clone().add(0, 0.15, 0), 2, 0.15, 0.05, 0.15, 0.0);
+            Puff puff = a.puff();
+            player.getWorld().spawnParticle(a.particle(), from.clone().add(0, puff.y(), 0), puff.count(),
+                    puff.dx(), puff.dy(), puff.dz(), 0.0);
         } catch (RuntimeException e) {
             active.remove(player.getUniqueId()); // a particle that needs data we do not give — stop trying
         }

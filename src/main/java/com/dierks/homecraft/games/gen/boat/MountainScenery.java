@@ -13,10 +13,11 @@ import java.util.Arrays;
  *
  * <p><b>The heightfield.</b> Every column off the track takes the level of its nearest track column (a
  * multi-source search over the whole half), dropped a block below the road on its downhill side and
- * falling away gently, or raised on its uphill side as a road cut 3-6 over the road; then smoothed away
- * from the roads, so the shelves of the road blend into one face, and given a low relief. Under the ice is
- * a block of support, under a wall the ground its base stands on; where neighbours differ by 2 or more the
- * skin is filled down into a cliff of stone.
+ * falling away gently, or raised on its uphill side as a road cut up to {@value #BANK_HIGH} over the road
+ * (the wide road, MOUNTAIN-V21-SPEC D6, so more of the track shows; algo 4's {@value #BANK_HIGH_V4}); then
+ * smoothed away from the roads, so the shelves of the road blend into one face, and given a low relief. Under
+ * the ice is a block of support, under a wall the ground its base stands on; where neighbours differ by 2 or
+ * more the skin is filled down into a cliff of stone.
  *
  * <p><b>What the proof allows, kept here</b> (V4, V7, V9): scenery only in columns two or more from the
  * track (or under a wall's base and the ice), never within 2 of the half's edge, nothing at or over the
@@ -24,18 +25,30 @@ import java.util.Arrays;
  * and the valley under the view from the stand to the finish. Blocks: snow on the top quarter of the
  * mountain, stone on faces of 2 or more and cliffs, moss elsewhere ({@code Palette.SNOW}, {@code STONE}).
  *
- * <p><b>The op budget</b> ({@value #BUDGET}): skin far from every road is left out first, then trees.
- * Pure: no Bukkit.
+ * <p><b>The op budget</b> ({@value #BUDGET} on the wide road, D11; algo 4's {@value #BUDGET_V4}): skin far
+ * from every road is left out first, {@value #FAR_STEP} columns at a time (algo 4: {@value #FAR_STEP_V4}),
+ * until it leaves the trees their reserve ({@value #TREE_RESERVE} on the wide road, so its ~320 trees always
+ * fit; algo 4 none), and the trees get what the skin leaves. Pure: no Bukkit.
  */
 final class MountainScenery {
 
-    /** The most blocks the mountain may add (§8). */
-    static final int BUDGET = 280_000;
+    /** The most blocks the mountain may add (§8): on the wide road (D11), and algo 4's. */
+    static final int BUDGET = 290_000;
+    static final int BUDGET_V4 = 280_000;
+    /** The trees' share of the wide road's budget, kept off the skin's first: 320 trees x 62.8 blocks + 400 (D11). */
+    static final int TREE_RESERVE = 20_500;
+    /** The far skin is cut this many columns at a time over budget: the wide road's, and algo 4's. */
+    static final int FAR_STEP = 6;
+    static final int FAR_STEP_V4 = 12;
     /** The valley floor's height over the half's floor (§4.1). */
     static final int VALLEY_LY = 6;
-    /** A road cut: the ground this many columns uphill of a road rises by up to {@value #BANK_HIGH}. */
+    /**
+     * A road cut: the ground this many columns uphill of a road rises by up to {@value #BANK_HIGH} (the wide road,
+     * D6: a lower cut shows more of the track; algo 4's {@value #BANK_HIGH_V4}).
+     */
     static final int BANK_COLUMNS = 6;
-    static final int BANK_HIGH = 5;
+    static final int BANK_HIGH = 2;
+    static final int BANK_HIGH_V4 = 5;
     /** Away from the roads the ground falls this much a column, and is smoothed over this radius. */
     static final double FALL = 0.12;
     static final int SMOOTH = 6;
@@ -69,6 +82,8 @@ final class MountainScenery {
         int sz = t.sz;
         int y0 = t.y0;
         int n = sx * sz;
+        boolean wide = t.tier.wide();
+        int bank = wide ? BANK_HIGH : BANK_HIGH_V4;
         byte[] kind = new byte[n];
         int[] lo = new int[n];
         for (int x = 0; x < sx; x++) {
@@ -142,7 +157,7 @@ final class MountainScenery {
                 double uphill = s % sz - z; // north of the road (toward the summit) is up
                 double base;
                 if (uphill > 0.5 && d > 1) {
-                    base = ice + Math.min(BANK_HIGH, (d - 1) * BANK_HIGH / (double) BANK_COLUMNS);
+                    base = ice + Math.min(bank, (d - 1) * bank / (double) BANK_COLUMNS);
                 } else {
                     base = ice - 1 - FALL * Math.max(0, d - 2);
                 }
@@ -206,11 +221,13 @@ final class MountainScenery {
         }
         int snowline = highest - (highest - lowest) / 4;
         int room = Math.max(0, MountainValidator.MAX_OPS - 8_000 - t.vox.size());
-        int budget = Math.min(BUDGET, room);
+        int budget = Math.min(wide ? BUDGET : BUDGET_V4, room);
+        int reserve = wide ? TREE_RESERVE : 0;
+        int step = wide ? FAR_STEP : FAR_STEP_V4;
         int farLimit = Integer.MAX_VALUE;
         int planned = skinCount(t, kind, top, lo, dist, farLimit);
-        while (planned > budget && farLimit > 12) {
-            farLimit = farLimit == Integer.MAX_VALUE ? FAR_SKIN * 3 : farLimit - 12;
+        while (planned > budget - reserve && farLimit > 12) {
+            farLimit = farLimit == Integer.MAX_VALUE ? FAR_SKIN * 3 : farLimit - step;
             planned = skinCount(t, kind, top, lo, dist, farLimit);
         }
         int standFloor = t.standFloor();

@@ -1553,6 +1553,40 @@ arcade:
       - { tokens: 60, weight: 3 }
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
+  # ---- Collectors: holiday looks you keep for good, sold only in their season and stamped with the
+  # year (0.37.1: the Pumpkin Cap 2026 in October, the Autumn Leaves 2026 trail in October and
+  # November). They are built into the plugin, so they are not rows in arcade.prizes, and the ones
+  # players own never go away. Tap one at the Prize Counter to buy it, or tap Give a present to buy
+  # one for someone online. on_sale: false = this season's collectors are not sold or given; owned
+  # ones keep working. gifting: false = no presents; your own buys still work.
+  collectors:
+    on_sale: true
+    gifting: true
+  # ---- Halloween: the Candy Apple shower (0.37.1). Candy apples fall around each player in an economy
+  # world, with a "Trick or treat!". Only you see and pick up your own candy. Never in a Games world, a
+  # game or a race, and never for anyone idle 5+ minutes. Collect `goal` for the Trick-or-Treat Bag
+  # (once each). Runs from `from` to `to` (local dates, clock.time_zone; keep the quotes) and switches
+  # itself off after `to`. Admins: /hcm candy now|status|clear|bag <player>|add <player> <n>.
+  events:
+    candy:
+      enabled: true
+      from: "2026-10-01"
+      to: "2026-10-31"
+      # A shower every this many minutes, counted from local midnight plus offset_minutes (10-120).
+      every_minutes: 20
+      offset_minutes: 10
+      # On the last day (`to`), a shower this often instead (0 = as every_minutes).
+      last_day_every_minutes: 10
+      # Candy apples per player per shower (1-12), and the chance each is a Golden Candy Apple.
+      apples_per_shower: 6
+      golden_percent: 4
+      # Tokens for each Golden Candy Apple picked up, and the most a player gets from candy in a local day.
+      golden_tokens: 5
+      daily_token_cap: 10
+      # Candy apples to collect for the Trick-or-Treat Bag.
+      goal: 31
+      # true = admins also see everyone's candy (to help a child find hers). Only its owner can pick it up.
+      admins_see_all: false
 
 # ---------------------------------------------------------------------
 #  Games — play games of chance and skill games for tokens (never dollars).

@@ -57,7 +57,10 @@ public final class Skeleton {
     /** The tiers that must have a chicane draw one this much more often. */
     static final double CHICANE_LEAN = 3;
     static final double APPROACH_ROAD = 104;
-    /** The hard road's approach holds two 2-block drops, the second a brake for the link (its descent floor is 44). */
+    /**
+     * Algo 4's hard road's approach holds two 2-block drops, the second a brake for the link (its descent floor is
+     * 44); the wide hard road's floor is {@link #APPROACH} (0.37.1).
+     */
     static final double APPROACH_HARD = 140;
     /** Draws refused before a band is closed at once. */
     static final int REDRAWS = 32;
@@ -308,7 +311,7 @@ public final class Skeleton {
         return switch (l.kind()) {
             case HAIRPIN -> new double[]{2 * tier.hairRMin, 2 * tier.hairRMax};
             case ELBOWS -> {
-                double lip = MountainTier.runUp(tier.width) + MountainTier.landing(2, false) + 2;
+                double lip = tier.lipPlunge();
                 double least = l.plunge() >= lip - 1e-9 ? lip : 0;
                 yield new double[]{l.r1() + l.r2() + least, l.r1() + l.r2() + Math.max(least, l.plunge()) + 24};
             }
@@ -386,7 +389,10 @@ public final class Skeleton {
             this.axis = frame.z[k];
             this.aEnd = dir * (frame.linkX(k) - x0);
             double road = tier.hard() ? APPROACH_HARD : APPROACH_ROAD;
-            this.approach = tier.road() && aEnd > road + 120 ? road : APPROACH;
+            // the wide hard road's approach is the slalom's APPROACH, so fill lays its lips in the rows (0.37.1, the
+            // spread); the wide easy and medium roads keep 104 (at 46 easy's side pockets left a seed unbuildable and
+            // medium's trees ran short: one plan in ten under 280)
+            this.approach = tier.road() && !(tier.wide() && tier.hard()) && aEnd > road + 120 ? road : APPROACH;
             double[] room = limits(frame, k);
             this.bMin = room[0];
             this.bMax = room[1];

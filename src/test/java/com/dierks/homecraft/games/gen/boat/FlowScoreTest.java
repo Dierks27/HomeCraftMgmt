@@ -200,13 +200,36 @@ class FlowScoreTest {
     @Test
     void theTimeWindowIsAGate() {
         FlowScore shortRun = new Hand().pit(56).straight(400).score(ROAD_M);
-        assertTrue(shortRun.failed.contains("F-T"), "456 blocks is far under 105 s: " + shortRun.seconds);
+        assertTrue(shortRun.failed.contains("F-T"), "456 blocks is far under " + ROAD_M.tMin + " s: "
+                + shortRun.seconds);
         Hand longRun = new Hand().pit(56);
-        while (longRun.s < 4_400) {
+        while (longRun.s < 5_400) {
             longRun.straight(150).arc(120, 40).straight(150).arc(120, -40);
         }
         FlowScore tooLong = longRun.score(ROAD_M);
-        assertTrue(tooLong.failed.contains("F-T"), "4,400 blocks is over 135 s: " + tooLong.seconds);
+        assertTrue(tooLong.failed.contains("F-T"), "5,400 blocks is over " + ROAD_M.tMax + " s: " + tooLong.seconds);
+    }
+
+    @Test
+    void aLipOnASeventyBlockStraightCountsAsBraking() {
+        // D4 item 2: F-F's "a lip on a long straight brakes" reads 60 (LIP_RUN), not 100; a fast R 400 sweeper
+        // after it is no brake of its own
+        Hand h = new Hand().pit(56).arc(400, 10).straight(70).lip(20, 1).arc(400, 25).straight(100);
+        RideLine line = new RideLine(h.parts, h.lips, List.of());
+        double s = h.lips.get(0).s();
+        assertEquals(60.0, FlowScore.LIP_RUN, 1e-12, "the wide road's long straight");
+        assertTrue(FlowScore.onLongStraight(line.parts, s, FlowScore.lipRun(ROAD_M)), "70 is long enough now");
+        MountainTier v4 = MountainTier.of(BoatStyle.ROAD, "medium", MountainValidator.FIRST_ALGO);
+        assertEquals(100.0, FlowScore.lipRun(v4), 1e-12, "algo 4's was 100");
+        assertFalse(FlowScore.onLongStraight(line.parts, s, FlowScore.lipRun(v4)), "where 70 wasn't");
+        FlowScore now = h.score(ROAD_M);
+        assertFalse(String.join(" ", now.missing).contains("lips brake"), "so the lip brakes for F-F: " + now.missing);
+        FlowScore then = h.score(v4);
+        assertTrue(String.join(" ", then.missing).contains("0 of 1 lips brake"), "algo 4 counted it plain: "
+                + then.missing);
+        Hand shorter = new Hand().pit(56).arc(400, 10).straight(50).lip(20, 1).arc(400, 25).straight(100);
+        assertFalse(FlowScore.onLongStraight(shorter.parts, shorter.lips.get(0).s(), FlowScore.lipRun(ROAD_M)),
+                "a 50-block straight still isn't long");
     }
 
     @Test

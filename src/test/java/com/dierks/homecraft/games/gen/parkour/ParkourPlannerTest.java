@@ -351,6 +351,34 @@ class ParkourPlannerTest {
         }
     }
 
+    @Test
+    void noCheckpointCountsFallingPastItsPadOrUnderIt() throws GenFailed {
+        for (Slots.Def slot : SLOTS) {
+            for (int day = 0; day < 100; day++) {
+                Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
+                for (Course.Mark m : ((PlannedTrial) p.course()).course().checkpoints()) {
+                    Course one = new Course(slot.id(), TrialKind.PARKOUR, slot.name(), Tier.EASY, "", null, List.of(m),
+                            new Course.Mark(0, -100, 0, 1), null, null, true, false, 1, tag(p, ParkourPlanner.ALGO));
+                    for (double dx = -2.5; dx <= 2.501; dx += 0.25) {
+                        for (double dz = -2.5; dz <= 2.501; dz += 0.25) {
+                            Progress drop = new Progress(one, new Point(m.x() + dx, m.y() - 0.51, m.z() + dz), 0);
+                            drop.move(new Point(m.x() + dx, m.y() - 8, m.z() + dz), 1);
+                            assertEquals(0, drop.reachedCheckpoints(), slot.id() + " day " + day + ": a drop at "
+                                    + dx + "," + dz + " from just under the pad's top doesn't count it");
+                        }
+                        Progress alongX = new Progress(one, new Point(m.x() - 6, m.y() - 1, m.z() + dx), 0);
+                        alongX.move(new Point(m.x() + 6, m.y() - 1, m.z() + dx), 1);
+                        Progress alongZ = new Progress(one, new Point(m.x() + dx, m.y() - 1, m.z() - 6), 0);
+                        alongZ.move(new Point(m.x() + dx, m.y() - 1, m.z() + 6), 1);
+                        assertEquals(0, alongX.reachedCheckpoints() + alongZ.reachedCheckpoints(), slot.id() + " day "
+                                + day + ": a level pass a block under the pad's top, " + dx + " off its middle, doesn't"
+                                + " count it");
+                    }
+                }
+            }
+        }
+    }
+
     // ---- the boot check -------------------------------------------------------------------------
 
     private static GenTag tag(Plan p, int algo) {

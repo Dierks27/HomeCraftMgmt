@@ -56,6 +56,39 @@ public final class PrizeDao {
         }
     }
 
+    /**
+     * Claim a lifetime prize for the player, once: insert its {@code 'life'} row, or do nothing when
+     * one is already there. This is a collector's one gate, written BEFORE any token moves, so a
+     * second confirm (or a second giver) finds the row and is refused with nothing charged.
+     *
+     * @return true when this call inserted the row
+     */
+    public boolean claimOnce(UUID player, String prizeId) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO prize_purchases(player, prize_id, period_key, count) VALUES(?, ?, 'life', 1) "
+                            + "ON CONFLICT(player, prize_id, period_key) DO NOTHING")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, prizeId);
+                return ps.executeUpdate() == 1;
+            }
+        }
+    }
+
+    /** Undo a {@link #claimOnce}: the charge or the hand-over after it failed. */
+    public void unclaim(UUID player, String prizeId) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "DELETE FROM prize_purchases WHERE player=? AND prize_id=? AND period_key='life'")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, prizeId);
+                ps.executeUpdate();
+            }
+        }
+    }
+
     /** Whether the player has ever bought this prize (any period). */
     public boolean everBought(UUID player, String prizeId) throws SQLException {
         Connection c = database.connection();

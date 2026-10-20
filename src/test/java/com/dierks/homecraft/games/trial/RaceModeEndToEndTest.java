@@ -730,6 +730,11 @@ class RaceModeEndToEndTest {
         mode.tick(players.get(2), runs.get(2), 510);
         assertEquals(TrialRun.Phase.RUNNING, runs.get(2).phase, "back on its spot: off it goes");
         assertEquals(go, runs.get(2).progress.startNanos(), "on the shared clock: the time going back is lost");
+        TrialRun late = runs.get(2);
+        assertTrue(runs.get(0).goNanos >= go && late.goNanos >= runs.get(0).goNanos,
+                "each racer's own Go is kept, the drifter's when it was really released");
+        assertEquals("at Go", FairPlay.when(late.sinceGoMs(late.goNanos)),
+                "so a void at the drifter's Go is logged as at Go, not as the time on the shared clock (FP-2)");
     }
 
     /** A main scoreboard's teams, as a map: entry to team. */
@@ -820,6 +825,56 @@ class RaceModeEndToEndTest {
         mode.inRace(ben, boat.race);
         assertNull(board.teamOf("Ben"), "boats bump, as the owner chose: a boat racer never joins it");
         trials.onSessionEnd(ben, EndReason.QUIT_ITEM);
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    @Test
+    void aHardCoursesRacersBumpAndAnEasyOrMediumCoursesNeverDo() {
+        Board board = new Board();
+        RaceMode mode = trials.raceMode();
+        mode.pushes(new NoPush(() -> board));
+        TrialFakes.Link link = new TrialFakes.Link();
+        for (Tier tier : Tier.values()) {
+            Course c = LapsTest.straight().withTier(tier);
+            TrialRun r = new TrialRun(id(ava), c, false, 0);
+            r.race = new RaceRun(link, c, c.start(), null, false);
+            trials.replaceRun(r);
+            mode.inRace(ava, r.race); // RaceMode.seated
+            boolean bumps = tier == Tier.HARD || tier == Tier.EXTREME;
+            assertEquals(bumps ? null : NoPush.TEAM, board.teamOf("Ava"), tier + ": the no-push team only below Hard");
+            assertEquals(!bumps, r.race.noShove, tier + ": not collidable only below Hard");
+            trials.onSessionEnd(ava, EndReason.QUIT_ITEM);
+            assertNull(board.teamOf("Ava"), tier + ": off the team once the run ends");
+            assertFalse(r.race.noShove, tier + ": collidable again");
+        }
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    @Test
+    void aSoloRunOnAnyTierLeavesItsPlayersTeamAloneTheWholeWayThrough() {
+        // the owner's decision is for races on courses with a tier (review BUMP-2): a solo run is as it always was
+        Board board = new Board();
+        board.teams.add("nametags");
+        board.teamOf.put("Ava", "nametags"); // another plugin's team
+        trials.raceMode().pushes(new NoPush(() -> board));
+        java.util.Map<String, java.util.function.Consumer<Player>> exits = new java.util.LinkedHashMap<>();
+        exits.put("the finish", p -> trials.onSessionEnd(p, EndReason.FINISH));
+        exits.put("Leave game", p -> trials.onSessionEnd(p, EndReason.QUIT_ITEM));
+        exits.put("a disconnect", trials::onQuit);
+        for (Tier tier : Tier.values()) {
+            for (java.util.Map.Entry<String, java.util.function.Consumer<Player>> exit : exits.entrySet()) {
+                TrialRun solo = new TrialRun(id(ava), LapsTest.straight().withTier(tier), false,
+                        TimeTrials.COUNTDOWN_TICKS + 1);
+                trials.replaceRun(solo);
+                assertEquals("nametags", board.teamOf("Ava"), tier + ": a solo run never puts them on the no-push team");
+                exit.getValue().accept(ava);
+                assertEquals("nametags", board.teamOf("Ava"), tier + ", " + exit.getKey() + ": still on their own team");
+            }
+        }
+        trials.replaceRun(new TrialRun(id(ava), LapsTest.straight(), false, TimeTrials.COUNTDOWN_TICKS + 1));
+        trials.stop();
+        assertEquals("nametags", board.teamOf("Ava"), "Time Trials stopping: still on their own team");
+        assertEquals(java.util.Set.of("nametags"), board.teams, "no no-push team was ever made for a solo run");
         assertEquals(0, bench.severe(), "nothing threw");
     }
 

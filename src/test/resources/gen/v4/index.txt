@@ -1,0 +1,4 @@
+# The algo-4 Mountain Runs (Mountain Run v2, 0.37.0) frozen before the wide road (MOUNTAIN-V21-SPEC §5.1): name slot tier half seed day hash
+boat-road-medium fresh_boat medium A 4a68f2c5671adda9 20725 ce63abc048ad
+boat-road-easy fresh_boat easy A 0000000000000002 20725 fd007631bde5
+boat-slalom-hard fresh_boat hard A 0000000000000001 20725 fe19c45a486d

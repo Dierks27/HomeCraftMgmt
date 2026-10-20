@@ -194,6 +194,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
+    private com.dierks.homecraft.arcade.candy.CandyService candy;
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
@@ -345,6 +346,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.radar = new com.dierks.homecraft.arcade.RadarService(this);
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
+        // The Candy Apple shower (0.37.1): candy apples fall around each player through October; collect
+        // them for the Trick-or-Treat Bag. Its counts live in player_counters, as the achievements' do.
+        this.candy = new com.dierks.homecraft.arcade.candy.CandyService(
+                this, new com.dierks.homecraft.storage.AchievementDao(database));
         // Daily/weekly quests (Phase 11) — repeatable token objectives; no listener,
         // progress is recorded from the existing market/printer/crate/pack hooks.
         this.quests = new com.dierks.homecraft.arcade.QuestService(
@@ -434,6 +439,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
         getServer().getPluginManager().registerEvents(trails, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
+        // Prizes are kept on death, safe on the ground, and can't be changed at a workstation (on for everyone).
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeSafetyListener(this), this);
+        // The Candy Apple shower: pickups and counting, the treat, the Bedrock taps, and the candy's guards.
+        getServer().getPluginManager().registerEvents(candy, this);
         // The +1 Home perk. LuckPerms and Essentials load before us (softdepend), so both the
         // tiers and the API are there to read now.
         this.homes = new com.dierks.homecraft.arcade.homes.HomeService(this);
@@ -464,6 +473,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService.start();
         startMarketSim(); // load, replay the missed ticks, arm the pump (§11.2)
         this.tokens.start(); // the five-minute streak + playtime tick
+        this.candy.start(); // the Candy Apple shower's 5-tick task, only inside its window
         this.arcade.start();
         this.radar.start(); // the Mini Radar's two-second ping
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
@@ -471,6 +481,8 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Item-builder self-test on the live API (Card lore/PDC + Legendary glint).
         com.dierks.homecraft.mini.ItemSelfTest.run(this);
+        // The collectors' look on the live API (dye, trim, no armour, tags), their trail particle, the clock's zone.
+        com.dierks.homecraft.arcade.CollectorSelfTest.run(this);
 
         // Once the worlds are up: rebuild placed-Mini effects, natural spawns, placed
         // heads and shop displays from the datastore (nothing leaks after a crash),
@@ -579,6 +591,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (effects != null) {
             effects.stop(); // removes every hologram/display/light we own
             effects = null;
+        }
+        if (candy != null) {
+            candy.stop(); // removes every live candy and boss bar, while the worlds are still up
+            candy = null;
         }
         if (tokens != null) {
             tokens.stop();
@@ -706,6 +722,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (arcade != null) {
             tokens.start(); // re-arm the streak + playtime tick under any new config
+            if (candy != null) {
+                candy.start(); // the shower under the new window and settings (its candy goes)
+            }
             arcade.start();
             quests.start(); // re-arm the quest stat poll under any new config
         }
@@ -2395,6 +2414,11 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.arcade.QuestService quests() {
         return quests;
+    }
+
+    /** The Candy Apple shower (0.37.1), or null before enable / after disable. */
+    public com.dierks.homecraft.arcade.candy.CandyService candy() {
+        return candy;
     }
 
     /** Sound Mufflers, or null if they failed to start. */

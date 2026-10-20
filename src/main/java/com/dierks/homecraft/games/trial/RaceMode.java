@@ -58,10 +58,11 @@ import java.util.logging.Level;
  * </ol>
  * Finishers are parked on the stand (the boat goes, the run idles) or, with no stand, sent home at
  * the line; race mode is the stand's one keeper (a racer who wanders off it is put back once, here,
- * within the link's {@link RaceLink#standRadius()}). A racer's collisions are off for the whole race
- * run (runners share the start spot, finishers the stand), and a parkour or elytra racer is on the
- * games' no-push team ({@link NoPush}) from seating until the run ends by any way at all, so nobody
- * shoves anybody; boats still bump, as the owner chose. Every teleport a finish causes happens on the
+ * within the link's {@link RaceLink#standRadius()}). On an Easy or Medium course a racer's collisions are
+ * off for the whole race run (runners share the start spot, finishers the stand), and a parkour or elytra
+ * racer is on the games' no-push team ({@link NoPush}) from seating until the run ends by any way at all, so
+ * nobody shoves anybody; on Hard, racers bump; boats still bump on every tier, as the owner chose
+ * ({@link Bumping}). Every teleport a finish causes happens on the
  * next trial tick, never inside the move event that saw the line. A racer the coordinator ends while
  * still on the way in goes straight home on arrival; a racer whose entry is dropped on the way (hands
  * not free, hurt, can't be reached: nothing tells the game) is swept once a tick and the race hears
@@ -374,6 +375,7 @@ final class RaceMode {
             return; // still arriving (or going back to the spot): starts once in, on the shared clock
         }
         run.progress = new Progress(run.course, TimeTrials.position(p, run), r.nanos());
+        run.goNanos = System.nanoTime(); // their own Go: later than the shared one for a racer released late
         run.phase = TrialRun.Phase.RUNNING;
         rr.started();
         TimeTrials.title(p, "&aGo!", "", 15);
@@ -444,9 +446,10 @@ final class RaceMode {
     /**
      * A racer crossed the line: judged as a solo run is (fair play, the shortest believable time, the
      * speed check from the grid spot), stale only when the base course changed; reported to the link;
-     * for a party race, also the course's normal finish, once; then parked, or home at the line.
+     * for a party race, also the course's normal finish, once; then parked, or home at the line. {@code jump}
+     * is a Mountain Run's "Best jump" line under the time (MOUNTAIN-V21-SPEC D18), or {@code null} for none.
      */
-    void finish(Player p, TrialRun run, long nanos) {
+    void finish(Player p, TrialRun run, long nanos, String jump) {
         RaceRun rr = run.race;
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
@@ -454,8 +457,10 @@ final class RaceMode {
         boolean stale = rr.stale(trials.course(rr.base.id()), trials.generated()::standing);
         int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
                 run.progress.reachedTargets(), run.stalls);
-        FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
-                run.course.minSecondsOr(s.minSeconds()), tooFast);
+        int min = run.course.minSecondsOr(s.minSeconds());
+        // which leg, how fast: the line and the log say (one expression: the link's lambda below reads it)
+        FairPlay.Verdict verdict = FairPlay.explained(FairPlay.judge(false, run.voided, stale, ms, min, tooFast),
+                run.course, run.progress.startNanos(), run.progress.times(), tooFast, ms, min);
         // WP-CH (the review's #12): with rider_runs_count false a ride with a rider is just for fun: the
         // place in the race stands, but it is never the course's normal run (no board, record, rewards,
         // Cup time or quest step)
@@ -466,7 +471,12 @@ final class RaceMode {
             return; // this race's line was crossed already
         }
         p.sendMessage(Text.of("&b" + rr.base.name() + ": &f" + TrialText.time(ms)));
+        if (jump != null) {
+            p.sendMessage(Text.of(jump)); // MOUNTAIN-V21-SPEC D18: a Mountain Run's longest jump, quietly
+        }
         if (!verdict.counts()) {
+            trials.log().info("Time trials: " + p.getName() + (com.dierks.homecraft.util.Bedrock.is(p) ? " (Bedrock)" : "")
+                    + "'s race on " + rr.base.id() + " in " + TrialText.time(ms) + " didn't count - " + verdict.reason());
             p.sendMessage(Text.of(voidLine(verdict.reason())));
             TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);
             Sounds.miss(p);
@@ -728,14 +738,20 @@ final class RaceMode {
     }
 
     /**
-     * Seated in a race (its warm-up or the grid), and again on the stand: nobody shoves anybody
-     * ({@link #noShoving}), and a parkour or elytra racer joins the games' no-push team, which is what
-     * really stops one player pushing another ({@code setCollidable} only stops mobs). Never a boat
-     * race: boats bump, as the owner chose. Every way the run ends {@link #restore}s both.
+     * Seated in a race (its warm-up or the grid), and again on the stand, by the course's tier ({@link Bumping}):
+     * on Easy and Medium nobody shoves anybody ({@link #noShoving}), and a parkour or elytra racer joins the
+     * games' no-push team, which is what really stops one player pushing another ({@code setCollidable} only
+     * stops mobs). A boat racer is only {@link #noShoving}, on every tier: boats bump, as the owner chose. On
+     * Hard a parkour or elytra racer is left as they are: racers bump. Every way the run ends {@link #restore}s
+     * whatever was done.
      */
     void inRace(Player p, RaceRun rr) {
+        Bumping.Rule rule = Bumping.race(rr.base.kind(), rr.base.tier());
+        if (rule == Bumping.Rule.NONE) {
+            return; // a Hard course: racers bump
+        }
         noShoving(p, rr);
-        if (!rr.noPush && rr.base.kind() != TrialKind.BOAT) {
+        if (rule == Bumping.Rule.APART && !rr.noPush) {
             NoPush np = noPush();
             if (np != null && np.on(p)) {
                 rr.noPush = true;

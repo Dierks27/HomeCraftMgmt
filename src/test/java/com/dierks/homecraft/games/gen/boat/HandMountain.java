@@ -50,7 +50,10 @@ import java.util.Set;
  *
  * <p>Its fields are open so a test can build a variant ({@link #extra} drive areas, {@link #carve}d
  * columns, the drops, the pit, the corners, the Final Drop); {@code HandRun}'s static helpers edit
- * single blocks, signs and marks of a built plan.
+ * single blocks, signs and marks of a built plan. For the wide road's proof (MOUNTAIN-V21-SPEC §5.2):
+ * the plan's {@link #algo}, any lane width ({@link #custom}), where the checkpoints either side of a
+ * 2-block lip stand ({@link #bigBefore}, {@link #bigAfter}), hops sharing checkpoints
+ * ({@link #shareHops}) and slow areas laid in sand or snow ({@link #slow}, {@link #slowBlock}).
  */
 final class HandMountain {
 
@@ -99,6 +102,27 @@ final class HandMountain {
     int opening = 6;
     int gateFrom = 58;
     long seed;
+    /**
+     * The plan's boat planner version: the proof judges it by that version's rules, the frozen v4 ones at
+     * {@link MountainValidator#FIRST_ALGO}, the wide road's from {@link MountainValidator#WIDE_ALGO}.
+     */
+    int algo = MountainValidator.FIRST_ALGO;
+    /**
+     * The checkpoint before a 2-block lip stands this far before the lip's edge (NaN: r + 0.5, as before; a
+     * planner's set-back is W / 2 + 0.75), and the one after it this far past the lip's last high cell (NaN:
+     * Z(2) + 3, as before).
+     */
+    double bigBefore = Double.NaN;
+    double bigAfter = Double.NaN;
+    /**
+     * Hops back to back on a traverse share one checkpoint: the next hop's, Z(1) + 3 past this one (so a wide
+     * lane falling far keeps within 128 checkpoints).
+     */
+    boolean shareHops = false;
+    /** The slow block: the paddock's and the {@link #slow} areas' (sand, or snow for the wide road's proof). */
+    String slowBlock = Palette.SAND;
+    /** Drive columns laid as {@link #slowBlock}, {x0, z0, x1, z1} half-local: a run-off, a drift. */
+    final List<int[]> slow = new ArrayList<>();
     /** More drive areas, {x0, z0, x1, z1, level} half-local, laid after the route (a bay, a pocket). */
     final List<int[]> extra = new ArrayList<>();
     /** Columns taken out of the track, {x0, z0, x1, z1}. */
@@ -167,6 +191,11 @@ final class HandMountain {
             case "medium" -> new HandMountain(tier, false, 7, drops(20, 14, 1), 4);
             default -> new HandMountain(tier, false, 7, drops(24, 20, 1), 6);
         };
+    }
+
+    /** A Winding Road of {@code tier} with a lane {@code width} wide (odd), these drops and {@code bands} traverses. */
+    static HandMountain custom(String tier, int width, List<Integer> drops, int bands) {
+        return new HandMountain(tier, false, width, drops, bands);
     }
 
     /** A Slalom of {@code tier} (1-block drops: a wide corridor's checkpoints can't span a 2-block flight in 60). */
@@ -269,13 +298,14 @@ final class HandMountain {
             }
             while (next < last) {
                 int d = drops.get(next);
-                int after = s + BoatEnvelope.zone(d) + 3;
+                int after = (int) Math.ceil(s + afterOf(d));
                 if (after + 2 * r + 2 > leg.length() - a) {
                     break;
                 }
                 out.get(j).add(new int[]{s, d});
                 next++;
-                s = after + 3 * r + 2;
+                boolean share = shareHops && d == 1 && next < last && drops.get(next) == 1;
+                s = share ? after + r : after + 3 * r + 2;
             }
         }
         if (next < last) {
@@ -360,7 +390,7 @@ final class HandMountain {
                     continue;
                 }
                 boolean paddock = x >= PADDOCK && x <= END && Math.abs(z - FINISH_Z) <= h;
-                put(x, level[x][z], z, paddock ? Palette.SAND : iceAt(x, z));
+                put(x, level[x][z], z, paddock || slowAt(x, z) ? slowBlock : iceAt(x, z));
             }
         }
         // risers under the high side of every 2-block edge
@@ -612,10 +642,11 @@ final class HandMountain {
                 if (l[0] != j) {
                     continue;
                 }
-                here.add(new Anchor(j, l[1] - r, "before", true));
-                if (l != lips.get(lips.size() - 1) || finalAfter) {
-                    // the Final Drop's leg runs on to the finish
-                    here.add(new Anchor(j, l[1] + BoatEnvelope.zone(l[2]) + 3, "after", false));
+                here.add(new Anchor(j, l[1] - beforeOf(l[2]), "before", true));
+                double after = l[1] + afterOf(l[2]);
+                if ((l != lips.get(lips.size() - 1) || finalAfter) && !sharedAt(j, after)) {
+                    // the Final Drop's leg runs on to the finish; a shared hop's next drop's checkpoint is its own
+                    here.add(new Anchor(j, after, "after", false));
                 }
             }
             if (j < finalLeg) {
@@ -655,6 +686,36 @@ final class HandMountain {
         }
         markers(finish, Palette.FINISH, 2);
         signs.add(new SignText(wx(40), first.base() + 3, wz(first.z0() - h - 1), Palette.sign(4), GenCopy.boatRun()));
+    }
+
+    /** How far before a lip's last high cell (sigma) the checkpoint before it stands. */
+    private double beforeOf(int d) {
+        return d >= 2 && !Double.isNaN(bigBefore) ? bigBefore - 0.5 : r();
+    }
+
+    /** How far past a lip's last high cell (sigma) the checkpoint after it stands. */
+    private double afterOf(int d) {
+        return d >= 2 && !Double.isNaN(bigAfter) ? bigAfter : BoatEnvelope.zone(d) + 3;
+    }
+
+    /** Whether a lip on leg {@code j} has its checkpoint before it at sigma {@code s}: a shared hop's after. */
+    private boolean sharedAt(int j, double s) {
+        for (int[] l : lips) {
+            if (l[0] == j && Math.abs(l[1] - beforeOf(l[2]) - s) < 1e-9) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether half-local column (x, z) is in a {@link #slow} area. */
+    private boolean slowAt(int x, int z) {
+        for (int[] a : slow) {
+            if (x >= a[0] && x <= a[2] && z >= a[1] && z <= a[3]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void addMark(int j, double s, String kind) {
@@ -832,7 +893,7 @@ final class HandMountain {
             int z1 = Math.max(leg.z(0), leg.z(leg.length())) + (leg.dx() != 0 ? h : 0);
             keep.add(new Box(wx(x0), BOTTOM + 1, wz(z0), wx(x1), Math.min(HALF.maxY(), leg.base() + 4), wz(z1)));
         }
-        return Plan.of(Slots.ICE_BOAT.id(), MountainValidator.FIRST_ALGO, seed, HALF, palette, ops, signs, keep,
+        return Plan.of(Slots.ICE_BOAT.id(), algo, seed, HALF, palette, ops, signs, keep,
                 new PlannedTrial(course, refMs), List.of("a hand-made Mountain Run v2 (" + tier + " "
                         + (slalom ? "slalom" : "road") + ")"), 1);
     }

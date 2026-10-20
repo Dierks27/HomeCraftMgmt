@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * appended and never renamed or moved: a renamed one would orphan every line written under its old
  * name ({@code /hcm tokens audit} would stop adding them up). Pinned here: the whole list in order,
  * the six this batch appends (EVENTS-DROPPER-SPEC C1, EVENTS-RECONCILED "Packages"), and that the
- * Weekly Cup's are not games of chance.
+ * Weekly Cup's are not games of chance; and the Candy Apple shower's, appended after them (HALLOWEEN-SPEC D16).
  */
 class TokenSourceTest {
 
@@ -28,7 +28,7 @@ class TokenSourceTest {
                         "GAMES_SNAKE", "GAMES_MATCH", "GAMES_SIMON", "GAMES_WHACK", "GAMES_CONNECT", "GAMES_TICTACTOE",
                         "GAMES_PARKOUR", "GAMES_ELYTRA", "GAMES_BOAT", "GAMES_GOLF", "GAMES_DAILY",
                         "GAMES_DROPPER", "GAMES_RACE_NIGHT", "GAMES_FLOORS",
-                        "GAMES_CUP_ENTRY", "GAMES_CUP_PRIZE", "GAMES_CUP_REFUND"),
+                        "GAMES_CUP_ENTRY", "GAMES_CUP_PRIZE", "GAMES_CUP_REFUND", "EVENT_CANDY"),
                 Arrays.stream(TokenService.Source.values()).map(Enum::name).toList(),
                 "a new source goes at the end; an old one is never renamed or moved");
     }
@@ -42,6 +42,13 @@ class TokenSourceTest {
         assertEquals("Weekly Cup entry", TokenService.Source.GAMES_CUP_ENTRY.label(), "an entry");
         assertEquals("Weekly Cup prize", TokenService.Source.GAMES_CUP_PRIZE.label(), "a share of the pool");
         assertEquals("Weekly Cup refund", TokenService.Source.GAMES_CUP_REFUND.label(), "an entry given back");
+        assertSame(TokenService.Source.EVENT_CANDY, TokenService.Source.of("EVENT_CANDY"), "the Candy Apple shower's");
+        assertEquals("Candy Apples", TokenService.Source.EVENT_CANDY.label(), "its own line in the token history");
+        for (String banned : List.of("bet", "wager", "gamble", "casino", "lucky", "jackpot")) {
+            assertFalse(TokenService.Source.EVENT_CANDY.label().toLowerCase(java.util.Locale.ROOT).contains(banned),
+                    "Candy Apples' label must not say '" + banned + "'");
+        }
+        assertFalse(GamesDao.CHANCE_SOURCES.contains("EVENT_CANDY"), "nothing is staked: not a game of chance");
         for (TokenService.Source s : TokenService.Source.values()) {
             String label = s.label().toLowerCase(java.util.Locale.ROOT);
             for (String banned : List.of("bet", "wager", "gamble", "casino", "lucky", "jackpot")) {

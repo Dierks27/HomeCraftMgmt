@@ -65,7 +65,13 @@ public final class GamesCommand {
     /** What a player in a world session may still use under {@code /hcm}. */
     static final Set<String> IN_SESSION = Set.of("play", "leave", "games", "help");
     /** The {@code /hcm games} verbs, in the order help and tab completion list them. */
-    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved");
+    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved", "boat",
+            "movement");
+    /** The {@code /hcm games boat} verbs (MOUNTAIN-V21-SPEC D17). */
+    static final List<String> BOAT_VERBS = List.of("flights");
+    /** The help line of {@code /hcm games boat flights}. */
+    static final String BOAT_HELP = "&e/hcm games boat flights &7- how far Ice Boats really jump off the Mountain Run's"
+            + " drops (measured on every ride)";
     /** The {@code /hcm games break <player>} verbs. */
     static final List<String> BREAK_VERBS = List.of("show", "pause", "limit", "clear", "clear-own");
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
@@ -211,9 +217,10 @@ public final class GamesCommand {
             if (games == null) {
                 return;
             }
+            long before = games.refusalsTold();
             boolean opened = games.open(target, id, null);
             sender.sendMessage(Text.of(opened ? "&aOpened &f" + id + " &afor &f" + target.getName() + "&a."
-                    : "&7" + target.getName() + " couldn't play " + id + " right now (they were told why)."));
+                    : notOpened(target.getName(), id, games.lastRefusal(target.getUniqueId()), before)));
             return;
         }
         Player player = self(sender, "Only players can play - from the console: /hcm play <game> <player>");
@@ -403,6 +410,10 @@ public final class GamesCommand {
             help(sender);
             return;
         }
+        if (verb.equals("movement")) {
+            movement(sender, args); // read-only, and works with the games off or failed to start
+            return;
+        }
         if (verb.equals("check")) {
             check(sender); // read-only, and works with the games off or failed to start
             return;
@@ -422,6 +433,7 @@ public final class GamesCommand {
             case "status" -> status(sender, games);
             case "feature" -> feature(sender, games, args);
             case "scores" -> scores(sender, games, args);
+            case "boat" -> boat(sender, games, args);
             default -> {
                 Game owner = adminOwner(games, verb);
                 if (owner == null) {
@@ -439,6 +451,21 @@ public final class GamesCommand {
 
     private void help(CommandSender sender) {
         for (String line : adminLines()) {
+            sender.sendMessage(Text.of(line));
+        }
+    }
+
+    /**
+     * {@code /hcm games boat flights} (MOUNTAIN-V21-SPEC D17): the Ice Boat jumps the flight recorder measured on
+     * Mountain Run rides (the last runs, and the longest jump per edition and drop next to what the safety rule
+     * allows). Read-only.
+     */
+    private void boat(CommandSender sender, GamesService games, String[] args) {
+        if (args.length < 3 || !BOAT_VERBS.contains(args[2].toLowerCase(Locale.ROOT))) {
+            sender.sendMessage(Text.of(BOAT_HELP));
+            return;
+        }
+        for (String line : com.dierks.homecraft.games.trial.TimeTrials.flightLines(games)) {
             sender.sendMessage(Text.of(line));
         }
     }
@@ -834,6 +861,8 @@ public final class GamesCommand {
                 + " Take a break");
         out.add("&e/hcm games scores reset <game> [board|all] [player] [confirm] &7- clear high scores");
         out.add("&e/hcm games saved <player> show|restore|return|discard confirm &7- a player's saved things");
+        out.add(BOAT_HELP);
+        out.add("&e/hcm games movement [player] &7- what the courses' fair-play watch reads on a player (changes nothing)");
         GamesService games = plugin.games();
         if (games != null) {
             for (Game g : games.games()) {
@@ -925,6 +954,16 @@ public final class GamesCommand {
                 }
             }
             case "scores" -> scoreCompletions(out, games, args, last);
+            case "movement" -> {
+                if (n == 3) {
+                    players(out, last);
+                }
+            }
+            case "boat" -> {
+                if (n == 3) {
+                    match(out, last, BOAT_VERBS.toArray(new String[0]));
+                }
+            }
             case "saved" -> {
                 if (n == 3) {
                     players(out, last);
@@ -1074,6 +1113,38 @@ public final class GamesCommand {
 
     private static void failed(CommandSender sender) {
         sender.sendMessage(Text.of("&cThat couldn't be saved - see the console."));
+    }
+
+    /**
+     * {@code /hcm games movement [player]}: what the time trials' fair-play watch reads on an online player (yourself
+     * when no name is given): game mode, flight, walk speed, effects, every watched attribute's base, value and
+     * modifiers, any other attribute carrying a modifier, and the verdict it would give now. Read-only; logged.
+     */
+    private void movement(CommandSender sender, String[] args) {
+        Player target = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : sender instanceof Player self ? self : null;
+        if (target == null) {
+            sender.sendMessage(Text.of("&eUsage: /hcm games movement <online player>"));
+            return;
+        }
+        List<String> lines = com.dierks.homecraft.games.trial.TimeTrials.movementState(target);
+        sender.sendMessage(Text.of("&6Fair-play movement of &f" + target.getName() + "&6:"));
+        for (String line : lines) {
+            boolean voids = line.contains("VOIDS") || (line.startsWith("the watch now: ") && !line.equals("the watch now: fine"));
+            sender.sendMessage(Text.of((voids ? "&c" : "&7") + line));
+        }
+        log(sender, "movement " + target.getName() + ": " + String.join(" | ", lines));
+    }
+
+    /**
+     * What {@code /hcm play <game> <player>} tells the admin when nothing opened: the refusal the player was just
+     * told, word for word, when this call told one ({@code last} numbered above {@code before}); otherwise where to
+     * look, since a refusal on the way in comes a tick or more later and is logged then.
+     */
+    static String notOpened(String name, String id, GamesService.Told last, long before) {
+        if (last != null && last.seq() > before) {
+            return "&7" + name + " couldn't play " + id + " right now. They were told: &f" + last.message();
+        }
+        return "&7" + name + " couldn't play " + id + " right now (they were told why; see the console).";
     }
 
     /** Who did what, for the console: every admin action on the Games is logged with the sender. */

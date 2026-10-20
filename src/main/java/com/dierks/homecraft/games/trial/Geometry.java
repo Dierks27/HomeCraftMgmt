@@ -50,6 +50,32 @@ final class Geometry {
         return Math.max(enter, lo);
     }
 
+    /**
+     * {@link #firstHit} no lower than {@code floorY}: the move is cut to its part at or above the floor, then
+     * tested as before; {@code NaN} when that part never touches the sphere. A Fresh Courses parkour checkpoint
+     * counts with the feet up on its pad, never while they fall past its side or under it
+     * ({@link Progress#FEET_BELOW}).
+     */
+    static double firstHitAbove(Point a, Point b, Point c, double r, double from, double floorY) {
+        double lo = Math.max(0, from);
+        double hi = 1;
+        double dy = b.y() - a.y();
+        if (dy == 0) {
+            if (a.y() < floorY) {
+                return Double.NaN;
+            }
+        } else if (dy > 0) {
+            lo = Math.max(lo, (floorY - a.y()) / dy);
+        } else {
+            hi = Math.min(hi, (floorY - a.y()) / dy);
+        }
+        if (lo > hi) {
+            return Double.NaN;
+        }
+        double t = firstHit(a, b, c, r, lo);
+        return t > hi ? Double.NaN : t; // NaN > hi is false: a miss stays a miss
+    }
+
     /** The point a fraction {@code t} of the way from {@code a} to {@code b}. */
     static Point along(Point a, Point b, double t) {
         return new Point(a.x() + (b.x() - a.x()) * t, a.y() + (b.y() - a.y()) * t, a.z() + (b.z() - a.z()) * t);

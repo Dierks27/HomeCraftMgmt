@@ -55,6 +55,7 @@ commands:
       /hcm reload            - reload config.yml and re-register recipes
       /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade|muffler> [player]
       /hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]
+      /hcm give prize <id> [player]  - admin: give back a lost prize (free)
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm market resetstock <item|all>  - admin: reseed stock+price from config
       /hcm market setstock <item> <amount>  - admin: set one item's stock
@@ -79,6 +80,8 @@ commands:
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
       /hcm mini repair-escaped [confirm]  - admin: give back mint numbers old wild escapes burned
       /hcm hunt spawn [rarity] [player]|status|clear  - admin: the wild hunt
+      /hcm candy             - your candy apples, your Trick-or-Treat Bag and the next shower
+      /hcm candy now [player]|status|clear|bag <player>|add <player> <n>  - admin: the Candy Apple shower
       /hcm play              - the Games screen (games of chance, cabinets, courses, mini golf)
       /hcm play <game|course> [player]  - open a game or start a course (for another player: admin)
       /hcm play break        - Take a break: your own limits on games of chance
@@ -86,11 +89,13 @@ commands:
       /hcm play invites [on|off]  - your invites to friend games (Coin Flip: the Take a break screen)
       /hcm play news [on|off]  - a line in chat when new Fresh Courses are up
       /hcm leave             - leave the world game you are in (your things come back)
-      /hcm games status|course|golf|feature|break|saved|scores  - admin: run the Games
+      /hcm games status|course|golf|feature|break|saved|scores|boat  - admin: run the Games
       /hcm games check       - admin: is the server set up for the Games? (it only looks)
       /hcm games break <player> show|pause <days>|limit <tokens|none>|clear|clear-own confirm  - admin: a player's Take a break
       /hcm games saved <player> show|restore|return|discard confirm  - admin: a player's things saved by a world game
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
+      /hcm games boat flights  - admin: how far Ice Boats really jump off the Mountain Run's drops
+      /hcm games movement [player]  - admin: what the courses' fair-play watch reads on a player (it only looks)
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.

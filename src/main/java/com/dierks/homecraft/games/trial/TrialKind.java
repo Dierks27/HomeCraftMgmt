@@ -22,7 +22,7 @@ import java.util.Locale;
 public enum TrialKind {
     PARKOUR("parkour", "Parkour", 14, 1.5, TokenService.Source.GAMES_PARKOUR,
             List.of("Jump from the start to the finish.",
-                    "Touch every checkpoint in order.",
+                    "Land on every checkpoint in order.",
                     "Fall and you go back to your last checkpoint.")),
     ELYTRA("elytra", "Elytra", 80, 4.0, TokenService.Source.GAMES_ELYTRA,
             List.of("Glide through every ring in order.",

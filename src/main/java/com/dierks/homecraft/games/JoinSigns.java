@@ -163,6 +163,11 @@ public final class JoinSigns implements Listener {
         }
     }
 
+    /** Whether {@code block} is a tagged join sign (a Bedrock tap on one never puts a hat on: PrizeItemListener). */
+    public static boolean isJoinSign(Block block) {
+        return signId(block) != null;
+    }
+
     /** The id a tagged sign opens, or {@code null} for any other block. */
     private static String signId(Block block) {
         if (block == null || !Tag.ALL_SIGNS.isTagged(block.getType())) {

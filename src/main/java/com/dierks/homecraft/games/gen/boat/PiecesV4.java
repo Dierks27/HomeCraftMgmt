@@ -14,21 +14,25 @@ import java.util.function.Predicate;
  * checkpoints can still be laid round it.
  *
  * <ul>
- *   <li><b>Sand run-offs</b> (roads): on every bend tighter than R {@value #SANDY_R}, two columns of sand
- *       outside the lane on its outer side, so going wide is slow and the full lane of ice is still
- *       there (V5b).</li>
- *   <li><b>The sand pit</b>: the lane widens by {@value #WIDEN} each side over {@value #TAPER} blocks, a
- *       pit of sand sits in the middle, ice ways round both sides at least P wide.</li>
- *   <li><b>Pick a path</b>: the lane splits round a moss island 3 wide with a tree; both branches wider
- *       than P (the islands rule).</li>
+ *   <li><b>Snow run-offs</b> (roads): on every bend tighter than R {@value #SANDY_R}, two columns of slow
+ *       ground (snow; algo 4's sand) outside the lane on its outer side, so going wide is slow and the full
+ *       lane of ice is still there (V5b).</li>
+ *   <li><b>The snow drift</b> (algo 4's sand pit): the lane widens by 2 each side over 4 blocks ({@link #widen},
+ *       {@link #taper}; algo 4: {@value #WIDEN} over {@value #TAPER}), a drift of slow ground sits in the middle,
+ *       ice ways round both sides at least 7 wide (P on algo 4's narrow road).</li>
+ *   <li><b>Pick a path</b>: the lane splits round a moss island 3 wide with a tree, widening by 2 each side
+ *       over 4 blocks (algo 4: {@value #WIDEN} over {@value #TAPER}); both branches wider than P (the islands
+ *       rule).</li>
  *   <li><b>The Ice Cave</b>: 12-20 blocks under a light-blue glass roof exactly 5 over the ice, sea
  *       lanterns in its walls.</li>
  *   <li><b>The tunnel</b> (medium, hard): 20-40 blocks through a rock spur, a stone roof 5 over the ice
  *       (V7: rock over the track 5 up or more), lanterns every {@value #LANTERN_EVERY}.</li>
- *   <li><b>The forest slalom</b>: the lane widens and 2 x 2 trunks stand in it, alternately left and
- *       right of the middle, every gap wider than P, under leaves 5 and 6 over the ice.</li>
+ *   <li><b>The forest slalom</b>: 2 x 2 trunks ({@link #trunks}: 3; algo 4's hard road 4) stand in the lane,
+ *       alternately left and right of the middle, every gap wider than P, under the trees' leaves; the wide
+ *       road's 14-15 lane is wide enough for it as it is (D1b; algo 4's lane widened by {@value #WIDEN}).</li>
  *   <li><b>Boost strips</b> (medium): the middle 3 columns blue for 15-30 blocks, never within 30
- *       before a lip.</li>
+ *       before a lip, and on the wide road on straights only, ending at least {@value #BOOST_ARC_GAP}
+ *       before the next arc (D8).</li>
  * </ul>
  * Placement (§7.1, {@link Room}): never in the first 40 after the start, on a run-up or landing strip, in
  * a flight zone (a split or a forest may stand in a 1-block drop's zone after its landing strip), or in the
@@ -41,9 +45,19 @@ public final class PiecesV4 {
     public static final double SANDY_R = 40;
     /** Run-off sand, columns outside the lane. */
     static final int RUNOFF = 2;
-    /** A widened piece's extra lane each side, and its taper length. */
+    /** Algo 4's widened pieces' extra lane each side (the sand pit, the split, the forest), and the taper length. */
     static final double WIDEN = 4;
     static final double TAPER = 8;
+    /**
+     * The wide road's split and snow drift widen by 2 a side over this, not {@value #TAPER}: algo 4's wall angle
+     * (4 over 8), so a split is 16-22 long (algo 4's 24-30) and a drift 18-22 (26-30), the island and the snow as
+     * before (0.37.1, the deck fix: about 30 lips a run leave free straights of 18-22, and a split needed 26).
+     */
+    static final double TAPER_WIDE = 4;
+    /** RasterV4.columnsOf's search box past the lane each side (0.37.0's WIDEN; no piece widens more). */
+    static final double SEARCH_WIDEN = 4;
+    /** A medium boost strip ends at least this far before the next arc (0.37.1, D8). */
+    static final double BOOST_ARC_GAP = 40;
     /** A piece keeps this far from the next. */
     static final double APART = 4;
     /** No piece in the first this after the start, nor in the last {@value #FINISH_CLEAR} before the finish. */
@@ -62,9 +76,31 @@ public final class PiecesV4 {
             this.word = word;
         }
 
-        boolean widens() {
-            return this == SAND_PIT || this == SPLIT || this == FOREST;
+        /** Whether this kind widens the lane on {@code tier}'s road (the split, the drift; algo 4 the forest too). */
+        boolean widens(MountainTier tier) {
+            return widen(this, tier) > 0;
         }
+    }
+
+    /**
+     * A widened piece's extra lane each side (0.37.1, D1b): the split and the snow drift 2; the forest stands in the
+     * lane.
+     */
+    static double widen(Kind k) {
+        return k == Kind.SPLIT || k == Kind.SAND_PIT ? 2 : 0;
+    }
+
+    /** A piece's taper at each end on {@code tier}'s road: {@link #TAPER_WIDE} for the wide road's split and drift. */
+    static double taper(Kind k, MountainTier tier) {
+        return tier.wide() && (k == Kind.SPLIT || k == Kind.SAND_PIT) ? TAPER_WIDE : TAPER;
+    }
+
+    /** A piece's extra lane each side on {@code tier}'s road: {@link #widen(Kind)}, or algo 4's {@value #WIDEN}. */
+    static double widen(Kind k, MountainTier tier) {
+        if (tier.wide()) {
+            return widen(k);
+        }
+        return k == Kind.SAND_PIT || k == Kind.SPLIT || k == Kind.FOREST ? WIDEN : 0;
     }
 
     /** One placed piece: [s1, s2] along the centreline, its features across (v). */
@@ -79,20 +115,26 @@ public final class PiecesV4 {
         double hi;
         /** A forest's trunks: {s of the trunk's first row, v of its left column}. */
         final List<double[]> trunks = new ArrayList<>();
+        /** Its extra lane each side at its widest ({@link #widen(Kind, MountainTier)}), 0 for none. */
+        final double widen;
+        /** Its widening's taper at each end ({@link #taper(Kind, MountainTier)}). */
+        final double taper;
 
-        Piece(Kind kind, double s1, double s2) {
+        Piece(Kind kind, double s1, double s2, double widen, double taper) {
             this.kind = kind;
             this.s1 = s1;
             this.s2 = s2;
+            this.widen = widen;
+            this.taper = taper;
         }
 
         /** The lane's extra width each side {@code s} along. */
         double extra(double s) {
-            if (!kind.widens() || s <= s1 || s >= s2) {
+            if (widen == 0 || s <= s1 || s >= s2) {
                 return 0;
             }
-            double ramp = Math.min(1, Math.min((s - s1) / TAPER, (s2 - s) / TAPER));
-            return WIDEN * ramp;
+            double ramp = Math.min(1, Math.min((s - s1) / taper, (s2 - s) / taper));
+            return widen * ramp;
         }
     }
 
@@ -316,8 +358,15 @@ public final class PiecesV4 {
     static final double ARC_R = 60;
     /** A pick-a-path split stands on a straight of at least this (§7.1). */
     static final double SPLIT_RUN = 40;
-    /** Spots of one card the checkpoint chain is asked about before the card is given up. */
+    /** Spots of one card the checkpoint chain is asked about before the card is given up (algo 4). */
     static final int CHAIN_TRIES = 4;
+    /** The wide road's: a card has 4-33 spots, and with about 30 lips a run the chain refuses many (0.37.1). */
+    static final int CHAIN_TRIES_WIDE = 16;
+
+    /** Spots of one card the chain is asked about on {@code tier}'s road. */
+    static int chainTries(MountainTier tier) {
+        return tier.wide() ? CHAIN_TRIES_WIDE : CHAIN_TRIES;
+    }
 
     /**
      * Where each kind of piece may stand (§7.1), as stretches [from, to] along the centreline: never on the
@@ -370,12 +419,12 @@ public final class PiecesV4 {
         return next;
     }
 
-    /** Whether element {@code e} may carry a piece of kind {@code k}. */
+    /** Whether element {@code e} may carry a piece of kind {@code k} (an arc no split, nor a wide road's boost). */
     static boolean carries(Skeleton sk, Centreline.Element e, int[] runoff, Kind k) {
         if (!e.arc()) {
             return true;
         }
-        if (k == Kind.SPLIT) {
+        if (k == Kind.SPLIT || (k == Kind.BOOST && sk.tier.wide())) {
             return false;
         }
         Skeleton.Role role = sk.tag(e).role();
@@ -407,8 +456,10 @@ public final class PiecesV4 {
         DropPlan.Planner probe = new DropPlan.Planner(new GenRandom(0), sk);
         boolean zoneOk = k == Kind.SPLIT || k == Kind.FOREST;
         for (DropPlan.Drop d : drops.drops) {
+            // the room the checkpoint before the lip needs, never the road's tight run-up (D4 item 3): the lane's
+            // own clearBefore (drops.width is the skeleton's on the wide road; algo 4's a neck's at a necked lip)
             double w = drops.width(d.s());
-            double from = d.s() - MountainTier.runUp(w) - 2;
+            double from = d.s() - MountainTier.clearBefore(w) - 2;
             double landed = d.s() + MountainTier.landing(d.drop(), drops.blueAt(d.s() - 1)) + 2;
             double to = zoneOk && d.drop() == 1 ? landed : Math.max(landed, probe.zoneEnd(d.s(), d.drop()) + 3);
             out = cut(out, from, to);
@@ -417,14 +468,23 @@ public final class PiecesV4 {
         return out;
     }
 
+    /**
+     * A forest's trunks on {@code tier}: 3, as medium's, on every wide road (MOUNTAIN-V21-SPEC §6.4 step F: at 4 the
+     * hard road's 38-block forest found a place in none of the mini soak's 40 plans; at 3 it is 32 long); algo 4's
+     * hard road keeps 4.
+     */
+    static int trunks(MountainTier tier) {
+        return tier.hard() && !tier.wide() ? 4 : 3;
+    }
+
     /** How long a piece of {@code k} is, along. */
     static double length(GenRandom r, Skeleton sk, Kind k) {
         return switch (k) {
-            case SAND_PIT -> 2 * TAPER + r.nextInt(10, 14);
-            case SPLIT -> 2 * TAPER + 2 + r.nextInt(6, 12);
+            case SAND_PIT -> 2 * taper(k, sk.tier) + r.nextInt(10, 14);
+            case SPLIT -> 2 * taper(k, sk.tier) + 2 + r.nextInt(6, 12);
             case CAVE -> r.nextInt(12, 20);
             case TUNNEL -> r.nextInt(20, 40);
-            case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
+            case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
             case BOOST -> r.nextInt(15, 30);
         };
     }
@@ -442,11 +502,11 @@ public final class PiecesV4 {
     /** The shortest piece of {@code k} ({@link #length}'s least). */
     static double shortest(Skeleton sk, Kind k) {
         return switch (k) {
-            case SAND_PIT -> 2 * TAPER + 10;
-            case SPLIT -> 2 * TAPER + 2 + 6;
+            case SAND_PIT -> 2 * taper(k, sk.tier) + 10;
+            case SPLIT -> 2 * taper(k, sk.tier) + 2 + 6;
             case CAVE -> 12;
             case TUNNEL -> 20;
-            case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
+            case FOREST -> 2 * TAPER + 6 * trunks(sk.tier) - 2;
             case BOOST -> 15;
         };
     }
@@ -455,9 +515,10 @@ public final class PiecesV4 {
      * A place for a piece of {@code k}, {@code len} long: the free stretches it fits, on bends first and then
      * anywhere it may stand, the tightest first (best fit); each stretch's start, then each one's end, then a
      * seeded spot in each, so the checkpoints are asked about different stretches before the same one twice.
-     * The first that keeps its own rules (a boost strip never within 30 before a lip, a widening piece §4.2's
-     * clearance) and the checkpoint chain ({@code feasible}, asked at most {@value #CHAIN_TRIES} times; never
-     * about a spot that blocks all a refused one did, since fewer checkpoint places never make a chain).
+     * The first that keeps its own rules (a boost strip never within 30 before a lip, and on the wide road at least
+     * {@value #BOOST_ARC_GAP} before the next arc; a widening piece §4.2's clearance) and the checkpoint chain
+     * ({@code feasible}, asked at most {@link #chainTries} times; never about a spot that blocks all a refused one
+     * did, since fewer checkpoint places never make a chain).
      * {@code null} when none does.
      */
     static Piece place(GenRandom r, Skeleton sk, DropPlan drops, Kind k, double len, Room room, List<Piece> placed,
@@ -500,11 +561,14 @@ public final class PiecesV4 {
                 for (DropPlan.Drop d : drops.drops) {
                     clear &= !(s2 > d.s() - 30 && s1 < d.s());
                 }
+                if (sk.tier.wide()) {
+                    clear &= nextArcStart(sk, s2) - s2 >= BOOST_ARC_GAP;
+                }
             }
             for (double[] no : refused) {
                 clear &= !(s1 - 1 <= no[0] && s2 + 1 >= no[1]);
             }
-            if (!clear || (k.widens() && !roomToWiden(sk, s1, s2, drops))) {
+            if (!clear || (k.widens(sk.tier) && !roomToWiden(sk, s1, s2, drops, k))) {
                 continue;
             }
             Piece p = make(r, sk, k, s1, s2);
@@ -514,19 +578,30 @@ public final class PiecesV4 {
                 return p;
             }
             refused.add(new double[]{s1 - 1, s2 + 1});
-            if (++asked >= CHAIN_TRIES) {
+            if (++asked >= chainTries(sk.tier)) {
                 return null;
             }
         }
         return null;
     }
 
+    /** Where the first arc at or after {@code s} begins along the line, or +∞ when none does. */
+    static double nextArcStart(Skeleton sk, double s) {
+        for (Centreline.Element e : sk.line.elements()) {
+            if (e.arc() && e.s0 >= s) {
+                return e.s0;
+            }
+        }
+        return Double.POSITIVE_INFINITY;
+    }
+
     /**
-     * Whether widening [s1, s2] by {@value #WIDEN} keeps 12 columns of terrain to every other part of the
+     * Whether widening [s1, s2] for a piece of {@code k} ({@link #widen(Kind, MountainTier)}: W / 2 + 3 for the
+     * wide road's split and drift, algo 4's W / 2 + 5) keeps 12 columns of terrain to every other part of the
      * corridor (§4.2's clearance), sampled every 2 blocks.
      */
-    static boolean roomToWiden(Skeleton sk, double s1, double s2, DropPlan drops) {
-        double reach = sk.tier.width / 2.0 + WIDEN + 1;
+    static boolean roomToWiden(Skeleton sk, double s1, double s2, DropPlan drops, Kind k) {
+        double reach = sk.tier.width / 2.0 + widen(k, sk.tier) + 1;
         for (double s = s1; s <= s2; s += 2) {
             double[] p = sk.line.at(s);
             for (double u = sk.start - Frame.START; u <= sk.end; u += 2) {
@@ -545,13 +620,14 @@ public final class PiecesV4 {
 
     /** A piece of kind {@code k} at [s1, s2] with its features. */
     static Piece make(GenRandom r, Skeleton sk, Kind k, double s1, double s2) {
-        Piece p = new Piece(k, s1, s2);
+        double widen = widen(k, sk.tier);
+        Piece p = new Piece(k, s1, s2, widen, taper(k, sk.tier));
         double w = sk.tier.width;
-        double half = w / 2.0 + WIDEN;
+        double half = w / 2.0 + widen;
         switch (k) {
             case SAND_PIT -> {
-                p.a1 = s1 + TAPER + 1;
-                p.a2 = s2 - TAPER - 1;
+                p.a1 = s1 + p.taper + 1;
+                p.a2 = s2 - p.taper - 1;
                 double sand = sk.tier.hard() ? 1.5 : 2;
                 double c = r.nextDouble(-0.5, 0.5);
                 p.lo = c - sand;
@@ -559,8 +635,8 @@ public final class PiecesV4 {
             }
             case SPLIT -> {
                 // the island stands where the lane is at its widest, so both ways are P + 2 wide
-                p.a1 = s1 + TAPER + 1;
-                p.a2 = s2 - TAPER - 1;
+                p.a1 = s1 + p.taper + 1;
+                p.a2 = s2 - p.taper - 1;
                 p.lo = -1.5;
                 p.hi = 1.5;
             }
@@ -568,7 +644,7 @@ public final class PiecesV4 {
                 // trunks alternately left and right of the middle; each gap past them wider than P
                 double at = s1 + TAPER;
                 boolean left = r.nextBoolean();
-                int n = sk.tier.hard() ? 4 : 3;
+                int n = trunks(sk.tier);
                 for (int i = 0; i < n; i++) {
                     double v = left ? -2.5 : 0.5;
                     p.trunks.add(new double[]{Math.floor(at), v});

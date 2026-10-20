@@ -27,8 +27,10 @@ import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
+import com.dierks.homecraft.games.gen.boat.BoatLine;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.gen.boat.MountainValidator;
 import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
@@ -4196,6 +4198,12 @@ public final class GenService implements GeneratedCourses, GenOps {
                 if (style != null) {
                     out.add("  &7" + style);
                 }
+                if (Slots.BOAT.equals(s.def.generator())) {
+                    String ice = iceLine(host.iceFacts()); // MOUNTAIN-V21-SPEC D14: the friction, live
+                    if (ice != null) {
+                        out.add("  " + ice);
+                    }
+                }
                 if (s.pin != null) {
                     String ignored = pinIgnored(s);
                     out.add("  &7pinned seed " + GenSeed.hex(s.pin.seed()) + (s.pin.until() > 0 ? " until "
@@ -4431,7 +4439,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         DailySettings.SlotConfig c = host.settings().slot(s.def.id());
         BoatStyle config = c == null ? null : c.style();
         BoatStyle want = style(s);
-        BoatStyle got = s.live == null || s.live.algo() < BoatPlanner.ALGO ? null : BoatStyle.of(s.live.seed());
+        BoatStyle got = s.live == null || s.live.algo() < MountainValidator.FIRST_ALGO ? null
+                : BoatStyle.of(s.live.seed());
         String live = got == null ? "" : "; this set's is " + StyleSeed.words(got);
         if (got != null && want != null && got != want) {
             // audit M10: made before the rule applied (Race Night or the style switched on after the set was built,
@@ -4447,6 +4456,38 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         return "style random: " + (want == BoatStyle.ROAD ? "the Winding Road every week while Race Night is on"
                 : "each week's own (Winding Road or Slalom)") + live;
+    }
+
+    /** The friction the boat planner's model assumes for {packed, plain, blue, snow, smooth sandstone} (BoatLine). */
+    private static final double[] ICE_MODEL = {BoatLine.PACKED, BoatLine.PACKED, BoatLine.BLUE, BoatLine.SAND,
+            BoatLine.SAND};
+    /** A live value further than this from the model's is "off". */
+    static final double ICE_SLACK = 0.0005;
+
+    /**
+     * Ice Boat's ice values line for its status (MOUNTAIN-V21-SPEC D14), from {@link GenHost#iceFacts}: "&amp;7ice on
+     * this server: packed 0.98, plain 0.98, blue 0.989; snow 0.6, smooth sandstone 0.6", in {@code &e} with " - the
+     * planner's model assumes 0.98 / 0.989 / 0.6" after it when any value is off the model's by more than
+     * {@value #ICE_SLACK}; {@code null} when the server's values can't be read.
+     */
+    static String iceLine(float[] f) {
+        if (f == null || f.length < ICE_MODEL.length) {
+            return null;
+        }
+        boolean off = false;
+        for (int i = 0; i < ICE_MODEL.length; i++) {
+            off |= !(Math.abs(f[i] - ICE_MODEL[i]) <= ICE_SLACK);
+        }
+        String line = "ice on this server: packed " + friction(f[0]) + ", plain " + friction(f[1]) + ", blue "
+                + friction(f[2]) + "; snow " + friction(f[3]) + ", smooth sandstone " + friction(f[4]);
+        return off ? "&e" + line + " - the planner's model assumes " + friction(BoatLine.PACKED) + " / "
+                + friction(BoatLine.BLUE) + " / " + friction(BoatLine.SAND) : "&7" + line;
+    }
+
+    /** {@code 0.98}: a friction to three places, no trailing zeros. */
+    private static String friction(double v) {
+        String s = String.format(Locale.ROOT, "%.3f", v);
+        return s.contains(".") ? s.replaceAll("0+$", "").replaceAll("\\.$", "") : s;
     }
 
     /**

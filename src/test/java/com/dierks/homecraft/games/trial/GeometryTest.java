@@ -12,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it passes straight through, at the fraction of the way where it first enters; a move that
  * starts inside touches at once; a move that stops short, or passes beside, doesn't touch; the
  * search can start part-way along (for the next checkpoint of the same move); a move that doesn't
- * move is simply inside or not; grazing the surface counts; and the facing used when a run goes
- * back looks at the next checkpoint in Minecraft's yaw convention.
+ * move is simply inside or not; grazing the surface counts; the parkour form ({@code firstHitAbove})
+ * tests only the part of the move at or above a floor; and the facing used when a run goes back looks
+ * at the next checkpoint in Minecraft's yaw convention.
  */
 class GeometryTest {
 
@@ -69,6 +70,37 @@ class GeometryTest {
         Point c = new Point(0, 0, 0.5);
         assertEquals(0.0, Geometry.firstHit(O, O, c, 1, 0), EPS, "standing inside");
         assertTrue(Double.isNaN(Geometry.firstHit(O, O, new Point(0, 0, 3), 1, 0)), "standing outside");
+    }
+
+    @Test
+    void aMoveUnderTheFloorNeverTouchesFromBelow() {
+        Point from = new Point(3, -0.4, 0);
+        Point to = new Point(1, -1.4, 0);
+        assertEquals(0.24, Geometry.firstHit(from, to, O, 2.6, 0), EPS, "the whole sphere: touched under its middle");
+        assertTrue(Double.isNaN(Geometry.firstHitAbove(from, to, O, 2.6, 0, -0.5)),
+                "under the floor the whole time it is inside: nothing");
+        assertTrue(Double.isNaN(Geometry.firstHitAbove(new Point(1, -1, 0), new Point(1, -1, 0), O, 2.6, 0, -0.5)),
+                "standing still under the floor, inside the sphere: nothing");
+    }
+
+    @Test
+    void aMoveThatClimbsOverTheFloorTouchesWhereItCrossesIt() {
+        assertEquals(5.0 / 12, Geometry.firstHitAbove(new Point(2.8, -1, 0), new Point(1.6, 0.2, 0), O, 2.6, 0, -0.5),
+                EPS, "inside the sphere from the start, but it counts only once the feet rise over the floor");
+    }
+
+    @Test
+    void aMoveWhollyAboveTheFloorIsTestedAsBefore() {
+        Point c = new Point(5, 0, 0);
+        assertEquals(Geometry.firstHit(O, new Point(10, 0, 0), c, 1, 0),
+                Geometry.firstHitAbove(O, new Point(10, 0, 0), c, 1, 0, -0.5), EPS, "level, above the floor");
+        assertEquals(Geometry.firstHit(new Point(0, 2, 0), new Point(8, 0, 0), c, 1, 0),
+                Geometry.firstHitAbove(new Point(0, 2, 0), new Point(8, 0, 0), c, 1, 0, -0.5), EPS,
+                "coming down onto it, never under the floor");
+        assertEquals(Geometry.firstHit(O, new Point(10, 0, 0), c, 1, 0.5),
+                Geometry.firstHitAbove(O, new Point(10, 0, 0), c, 1, 0.5, -0.5), EPS, "part-way along, as before");
+        assertTrue(Double.isNaN(Geometry.firstHitAbove(O, new Point(3, 0, 0), c, 1, 0, -0.5)),
+                "a miss stays a miss");
     }
 
     @Test

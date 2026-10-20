@@ -1,7 +1,10 @@
 package com.dierks.homecraft.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.block.CustomBlockService;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
+import com.dierks.homecraft.games.JoinSigns;
+import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Sounds;
@@ -49,7 +52,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>Mini Lure</b>: right-click to set it — the next wild Mini that rolls for anyone lands
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
- *   <li><b>Hats</b>: right-click the air to put one on.</li>
+ *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
+ *       one of ours, such as the Arcade Machine or a Mini).</li>
  *   <li><b>Placed hats and trophies</b> remember exactly what they were, so breaking one (or
  *       blowing it up, pushing it, washing it away) gives the same prize back — never a plain head
  *       that has lost its tag and could be sold.</li>
@@ -128,15 +132,65 @@ public final class PrizeItemListener implements Listener {
                 show(player);
             }
             case HAT -> {
-                if (a == Action.RIGHT_CLICK_AIR) {
+                Block clicked = event.getClickedBlock();
+                boolean bedrock = Bedrock.is(player);
+                boolean tap = clicked != null && wearsOnBlockTap(bedrock, player.isSneaking(),
+                        clicked.getType().isInteractable(), item.getType() == Material.PLAYER_HEAD,
+                        bedrock && ours(plugin, clicked));
+                if (a == Action.RIGHT_CLICK_AIR || tap) {
                     cancel(event);
                     wear(player, hand);
                 }
-                // on a block: let it be placed as a head (onPlace remembers it)
+                // otherwise, on a block: let it be placed as a head (onPlace remembers it)
             }
             default -> {
                 // a trophy is placed like any head
             }
+        }
+    }
+
+    /**
+     * A Bedrock tap on a block wears a hat too (HALLOWEEN-SPEC D2). Geyser turns a tap on a block into a
+     * use-on-block only, so "right-click the air" never fires for a child looking at the ground. Not a
+     * head (heads are still placed), not while sneaking, and not on a block that does something when
+     * tapped (a chest or a door still opens). Java keeps the right-click in the air.
+     */
+    static boolean wearsOnBlockTap(boolean bedrock, boolean sneaking, boolean interactable, boolean head) {
+        return wearsOnBlockTap(bedrock, sneaking, interactable, head, false);
+    }
+
+    /**
+     * {@link #wearsOnBlockTap(boolean, boolean, boolean, boolean)}, and never on a block of ours ({@code ours}): a
+     * HomeCraft block, a join sign, or a Mini's head (placed or wild). The Arcade Machine and a Mini are player
+     * heads, which don't count as interactable, so a tap that opened the machine's screen, caught a wild Mini or
+     * opened a placed one's card also put the hat in the hand on.
+     */
+    static boolean wearsOnBlockTap(boolean bedrock, boolean sneaking, boolean interactable, boolean head,
+                                   boolean ours) {
+        return bedrock && !sneaking && !interactable && !head && !ours;
+    }
+
+    /**
+     * Whether {@code clicked} is one of ours: a placed HomeCraft block (the upper head of a Vending Machine acts
+     * for the machine, as in {@code CustomBlockListener}), a tagged join sign, or a Mini's head, placed or wild
+     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini). A lookup that fails is "no". Public
+     * for the Candy Apple shower's taps (the Bedrock eat fallback and the bag), which leave a block of ours alone too.
+     */
+    public static boolean ours(HomeCraftManagement plugin, Block clicked) {
+        try {
+            CustomBlockService blocks = plugin.blockService();
+            if (blocks != null && blocks.at(blocks.vendingLowerOf(clicked).orElse(clicked).getLocation()).isPresent()) {
+                return true;
+            }
+            if (JoinSigns.isJoinSign(clicked)) {
+                return true;
+            }
+            Material type = clicked.getType();
+            return (type == Material.PLAYER_HEAD || type == Material.PLAYER_WALL_HEAD)
+                    && clicked.getState(false) instanceof Skull skull && plugin.miniService() != null
+                    && plugin.miniService().refFrom(skull.getPersistentDataContainer()) != null;
+        } catch (RuntimeException | LinkageError e) {
+            return false;
         }
     }
 
@@ -203,15 +257,26 @@ public final class PrizeItemListener implements Listener {
         }
     }
 
-    /** Put a hat on, handing back whatever was on the player's head. */
+    /**
+     * Put a hat on, handing back whatever was on the player's head. A collector coming off the head
+     * needs a place in the bag: it is never dropped on the ground, where anyone could take it, so with
+     * no room the hat stays in the hand and the head is left as it was.
+     */
     private static void wear(Player player, EquipmentSlot hand) {
         ItemStack held = player.getInventory().getItem(hand);
         if (held == null) {
             return;
         }
+        ItemStack old = player.getInventory().getHelmet();
+        if (old != null && !old.getType().isAir()
+                && keepsOldOn(PrizeSafety.ownerBound(TokenPrizes.prizeId(old)),
+                player.getInventory().firstEmpty() != -1, hand == EquipmentSlot.HAND && held.getAmount() == 1)) {
+            player.sendMessage(Text.of("&7Make room in your bag first: what's on your head goes there."));
+            Sounds.refused(player);
+            return;
+        }
         ItemStack hat = held.clone();
         hat.setAmount(1);
-        ItemStack old = player.getInventory().getHelmet();
         player.getInventory().setHelmet(hat);
         held.setAmount(held.getAmount() - 1);
         if (old != null && !old.getType().isAir()) {
@@ -219,6 +284,15 @@ public final class PrizeItemListener implements Listener {
                     .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
         }
         Sounds.received(player);
+    }
+
+    /**
+     * A swap that would drop the old helmet is refused when the old one is a collector (review R1).
+     * The old helmet goes to the bag; it fits when there is a free bag slot, or when the held stack is
+     * the last one in the main hand, whose slot it then takes (the off-hand isn't part of the bag).
+     */
+    static boolean keepsOldOn(boolean oldIsCollector, boolean bagHasRoom, boolean heldSlotFrees) {
+        return oldIsCollector && !bagHasRoom && !heldSlotFrees;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

@@ -17,11 +17,24 @@ import java.util.List;
  * first touched it, and the time is interpolated the same fraction of the way between the two
  * moves' times. So the finish time doesn't depend on where the tick happened to fall.
  *
+ * <p><b>On Fresh Courses' parkour, up on the pad.</b> A target of a parkour course Fresh Courses made
+ * (it has a {@code gen} tag) counts only where the feet are no lower than {@link #FEET_BELOW} under its
+ * mark: the move is cut to its part above that floor, then tested against the same sphere. Such a mark
+ * sits on its pad's top (its layout's proof needs a solid block under every one), and its sphere reaches
+ * as far below it as above, so a jump that fell short past the pad's side, or under it, used to count. A
+ * hand-built parkour course (a kept one too: it has no tag) keeps the whole sphere, as it always did: its
+ * marks are wherever the builder stood, maybe in the air above the pad, and a floor under such a mark
+ * could make it need a jump, or never count at all. Elytra rings, boat marks and a Dropper's pools keep
+ * the whole sphere: rings are flown through from any side, and a pool's mark is under its water.
+ *
  * <p>A teleport of the run's own (back to a checkpoint) is {@link #jump}: the next move starts from
  * there, and nothing between the two places counts. A game whose target isn't a sphere (the Dropper's
  * pool box) marks it reached with {@link #reachNext}.
  */
 public final class Progress {
+
+    /** How far under a Fresh Courses parkour mark the feet may be and still reach it: a hair under the pad's top. */
+    public static final double FEET_BELOW = 0.5;
 
     /**
      * A target reached by a move.
@@ -37,6 +50,8 @@ public final class Progress {
     private final int checkpoints;
     private final long[] reached;
     private final long startNanos;
+    /** A parkour course Fresh Courses made: a target counts only with the feet up on its pad ({@link #FEET_BELOW}). */
+    private final boolean parkour;
     private int next;
     private Point last;
     private long lastNanos;
@@ -47,6 +62,7 @@ public final class Progress {
         this.checkpoints = course.checkpoints().size();
         this.reached = new long[targets.size()];
         this.startNanos = nanos;
+        this.parkour = course.kind() == TrialKind.PARKOUR && course.gen() != null; // hand-built: the whole sphere
         this.last = origin;
         this.lastNanos = nanos;
     }
@@ -61,7 +77,9 @@ public final class Progress {
         long span = nanos - lastNanos;
         while (next < targets.size()) {
             Course.Mark target = targets.get(next);
-            double t = Geometry.firstHit(last, to, target.center(), target.radius(), from);
+            double t = parkour
+                    ? Geometry.firstHitAbove(last, to, target.center(), target.radius(), from, target.y() - FEET_BELOW)
+                    : Geometry.firstHit(last, to, target.center(), target.radius(), from);
             if (Double.isNaN(t)) {
                 break;
             }

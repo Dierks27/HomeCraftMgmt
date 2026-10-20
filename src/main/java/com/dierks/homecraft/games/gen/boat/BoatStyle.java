@@ -3,9 +3,9 @@ package com.dierks.homecraft.games.gen.boat;
 import java.util.Locale;
 
 /**
- * The two kinds of Mountain Run v2 (MOUNTAIN-V2-SPEC §5.1): the <b>Winding Road</b>, a 7-9 wide racing
- * road for Race Night and party races, and the <b>Slalom</b>, an 11-15 wide run through red and blue
- * gate fences for solo time trials.
+ * The two kinds of Mountain Run v2 (MOUNTAIN-V2-SPEC §5.1): the <b>Winding Road</b>, a 14-18 wide racing
+ * road for Race Night and party races (0.37.1; 7-9 wide in algo 4), and the <b>Slalom</b>, an 11-15 wide
+ * run through red and blue gate fences for solo time trials.
  *
  * <p><b>A pure function of the seed.</b> The style is never stored and never read from config by the
  * planner: {@link #of} reads it off the seed alone, so a layout still comes only from (algo, seed, day,

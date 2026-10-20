@@ -2,8 +2,10 @@ package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.gen.api.GenTag;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -153,6 +155,44 @@ public final class FairPlay {
         return reason == null ? new Verdict(Kind.COUNTED, null) : new Verdict(Kind.VOID, reason);
     }
 
+    /**
+     * {@code v} with what tripped a finish-time rule, for the player's line and the log: a too-quick run's
+     * time against the shortest, or the too-fast leg ({@code tooFastAt}, as {@link #judge} got it) with its
+     * gap, time and speed against the kind's limit. Any other verdict comes back as it is.
+     */
+    public static Verdict explained(Verdict v, Course course, long startNanos, long[] times, int tooFastAt,
+                                    long ms, int minSeconds) {
+        if (v == null || v.reason() == null || course == null) {
+            return v;
+        }
+        if (TOO_QUICK.equals(v.reason())) {
+            return new Verdict(v.kind(), TOO_QUICK + " (" + TrialText.time(ms) + ", shortest " + minSeconds + " s)");
+        }
+        List<Course.Mark> targets = course.targets();
+        if (!TOO_FAST.equals(v.reason()) || tooFastAt < 0 || course.start() == null || times == null
+                || tooFastAt >= times.length || tooFastAt >= targets.size()) {
+            return v;
+        }
+        Course.Mark cur = targets.get(tooFastAt);
+        Point prev = tooFastAt == 0 ? course.start().point() : targets.get(tooFastAt - 1).center();
+        double rPrev = tooFastAt == 0 ? START_RADIUS : targets.get(tooFastAt - 1).radius();
+        long prevAt = tooFastAt == 0 ? startNanos : times[tooFastAt - 1];
+        double gap = Math.max(0, prev.distance(cur.center()) - rPrev - cur.radius());
+        double seconds = (times[tooFastAt] - prevAt) / 1e9;
+        String to = tooFastAt == targets.size() - 1 ? "the finish" : "checkpoint " + (tooFastAt + 1);
+        return new Verdict(v.kind(), TOO_FAST + " (to " + to + ": " + num(Math.round(gap * 10) / 10.0) + " blocks in "
+                + num(Math.round(seconds * 100) / 100.0) + " s, limit " + num(course.kind().maxSpeed()) + " a second)");
+    }
+
+    /**
+     * When a watch void fired, for its log line: "at Go" within the first tick of the clock ({@code ms} under 50,
+     * the watch's own call at Go), else "3.2 s in". At Go while standing still points to something the player
+     * carried in; the moment they started to run points to sprinting.
+     */
+    public static String when(long ms) {
+        return ms < 50 ? "at Go" : num(Math.round(ms / 100.0) / 10.0) + " s in";
+    }
+
     /** Whether a run of {@code ms} beats the shortest believable time. */
     public static boolean tooQuick(long ms, int minSeconds) {
         return minSeconds > 0 && ms < minSeconds * 1000L;
@@ -252,8 +292,30 @@ public final class FairPlay {
      * isn't a number counts as changed.
      */
     public static String movement(float walkSpeed, Collection<Stat> stats) {
+        Finding f = finding(walkSpeed, stats);
+        return f == null ? null : f.reason();
+    }
+
+    /**
+     * What tripped {@link #movement}: its reason ({@link #WALK_SPEED} or {@link #MOVEMENT}) and exactly
+     * what, so the player's line and the log name it.
+     *
+     * @param reason {@link #WALK_SPEED} or {@link #MOVEMENT}
+     * @param detail "walk speed 0.4, not 0.2", "minecraft:jump_strength base 0.6, not 0.42" or
+     *               "minecraft:gravity: modifier someplugin:floaty"
+     */
+    public record Finding(String reason, String detail) {
+
+        /** "your movement changed (minecraft:gravity: modifier someplugin:floaty)". */
+        public String line() {
+            return detail == null || detail.isBlank() ? reason : reason + " (" + detail + ")";
+        }
+    }
+
+    /** {@link #movement}, with what tripped it; {@code null} exactly when {@link #movement} is. */
+    public static Finding finding(float walkSpeed, Collection<Stat> stats) {
         if (!(Math.abs(walkSpeed - DEFAULT_WALK_SPEED) <= 1e-4)) {
-            return WALK_SPEED;
+            return new Finding(WALK_SPEED, "walk speed " + num(walkSpeed) + ", not " + num(DEFAULT_WALK_SPEED));
         }
         for (Stat st : stats) {
             Double base = PLAYER_BASES.get(st.key());
@@ -261,15 +323,89 @@ public final class FairPlay {
                 continue;
             }
             if (!(Math.abs(st.base() - base) <= 1e-6)) {
-                return MOVEMENT;
+                return new Finding(MOVEMENT, st.key() + " base " + num(st.base()) + ", not " + num(base));
             }
             for (String m : st.modifiers()) {
-                if (!((SPRINTING.equals(m) || POWDER_SNOW.equals(m)) && MOVEMENT_SPEED.equals(st.key()))) {
-                    return MOVEMENT;
+                if (!allowed(st.key(), m)) {
+                    return new Finding(MOVEMENT, st.key() + ": modifier " + m);
                 }
             }
         }
         return null;
+    }
+
+    /** Vanilla sprinting's shape: +30% of the total (Bukkit's MULTIPLY_SCALAR_1 is vanilla's add_multiplied_total). */
+    public static boolean sprintShaped(String bukkitOperation, double amount) {
+        return "MULTIPLY_SCALAR_1".equals(bukkitOperation) && Math.abs(amount - 0.3) <= 1e-6;
+    }
+
+    /**
+     * One modifier on an attribute, as the player has it.
+     *
+     * @param key       its key ({@code minecraft:sprinting})
+     * @param operation its Bukkit operation's name ({@code MULTIPLY_SCALAR_1})
+     * @param amount    its amount
+     */
+    public record Modifier(String key, String operation, double amount) {
+    }
+
+    /**
+     * The modifier keys the watch reads on one attribute.
+     *
+     * @param keys    the keys, for {@link Stat#modifiers()}
+     * @param renamed the real key of a modifier read as {@link #SPRINTING} ({@link #sprintRead}), or {@code null}
+     */
+    public record SprintRead(List<String> keys, String renamed) {
+    }
+
+    /**
+     * The modifier keys the watch reads on attribute {@code key}: their own keys, with one fallback. Should the
+     * server key vanilla's sprint modifier other than {@link #SPRINTING}, every sprint would void a run. So on the
+     * movement speed, while the player is sprinting and carries no {@link #SPRINTING} modifier, exactly one
+     * modifier of sprinting's shape ({@link #sprintShaped}) under a key the watch doesn't allow is read as
+     * {@link #SPRINTING}. Everything else is read as it is and still voids: a second such modifier, one while not
+     * sprinting, one next to a real {@link #SPRINTING}, one on another attribute, or any other shape.
+     *
+     * @param sprinting whether the player is sprinting now
+     */
+    public static SprintRead sprintRead(String key, List<Modifier> modifiers, boolean sprinting) {
+        List<String> keys = new ArrayList<>(modifiers.size());
+        for (Modifier m : modifiers) {
+            keys.add(m.key());
+        }
+        if (!sprinting || !MOVEMENT_SPEED.equals(key) || keys.contains(SPRINTING)) {
+            return new SprintRead(keys, null);
+        }
+        int at = -1;
+        for (int i = 0; i < modifiers.size(); i++) {
+            Modifier m = modifiers.get(i);
+            if (!allowed(key, m.key()) && sprintShaped(m.operation(), m.amount())) {
+                if (at >= 0) {
+                    return new SprintRead(keys, null); // two of them: neither is the player's own sprint
+                }
+                at = i;
+            }
+        }
+        if (at < 0) {
+            return new SprintRead(keys, null);
+        }
+        String renamed = keys.get(at);
+        keys.set(at, SPRINTING);
+        return new SprintRead(keys, renamed);
+    }
+
+    /** Whether modifier {@code modifier} on attribute {@code key} is an honest run's: sprinting or powder snow, on the movement speed. */
+    public static boolean allowed(String key, String modifier) {
+        return (SPRINTING.equals(modifier) || POWDER_SNOW.equals(modifier)) && MOVEMENT_SPEED.equals(key);
+    }
+
+    /** A value for a line: at most 6 decimals, no trailing zeros ("0.42" for a stored 0.41999998688697815). */
+    public static String num(double v) {
+        if (!Double.isFinite(v)) {
+            return String.valueOf(v);
+        }
+        String s = String.format(Locale.ROOT, "%.6f", v).replaceAll("0+$", "");
+        return s.endsWith(".") ? s.substring(0, s.length() - 1) : s;
     }
 
     /**

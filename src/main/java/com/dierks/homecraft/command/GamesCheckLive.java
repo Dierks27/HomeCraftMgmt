@@ -638,10 +638,27 @@ final class GamesCheckLive implements GamesCheck.Facts {
                     continue;
                 }
                 out.add(new GamesCheck.Course(c.id(), false, c.world(), row.enabled(), worldLoaded(c.world()),
-                        c.problems(worlds)));
+                        c.problems(worlds), offGround(c)));
             }
         }
         return out;
+    }
+
+    /**
+     * A hand-built parkour course's points that aren't on a block ({@code trial/Footing}), read from its world;
+     * none while the world isn't loaded, or when it can't be read.
+     */
+    private static List<String> offGround(com.dierks.homecraft.games.trial.Course c) {
+        World w = c.world().isBlank() ? null : Bukkit.getWorld(c.world());
+        if (w == null) {
+            return List.of();
+        }
+        try {
+            return com.dierks.homecraft.games.trial.Footing.offGround(c,
+                    (x, y, z) -> w.getBlockAt(x, y, z).getType().isSolid());
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     @Override

@@ -96,6 +96,8 @@ public final class SoundMufflerService {
     private String problem = "";
     private BukkitTask replayTask;
     private BukkitTask sweepTask;
+    /** Silences minecarts and bees in silencing boxes — the two loops no packet carries. */
+    private EntityHusher husher;
     private List<String> allKeys;
 
     public SoundMufflerService(HomeCraftManagement plugin, SoundMufflerDao dao) {
@@ -112,6 +114,9 @@ public final class SoundMufflerService {
         hook();
         replayTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::drainReplays, 1L, 1L);
         sweepTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sweep, 600L, 600L);
+        // Needs no ProtocolLib: the silent flag is plain Bukkit.
+        husher = new EntityHusher(plugin, mufflers::values, () -> configEnabled);
+        husher.start();
     }
 
     /** Re-read {@code sound_muffler} from config (on/off, range limits) and re-clamp every muffler. */
@@ -148,6 +153,10 @@ public final class SoundMufflerService {
         if (sweepTask != null) {
             sweepTask.cancel();
             sweepTask = null;
+        }
+        if (husher != null) {
+            husher.stop(); // every minecart and bee it silenced gets its voice back
+            husher = null;
         }
         for (BukkitTask t : previews.values()) {
             t.cancel();
@@ -201,9 +210,9 @@ public final class SoundMufflerService {
      */
     private void hook() {
         if (!plugin.getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
-            problem = "ProtocolLib isn't installed, so mufflers can't reach any sounds.";
+            problem = "ProtocolLib isn't installed, so mufflers can only switch off minecarts and bees.";
             plugin.getLogger().info("Sound Muffler: ProtocolLib is not installed — mufflers can be placed and "
-                    + "set up, but they won't hush anything until it is.");
+                    + "set up, but until it is they can only switch off minecarts and bees.");
             return;
         }
         try {

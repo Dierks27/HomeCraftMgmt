@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.muffler;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.muffler.EntityHush;
 import com.dierks.homecraft.muffler.MuffleLevel;
 import com.dierks.homecraft.muffler.Muffler;
 import com.dierks.homecraft.muffler.MufflerPos;
@@ -117,7 +118,10 @@ final class SoundListMenu extends Menu {
                     return;
                 }
                 MuffleLevel now = cur.sounds().get(key);
-                MuffleLevel next = e.isRightClick() ? MuffleLevel.previousForSound(now) : MuffleLevel.nextForSound(now);
+                MuffleLevel next = step(now, e.isRightClick());
+                if (next == MuffleLevel.QUIETER && EntityHush.Kind.ofLoop(key) != null) {
+                    next = step(next, e.isRightClick()); // a loop can be switched off, not turned down
+                }
                 Muffler changed = cur.withSound(key, next);
                 if (changed == cur && next != null) {
                     Sounds.refused(player);
@@ -185,14 +189,25 @@ final class SoundListMenu extends Menu {
             lore.add("&7From " + (g == null ? "its group" : g.name()) + ": " + describe(fromGroup, m));
         }
         lore.add("&7Now: " + (effective == null || effective == MuffleLevel.ALLOW ? "&fplays normally" : describe(effective, m)));
+        EntityHush.Kind loop = EntityHush.Kind.ofLoop(key);
+        if (loop != null) {
+            lore.add("&8Each player's game makes this one: Silent");
+            lore.add("&8quiets the whole " + (loop == EntityHush.Kind.MINECART ? "minecart" : "bee")
+                    + ", and Quieter can't apply.");
+        }
         if (edit) {
             lore.add("");
-            lore.add("&8Click: Quieter → Silent → Always play → not picked");
+            lore.add(loop != null ? "&8Click: Silent → Always play → not picked"
+                    : "&8Click: Quieter → Silent → Always play → not picked");
             lore.add("&8Right-click: back a step");
         }
         String colour = effective == null ? "&f" : effective.colour();
         ItemStack icon = Menus.icon(SoundIcons.of(key), colour + SoundNames.friendly(key), lore.toArray(new String[0]));
         return Menus.glint(icon, pick != null);
+    }
+
+    private static MuffleLevel step(MuffleLevel now, boolean back) {
+        return back ? MuffleLevel.previousForSound(now) : MuffleLevel.nextForSound(now);
     }
 
     private static String describe(MuffleLevel level, Muffler m) {

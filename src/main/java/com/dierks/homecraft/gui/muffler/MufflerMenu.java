@@ -130,7 +130,7 @@ public final class MufflerMenu extends Menu {
         for (SoundGroups.SoundGroup g : SoundGroups.all()) {
             set(g.slot(), groupIcon(g, m, edit), e -> change(cur -> {
                 MuffleLevel now = cur.groups().get(g.id());
-                MuffleLevel next = e.isRightClick() ? MuffleLevel.previousForGroup(now) : MuffleLevel.nextForGroup(now);
+                MuffleLevel next = g.next(now, e.isRightClick());
                 return cur.withGroup(g.id(), next);
             }));
         }
@@ -141,11 +141,13 @@ public final class MufflerMenu extends Menu {
                 "&7can reach them:",
                 "&8 rain and thunder, music and jukeboxes,",
                 "&8 furnaces and campfires crackling,",
-                "&8 portals humming, lava popping,",
-                "&8 minecarts rolling, bees buzzing in",
-                "&8 flight, and your OWN footsteps,",
-                "&8 clicks and pickups.",
-                "&7Anything in &bHeard nearby &7can be hushed."), null);
+                "&8 portals humming, lava popping, and",
+                "&8 your OWN footsteps, clicks and pickups.",
+                "&7Anything in &bHeard nearby &7can be hushed.",
+                "&7Minecarts rolling and bees buzzing are",
+                "&7made by your game too, but &cSilent &7still",
+                "&7works on them: the muffler quiets the",
+                "&7minecart or bee itself."), null);
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
         if (edit && m.ruleCount() > 0) {
             set(51, Menus.icon(Material.MILK_BUCKET, "&cClear every choice",
@@ -183,8 +185,10 @@ public final class MufflerMenu extends Menu {
         lore.add("&7Now: " + (level == null ? "&fNormal"
                 : level.label() + (level == MuffleLevel.QUIETER ? " &7(" + m.quietPercent() + "% volume)" : "")));
         if (edit) {
-            lore.add("&8Click: Normal → Quieter → Silent");
-            lore.add("&8Right-click: back a step");
+            lore.add(g.quieter() ? "&8Click: Normal → Quieter → Silent" : "&8Click: Normal ↔ Silent");
+            if (g.quieter()) {
+                lore.add("&8Right-click: back a step");
+            }
         }
         ItemStack icon = Menus.icon(SoundIcons.group(g), (level == null ? "&f" : level.colour()) + g.name(),
                 lore.toArray(new String[0]));

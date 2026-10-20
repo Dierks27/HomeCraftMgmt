@@ -21,16 +21,30 @@ import java.util.regex.Pattern;
  * footstep — and a muffler applies the strongest of them. The ids are stored in the database, so
  * an id never changes once shipped; the name, icon and patterns may.
  *
- * <p>Only sounds the SERVER sends can be hushed. The groups leave out what the player's own game
- * makes by itself — rain and thunder, music and jukeboxes, furnaces and campfires crackling,
- * portals humming, lava popping, minecarts rolling, bees buzzing in flight, and a player's own
- * footsteps, clicks and pickups — because a button that does nothing is worse than no button.
+ * <p>Most sounds are hushed on their way from the server. Two loops the player's own game starts
+ * by itself — minecarts rolling and bees buzzing in flight — are switched off by silencing the
+ * entity instead ({@link EntityHush}), so Minecarts and Bees can be Silent. The groups leave out
+ * the rest of what the player's game makes alone — rain and thunder, music and jukeboxes,
+ * furnaces and campfires crackling, portals humming, lava popping, and a player's own footsteps,
+ * clicks and pickups — because a button that does nothing is worse than no button.
  */
 public final class SoundGroups {
 
-    /** One button. {@code slot} is where it sits in the muffler's 54-slot menu (rows 2–5). */
+    /**
+     * One button. {@code slot} is where it sits in the muffler's 54-slot menu (rows 2–5).
+     * {@code quieter} is false for a group whose sound can only be switched off, never turned
+     * down (see {@link EntityHush}): its button steps Normal ↔ Silent.
+     */
     public record SoundGroup(String id, String name, String icon, int slot, List<String> about,
-                             List<String> patterns, List<Pattern> compiled) {
+                             List<String> patterns, List<Pattern> compiled, boolean quieter) {
+
+        /** The level after a click ({@code back} = right-click), skipping Quieter where it can't work. */
+        public MuffleLevel next(MuffleLevel now, boolean back) {
+            if (!quieter) {
+                return now == MuffleLevel.SILENT ? null : MuffleLevel.SILENT;
+            }
+            return back ? MuffleLevel.previousForGroup(now) : MuffleLevel.nextForGroup(now);
+        }
 
         /** Whether this group covers a sound path (a key with no namespace). */
         public boolean covers(String path) {
@@ -70,8 +84,8 @@ public final class SoundGroups {
                 "entity.goat.*"));
         g.add(group("bees", "Bees", "BEE_SPAWN_EGG", 14,
                 List.of("Hives, pollinating and stings.",
-                        "&8Their buzz while flying comes from your",
-                        "&8own game, so a muffler can't reach it."),
+                        "&8Silent also stops their buzz in flight;",
+                        "&8Quieter can't turn the buzz down."),
                 "entity.bee.*", "block.beehive.*"));
         g.add(group("horses", "Horses & Llamas", "HORSE_SPAWN_EGG", 15,
                 List.of("Horses, donkeys, mules, llamas and camels."),
@@ -144,6 +158,12 @@ public final class SoundGroups {
         g.add(group("fishing", "Fishing", "FISHING_ROD", 32,
                 List.of("Casting, splashing and reeling in", "— handy next to an AFK fish farm."),
                 "entity.fishing_bobber.*"));
+        g.add(silenceOnly("minecarts", "Minecarts", "MINECART", 33,
+                List.of("The rumble of minecarts rolling on rails —",
+                        "hopper carts under a farm too.",
+                        "&8Each player's game makes this sound, so a",
+                        "&8muffler can switch it off, not turn it down."),
+                "entity.minecart.*"));
 
         // Row 5 — machines and blocks.
         g.add(group("pistons", "Pistons", "PISTON", 36,
@@ -234,11 +254,23 @@ public final class SoundGroups {
 
     private static SoundGroup group(String id, String name, String icon, int slot, List<String> about,
                                     String... patterns) {
+        return build(id, name, icon, slot, about, true, patterns);
+    }
+
+    /** A group whose sound can only be switched off (Normal ↔ Silent). */
+    private static SoundGroup silenceOnly(String id, String name, String icon, int slot, List<String> about,
+                                          String... patterns) {
+        return build(id, name, icon, slot, about, false, patterns);
+    }
+
+    private static SoundGroup build(String id, String name, String icon, int slot, List<String> about,
+                                    boolean quieter, String... patterns) {
         List<Pattern> compiled = new ArrayList<>(patterns.length);
         for (String p : patterns) {
             compiled.add(glob(p));
         }
-        return new SoundGroup(id, name, icon, slot, List.copyOf(about), List.of(patterns), List.copyOf(compiled));
+        return new SoundGroup(id, name, icon, slot, List.copyOf(about), List.of(patterns), List.copyOf(compiled),
+                quieter);
     }
 
     /** {@code *} is any run of characters, dots included; everything else is literal. */

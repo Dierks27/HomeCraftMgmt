@@ -40,7 +40,7 @@ softdepend:
   # Bedrock players (Geyser) get plain-material icons and short animations.
   - floodgate
   # Sound Mufflers reach sounds on their way to each player through ProtocolLib. Without it
-  # mufflers still place and save their settings, but hush nothing.
+  # mufflers still place and save their settings, but can only silence minecarts and bees.
   - ProtocolLib
   # Not Multiverse-Core or Multiverse-Inventories: this plugin enables BEFORE Multiverse-Core
   # (loadbefore, above), and Multiverse-Inventories depends on Multiverse-Core, so naming either

@@ -52,10 +52,13 @@ import java.util.logging.Level;
  * immutable ({@link MufflerZones}, swapped in whole after every change) or concurrent (the
  * "Heard nearby" lists, the replay queue). Everything else here is main-thread only.
  *
- * <p><b>What it can't reach.</b> Sounds the player's own game makes without being told: rain,
- * thunder, music and jukeboxes, furnaces and campfires, portals, lava, minecarts rolling, bees in
- * flight, and your own footsteps, clicks and pickups. The menus say so rather than offering
- * buttons that do nothing.
+ * <p><b>Minecarts and bees.</b> Their rolling rumble and flying buzz are started by each
+ * player's game, so no packet carries them; {@link EntityHusher} silences the entities instead
+ * (see {@link EntityHush}). That part is plain Bukkit and runs without ProtocolLib.
+ *
+ * <p><b>What it can't reach.</b> Sounds the player's own game makes with no entity to silence:
+ * rain, thunder, music and jukeboxes, furnaces and campfires, portals, lava, and your own
+ * footsteps, clicks and pickups. The menus say so rather than offering buttons that do nothing.
  */
 public final class SoundMufflerService {
 
@@ -96,6 +99,8 @@ public final class SoundMufflerService {
     private String problem = "";
     private BukkitTask replayTask;
     private BukkitTask sweepTask;
+    /** Silences minecarts and bees in silencing boxes — the two loops no packet carries. */
+    private EntityHusher husher;
     private List<String> allKeys;
 
     public SoundMufflerService(HomeCraftManagement plugin, SoundMufflerDao dao) {
@@ -105,13 +110,16 @@ public final class SoundMufflerService {
 
     // ---- lifecycle ------------------------------------------------------------------------------
 
-    /** Load every muffler, hook ProtocolLib and start the two small timers. Call once, on enable. */
+    /** Load every muffler, hook ProtocolLib, start the two small timers and the husher. Call once, on enable. */
     public void start() {
         reload();
         load();
         hook();
         replayTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::drainReplays, 1L, 1L);
         sweepTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sweep, 600L, 600L);
+        // Needs no ProtocolLib: the silent flag is plain Bukkit.
+        husher = new EntityHusher(plugin, mufflers::values, () -> configEnabled);
+        husher.start();
     }
 
     /** Re-read {@code sound_muffler} from config (on/off, range limits) and re-clamp every muffler. */
@@ -148,6 +156,10 @@ public final class SoundMufflerService {
         if (sweepTask != null) {
             sweepTask.cancel();
             sweepTask = null;
+        }
+        if (husher != null) {
+            husher.stop(); // every minecart and bee it silenced gets its voice back
+            husher = null;
         }
         for (BukkitTask t : previews.values()) {
             t.cancel();
@@ -201,9 +213,9 @@ public final class SoundMufflerService {
      */
     private void hook() {
         if (!plugin.getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
-            problem = "ProtocolLib isn't installed, so mufflers can't reach any sounds.";
+            problem = "ProtocolLib isn't installed, so only minecarts and the bees themselves can be switched off.";
             plugin.getLogger().info("Sound Muffler: ProtocolLib is not installed — mufflers can be placed and "
-                    + "set up, but they won't hush anything until it is.");
+                    + "set up, but until it is they can only silence minecarts and bees (not their hives).");
             return;
         }
         try {
@@ -212,9 +224,10 @@ public final class SoundMufflerService {
             problem = "";
             plugin.getLogger().info("Sound Muffler: hooked into ProtocolLib.");
         } catch (Throwable t) {
-            problem = "ProtocolLib is installed but couldn't be hooked (" + t.getClass().getSimpleName() + ").";
-            plugin.getLogger().log(Level.WARNING, "Sound Muffler: could not hook ProtocolLib — mufflers won't hush "
-                    + "anything.", t);
+            problem = "ProtocolLib is installed but couldn't be hooked (" + t.getClass().getSimpleName()
+                    + "), so only minecarts and the bees themselves can be switched off.";
+            plugin.getLogger().log(Level.WARNING, "Sound Muffler: could not hook ProtocolLib — mufflers can only "
+                    + "silence minecarts and bees.", t);
         }
     }
 
@@ -223,6 +236,14 @@ public final class SoundMufflerService {
     /** Whether mufflers are hushing anything right now. */
     public boolean working() {
         return hooked && configEnabled;
+    }
+
+    /**
+     * Mufflers are on but ProtocolLib isn't hooked: only minecarts and bees (silenced as entities)
+     * are being hushed.
+     */
+    public boolean entitiesOnly() {
+        return configEnabled && !hooked;
     }
 
     /** Why {@link #working()} is false, in words for a player; "" when it is true. */

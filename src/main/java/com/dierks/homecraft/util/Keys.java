@@ -60,6 +60,8 @@ public final class Keys {
     public static NamespacedKey VENDING_UPPER;
     /** On a picked-up Sound Muffler item: the settings it had, so it is placed again as it was (String). */
     public static NamespacedKey MUFFLER_MEMORY;
+    /** On a minecart or bee a Sound Muffler silenced: so only those are ever un-silenced (Byte). */
+    public static NamespacedKey MUFFLER_HUSHED;
 
     /** On a minted Mini item: the render revision it was last drawn with (Integer). */
     public static NamespacedKey MINI_RENDER;
@@ -163,6 +165,7 @@ public final class Keys {
         MAILBOX_VARIANT = new NamespacedKey(plugin, "mailbox_variant");
         VENDING_UPPER = new NamespacedKey(plugin, "vending_upper");
         MUFFLER_MEMORY = new NamespacedKey(plugin, "muffler_memory");
+        MUFFLER_HUSHED = new NamespacedKey(plugin, "muffler_hushed");
         MINI_RENDER = new NamespacedKey(plugin, "mini_render");
         EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
         COURIER_JOB = new NamespacedKey(plugin, "courier_job");

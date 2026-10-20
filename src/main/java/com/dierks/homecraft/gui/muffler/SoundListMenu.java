@@ -194,7 +194,8 @@ final class SoundListMenu extends Menu {
         boolean whole = maker != null && EntityHush.silences(m, maker);
         if (whole) {
             effective = MuffleLevel.SILENT;
-            lore.add("&7Now: &cSilent &7(the whole " + maker.noun() + " is silenced)");
+            lore.add("&7Now: &cSilent &7(the whole " + maker.noun() + " is silenced"
+                    + (maker == EntityHush.Kind.MINECART ? ", except TNT ones)" : ")"));
             if (pick == MuffleLevel.ALLOW || pick == MuffleLevel.QUIETER) {
                 lore.add("&8That pick can't apply while the " + maker.noun() + " itself is silent.");
             }
@@ -210,6 +211,10 @@ final class SoundListMenu extends Menu {
             lore.add("&8Each player's game makes this one: Silent");
             lore.add("&8quiets the whole " + loop.noun() + ", and Quieter can't apply.");
             lore.add("&8Off Silent, it returns after you walk away and back.");
+            if (loop == EntityHush.Kind.MINECART) {
+                lore.add("&8TNT minecarts are never silenced: their fuse");
+                lore.add("&8hiss is a warning.");
+            }
             if (!whole && m.levelFor(loop.loop()) == MuffleLevel.ALLOW) {
                 lore.add("&8The " + loop.noun() + "'s main loop is on Always play, so the");
                 lore.add("&8" + loop.noun() + " itself isn't silenced.");

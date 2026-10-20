@@ -624,7 +624,7 @@ A placeable block (craft: eight wool around a note block) that hushes chosen sou
 - **TNT minecarts are never silenced.** A silent `MinecartTNT` primes without `TNT_PRIMED`, the explosion warning.
 - **Only its own.** Only entities that were not already silent are silenced. They carry a `muffler_hushed` PDC tag, any tagged entity a pass finds is treated as ours, and only tagged entities are ever un-silenced.
 - **Decided on add.** A tagged entity is decided on `EntityAddToWorldEvent` (start-up, chunk loads) in the same tick, before a client adds it with a stale flag: adopted if a silencing box holds it, released if not.
-- **Bees and hives.** A tagged bee is released on `EntityEnterBlockEvent`, so it is stored without the flag. If it leaves the hive inside a silencing box, the next pass silences it again.
+- **Bees and hives.** A tagged bee is released on `EntityEnterBlockEvent`, so it is stored without the flag. A bee added inside a silencing box (`CreatureSpawnEvent`, which fires before the add, for a hive exit, breeding or a spawn) is silenced there, before any client pairs it.
 - **Shutdown.** Every loaded tagged entity is released. A released cart's rumble returns only when the client re-adds it (re-entering view, rejoining). Forcing a re-add with hide/show would make carts flicker and could disturb a rider, so it isn't done. This part needs no ProtocolLib.
 
 **Out of reach, by construction:** sounds each client makes itself with no entity to silence (rain and thunder, music and jukeboxes, furnace, campfire and portal ambience, lava, a player's own footsteps, clicks and pickups). The menu says so, and no group offers a button for them.

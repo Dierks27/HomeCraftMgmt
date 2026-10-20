@@ -12,6 +12,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityEnterBlockEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
@@ -158,6 +159,23 @@ final class EntityHusher implements Listener {
         } else {
             release(e);
             hushed.remove(e.getUniqueId());
+        }
+    }
+
+    /**
+     * A bee appearing inside a silencing box — out of its hive, bred, spawned — is silenced before
+     * it is added to the world, so no player's game starts its buzz for the half second until the
+     * next pass. The event fires before the add, with the bee already at its position.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSpawn(CreatureSpawnEvent event) {
+        Entity e = event.getEntity();
+        EntityHush.Kind kind = kindOf(e);
+        if (kind == null || !enabled.getAsBoolean()) {
+            return;
+        }
+        if (EntityHush.shouldSilence(mufflersIn(e.getWorld().getName()), kind, e.getX(), e.getY(), e.getZ())) {
+            hush(e);
         }
     }
 

@@ -4316,8 +4316,8 @@ choice changes or the muffler is broken.
   never touched. Carts the muffler silenced carry a tag, which survives restarts and unloaded
   chunks, so they are always given back. On shutdown every loaded one is given its voice back
   (one left in an unloaded chunk is sorted out the moment it loads again). A bee gets its
-  voice back as it flies into a hive, so it comes back out buzzing, and is quieted again
-  straight away if it comes out inside a box that still silences bees.
+  voice back as it flies into a hive, so it comes back out buzzing. A bee that comes out (or
+  is bred or spawned) inside a box that silences bees is silenced before anyone can hear it.
 - Silencing the minecarts and bees themselves works **without ProtocolLib**: the silent flag
   is plain Bukkit. Hive sounds and everything else still need ProtocolLib.
 

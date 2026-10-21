@@ -26,6 +26,7 @@ Spend them in the **Arcade** (`/hcm arcade`):
   - Hunt gear: a Mini Radar and a Mini Lure.
   - Cosmetics: fireworks, trails and hats.
     - Halloween collectors: the Pumpkin Cap 2026 (October) and the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
+    - Christmas collectors: the Santa Cap 2026 (December) and the Twinkle 2026 trail (1 December to 6 January). Yours for good, and they can be presents too.
   - Perks: an extra home, `/hat`.
   - Trophies: a numbered Arcade Trophy.
   - Minis: a Rare Card once a week, filament, a Display Case.

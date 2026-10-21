@@ -48,9 +48,15 @@ class GiftPickerTest {
 
     @Test
     void theEntryShowsOnlyWhileGiftingIsOnAndAGiftableCollectorIsOnSale() {
-        List<Prize> both = Collectors.ROWS;
+        List<Prize> both = Collectors.ROWS.subList(0, 2);
         assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026"),
                 GiftPickerMenu.presents(true, both).stream().map(Prize::id).toList(), "both, in counter order");
+        assertEquals(List.of("cap_santa_2026", "trail_twinkle_2026"),
+                GiftPickerMenu.presents(true, Collectors.ROWS.subList(2, 4)).stream().map(Prize::id).toList(),
+                "December: the Santa Cap and Twinkle, both giftable");
+        assertEquals(List.of("trail_twinkle_2026"),
+                GiftPickerMenu.presents(true, List.of(Collectors.ROWS.get(3))).stream().map(Prize::id).toList(),
+                "1-6 January: Twinkle can still be given");
         assertTrue(GiftPickerMenu.presents(false, both).isEmpty(), "arcade.collectors.gifting: false hides the entry");
         assertTrue(GiftPickerMenu.presents(true, List.of()).isEmpty(),
                 "nothing on sale (out of season, or on_sale: false): no entry");
@@ -66,9 +72,19 @@ class GiftPickerTest {
         mixed.add(row("hat_creeper", PrizeType.HAT));
         mixed.add(notGiftable());
         mixed.addAll(Collectors.ROWS);
-        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026"),
+        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026"),
                 GiftPickerMenu.presents(true, mixed).stream().map(Prize::id).toList(),
                 "a config row is never giftable in this slice, nor a collector marked not giftable");
+    }
+
+    /** The counter's entry names no season, so it is true in October and in December alike. */
+    @Test
+    void theEntrySaysACollectorForSomeoneOnline() {
+        assertArrayEquals(new String[] {"&7Buy a collector", "&7for someone who's online."},
+                PrizeCounterMenu.giftEntryLore());
+        for (String line : PrizeCounterMenu.giftEntryLore()) {
+            assertFalse(line.contains("Halloween") || line.contains("Christmas"), line);
+        }
     }
 
     @Test

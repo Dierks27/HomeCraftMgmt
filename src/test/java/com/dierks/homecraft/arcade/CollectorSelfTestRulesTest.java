@@ -74,9 +74,43 @@ class CollectorSelfTestRulesTest {
         assertTrue(CollectorSelfTest.particleProblem(TRAIL, false, null).contains("is not a particle"));
         assertTrue(CollectorSelfTest.particleProblem(TRAIL, true, Color.class).contains("needs data (Color)"));
         // final audit F7: the one line at enable says the trail is held back, and why
-        assertTrue(CollectorSelfTest.particleProblem(TRAIL, false, null).contains("is not sold or given (it needs "
-                + "Paper 26.3)"));
+        assertTrue(CollectorSelfTest.particleProblem(TRAIL, false, null).contains("is not sold or given (it can't "
+                + "show on this server yet)"), "worded as /hcm give prize's answer, with no version");
         assertTrue(CollectorSelfTest.particleProblem(TRAIL, true, Color.class).contains("not sold or given"));
+    }
+
+    /** The Santa Cap is checked like the Pumpkin Cap, against its own red dye and quartz rib band. */
+    @Test
+    void theSantaCapIsCheckedForItsOwnLook() {
+        Prize santa = row("cap_santa_2026");
+        assertEquals(List.of(), CollectorSelfTest.capProblems(santa,
+                new CapFacts(0xB02E26, true, true, 0, "cap_santa_2026", "HAT")));
+        List<String> orange = CollectorSelfTest.capProblems(santa,
+                new CapFacts(0xF9801D, true, true, 0, "cap_santa_2026", "HAT"));
+        assertEquals(1, orange.size(), "the Pumpkin Cap's orange is not the Santa Cap's red: " + orange);
+        assertTrue(orange.get(0).startsWith("cap_santa_2026 is not dyed #B02E26"), orange.get(0));
+        List<String> noBand = CollectorSelfTest.capProblems(santa,
+                new CapFacts(0xB02E26, false, true, 0, "cap_santa_2026", "HAT"));
+        assertEquals(List.of("cap_santa_2026 has no trim (TRIM rib/quartz) - it shows without its trim."), noBand);
+        assertEquals(1, CollectorSelfTest.capProblems(santa,
+                new CapFacts(0xB02E26, true, true, 0, "cap_pumpkin_2026", "HAT")).size(), "its own tag");
+    }
+
+    @Test
+    void twinklesParticleNeedsNoData() {
+        Prize twinkle = row("trail_twinkle_2026");
+        assertNull(CollectorSelfTest.particleProblem(twinkle, true, Void.class));
+        assertTrue(CollectorSelfTest.particleProblem(twinkle, false, null)
+                .startsWith("trail_twinkle_2026's particle ELECTRIC_SPARK is not a particle on this server"));
+    }
+
+    /** The self-test covers every collector: two caps (dye, trim) and two trails (particle). */
+    @Test
+    void theSelfTestCoversEveryCollector() {
+        assertEquals(List.of("cap_pumpkin_2026", "cap_santa_2026"), Collectors.ROWS.stream()
+                .filter(p -> p.type() == PrizeType.HAT && p.collector().look() != null).map(Prize::id).toList());
+        assertEquals(List.of("trail_leaves_2026", "trail_twinkle_2026"), Collectors.ROWS.stream()
+                .filter(p -> p.type() == PrizeType.TRAIL).map(Prize::id).toList());
     }
 
     @Test

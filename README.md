@@ -80,8 +80,9 @@ Tokens are **earned by playing and never become dollars**.
     off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
   Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
-  LuckPerms and EssentialsX), and a numbered Arcade Trophy; Halloween collectors you keep for good
-  and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
+  LuckPerms and EssentialsX), and a numbered Arcade Trophy; holiday collectors you keep for good
+  and can give to someone online (Halloween: the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail;
+  Christmas: the Santa Cap 2026 and the Twinkle 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
   money path, inside a bundle or shulker box too (one packed too deep to check counts as a prize).
 - **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bundle
@@ -176,6 +177,11 @@ showing) until you upgrade again, and prizes drop on death again. No candy falls
 Trick-or-Treat Bags and candy apples are kept, but a bag takes anything until you upgrade again
 (one holding anything but candy drops on death). Nothing is deleted. See
 [Halloween 2026](#halloween-2026-0371) and [The Candy Apple shower](#the-candy-apple-shower-0371).
+
+**Back to 0.37.2 from 0.37.3:** the jar alone (0.37.3 changes no schema and no config). The
+Christmas collectors' tiles go, and owned Twinkle trails stop drawing until you upgrade again (an
+owned trail shows only while its row exists); Santa Caps stay in players' bags. Nothing is deleted.
+See [Christmas 2026](#christmas-2026-0373).
 
 Check which you have before trusting a downloaded jar:
 
@@ -533,6 +539,34 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
   the leaves particle needs no data. Each problem is one WARN. So is a clock on UTC (a blank or
   unknown `clock.time_zone`), which would end Halloween at 7 PM in Chicago.
 
+### Christmas 2026 (0.37.3)
+
+Two more collectors, for Christmas: kept for good, one each, sold only in their season and given
+as presents, all exactly as Halloween's above.
+
+| Collector | Price | On sale (local dates, `clock.time_zone`) | What it is |
+|---|---|---|---|
+| **Santa Cap 2026** (`cap_santa_2026`) | 250 tokens | 1 to 31 Dec 2026 | A red leather cap with a white band (the vanilla rib trim in quartz). No armour, and it never wears out. Worn like the Pumpkin Cap |
+| **Twinkle 2026** (`trail_twinkle_2026`) | 400 tokens | 1 Dec 2026 to 6 Jan 2027 | A trail of little sparks at your feet as you walk |
+
+- **The season is in the line.** The cap and both tiles say "Christmas 2026 collector", in red
+  (Halloween's line stays gold), and "Yours for good!". Twinkle is a 2026 collector, though it is
+  sold into January.
+- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock), as the
+  first two tiles of the Cosmetics tab. The cap leaves at midnight going into 1 January, Twinkle at
+  midnight going into 7 January. Before 1 December neither is on the counter, in Give a present or
+  in the website feed. Don't use `/hcm give prize` to look at one early: given to a player, it is
+  their one Santa Cap.
+- **Give a present** offers both through December, and Twinkle alone from 1 to 6 January. Its tile
+  now reads "Buy a collector for someone who's online", with no season in it.
+- **On Bedrock** the cap is dyed leather like the Pumpkin Cap, so the red shows either way; if the
+  Pumpkin Cap's trim shows on a Bedrock screen, the Santa Cap's band will too. Twinkle's particle,
+  `ELECTRIC_SPARK`, is in Paper 26.2 and 26.3 and needs no data, so Twinkle is sold on both.
+- **The startup self-test** checks the Santa Cap (its red, its band, its zero armour and its tag)
+  and Twinkle's particle as it does Halloween's: one `Self-test: collector … OK` line each, four in
+  all, and a WARN for anything missing.
+- No config edit and no config revision: like Halloween's, they are built into the plugin.
+
 ### Give a present
 
 - **The Give a present tile** (a cake, top right of the Cosmetics tab) shows while a collector is
@@ -582,9 +616,10 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
   show on a Bedrock screen, update Geyser.
 - The orange poplar leaves are new in Paper **26.3**. **On 26.2 the trail is not sold or given:** it
   has no counter tile, "Give a present" doesn't offer it, the website feed leaves it out, and
-  `/hcm give prize trail_leaves_2026` answers "That trail needs Paper 26.3." One already owned stays
-  in the database and shows after the upgrade to 26.3. The collector self-test's WARN at startup says
-  why (and an owned trail switched on logs that its particle is missing when its owner joins).
+  `/hcm give prize trail_leaves_2026` answers "That trail can't show on this server yet." One
+  already owned stays in the database and shows after the upgrade to 26.3. The collector self-test's
+  WARN at startup says why (and an owned trail switched on logs that its particle is missing when
+  its owner joins).
 - Bedrock shows lore only on a long press, so the year is in the name as well.
 
 ### Prizes are safe (every prize, for everyone)

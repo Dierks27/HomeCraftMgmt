@@ -116,7 +116,7 @@ public final class CollectorSelfTest {
         }
         if (look.trimPattern() != null && look.trimMaterial() != null && !f.trim()) {
             out.add(p.id() + " has no trim (TRIM " + look.trimPattern() + "/" + look.trimMaterial()
-                    + ") - it shows without its vines.");
+                    + ") - it shows without its trim.");
         }
         if (!f.unbreakable()) {
             out.add(p.id() + " is not unbreakable (UNBREAKABLE) - a worn cap would wear out.");
@@ -141,13 +141,14 @@ public final class CollectorSelfTest {
     /**
      * Null when the trail's particle exists and needs no data; otherwise why it would show nothing, and so is
      * not sold or given here ({@link TrailService#particleUsable}, the same two facts). This is the line at
-     * enable that says so (final audit F7). "It needs Paper 26.3" is worded for the one collector trail so far,
-     * the Autumn Leaves 2026, whose particle is new in the 26.3 API: revisit it with the next collector trail.
+     * enable that says so (final audit F7). Like {@code /hcm give prize}'s answer it names no version (the
+     * Autumn Leaves 2026's particle is new in the 26.3 API; a later trail's may be newer still).
      */
     static String particleProblem(Prize p, boolean known, Class<?> dataType) {
         if (!known) {
             return p.id() + "'s particle " + p.particle() + " is not a particle on this server - the trail "
-                    + "is not sold or given (it needs Paper 26.3); one already owned shows after the update.";
+                    + "is not sold or given (it can't show on this server yet); one already owned shows after "
+                    + "a Paper update that has it.";
         }
         if (dataType != Void.class) {
             return p.id() + "'s particle " + p.particle() + " needs data (" + (dataType == null ? "null"

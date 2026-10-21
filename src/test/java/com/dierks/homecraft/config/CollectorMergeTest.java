@@ -51,10 +51,12 @@ class CollectorMergeTest {
     void theCollectorsComeFirst() {
         Prize heart = row("trail_heart", PrizeType.TRAIL, 100);
         List<Prize> merged = PluginConfig.mergeCollectors(List.of(heart), null);
-        assertEquals(3, merged.size());
+        assertEquals(5, merged.size());
         assertEquals("cap_pumpkin_2026", merged.get(0).id());
         assertEquals("trail_leaves_2026", merged.get(1).id());
-        assertSame(heart, merged.get(2), "config rows follow, in their order");
+        assertEquals("cap_santa_2026", merged.get(2).id());
+        assertEquals("trail_twinkle_2026", merged.get(3).id());
+        assertSame(heart, merged.get(4), "config rows follow, in their order");
     }
 
     @Test
@@ -66,8 +68,8 @@ class CollectorMergeTest {
                 row("candy_apple_2026", PrizeType.BOOST, 5),
                 row("bag_trick_or_treat_2026", PrizeType.BOOST, 5),
                 row("trail_heart", PrizeType.TRAIL, 100)), warnings::add);
-        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "trail_heart"),
-                merged.stream().map(Prize::id).toList());
+        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026",
+                        "trail_heart"), merged.stream().map(Prize::id).toList());
         assertEquals(250, merged.get(0).costTokens(), "the collector stays the catalogue's");
         assertNotNull(merged.get(0).collector());
         assertEquals(400, merged.get(1).costTokens());
@@ -83,7 +85,7 @@ class CollectorMergeTest {
             assertFalse(Collectors.reserved(id), "the bundled row '" + id + "' would be skipped");
         }
         List<Prize> merged = PluginConfig.mergeCollectors(List.of(row("trail_heart", PrizeType.TRAIL, 100)), null);
-        for (Prize p : merged.subList(2, merged.size())) {
+        for (Prize p : merged.subList(Collectors.ROWS.size(), merged.size())) {
             assertNull(p.collector(), "a config row is never a collector");
         }
     }

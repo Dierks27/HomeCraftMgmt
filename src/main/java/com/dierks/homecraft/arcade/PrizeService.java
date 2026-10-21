@@ -65,11 +65,11 @@ public final class PrizeService {
     private static final String NO_TRAIL = "Couldn't add that trail — nothing charged. Tell an admin.";
     private static final String NOT_A_COLLECTOR = "That isn't a collector.";
     /**
-     * Worded for the one collector trail so far, the Autumn Leaves 2026 (its particle is new in the 26.3 API).
-     * {@link #trailsNotHere} also holds a trail whose particle needs data, which no upgrade fixes: revisit this
-     * wording, and the collector self-test's, with the next collector trail.
+     * Why a collector trail in {@link #trailsNotHere} isn't given back. It names no version, so it is true for
+     * every collector trail: the Autumn Leaves 2026's particle is new in the 26.3 API, and a later one may be
+     * newer still. The collector self-test's line says the same.
      */
-    private static final String TRAIL_NOT_HERE = "That trail needs Paper 26.3.";
+    private static final String TRAIL_NOT_HERE = "That trail can't show on this server yet.";
 
     /** Where a collector cap goes: on the head, on the head with the old helmet into the bag, or into the bag. */
     public enum CapPlacement { HEAD, SWAP, BAG }

@@ -435,11 +435,45 @@ public final class PluginConfig {
     public record PrizeLimit(LimitPer per, int count) {
     }
 
-    /** A collector's season (local dates, inclusive) and look. {@code look} is null for a trail. */
+    /**
+     * A collector's season (local dates, inclusive), look and season name. {@code look} is null for a trail.
+     * {@code season} names the holiday on its lines ("Christmas 2026 collector"); a blank one is worked out
+     * from the start month ({@link #seasonOf}).
+     */
     public record Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
-                            CapLook look) {
+                            CapLook look, String season) {
+        public Collector {
+            if (season == null || season.isBlank()) {
+                season = seasonOf(from);
+            }
+        }
+
+        /** A collector whose season name comes from its start month ({@link #seasonOf}). */
+        public Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
+                         CapLook look) {
+            this(year, from, to, giftable, look, seasonOf(from));
+        }
+
         public boolean inSeason(java.time.LocalDate today) {
             return today != null && !today.isBefore(from) && !today.isAfter(to);
+        }
+
+        /**
+         * The season of a collector that goes on sale on {@code from}: October is Halloween, December
+         * Christmas, April and May Spring, July and August Summer. Any other month (or none) is a plain
+         * "Holiday".
+         */
+        public static String seasonOf(java.time.LocalDate from) {
+            if (from == null) {
+                return "Holiday";
+            }
+            return switch (from.getMonth()) {
+                case OCTOBER -> "Halloween";
+                case DECEMBER -> "Christmas";
+                case APRIL, MAY -> "Spring";
+                case JULY, AUGUST -> "Summer";
+                default -> "Holiday";
+            };
         }
     }
 

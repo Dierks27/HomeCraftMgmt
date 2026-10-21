@@ -3,6 +3,7 @@ package com.dierks.homecraft.trade;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -94,6 +95,14 @@ class PlacedMiniBreakTest {
         Head wild = new Head();
         wild.breakBy(true, false, false, act);
         assertEquals(List.of(), wild.ground, "the catch is the Mini; no copy drops as well");
+    }
+
+    @Test
+    void aWitherIsHandledLikeAFlowAndOnlyWhileTheChangeStands() throws Exception {
+        EventHandler h = MiniHeadListener.class.getMethod("onEntityChangeBlock", EntityChangeBlockEvent.class)
+                .getAnnotation(EventHandler.class);
+        assertNotNull(h, "a wither breaking a placed Mini head has a handler, so the copy drops, not a plain head");
+        assertTrue(h.ignoreCancelled(), "a change another plugin refused leaves the head and its copy alone");
     }
 
     private static EventHandler handler(String name) throws Exception {

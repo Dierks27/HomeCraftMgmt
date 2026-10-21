@@ -21,6 +21,7 @@ import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -34,7 +35,7 @@ import java.util.List;
  * Makes a Mini head placed as a block a first-class placed Mini: on placement the
  * block records the Mini's full identity (id, uid, mint, grade, finish, owner, exact
  * item) and joins the placed-Mini registry so its effects run; right-clicking opens
- * the public info card; breaking it (by hand, explosion, piston or water) always
+ * the public info card; breaking it (by hand, explosion, piston, water or a wither) always
  * returns the exact copy — never a plain head, never a fresh mint, and by hand only
  * once the break is final (0.37.3). Towny/WorldGuard are respected on break. Wild
  * spawns are claimed by touching them instead.
@@ -182,6 +183,19 @@ public final class MiniHeadListener implements Listener {
         Block to = event.getToBlock();
         if (plugin.placedMinis().isPlacedMini(to)) {
             plugin.placedMinis().dropAndForget(to, true);
+        }
+    }
+
+    /** A hurt wither chewing through the head: we clear it ourselves so the exact copy drops, not a plain head. */
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        Block b = event.getBlock();
+        if (b.getType() != Material.PLAYER_HEAD && b.getType() != Material.PLAYER_WALL_HEAD) {
+            return;
+        }
+        if (plugin.placedMinis().isPlacedMini(b)) {
+            event.setCancelled(true);
+            plugin.placedMinis().dropAndForget(b, true);
         }
     }
 

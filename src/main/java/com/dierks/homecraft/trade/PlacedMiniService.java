@@ -210,7 +210,7 @@ public final class PlacedMiniService {
 
     /**
      * Take the head out of the world and drop the exact copy at {@code at} (a break,
-     * explosion, piston or flowing water). Clears the block when {@code clearBlock}.
+     * explosion, piston, flowing water or a wither). Clears the block when {@code clearBlock}.
      * Returns true if a Mini was dropped.
      */
     public boolean dropAndForget(Block block, boolean clearBlock) {

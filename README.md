@@ -33,6 +33,9 @@ and the How It Works **Guide**.
   the **Locker** if you're offline or your bag is full.
 - **Marketplace & Pallets:** player-to-player selling through placeable Pallet seller boxes,
   auto-sorted into departments, with commission and an admin ban list.
+- **Shop blocks stay yours (0.37.3):** only whoever placed a Vending Machine, Display Case or
+  Pallet (or an admin) can break it, and everything in it goes back to whoever stocked it, in their
+  Mailbox. See [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
   (signs, holograms, TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
   `/api/minis`, `/api/news`, `/api/arcade`) also drive the LilahCraft website, behind an
@@ -80,9 +83,10 @@ Tokens are **earned by playing and never become dollars**.
   LuckPerms and EssentialsX), and a numbered Arcade Trophy; Halloween collectors you keep for good
   and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
-  money path.
+  money path, inside a bundle or shulker box too (one packed too deep to check counts as a prize).
 - **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bundle
-  or shulker box), and can't be washed, renamed, re-trimmed or enchanted.
+  or shulker box), and can't be washed, renamed, re-trimmed or enchanted. A placed hat or trophy
+  can't be pushed, washed or blown off, and only whoever placed it can break it (0.37.3).
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -230,6 +234,34 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   so its join-time sync sees them. If a recipe still doesn't show in JEI, the
   result item's custom head/PDC is the likely reason on the proxy side.
 
+### Shop blocks and the Mailbox (0.37.3)
+
+- **Who can break one.** A Vending Machine, a Display Case or a Pallet can be broken only by the
+  player who placed it, or an admin (`hcm.admin`), empty or not. Anyone else is told
+  "This is <name>'s Vending Machine. Only they can take it down." The town check is as before.
+- **Where its things go.** Every Mini in a Vending Machine or Display Case goes back to whoever
+  stocked it, and a Pallet's stock to its owner (one Mailbox row per full stack): always into their
+  **Mailbox** (collect at a Mailbox block or the PC), even when the owner breaks their own. Never
+  to whoever broke it, never on the ground. An owner who is online is told ("Your 2 Minis from
+  your Vending Machine are in your Mailbox"); an admin who breaks someone else's is told where it
+  went. The Mailbox keeps things until they are collected and survives a crash.
+- **Nothing happens until the break is final.** The break is decided first and done last, so if a
+  protection plugin says no, the block, its record and its stock stay exactly as they were. If the
+  database can't save, the block stays standing ("Could not save - try again.").
+- **Pistons, flowing water and lava, and explosions** can't move or break any HomeCraft block, a
+  Vending Machine's top, or a placed hat or trophy.
+- **Taking things back saves first.** "Take it back" on a Display Case, taking a listing out of a
+  Vending Machine, "Take it all back" on a Pallet and collecting from the Mailbox write the change
+  first and hand over after: a failed save gives nothing, and what doesn't fit your bag goes to (or
+  stays in) your Mailbox. Mailbox tiles say where returned things came from ("From your Pallet").
+- **Every economy world in one Multiverse-Inventories group.** The Mailbox opens in any economy
+  world. If two economy worlds have inventories of their own, it would carry things from one to the
+  other, so `/hcm games check` warns: "Economy worlds 'world' and 'hub' are in different
+  Multiverse-Inventories groups - the Mailbox would carry things between them". Put them in one
+  group in `plugins/Multiverse-Inventories/groups.yml`.
+- **Rolling back to 0.37.2** is the jar only; the old break comes back and nothing in the database
+  needs changing.
+
 ### Recipes, skins and block variants (0.19)
 
 - **Recipes** live under `recipes:` in `config.yml` — one SHAPED 3×3 entry per
@@ -249,8 +281,8 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
 - **Vending Machine** — **two blocks tall**: the lower head (`skins.vending_lower`)
   is the real block; the upper head (`skins.vending_upper`) is placed automatically
   (the space above must be air or placement is refused). Right-click either half
-  to open it; break either half and the whole machine drops as one item. Machines
-  placed before 0.19 get their upper head on the first start (blocked ones are
+  to open it; break either half and the whole machine drops as one item (only its
+  owner or an admin can break it, 0.37.3). Machines placed before 0.19 get their upper head on the first start (blocked ones are
   logged with coordinates).
 - **Mailbox** — eight colour variants (`wood`, `light_blue`, `black`, `white`,
   `purple`, `blue`, `orange`, `yellow`): `/hcm give mailbox [variant] [player]`
@@ -573,6 +605,13 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Workstations:** a cauldron won't wash a prize ("That's a prize - it stays just as it is."), and
   an anvil, a smithing table, a grindstone or an enchanting table won't change one. Crafting,
   crafters, brewing and villager trades already refused prizes.
+- **A placed hat or trophy (0.37.3)** can be broken only by whoever placed it, or an admin
+  ("That trophy belongs to <name>."). The same prize goes back into their bag, or their Mailbox
+  when the bag is full, never on the ground. Pistons, water, lava and TNT leave it standing. One
+  placed before 0.37.3 doesn't know who placed it, so anyone can still break it (and gets it in
+  their bag).
+- **A prize packed deep inside bundles (0.37.3)** can't be sold either: a bundle or shulker box
+  holding anything more than four containers in, or one that can't be read, counts as a prize.
 
 ### Owner knobs (`arcade.collectors`)
 

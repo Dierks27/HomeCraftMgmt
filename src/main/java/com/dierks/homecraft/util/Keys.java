@@ -95,6 +95,13 @@ public final class Keys {
     public static NamespacedKey BOOST_MINUTES;
     /** On a placed hat or trophy head: the exact item, so breaking it gives back the same prize. */
     public static NamespacedKey PRIZE_ITEM;
+    /**
+     * On a placed hat or trophy head (0.37.3): the UUID of the player who placed it (String). Only they, or an
+     * admin, may break it; a head placed before 0.37.3 has none and stays breakable by anyone.
+     */
+    public static NamespacedKey TROPHY_PLACER;
+    /** On a placed hat or trophy head (0.37.3): the plain prize id, so nothing on a hot path decodes the item. */
+    public static NamespacedKey PLACED_PRIZE_ID;
     /** On a Firework Show rocket: marks it harmless. */
     public static NamespacedKey FIREWORK_SHOW;
 
@@ -179,6 +186,8 @@ public final class Keys {
         BOOST_AMPLIFIER = new NamespacedKey(plugin, "boost_amplifier");
         BOOST_MINUTES = new NamespacedKey(plugin, "boost_minutes");
         PRIZE_ITEM = new NamespacedKey(plugin, "prize_item");
+        TROPHY_PLACER = new NamespacedKey(plugin, "trophy_placer");
+        PLACED_PRIZE_ID = new NamespacedKey(plugin, "placed_prize_id");
         FIREWORK_SHOW = new NamespacedKey(plugin, "firework_show");
         WILD_FINISH = new NamespacedKey(plugin, "wild_finish");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");

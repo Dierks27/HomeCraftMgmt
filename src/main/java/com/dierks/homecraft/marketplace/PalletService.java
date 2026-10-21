@@ -5,7 +5,9 @@ import com.dierks.homecraft.block.BlockSkins;
 import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.integration.EconomyService;
+import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.PalletDao;
+import com.dierks.homecraft.util.GiveAfterWrite;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -34,6 +36,9 @@ public final class PalletService {
             return new Result(false, e, 0);
         }
     }
+
+    /** The Mailbox source of stock coming home from a Pallet (0.37.3). */
+    public static final String SOURCE = "PALLET";
 
     private final HomeCraftManagement plugin;
     private final PalletDao dao;
@@ -81,21 +86,11 @@ public final class PalletService {
         if (held == null || held.getType().isAir()) {
             return Result.fail("Hold the item you want to sell in your main hand.");
         }
-        if (plugin.miniService().isMini(held)) {
-            return Result.fail("Minis are sold at the Vending Machine / Auction House, not Pallets.");
-        }
-        // Tokens never become dollars: nothing bought or won with tokens is listed (§11 #9).
-        if (com.dierks.homecraft.util.TokenPrizes.carries(held)) {
-            return Result.fail(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
-        }
-        // A delivery crate is worth nothing and must stay worth nothing: anything that survives
-        // its job is an item you can mint on demand by taking Courier work. This is the one
-        // listing surface that accepts an arbitrary stack, so it is the one that has to say no.
-        if (com.dierks.homecraft.courier.CourierPackage.is(held)) {
-            return Result.fail("A delivery crate is not yours to sell.");
-        }
-        if (mp.isBanned(held.getType())) {
-            return Result.fail("That item can't be listed on the Marketplace.");
+        String refusal = stockRefusal(plugin.miniService().isMini(held),
+                com.dierks.homecraft.util.TokenPrizes.carries(held),
+                com.dierks.homecraft.courier.CourierPackage.is(held), mp.isBanned(held.getType()));
+        if (refusal != null) {
+            return Result.fail(refusal);
         }
         int amount = held.getAmount();
         ItemStack template = held.clone();
@@ -132,6 +127,32 @@ public final class PalletService {
     }
 
     /**
+     * Why a held stack can't be put on a Pallet, or null when it can (pure; the checks in their order).
+     *
+     * @param carries {@code TokenPrizes.carries}: a prize, or something holding one (or holding anything too deep to
+     *                read, 0.37.3)
+     */
+    public static String stockRefusal(boolean mini, boolean carries, boolean courierPackage, boolean banned) {
+        if (mini) {
+            return "Minis are sold at the Vending Machine / Auction House, not Pallets.";
+        }
+        // Tokens never become dollars: nothing bought or won with tokens is listed (§11 #9).
+        if (carries) {
+            return com.dierks.homecraft.util.TokenPrizes.REFUSAL;
+        }
+        // A delivery crate is worth nothing and must stay worth nothing: anything that survives
+        // its job is an item you can mint on demand by taking Courier work. This is the one
+        // listing surface that accepts an arbitrary stack, so it is the one that has to say no.
+        if (courierPackage) {
+            return "A delivery crate is not yours to sell.";
+        }
+        if (banned) {
+            return "That item can't be listed on the Marketplace.";
+        }
+        return null;
+    }
+
+    /**
      * Two visual states: a placed Pallet wears {@code skins.pallet_empty} with no
      * listing and {@code skins.pallet_used} once one is loaded. Applied to the placed
      * head the same way the Display Case trophy is (no-op if the base isn't a head).
@@ -163,7 +184,11 @@ public final class PalletService {
         return new Result(true, null, 0);
     }
 
-    /** Owner empties the Pallet, taking back all remaining stock. */
+    /**
+     * Owner empties the Pallet, taking back all remaining stock. The listing is deleted first and the stock handed
+     * over after (0.37.3, {@link GiveAfterWrite}): a failed delete gives nothing, and what doesn't fit the bag goes
+     * to the Mailbox, one row per stack, never the ground.
+     */
     public Result takeBack(Player owner, Location loc) {
         Optional<PalletDao.Listing> opt = at(loc);
         if (opt.isEmpty()) {
@@ -172,17 +197,83 @@ public final class PalletService {
         if (!opt.get().owner().equals(owner.getUniqueId()) && !owner.hasPermission("hcm.admin")) {
             return Result.fail("This isn't yours.");
         }
-        returnStock(owner, opt.get());
-        deleteAt(loc);
+        PalletDao.Listing l = opt.get();
+        ItemStack template = Items.fromBase64(l.itemB64());
+        if (template == null || l.stock() <= 0) {
+            // Nothing to hand over (as before): the empty or unreadable listing just goes.
+            deleteAt(loc);
+            refreshSkin(loc);
+            return new Result(true, null, 0);
+        }
+        String label = "From your Pallet";
+        GiveAfterWrite.Outcome out = deliveries.handOver(owner, template, l.stock(), label, SOURCE,
+                toMailbox -> plugin.database().transaction(c -> {
+                    if (!dao.deleteAt(loc)) {
+                        return false;
+                    }
+                    deliveries.queueStacks(owner.getUniqueId(), template, toMailbox, label, SOURCE);
+                    return true;
+                }));
+        if (out.status() == GiveAfterWrite.Status.NOT_SAVED) {
+            return Result.fail("Could not save - try again.");
+        }
+        if (out.status() == GiveAfterWrite.Status.GONE) {
+            return Result.fail("Nothing is loaded here.");
+        }
+        if (out.mailed() > 0) {
+            owner.sendMessage(Text.of("&e✉ Your bag is full, so the rest went to your Mailbox (PC or Mailbox)."));
+        }
         refreshSkin(loc);
         return new Result(true, null, 0);
     }
 
-    /** On block break: return all stock to the breaker and clear the listing. */
-    public void onBlockBroken(Location loc, Player breaker) {
-        at(loc).ifPresent(l -> {
-            returnStock(breaker, l);
-            deleteAt(loc);
+    /**
+     * A Pallet is being broken (the break is final, 0.37.3): its stock goes back to whoever stocked it, always
+     * into their Mailbox, one row per full stack, in one transaction with the listing's delete. Never the breaker,
+     * never the ground; a failed write changes nothing.
+     *
+     * @return how many items went back (0 for an empty Pallet)
+     * @throws SQLException when it couldn't be written: nothing changed, and the block should stay
+     */
+    public int returnStock(Location loc) throws SQLException {
+        Optional<PalletDao.Listing> opt = dao.at(loc);
+        if (opt.isEmpty()) {
+            return 0;
+        }
+        PalletDao.Listing l = opt.get();
+        ItemStack template = Items.fromBase64(l.itemB64());
+        int max = template == null ? 1 : Math.max(1, template.getMaxStackSize());
+        int back = returnStock(plugin.database(), dao, plugin.deliveries()::queueReady, loc, max,
+                template == null ? null : n -> Items.toBase64(GiveAfterWrite.withAmount(template, n)));
+        Player online = Bukkit.getPlayer(l.owner());
+        if (online != null && back > 0) {
+            online.sendMessage(Text.of("&e✉ The " + back + " " + label(template) + " from your Pallet "
+                    + (back == 1 ? "is" : "are") + " in your Mailbox (PC or Mailbox)."));
+        }
+        return back;
+    }
+
+    /**
+     * {@link #returnStock(Location)}'s one transaction (a test passes its own Mailbox and encoder): the listing at
+     * {@code loc} is deleted and its stock queued for its owner, one row per stack of at most {@code maxStack}.
+     *
+     * @param encode a stack of {@code n} of the listed item as Base64; null when the item can't be read (the
+     *               listing is only deleted, as before: there is nothing to hand back)
+     */
+    static int returnStock(Database db, PalletDao dao, DeliveryService.Mailbox mailbox, Location loc, int maxStack,
+                           java.util.function.IntFunction<String> encode) throws SQLException {
+        return db.transaction(c -> {
+            Optional<PalletDao.Listing> opt = dao.at(loc);
+            if (opt.isEmpty()) {
+                return 0;
+            }
+            PalletDao.Listing l = opt.get();
+            int stock = encode == null ? 0 : Math.max(0, l.stock());
+            dao.deleteAt(loc);
+            for (int n : GiveAfterWrite.stacks(stock, maxStack)) {
+                mailbox.queueReady(l.owner(), encode.apply(n), "From your Pallet", SOURCE);
+            }
+            return stock;
         });
     }
 
@@ -264,23 +355,6 @@ public final class PalletService {
 
     // ---- helpers ----------------------------------------------------------
 
-    private void returnStock(Player to, PalletDao.Listing l) {
-        ItemStack template = Items.fromBase64(l.itemB64());
-        if (template == null) {
-            return;
-        }
-        int remaining = l.stock();
-        int max = Math.max(1, template.getMaxStackSize());
-        while (remaining > 0) {
-            int n = Math.min(remaining, max);
-            ItemStack give = template.clone();
-            give.setAmount(n);
-            to.getInventory().addItem(give).values()
-                    .forEach(drop -> to.getWorld().dropItemNaturally(to.getLocation(), drop));
-            remaining -= n;
-        }
-    }
-
     private void deleteAt(Location loc) {
         try {
             dao.deleteAt(loc);
@@ -290,6 +364,9 @@ public final class PalletService {
     }
 
     private String label(ItemStack item) {
+        if (item == null) {
+            return "items";
+        }
         if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
             return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                     .serialize(item.getItemMeta().displayName());

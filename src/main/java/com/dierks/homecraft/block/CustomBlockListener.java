@@ -1,6 +1,7 @@
 package com.dierks.homecraft.block;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.PlacedPrizes;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.StoreMenu;
@@ -24,6 +25,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -40,7 +44,12 @@ import java.util.UUID;
 /**
  * Wires placed custom blocks into the world: places (with build-permission
  * checks + persistence), breaks (returns the correct custom item + cleans up),
- * right-click opens the matching GUI, and explosions leave our blocks intact.
+ * right-click opens the matching GUI, and explosions, pistons and flowing water
+ * or lava leave our blocks (and placed prize heads) intact.
+ *
+ * <p>A Vending Machine, Display Case or Pallet is broken only by whoever placed it
+ * or an admin, and what it holds goes back to whoever stocked it, into their
+ * Mailbox, once the break is final (0.37.3, {@link CustomBlockGuard}).
  */
 public final class CustomBlockListener implements Listener {
 
@@ -150,10 +159,49 @@ public final class CustomBlockListener implements Listener {
         }
     }
 
+    /**
+     * A break only decides here (HIGH): a Vending Machine, Display Case or Pallet is refused to anyone but whoever
+     * placed it or an admin ({@link CustomBlockGuard#breakRefusal}), then the town check as before. Nothing changes
+     * yet: everything a break does happens in {@link #onBreakFinal}, once no other plugin can cancel it (0.37.3,
+     * spec §4.15 (1)). Acting here left a cancelled break standing with its record gone and its item already
+     * dropped, so breaking it again dropped a second one.
+     */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
         Block broken = event.getBlock();
         // Breaking the upper head of a Vending Machine breaks the whole machine.
+        Block base = blocks.vendingLowerOf(broken).orElse(broken);
+        Location loc = base.getLocation();
+        Optional<PlacedBlock> placed = blocks.at(loc);
+        if (placed.isEmpty()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        PlacedBlock record = placed.get();
+        boolean isOwner = record.owner().equals(player.getUniqueId());
+
+        if (CustomBlockGuard.breakRefusal(record.type(), isOwner, player.hasPermission("hcm.admin"))) {
+            event.setCancelled(true);
+            player.sendMessage(Text.of(CustomBlockGuard.refusalLine(ownerName(record.owner()), record.type())));
+            return;
+        }
+
+        if (config.respectTownPerms() && !isOwner && !protection.canBuild(player, loc)) {
+            event.setCancelled(true);
+            player.sendMessage(Text.of("&cYou can't break this here."));
+        }
+    }
+
+    /**
+     * The break is final (MONITOR, {@code ignoreCancelled}: a break any plugin cancelled never gets here). The stock
+     * goes back to whoever stocked it, always into their Mailbox ({@code returnStock}); then the record, a muffler,
+     * the shop display and the vanilla drop go, and the block's own item drops, exactly one. If the stock can't be
+     * written the break is called off after all, the one change made here, so the block stays with everything in
+     * it and nothing is lost or dropped.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBreakFinal(BlockBreakEvent event) {
+        Block broken = event.getBlock();
         Optional<Block> lowerOfUpper = blocks.vendingLowerOf(broken);
         Block base = lowerOfUpper.orElse(broken);
         Location loc = base.getLocation();
@@ -167,23 +215,6 @@ public final class CustomBlockListener implements Listener {
         }
         Player player = event.getPlayer();
         PlacedBlock record = placed.get();
-        boolean isOwner = record.owner().equals(player.getUniqueId());
-
-        if (config.respectTownPerms() && !isOwner && !protection.canBuild(player, loc)) {
-            event.setCancelled(true);
-            player.sendMessage(Text.of("&cYou can't break this here."));
-            return;
-        }
-
-        // Return any Mini loaded into a Vending Machine / Display Case to the breaker.
-        if (record.type() == CustomBlockType.MINI_VENDING_MACHINE
-                || record.type() == CustomBlockType.DISPLAY_CASE) {
-            plugin.vending().onBlockBroken(loc, player);
-        }
-        // Return all stock from a broken Pallet.
-        if (record.type() == CustomBlockType.PALLET) {
-            plugin.pallets().onBlockBroken(loc, player);
-        }
 
         // The item to drop is resolved BEFORE the tile goes away (variants live on it).
         ItemStack drop = switch (record.type()) {
@@ -196,22 +227,76 @@ public final class CustomBlockListener implements Listener {
             default -> items.of(record.type());
         };
 
-        blocks.removeAt(loc);
-        if (record.type() == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
-            plugin.soundMufflers().removed(loc);
-        }
-        event.setDropItems(false); // suppress the vanilla base-block drop
-        if (record.type() == CustomBlockType.MINI_VENDING_MACHINE) {
-            // Remove the other half too — exactly one vending item drops either way.
-            blocks.removeVendingUpper(base); // legacy upper head block, if one is still there
-            if (plugin.shops() != null) {
-                plugin.shops().unregister(loc); // the floating display + glow + hologram
+        boolean done = CustomBlockGuard.finish(record.type(), new CustomBlockGuard.Finish() {
+            @Override
+            public boolean returnStock() {
+                return CustomBlockListener.this.returnStock(record, loc, player);
             }
-            if (lowerOfUpper.isPresent()) {
-                base.setType(Material.AIR, false);
+
+            @Override
+            public void forget() {
+                blocks.removeAt(loc);
+                if (record.type() == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
+                    plugin.soundMufflers().removed(loc);
+                }
+                event.setDropItems(false); // suppress the vanilla base-block drop
+                if (record.type() == CustomBlockType.MINI_VENDING_MACHINE) {
+                    // Remove the other half too — exactly one vending item drops either way.
+                    blocks.removeVendingUpper(base); // legacy upper head block, if one is still there
+                    if (plugin.shops() != null) {
+                        plugin.shops().unregister(loc); // the floating display + glow + hologram
+                    }
+                    if (lowerOfUpper.isPresent()) {
+                        base.setType(Material.AIR, false);
+                    }
+                }
             }
+
+            @Override
+            public void drop() {
+                loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop);
+            }
+        });
+        if (!done) {
+            event.setCancelled(true);
+            player.sendMessage(Text.of("&cCould not save - try again."));
         }
-        loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop);
+    }
+
+    /**
+     * Everything in a Vending Machine, Display Case or Pallet back to whoever stocked it, into their Mailbox, in one
+     * transaction (the services tell each owner). An admin who broke someone else's is told where it went.
+     *
+     * @return false when it couldn't be written (nothing changed)
+     */
+    private boolean returnStock(PlacedBlock record, Location loc, Player breaker) {
+        boolean someoneElses = !record.owner().equals(breaker.getUniqueId());
+        try {
+            if (record.type() == CustomBlockType.PALLET) {
+                int back = plugin.pallets().returnStock(loc);
+                if (someoneElses && back > 0) {
+                    breaker.sendMessage(Text.of("&7Returned the Pallet's stock to its owner's Mailbox."));
+                }
+            } else {
+                int back = plugin.vending().returnStock(loc, CustomBlockGuard.name(record.type())).size();
+                if (someoneElses && back > 0) {
+                    breaker.sendMessage(Text.of("&7Returned " + back + (back == 1 ? " Mini" : " Minis")
+                            + " to their owners' Mailboxes."));
+                }
+            }
+            return true;
+        } catch (java.sql.SQLException e) {
+            plugin.getLogger().severe("Couldn't return the stock of the " + CustomBlockGuard.name(record.type())
+                    + " at " + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ() + " in "
+                    + loc.getWorld().getName() + ", so it stays standing: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** The name of a block's owner for a refusal line ("someone else" when the server doesn't know it). */
+    private String ownerName(UUID owner) {
+        String name = plugin.getServer().getOfflinePlayer(owner).getName();
+        return name == null || name.isBlank() ? "someone else" : name;
     }
 
     /**
@@ -418,16 +503,58 @@ public final class CustomBlockListener implements Listener {
     // leaving an orphaned DB row for a block that no longer exists.
     @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
-        event.blockList().removeIf(this::isProtectedBlock);
+        CustomBlockGuard.spare(event.blockList(), this::isProtectedBlock);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent event) {
-        event.blockList().removeIf(this::isProtectedBlock);
+        CustomBlockGuard.spare(event.blockList(), this::isProtectedBlock);
     }
 
+    /**
+     * No piston moves or breaks one of ours (0.37.3): pushed, its record would point at the old spot; a head in the
+     * way (a Display Case, a Vending Machine's top, a placed trophy) would pop off as a plain head. Refused at LOW,
+     * before anything acts on a move that won't happen.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        Block inFront = event.getBlock().getRelative(event.getDirection(), event.getBlocks().size() + 1);
+        if (CustomBlockGuard.pistonRefused(CustomBlockGuard.pistonTouches(event.getBlocks(), inFront),
+                this::isProtectedBlock)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        if (CustomBlockGuard.pistonRefused(CustomBlockGuard.pistonTouches(event.getBlocks(), null),
+                this::isProtectedBlock)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Water or lava never washes one of ours away (0.37.3). A flow into air or more fluid, nearly every flow there
+     * is, looks nothing up.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onFlow(BlockFromToEvent event) {
+        Block to = event.getToBlock();
+        if (to.getType().isAir() || to.isLiquid()) {
+            return;
+        }
+        if (CustomBlockGuard.flowRefused(to, this::isProtectedBlock)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * One of ours: a placed prize head (a hat or a trophy, read from the skull, material first), a placed HomeCraft
+     * block, or the upper head of a Vending Machine.
+     */
     private boolean isProtectedBlock(Block b) {
-        return blocks.at(b.getLocation()).isPresent() || blocks.vendingLowerOf(b).isPresent();
+        return PlacedPrizes.isPlaced(b) || blocks.at(b.getLocation()).isPresent()
+                || blocks.vendingLowerOf(b).isPresent();
     }
 
     /**

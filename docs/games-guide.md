@@ -1782,4 +1782,4 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 ---
 
-*Written from the plugin's code for release 0.35.0-arcade-games and updated from the code for 0.36 (Course Variety), 0.37 (Golf v4, Mountain Run v2 and the token balance) and 0.37.1 (the wider, more downhill Mountain Run and the Halloween collectors). If a number here and the game ever disagree, the game is right. Tell the server owner so this guide can be fixed.*
+*Written from the plugin's code for release 0.35.0-arcade-games and updated from the code for 0.36 (Course Variety), 0.37 (Golf v4, Mountain Run v2 and the token balance), 0.37.1 (the wider, more downhill Mountain Run and the Halloween collectors) and 0.37.3 (the Christmas collectors). If a number here and the game ever disagree, the game is right. Tell the server owner so this guide can be fixed.*

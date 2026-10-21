@@ -17,6 +17,7 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,6 +136,45 @@ class DatabaseMigrationTest {
         }
         Database.open(conn, Logger.getAnonymousLogger());
         assertEquals(36, version(), "opening again runs nothing twice");
+    }
+
+    /**
+     * A database a newer HomeCraft wrote (0.38's v38, with this jar rolled back under it): one WARN naming it,
+     * no migration, and the stored version stays, so the re-upgrade finds it as it left it (SHOP-V2-SPEC §7.9).
+     */
+    @Test
+    void aNewerDatabaseIsNamedOnceAndLeftAlone() throws SQLException {
+        Database.open(conn, Logger.getAnonymousLogger());
+        exec("UPDATE hcm_meta SET value = '38' WHERE key = 'schema_version'");
+        exec("CREATE TABLE trades (id INTEGER PRIMARY KEY)");
+
+        List<java.util.logging.LogRecord> records = new ArrayList<>();
+        Logger log = Logger.getAnonymousLogger();
+        log.setUseParentHandlers(false);
+        log.addHandler(new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord r) {
+                records.add(r);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        Database.open(conn, log);
+
+        assertEquals(38, version(), "never lowered");
+        assertTrue(table("trades"), "the newer table is left alone");
+        assertEquals(1, records.size(), "one line, and no migration ran");
+        assertEquals(java.util.logging.Level.WARNING, records.get(0).getLevel());
+        assertEquals("This database was written by a newer HomeCraft (schema v38); rows this version doesn't know"
+                + " are skipped.", records.get(0).getMessage());
+        assertNull(Database.newerSchemaWarning(Database.latestVersion()), "this build's own: nothing");
+        assertNull(Database.newerSchemaWarning(0), "an empty database: nothing");
     }
 
     @Test

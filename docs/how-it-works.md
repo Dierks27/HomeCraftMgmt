@@ -41,6 +41,9 @@ Courier runs all say no.
 Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
 inside one drops with it.
 
+A hat or trophy you place stays put: pistons, water, lava and TNT can't move it, and only you (or an
+admin) can break it. It goes back in your bag (or your Mailbox, if your bag is full).
+
 ## Candy apples (until 31 Oct)
 
 Every 20 minutes in October (every 10 on Halloween), you hear "Trick or treat!" and six candy
@@ -69,6 +72,10 @@ minutes.
 
 Each pack shows its chances for every rarity, and how many of its Minis you're still missing.
 Click a pack to see every Mini inside it, marked ✓ (you have it), missing, or sold out.
+
+Your Display Case, Vending Machine and Pallet are yours: only you (or an admin) can break one. When
+one is broken, everything in it goes back to your **Mailbox** (at a Mailbox or on the PC), never
+on the ground.
 
 ## Wild Minis
 

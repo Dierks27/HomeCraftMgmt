@@ -1122,6 +1122,12 @@ public final class Database {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
+            String newer = newerSchemaWarning(current);
+            if (newer != null) {
+                // Written by a newer HomeCraft (this jar was rolled back under it): nothing runs and the stored
+                // version stays, so its tables are there again on the re-upgrade.
+                log.warning(newer);
+            }
             int last = Math.min(target, MIGRATIONS.length);
             if (current < last && current > 0 && plugin != null) {
                 // A schema change is about to run: keep a copy of the file first (§11 #6).
@@ -1139,6 +1145,19 @@ public final class Database {
                 setSchemaVersion(v);
             }
         }
+    }
+
+    /**
+     * The WARN for a database whose stored schema version is newer than this build's {@link #latestVersion()},
+     * or null when it isn't. Every migration block is additive, so this build keeps working on it and only
+     * leaves alone what it doesn't know.
+     */
+    static String newerSchemaWarning(int stored) {
+        if (stored <= MIGRATIONS.length) {
+            return null;
+        }
+        return "This database was written by a newer HomeCraft (schema v" + stored
+                + "); rows this version doesn't know are skipped.";
     }
 
     private int schemaVersion() throws SQLException {

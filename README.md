@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.37.2-quiet-rails`
+- **Version:** `0.37.3-christmas`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -180,8 +180,16 @@ Trick-or-Treat Bags and candy apples are kept, but a bag takes anything until yo
 
 **Back to 0.37.2 from 0.37.3:** the jar alone (0.37.3 changes no schema and no config). The
 Christmas collectors' tiles go, and owned Twinkle trails stop drawing until you upgrade again (an
-owned trail shows only while its row exists); Santa Caps stay in players' bags. Nothing is deleted.
-See [Christmas 2026](#christmas-2026-0373).
+owned trail shows only while its row exists); Santa Caps stay in players' bags. The break fix
+reverts: anyone with build rights can break a shop block again and gets what is in it, and a
+piston, water, lava or TNT can pop a placed hat or trophy again. Anything already in a Mailbox
+stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
+and [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
+
+**A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
+by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
+config was written by a newer HomeCraft (revision 22); rows this version doesn't know are skipped."
+Nothing runs and nothing is changed: the file keeps its revision and the database its version.
 
 Check which you have before trusting a downloaded jar:
 

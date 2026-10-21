@@ -24,11 +24,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -44,8 +46,8 @@ import java.util.UUID;
 /**
  * Wires placed custom blocks into the world: places (with build-permission
  * checks + persistence), breaks (returns the correct custom item + cleans up),
- * right-click opens the matching GUI, and explosions, pistons and flowing water
- * or lava leave our blocks (and placed prize heads) intact.
+ * right-click opens the matching GUI, and explosions, pistons, flowing water or
+ * lava, a wither and fire leave our blocks (and placed prize heads) intact.
  *
  * <p>A Vending Machine, Display Case or Pallet is broken only by whoever placed it
  * or an admin, and what it holds goes back to whoever stocked it, into their
@@ -544,6 +546,31 @@ public final class CustomBlockListener implements Listener {
             return;
         }
         if (CustomBlockGuard.flowRefused(to, this::isProtectedBlock)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Nor does a mob (0.37.3): a hurt wither breaks every block around it that isn't wither-immune, and heads,
+     * barrels and chests aren't. The world would drop a plain block (a head with a trophy's look and none of its
+     * prize) and leave the record and its stock behind. A change of air or fluid (a falling block landing) looks
+     * nothing up.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        Block b = event.getBlock();
+        if (b.getType().isAir() || b.isLiquid()) {
+            return;
+        }
+        if (CustomBlockGuard.changeRefused(b, this::isProtectedBlock)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Nor fire, for a block whose material burns (one set to wool or planks in {@code config.yml}). */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onBurn(BlockBurnEvent event) {
+        if (CustomBlockGuard.changeRefused(event.getBlock(), this::isProtectedBlock)) {
             event.setCancelled(true);
         }
     }

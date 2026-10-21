@@ -261,9 +261,11 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   went. The Mailbox keeps things until they are collected and survives a crash.
 - **Nothing happens until the break is final.** The break is decided first and done last, so if a
   protection plugin says no, the block, its record and its stock stay exactly as they were. If the
-  database can't save, the block stays standing ("Could not save - try again.").
-- **Pistons, flowing water and lava, and explosions** can't move or break any HomeCraft block, a
-  Vending Machine's top, or a placed hat or trophy.
+  database can't save, the block stays standing ("Could not save - try again."). A Mini head placed
+  as a block works the same way: its exact copy drops only once the break is final.
+- **Pistons, flowing water and lava, explosions and a wither** can't move or break any HomeCraft
+  block, a Vending Machine's top, or a placed hat or trophy (nor fire, for a block set to something
+  that burns).
 - **Taking things back saves first.** "Take it back" on a Display Case, taking a listing out of a
   Vending Machine, "Take it all back" on a Pallet and collecting from the Mailbox write the change
   first and hand over after: a failed save gives nothing, and what doesn't fit your bag goes to (or
@@ -650,9 +652,9 @@ as presents, all exactly as Halloween's above.
   crafters, brewing and villager trades already refused prizes.
 - **A placed hat or trophy (0.37.3)** can be broken only by whoever placed it, or an admin
   ("That trophy belongs to <name>."). The same prize goes back into their bag, or their Mailbox
-  when the bag is full, never on the ground. Pistons, water, lava and TNT leave it standing. One
-  placed before 0.37.3 doesn't know who placed it, so anyone can still break it (and gets it in
-  their bag).
+  when the bag is full, never on the ground. Pistons, water, lava, TNT and a wither leave it
+  standing. One placed before 0.37.3 doesn't know who placed it, so anyone can still break it (and
+  gets it in their bag).
 - **A prize packed deep inside bundles (0.37.3)** can't be sold either: a bundle or shulker box
   holding anything more than four containers in, or one that can't be read, counts as a prize.
 

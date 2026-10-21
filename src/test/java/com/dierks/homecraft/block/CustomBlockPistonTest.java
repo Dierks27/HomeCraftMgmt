@@ -3,10 +3,12 @@ package com.dierks.homecraft.block;
 import com.dierks.homecraft.arcade.PrizeItemListener;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.junit.jupiter.api.Test;
 
@@ -24,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Pistons, flows and explosions leave ours standing (0.37.3, spec §4.15 (3)-(4), D17, red team D-M1): "ours" is a
  * placed HomeCraft block, the upper head of a Vending Machine, or a placed prize head (a hat or a trophy). A push or
- * pull that moves one, or breaks one in front of its line, is refused; water or lava never flows into one; and an
- * explosion (TNT, or a bed or respawn anchor) takes ours out of its block list. Placed prizes used to pop onto the
- * ground for anyone to pick up.
+ * pull that moves one, or breaks one in front of its line, is refused; water or lava never flows into one; an
+ * explosion (TNT, or a bed or respawn anchor) takes ours out of its block list; and a wither (or any mob) never
+ * changes one, nor fire burns one. Placed prizes used to pop onto the ground for anyone to pick up.
  */
 class CustomBlockPistonTest {
 
@@ -99,11 +101,28 @@ class CustomBlockPistonTest {
         }
     }
 
+    /**
+     * A hurt wither breaks every block around it that isn't wither-immune, and heads, barrels and chests aren't: a
+     * placed trophy would drop a plain head with its look and name but none of its prize (one a Pallet would take),
+     * and a shop block a plain one, its record and stock left behind. Fire, for a block set to a material that burns.
+     */
+    @Test
+    void aWitherOrFireNeverTakesOneOfOurs() {
+        for (Pos p : WORLD.keySet()) {
+            assertTrue(CustomBlockGuard.changeRefused(p, OURS), WORLD.get(p) + " is never chewed through or burnt");
+        }
+        assertFalse(CustomBlockGuard.changeRefused(new Pos(8, 66, 0), OURS),
+                "the block above the trophy goes, as any other block does");
+        assertFalse(CustomBlockGuard.changeRefused(null, OURS));
+    }
+
     @Test
     void theGuardsRunEarlyAndSkipWhatIsAlreadyCancelled() throws Exception {
         for (String[] h : new String[][]{{"onPistonExtend", BlockPistonExtendEvent.class.getName()},
                 {"onPistonRetract", BlockPistonRetractEvent.class.getName()},
-                {"onFlow", BlockFromToEvent.class.getName()}}) {
+                {"onFlow", BlockFromToEvent.class.getName()},
+                {"onEntityChangeBlock", EntityChangeBlockEvent.class.getName()},
+                {"onBurn", BlockBurnEvent.class.getName()}}) {
             EventHandler e = handler(CustomBlockListener.class, h[0], Class.forName(h[1]));
             assertEquals(EventPriority.LOW, e.priority(), h[0] + ": refused before anything acts on the move");
             assertTrue(e.ignoreCancelled(), h[0]);

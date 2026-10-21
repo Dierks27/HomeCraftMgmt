@@ -41,8 +41,8 @@ Courier runs all say no.
 Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
 inside one drops with it.
 
-A hat or trophy you place stays put: pistons, water, lava and TNT can't move it, and only you (or an
-admin) can break it. It goes back in your bag (or your Mailbox, if your bag is full).
+A hat or trophy you place stays put: pistons, water, lava, TNT and withers can't move it, and only
+you (or an admin) can break it. It goes back in your bag (or your Mailbox, if your bag is full).
 
 ## Candy apples (until 31 Oct)
 

@@ -8,7 +8,8 @@ import java.util.function.Predicate;
 /**
  * The rules that keep a placed HomeCraft block where it stands and what is in it with its owner (0.37.3, spec
  * §4.15, D22): who may break a Vending Machine, Display Case or Pallet, the order a final break works in, and which
- * piston moves, flows and explosion blocks are refused. Pure, so every rule is tested without a server;
+ * piston moves, flows, explosion blocks, mob changes (a wither) and burns are refused. Pure, so every rule is tested
+ * without a server;
  * {@link CustomBlockListener} asks them, with "ours" meaning a placed HomeCraft block, the upper head of a Vending
  * Machine, or a placed prize head (a hat or a trophy).
  */
@@ -105,6 +106,14 @@ public final class CustomBlockGuard {
     /** Water or lava flowing into one of ours is refused. */
     public static <B> boolean flowRefused(B to, Predicate<B> isOurs) {
         return to != null && isOurs.test(to);
+    }
+
+    /**
+     * A mob changing one of ours (a hurt wither breaking the blocks around it, an enderman taking one), or fire
+     * burning one, is refused: the world would drop a plain block and leave its record and stock behind.
+     */
+    public static <B> boolean changeRefused(B block, Predicate<B> isOurs) {
+        return block != null && isOurs.test(block);
     }
 
     /** An explosion leaves ours standing: they come out of its block list. Returns how many were spared. */

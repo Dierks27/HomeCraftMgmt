@@ -26,6 +26,7 @@ Spend them in the **Arcade** (`/hcm arcade`):
   - Hunt gear: a Mini Radar and a Mini Lure.
   - Cosmetics: fireworks, trails and hats.
     - Halloween collectors: the Pumpkin Cap 2026 (October) and the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
+    - Christmas collectors: the Santa Cap 2026 (December) and the Twinkle 2026 trail (1 December to 6 January). Yours for good, and they can be presents too.
   - Perks: an extra home, `/hat`.
   - Trophies: a numbered Arcade Trophy.
   - Minis: a Rare Card once a week, filament, a Display Case.
@@ -39,6 +40,9 @@ Courier runs all say no.
 
 Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
 inside one drops with it.
+
+A hat or trophy you place stays put: pistons, water, lava, TNT and withers can't move it, and only
+you (or an admin) can break it. It goes back in your bag (or your Mailbox, if your bag is full).
 
 ## Candy apples (until 31 Oct)
 
@@ -68,6 +72,10 @@ minutes.
 
 Each pack shows its chances for every rarity, and how many of its Minis you're still missing.
 Click a pack to see every Mini inside it, marked ✓ (you have it), missing, or sold out.
+
+Your Display Case, Vending Machine and Pallet are yours: only you (or an admin) can break one. When
+one is broken, everything in it goes back to your **Mailbox** (at a Mailbox or on the PC), never
+on the ground.
 
 ## Wild Minis
 

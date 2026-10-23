@@ -125,8 +125,7 @@ public final class PrizeItems {
         for (String line : p.description()) {
             out.add("&7" + line);
         }
-        // Every collector so far is Halloween's; a later season's collector names its own season here.
-        out.add("&6Halloween " + p.collector().year() + " collector");
+        out.add(Collectors.collectorLine(p.collector()));
         out.add("&aYours for good!");
         if (giver != null && !giver.isBlank()) {
             out.add("&7A gift from &f" + giver);

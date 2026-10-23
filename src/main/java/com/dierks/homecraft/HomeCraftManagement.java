@@ -820,6 +820,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (onDisk == null) {
             return false;
         }
+        // A file written by a newer HomeCraft (this jar was rolled back under it) runs no revision step and keeps
+        // its revision; nothing else says so, so one WARN does.
+        String newer = newerConfigWarning(revision(onDisk));
+        if (newer != null) {
+            getLogger().warning(newer);
+        }
         String mainWorld = getServer().getWorlds().isEmpty()
                 ? "world" : getServer().getWorlds().get(0).getName();
 
@@ -2186,6 +2192,20 @@ public final class HomeCraftManagement extends JavaPlugin {
      */
     private static int revision(org.bukkit.configuration.file.FileConfiguration c) {
         return c.get("config_revision", null) instanceof Number n ? n.intValue() : 0;
+    }
+
+    /**
+     * The WARN for a config.yml whose {@code config_revision} is newer than this build's (the file was written
+     * by a later HomeCraft and the jar rolled back under it), or null when it isn't. Nothing changes because of
+     * it: every revision step is {@code from < N}, so a newer file runs none, and {@code config_revision} is never
+     * lowered.
+     */
+    static String newerConfigWarning(int revision) {
+        if (revision <= CONFIG_REVISION) {
+            return null;
+        }
+        return "This config was written by a newer HomeCraft (revision " + revision
+                + "); rows this version doesn't know are skipped.";
     }
 
     /**

@@ -127,7 +127,9 @@ public final class MailboxMenu extends Menu {
                     List<net.kyori.adventure.text.Component> lore = meta.hasLore()
                             ? new ArrayList<>(meta.lore()) : new ArrayList<>();
                     lore.add(Text.of("&8—"));
-                    lore.add(Text.of("&7Marketplace delivery"));
+                    // Stock coming home from a broken block or a full bag (0.37.3) says where it came from.
+                    lore.add(Text.of("&7" + (d.source() == null || d.source().equals("MARKETPLACE")
+                            ? "Marketplace delivery" : d.label())));
                     lore.add(ready ? Text.of("&aReady — click to collect")
                             : Text.of("&7Arrives in &f" + Menus.duration(d.deliverAt() - now)));
                     meta.lore(lore);

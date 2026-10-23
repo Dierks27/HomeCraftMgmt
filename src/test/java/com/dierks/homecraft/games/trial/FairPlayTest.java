@@ -28,8 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Also pinned (review fixes): a gap between trial ticks over 250 ms is a server stall, and a
  * leg its window touches isn't speed-checked — the reviewer's honest 7.2 s run through a 1.7 s
  * stall counts — while a leg away from any stall still is, with a tick of slack; a changed walk
- * speed, a movement attribute off a player's own base or any modifier but vanilla sprinting voids
- * a run; and a course deleted and made again at the same layout number is still a changed course.
+ * speed or a movement attribute boosted past an honest run's voids a run, judged on its value (0.37.3:
+ * a sprint under any key, powder snow, a lowered base and anything that slows never void, gravity is
+ * judged both ways, Java and Bedrock alike, and the line still names every modifier); and a course
+ * deleted and made again at the same layout number is still a changed course.
  *
  * <p>And Daily Courses' "still standing" rule (GEN-SPEC §3.4): a finish on the previous layout of
  * a daily course counts while that layout stands, even though the row has moved on to the next
@@ -279,64 +281,219 @@ class FairPlayTest {
 
     // ---- walk speed and movement attributes ---------------------------------------------------
 
-    private static List<FairPlay.Stat> own(String key, double base, String... modifiers) {
+    /** Vanilla's sprint as the server keeps it: +30% of the total, its amount stored as a float. */
+    private static final FairPlay.Modifier SPRINT = mod(FairPlay.SPRINTING, "MULTIPLY_SCALAR_1", 0.3f);
+    /** A player's own 0.1 with {@link #SPRINT}, as Paper's {@code getValue()} gives it. */
+    private static final double SPRINTING_VALUE = 0.13000000312924387;
+
+    private static FairPlay.Modifier mod(String key, String operation, double amount) {
+        return new FairPlay.Modifier(key, operation, amount);
+    }
+
+    private static FairPlay.Stat stat(String key, double base, double value, FairPlay.Modifier... mods) {
+        return new FairPlay.Stat(key, base, value, List.of(mods));
+    }
+
+    /** {@code st}, with every other watched attribute at the player's own value and nothing on it. */
+    private static List<FairPlay.Stat> with(FairPlay.Stat st) {
         List<FairPlay.Stat> out = new ArrayList<>();
         for (var e : FairPlay.PLAYER_BASES.entrySet()) {
-            out.add(e.getKey().equals(key) ? new FairPlay.Stat(key, base, List.of(modifiers))
-                    : new FairPlay.Stat(e.getKey(), e.getValue(), List.of()));
+            out.add(e.getKey().equals(st.key()) ? st : new FairPlay.Stat(e.getKey(), e.getValue(), e.getValue(),
+                    List.of()));
+        }
+        if (!FairPlay.PLAYER_BASES.containsKey(st.key())) {
+            out.add(st);
         }
         return out;
     }
 
+    /** What the watch finds with the default walk speed and {@code st}. */
+    private static FairPlay.Finding find(FairPlay.Stat st) {
+        return FairPlay.finding(0.2f, with(st));
+    }
+
+    private static FairPlay.Stat speed(double value, FairPlay.Modifier... mods) {
+        return stat(FairPlay.MOVEMENT_SPEED, 0.1f, value, mods);
+    }
+
     @Test
     void aPlayersOwnMovementIsFineSprintingIncluded() {
-        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1f)),
+        assertNull(FairPlay.movement(0.2f, with(speed(0.1f))),
                 "the default walk speed and a movement speed of 0.1 (stored as a float)");
-        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING)),
+        assertNull(FairPlay.movement(0.2f, with(speed(SPRINTING_VALUE, SPRINT))),
                 "vanilla sprinting is a modifier an honest run has");
-        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.POWDER_SNOW)),
-                "so is powder snow's slow-down: a course may be built with powder snow");
-        assertNull(FairPlay.movement(0.2f, List.of(new FairPlay.Stat("minecraft:scale", 2, List.of("x:y")))),
+        assertNull(FairPlay.movement(0.2f, with(speed(0.08000000149011612,
+                mod(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.02)))), "so is powder snow's slow-down");
+        assertNull(FairPlay.movement(0.2f, List.of(stat("minecraft:scale", 2, 2, mod("x:y", "ADD_NUMBER", 1)))),
                 "an attribute the run doesn't watch is none of its business");
     }
 
     @Test
     void aChangedWalkSpeedOrMovementAttributeVoidsARun() {
-        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(0.4f, own(FairPlay.MOVEMENT_SPEED, 0.1)),
-                "/speed walk: the walk speed changed");
-        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(Float.NaN, own(FairPlay.MOVEMENT_SPEED, 0.1)),
+        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(0.4f, with(speed(0.1f))), "/speed walk: the walk speed changed");
+        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(Float.NaN, with(speed(0.1f))),
                 "a walk speed that isn't a number is not the default");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:jump_strength", 0.6)),
-                "a jump strength base off the player's own 0.42");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:gravity", 0.08, "someplugin:floaty")),
-                "another plugin's gravity modifier");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f,
-                own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING, "someplugin:boots")),
-                "a speed modifier next to sprinting");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:step_height", 0.6, FairPlay.SPRINTING)),
-                "sprinting belongs on the movement speed only");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:safe_fall_distance", 10)),
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, with(stat("minecraft:jump_strength", 0.6, 0.6))),
+                "a jump strength base over the player's own 0.42");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, with(stat(FairPlay.GRAVITY, 0.08, 0.04,
+                mod("someplugin:floaty", "MULTIPLY_SCALAR_1", -0.5)))), "another plugin's lighter gravity");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, with(speed(0.16900000561773784, SPRINT,
+                mod("someplugin:boots", "MULTIPLY_SCALAR_1", 0.3)))), "a speed boost on top of sprinting");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, with(stat("minecraft:safe_fall_distance", 10, 10))),
                 "a longer safe fall");
     }
 
     @Test
     void aVoidNamesTheAttributeAndTheModifier() {
-        assertEquals("your movement changed (minecraft:gravity: modifier someplugin:floaty)",
-                FairPlay.finding(0.2f, own("minecraft:gravity", 0.08, "someplugin:floaty")).line());
-        assertEquals("your movement changed (minecraft:movement_speed: modifier someplugin:boots)",
-                FairPlay.finding(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING, "someplugin:boots")).line(),
-                "sprinting is passed over, the boots are named");
-        assertEquals("your movement changed (minecraft:step_height: modifier minecraft:sprinting)",
-                FairPlay.finding(0.2f, own("minecraft:step_height", 0.6, FairPlay.SPRINTING)).line(),
-                "sprinting anywhere but the movement speed is named too");
-        assertEquals("your movement changed (minecraft:jump_strength base 0.6, not 0.42)",
-                FairPlay.finding(0.2f, own("minecraft:jump_strength", 0.6)).line());
+        assertEquals("your movement changed (minecraft:gravity 0.04, under 0.08; base 0.08; someplugin:floaty -0.5"
+                + " multiply_scalar_1)", find(stat(FairPlay.GRAVITY, 0.08, 0.04,
+                mod("someplugin:floaty", "MULTIPLY_SCALAR_1", -0.5))).line());
+        assertEquals("your movement changed (minecraft:movement_speed 0.169, over 0.13; base 0.1; minecraft:sprinting"
+                + " 0.3 multiply_scalar_1; someplugin:boots 0.3 multiply_scalar_1)", find(speed(0.16900000561773784,
+                SPRINT, mod("someplugin:boots", "MULTIPLY_SCALAR_1", 0.3))).line(), "every modifier is named");
+        assertEquals("your movement changed (minecraft:jump_strength base 0.6, over 0.42; value 0.6; no modifiers)",
+                find(stat("minecraft:jump_strength", 0.6, 0.6)).line());
         assertEquals("your walk speed changed (walk speed 0.4, not 0.2)",
-                FairPlay.finding(0.4f, own(FairPlay.MOVEMENT_SPEED, 0.1)).line());
-        assertNull(FairPlay.finding(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1f, FairPlay.SPRINTING)),
-                "an honest sprint: no finding, as movement() says");
+                FairPlay.finding(0.4f, with(speed(0.1f))).line());
+        assertNull(find(speed(SPRINTING_VALUE, SPRINT)), "an honest sprint: no finding, as movement() says");
         assertEquals("0.42", FairPlay.num(0.42f), "a float base reads as the player's own value");
         assertEquals("0.1", FairPlay.num(0.1f));
+    }
+
+    @Test
+    void anHonestSprintIsFineUnderAnyKey() {
+        assertNull(find(speed(SPRINTING_VALUE, SPRINT)), "vanilla's sprint");
+        assertNull(find(speed(SPRINTING_VALUE, mod("paper:sprint", "MULTIPLY_SCALAR_1", 0.3f))),
+                "the same sprint under another key: no faster, so fine (no sprint flag is read)");
+        assertNull(find(speed(SPRINTING_VALUE, mod("x:y", "MULTIPLY_SCALAR_1", 0.3f))), "under any key");
+        assertNull(find(speed(0.1f)), "walking");
+    }
+
+    @Test
+    void twoSprintsOrAnotherShapeVoid() {
+        assertEquals("your movement changed (minecraft:movement_speed 0.169, over 0.13; base 0.1; minecraft:sprinting"
+                + " 0.3 multiply_scalar_1; other:boost 0.3 multiply_scalar_1)", find(speed(0.16900000561773784,
+                SPRINT, mod("other:boost", "MULTIPLY_SCALAR_1", 0.3))).line(), "two of sprinting's shape");
+        assertEquals("your movement changed (minecraft:movement_speed 0.4, over 0.13; base 0.1; other:boost 0.3"
+                + " add_number)", find(speed(0.4, mod("other:boost", "ADD_NUMBER", 0.3))).line(), "a flat +0.3");
+    }
+
+    @Test
+    void powderSnowNeverVoids() {
+        assertNull(find(speed(0.05000000149011612, mod(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.05))), "walking, frozen");
+        assertNull(find(speed(0.06500000253319742, mod(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.05), SPRINT)),
+                "sprinting in powder snow");
+    }
+
+    @Test
+    void soulSpeedOnSoulSandIsABoost() {
+        assertEquals("your movement changed (minecraft:movement_speed 0.1405, over 0.13; base 0.1;"
+                        + " minecraft:enchantment.soul_speed 0.0405 add_number)",
+                find(speed(0.1405000016093254, mod("minecraft:enchantment.soul_speed", "ADD_NUMBER", 0.0405f))).line(),
+                "Soul Speed I, walking: faster than an honest sprint");
+        assertEquals(FairPlay.MOVEMENT, find(speed(0.2099500060707331,
+                mod("minecraft:enchantment.soul_speed", "ADD_NUMBER", 0.0615f), SPRINT)).reason(), "III, sprinting");
+        assertNull(find(speed(0.1f)), "soul sand alone: its slow-down is the block's, not an attribute");
+    }
+
+    @Test
+    void anotherPluginsSpeedBoostVoidsOncePastASprint() {
+        FairPlay.Modifier boost = mod("someplugin:boost", "MULTIPLY_SCALAR_1", 0.2f);
+        assertNull(find(speed(0.12000000208616257, boost)), "walking with +20%: no faster than an honest sprint");
+        assertEquals("your movement changed (minecraft:movement_speed 0.156, over 0.13; base 0.1; minecraft:sprinting"
+                + " 0.3 multiply_scalar_1; someplugin:boost 0.2 multiply_scalar_1)",
+                find(speed(0.15600000414252285, SPRINT, boost)).line(), "sprinting with it: faster than any honest run");
+    }
+
+    @Test
+    void aJumpBoostByModifierVoids() {
+        assertEquals("your movement changed (minecraft:jump_strength 0.52, over 0.42; base 0.42; someplugin:jump 0.1"
+                + " add_number)", find(stat("minecraft:jump_strength", 0.42f, 0.5199999868869781,
+                mod("someplugin:jump", "ADD_NUMBER", 0.1))).line());
+        assertNull(find(stat("minecraft:jump_strength", 0.42f, 0.32, mod("someplugin:jump", "ADD_NUMBER", -0.1))),
+                "a lower jump");
+    }
+
+    @Test
+    void anyChangeOfGravityVoids() {
+        assertEquals("your movement changed (minecraft:gravity 0.04, under 0.08; base 0.08; someplugin:floaty -0.5"
+                + " multiply_scalar_1)", find(stat(FairPlay.GRAVITY, 0.08, 0.04,
+                mod("someplugin:floaty", "MULTIPLY_SCALAR_1", -0.5))).line(), "lighter: a longer jump, a longer glide");
+        assertEquals("your movement changed (minecraft:gravity 0.12, over 0.08; base 0.08; someplugin:heavy 0.5"
+                + " multiply_scalar_1)", find(stat(FairPlay.GRAVITY, 0.08, 0.12,
+                mod("someplugin:heavy", "MULTIPLY_SCALAR_1", 0.5))).line(), "heavier: a faster Dropper fall or dive");
+        assertEquals("your movement changed (minecraft:gravity base 0.1, over 0.08; value 0.1; no modifiers)",
+                find(stat(FairPlay.GRAVITY, 0.1, 0.1)).line(), "a heavier base");
+        assertEquals("your movement changed (minecraft:gravity base 0.06, under 0.08; value 0.06; no modifiers)",
+                find(stat(FairPlay.GRAVITY, 0.06, 0.06)).line(), "a lighter base");
+        assertNull(find(stat(FairPlay.GRAVITY, 0.08, 0.0800000011920929)), "a float's rounding either way is no change");
+        assertTrue(FairPlay.bothWays(FairPlay.GRAVITY), "gravity alone is judged both ways");
+        assertFalse(FairPlay.bothWays(FairPlay.MOVEMENT_SPEED), "a slower speed is never a boost");
+    }
+
+    @Test
+    void aRaisedBaseVoidsALoweredOneDoesnt() {
+        assertEquals("your movement changed (minecraft:movement_speed base 0.11, over 0.1; value 0.11; no modifiers)",
+                find(stat(FairPlay.MOVEMENT_SPEED, 0.11, 0.11)).line(),
+                "walking on a raised base: still under a sprint's 0.13, but the base is past the player's own");
+        assertEquals("your movement changed (minecraft:jump_strength base 0.6, over 0.42; value 0.6; no modifiers)",
+                find(stat("minecraft:jump_strength", 0.6, 0.6)).line(), "README's /attribute check");
+        assertEquals(FairPlay.MOVEMENT, find(stat("minecraft:safe_fall_distance", 10, 10)).reason(), "a longer safe fall");
+        assertEquals(FairPlay.MOVEMENT, find(stat("minecraft:step_height", 0.6f, 1.0,
+                mod("someplugin:step", "ADD_NUMBER", 0.4))).reason(), "a higher step");
+        assertNull(find(stat(FairPlay.MOVEMENT_SPEED, 0.05, 0.06500000059604645, SPRINT)), "a slower base, sprinting");
+        assertNull(find(stat("minecraft:jump_strength", 0.3, 0.3)), "a lower jump");
+        assertNull(find(stat("minecraft:step_height", 0.5, 0.5)), "a lower step");
+        assertNull(find(stat("minecraft:safe_fall_distance", 2, 2)), "a shorter safe fall");
+    }
+
+    @Test
+    void theSlackIsAFloatsRoundingNotABoost() {
+        assertNull(find(speed(0.13001, SPRINT)), "+0.008% over a sprint: rounding");
+        assertEquals(FairPlay.MOVEMENT, find(speed(0.13026000194102527, SPRINT)).reason(), "+0.2%: a boost");
+        assertNull(find(stat("minecraft:jump_strength", 0.41999998688697815, 0.41999998688697815)), "0.42 as a float");
+        assertNull(find(stat(FairPlay.MOVEMENT_SPEED, 0.10000000149011612, 0.10000000149011612)), "0.1 as a float");
+    }
+
+    @Test
+    void bedrockIsJudgedAsJava() {
+        // finding takes no platform and no sprint flag: what Geyser hands the server is judged as Java's is
+        assertNull(find(speed(0.1f)), "the daughter's tablet run: walking, nothing on the movement");
+        assertNull(find(speed(SPRINTING_VALUE, SPRINT)), "a Bedrock sprint (Geyser sends Java's start-sprint)");
+        assertNull(find(speed(SPRINTING_VALUE, SPRINT)),
+                "the same sprint while the server's sprint flag hasn't caught up (a stop and a start in one tick)");
+        assertEquals(FairPlay.MOVEMENT, find(speed(0.15600000414252285, SPRINT,
+                mod("someplugin:boost", "MULTIPLY_SCALAR_1", 0.2f))).reason(), "a boost voids exactly as on Java");
+    }
+
+    @Test
+    void walkSpeedIsStillCheckedFirst() {
+        FairPlay.Stat boosted = speed(0.4, mod("other:boost", "ADD_NUMBER", 0.3));
+        assertEquals("your walk speed changed (walk speed 0.4, not 0.2)", FairPlay.finding(0.4f, with(boosted)).line(),
+                "/speed first, whatever else");
+        assertEquals(FairPlay.WALK_SPEED, FairPlay.finding(Float.NaN, with(speed(0.1f))).reason(),
+                "a walk speed that isn't a number");
+        assertEquals(FairPlay.MOVEMENT, find(speed(Double.NaN)).reason(), "a value that isn't a number can't be judged");
+    }
+
+    @Test
+    void unwatchedAttributesAreNoneOfItsBusiness() {
+        assertNull(FairPlay.finding(0.2f, List.of(stat("minecraft:scale", 2, 2, mod("x:y", "ADD_NUMBER", 1)))));
+        assertNull(FairPlay.finding(0.2f, List.of(stat("minecraft:friction_modifier", 1, 0.5,
+                mod("x:y", "MULTIPLY_SCALAR_1", -0.5)))));
+        assertNull(FairPlay.boost(stat("minecraft:scale", 2, 2)), "nothing to judge");
+        assertTrue(Double.isNaN(FairPlay.mark("minecraft:scale")), "and no mark");
+        assertEquals(FairPlay.SPRINT_SPEED, FairPlay.mark(FairPlay.MOVEMENT_SPEED), 0.0, "the speed's mark is a sprint");
+        assertEquals(0.42, FairPlay.mark("minecraft:jump_strength"), 0.0, "the others' is the player's own");
+    }
+
+    @Test
+    void foreignListsOnlyModifiersThatArentVanillasOwn() {
+        FairPlay.Modifier boost = mod("someplugin:boost", "MULTIPLY_SCALAR_1", 0.2f);
+        assertEquals(List.of(boost), FairPlay.foreign(speed(0.1, SPRINT,
+                mod(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.05), boost)), "only the plugin's, for the console's note");
+        assertEquals(List.of(), FairPlay.foreign(speed(SPRINTING_VALUE, SPRINT)), "vanilla's own: nothing to note");
+        assertEquals("no modifiers", FairPlay.listed(List.of()), "and a bare attribute lists none");
     }
 
     @Test
@@ -354,58 +511,6 @@ class FairPlayTest {
                 FairPlay.judge(false, null, false, 4_999, 5, -1), straight, 0, times, -1, 4_999, 5).reason());
         FairPlay.Verdict flying = FairPlay.judge(false, FairPlay.FLYING, false, 30_000, 5, -1);
         assertEquals(flying, FairPlay.explained(flying, straight, 0, times, -1, 30_000, 5), "a watch void is as it was");
-    }
-
-    @Test
-    void vanillaSprintingsShapeIsRecognised() {
-        assertTrue(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.3), "+30% of the total: vanilla's add_multiplied_total");
-        assertTrue(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.3f), "stored as a float");
-        assertFalse(FairPlay.sprintShaped("ADD_NUMBER", 0.3), "a flat 0.3 is another shape");
-        assertFalse(FairPlay.sprintShaped("ADD_SCALAR", 0.3), "so is 30% of the base");
-        assertFalse(FairPlay.sprintShaped("MULTIPLY_SCALAR_1", 0.5), "+50% is not sprinting");
-    }
-
-    private static final FairPlay.Modifier RENAMED = new FairPlay.Modifier("paper:sprint", "MULTIPLY_SCALAR_1", 0.3f);
-
-    /** The watched attributes with {@code mods} on the movement speed, read as the watch reads them. */
-    private static List<FairPlay.Stat> read(boolean sprinting, FairPlay.Modifier... mods) {
-        List<FairPlay.Stat> out = new ArrayList<>();
-        for (FairPlay.Stat st : own(FairPlay.MOVEMENT_SPEED, 0.1)) {
-            List<String> keys = st.key().equals(FairPlay.MOVEMENT_SPEED)
-                    ? FairPlay.sprintRead(st.key(), List.of(mods), sprinting).keys() : List.copyOf(st.modifiers());
-            out.add(new FairPlay.Stat(st.key(), st.base(), keys));
-        }
-        return out;
-    }
-
-    @Test
-    void aRenamedSprintWhileSprintingIsReadAsSprinting() {
-        FairPlay.SprintRead r = FairPlay.sprintRead(FairPlay.MOVEMENT_SPEED, List.of(RENAMED), true);
-        assertEquals(List.of(FairPlay.SPRINTING), r.keys(), "read as vanilla's sprint");
-        assertEquals("paper:sprint", r.renamed(), "its real key, for the warning");
-        assertNull(FairPlay.movement(0.2f, read(true, RENAMED)), "so the run still counts");
-        assertNull(FairPlay.movement(0.2f, read(true, RENAMED,
-                new FairPlay.Modifier(FairPlay.POWDER_SNOW, "ADD_NUMBER", -0.01))), "next to powder snow too");
-        FairPlay.SprintRead real = FairPlay.sprintRead(FairPlay.MOVEMENT_SPEED,
-                List.of(new FairPlay.Modifier(FairPlay.SPRINTING, "MULTIPLY_SCALAR_1", 0.3f)), true);
-        assertEquals(List.of(FairPlay.SPRINTING), real.keys(), "the real one is read as it is");
-        assertNull(real.renamed(), "and nothing is renamed");
-    }
-
-    @Test
-    void everythingElseOfSprintingsShapeStillVoids() {
-        assertEquals("your movement changed (minecraft:movement_speed: modifier paper:sprint)",
-                FairPlay.finding(0.2f, read(false, RENAMED)).line(), "the same modifier while not sprinting");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, read(true, RENAMED,
-                new FairPlay.Modifier("other:boost", "MULTIPLY_SCALAR_1", 0.3))), "two of sprinting's shape");
-        assertEquals("your movement changed (minecraft:movement_speed: modifier paper:sprint)",
-                FairPlay.finding(0.2f, read(true, new FairPlay.Modifier(FairPlay.SPRINTING, "MULTIPLY_SCALAR_1", 0.3f),
-                        RENAMED)).line(), "a real minecraft:sprinting and a renamed one");
-        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, read(true,
-                new FairPlay.Modifier("other:boost", "ADD_NUMBER", 0.3))), "another shape while sprinting");
-        FairPlay.SprintRead jump = FairPlay.sprintRead("minecraft:jump_strength", List.of(RENAMED), true);
-        assertEquals(List.of("paper:sprint"), jump.keys(), "on any attribute but the movement speed it is read as it is");
-        assertNull(jump.renamed());
     }
 
     @Test

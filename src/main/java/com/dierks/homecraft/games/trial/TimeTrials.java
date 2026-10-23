@@ -178,8 +178,8 @@ public final class TimeTrials implements Game {
     private static final double SNOW_SPREAD = 0.35;
     private static final double SNOW_RISE = 0.05;
     private static final double SNOW_SPEED = 0.08;
-    /** The sprint modifier keys the watch has read as sprinting and warned about: one warning a key. */
-    private static final Set<String> SPRINT_KEYS_WARNED = ConcurrentHashMap.newKeySet();
+    /** The modifiers ({@link FairPlay#foreign}) the console has noted, as "attribute key": one note each a start. */
+    private static final Set<String> MODIFIERS_NOTED = ConcurrentHashMap.newKeySet();
 
     /** The general rules, shown on the course list. */
     private static final List<String> RULES = List.of(
@@ -1238,8 +1238,8 @@ public final class TimeTrials implements Game {
 
     /**
      * The fair-play watch, at Go and on every tick: flying, a changed game mode, a potion effect,
-     * a changed walk speed or movement attribute — the run won't count, and the player hears it
-     * once.
+     * a changed walk speed or a boosted movement attribute — the run won't count, and the player
+     * hears it once.
      */
     void watch(Player p, TrialRun run) {
         if (run.voided != null || run.warmup) { // WP-R1 (D3): nothing in a warm-up counts anyway
@@ -1274,7 +1274,8 @@ public final class TimeTrials implements Game {
     /**
      * The watch's reason, with what exactly tripped it: "your game mode changed (survival)", "flying (flight
      * allowed)", "a potion effect (minecraft:speed 1 for 11999 ticks)", "your movement changed
-     * (minecraft:gravity: modifier someplugin:floaty)"; {@code null} when the run is fine.
+     * (minecraft:movement_speed 0.156, over 0.13; base 0.1; minecraft:sprinting 0.3 multiply_scalar_1;
+     * someplugin:boost 0.2 multiply_scalar_1)"; {@code null} when the run is fine.
      */
     static String voidWhy(Player p) {
         if (p.getGameMode() != GameMode.ADVENTURE) {
@@ -1302,9 +1303,10 @@ public final class TimeTrials implements Game {
 
     /**
      * Everything the fair-play watch reads on {@code p}, a line each ({@code /hcm games movement} and a void's log
-     * line): game mode, flight and sprinting; walk speed; effects; each watched attribute's base, value and every
-     * modifier on it (id, amount, operation), with VOIDS on what would void a run; then every other attribute
-     * that carries a modifier ("not watched"); then the verdict the watch would give now.
+     * line): game mode, flight and sprinting; walk speed; effects; each watched attribute's base (and the player's
+     * own), value (and the most an honest run has: {@link FairPlay#mark}, the only one for gravity), VOIDS when it
+     * is boosted past that ({@link FairPlay#boost}), and every modifier on it (id, amount, operation); then every
+     * other attribute that carries a modifier ("not watched"); then the verdict the watch would give now.
      */
     public static List<String> movementState(Player p) {
         List<String> out = new ArrayList<>();
@@ -1325,23 +1327,21 @@ public final class TimeTrials implements Game {
             if (usual == null && in.getModifiers().isEmpty()) {
                 continue; // not watched and untouched
             }
-            StringBuilder line = new StringBuilder(key).append(" base ").append(FairPlay.num(in.getBaseValue()));
+            FairPlay.Stat st = stat(a, in);
+            StringBuilder line = new StringBuilder(key).append(" base ").append(FairPlay.num(st.base()));
             if (usual == null) {
-                line.append(" (not watched)");
-            } else if (!(Math.abs(in.getBaseValue() - usual) <= 1e-6)) {
-                line.append(" VOIDS (usual ").append(FairPlay.num(usual)).append(')');
-            }
-            line.append(", value ").append(FairPlay.num(in.getValue()));
-            String renamed = FairPlay.sprintRead(key, modifiers(in), p.isSprinting()).renamed();
-            for (AttributeModifier m : in.getModifiers()) {
-                String id = m.getKey().toString();
-                line.append("; ").append(id).append(' ').append(FairPlay.num(m.getAmount())).append(' ')
-                        .append(m.getOperation().name().toLowerCase(Locale.ROOT));
-                if (id.equals(renamed)) {
-                    line.append(" (read as sprinting)");
-                } else if (usual != null && !FairPlay.allowed(key, id)) {
+                line.append(" (not watched), value ").append(FairPlay.num(st.value()));
+            } else {
+                line.append(" (own ").append(FairPlay.num(usual)).append("), value ").append(FairPlay.num(st.value()))
+                        .append(FairPlay.bothWays(key) ? " (only " : " (at most ")
+                        .append(FairPlay.num(FairPlay.mark(key))).append(')');
+                if (FairPlay.boost(st) != null) {
                     line.append(" VOIDS");
                 }
+            }
+            for (FairPlay.Modifier m : st.modifiers()) {
+                line.append("; ").append(m.key()).append(' ').append(FairPlay.num(m.amount())).append(' ')
+                        .append(m.operation().toLowerCase(Locale.ROOT));
             }
             out.add(line.toString());
         }
@@ -1351,29 +1351,37 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * The movement attributes the watch reads: base values and modifier keys, with the sprint fallback
-     * ({@link FairPlay#sprintRead}): a server that keys vanilla's sprint modifier otherwise has it read as
-     * sprinting, and its real key is logged once as a warning.
+     * The movement attributes the watch reads: base, value and every modifier, judged on the values
+     * ({@link FairPlay#boost}), so no key and no sprint flag is read. A modifier under any key but vanilla's sprint
+     * or powder snow ({@link FairPlay#foreign}) is noted on the console once a key, boost or not, so whatever
+     * another plugin or a datapack puts on a player is named the first time a run sees it.
      */
     private static List<FairPlay.Stat> movementStats(Player p) {
         List<FairPlay.Stat> out = new ArrayList<>(5);
-        boolean sprinting = p.isSprinting();
         for (Attribute a : List.of(Attribute.MOVEMENT_SPEED, Attribute.JUMP_STRENGTH, Attribute.STEP_HEIGHT,
                 Attribute.GRAVITY, Attribute.SAFE_FALL_DISTANCE)) {
             AttributeInstance in = p.getAttribute(a);
             if (in == null) {
                 continue;
             }
-            String key = a.getKey().toString();
-            FairPlay.SprintRead read = FairPlay.sprintRead(key, modifiers(in), sprinting);
-            if (read.renamed() != null && SPRINT_KEYS_WARNED.add(read.renamed())) {
-                Logger.getLogger("HomeCraftManagement").warning("Time trials: this server's sprint modifier is "
-                        + read.renamed() + ", not " + FairPlay.SPRINTING + "; the fair-play watch reads it as "
-                        + "sprinting (the same shape, +30% of the total, only while sprinting)");
+            FairPlay.Stat st = stat(a, in);
+            for (FairPlay.Modifier m : FairPlay.foreign(st)) {
+                if (MODIFIERS_NOTED.add(st.key() + " " + m.key())) {
+                    Logger.getLogger("HomeCraftManagement").info("Time trials: " + p.getName()
+                            + (Bedrock.is(p) ? " (Bedrock)" : "") + " carries " + m.key() + " "
+                            + FairPlay.num(m.amount()) + " " + m.operation().toLowerCase(Locale.ROOT) + " on "
+                            + st.key() + " (not vanilla's sprint or powder snow); the fair-play watch voids a run only"
+                            + " when it boosts the value past an honest run's (noted once a key)");
+                }
             }
-            out.add(new FairPlay.Stat(key, in.getBaseValue(), read.keys()));
+            out.add(st);
         }
         return out;
+    }
+
+    /** One attribute as the pure rules read it: its key, base, value and modifiers. */
+    private static FairPlay.Stat stat(Attribute a, AttributeInstance in) {
+        return new FairPlay.Stat(a.getKey().toString(), in.getBaseValue(), in.getValue(), modifiers(in));
     }
 
     /** An attribute's modifiers as the pure rules read them: key, Bukkit operation, amount. */

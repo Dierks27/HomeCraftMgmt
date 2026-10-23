@@ -24,8 +24,8 @@ import java.util.regex.Pattern;
  *
  * <p>The checks, in order: the {@code games.enabled} switch; the economy worlds exist; each Games
  * world is loaded, not an economy world and in adventure mode (Multiverse's setting, when it can be
- * read); Multiverse-Inventories gives the Games worlds a group of their own and keeps no per-game-mode
- * profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
+ * read); Multiverse-Inventories gives the Games worlds a group of their own, puts every economy world in one
+ * group (the Mailbox opens in each of them) and keeps no per-game-mode profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
  * the cadence, every area inside the world and clear of hand-built courses and each other, the
  * claims and foreign blocks, the next change, each course live or why not, the keep area and the
  * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); the Clubhouse; what players can
@@ -452,6 +452,7 @@ public final class GamesCheck {
                             + own.get(0) + "')"));
                 }
             }
+            economyGroups(inv.groups(), economy, gamesWorlds, out);
         }
         Boolean share = inv.gamemodeShare();
         if (share == null) {
@@ -464,6 +465,40 @@ public final class GamesCheck {
                             + "in its config.yml, then restart"));
         } else {
             out.add(Line.ok("Multiverse-Inventories' game-mode share handling is off"));
+        }
+    }
+
+    /**
+     * Every economy world shares one Multiverse-Inventories group (0.37.3, spec §4.13): the Mailbox opens in any
+     * economy world, and the break fix sends a broken block's stock there, so two economy worlds with inventories of
+     * their own would let it carry things from one to the other. One WARN for each economy world that shares no group
+     * with the first; worlds in no group aren't compared (what Multiverse-Inventories does with an ungrouped world is
+     * its own setting), and neither is a Games world listed as an economy world (a FAIL of its own above).
+     */
+    static void economyGroups(Map<String, List<String>> groups, List<String> economy, List<String> gamesWorlds,
+                              List<Line> out) {
+        List<String> grouped = new ArrayList<>();
+        for (String w : economy) {
+            if (!contains(gamesWorlds, w) && groups.values().stream().anyMatch(g -> contains(g, w))) {
+                grouped.add(w);
+            }
+        }
+        if (grouped.size() < 2) {
+            return;
+        }
+        String first = grouped.get(0);
+        boolean apart = false;
+        for (String w : grouped.subList(1, grouped.size())) {
+            boolean together = groups.values().stream().anyMatch(g -> contains(g, first) && contains(g, w));
+            if (!together) {
+                apart = true;
+                out.add(Line.warn("Economy worlds '" + first + "' and '" + w + "' are in different "
+                                + "Multiverse-Inventories groups - the Mailbox would carry things between them",
+                        "put every economy world in one group in plugins/Multiverse-Inventories/groups.yml"));
+            }
+        }
+        if (!apart) {
+            out.add(Line.ok("The economy worlds share a Multiverse-Inventories group"));
         }
     }
 

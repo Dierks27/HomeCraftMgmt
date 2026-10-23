@@ -235,6 +235,43 @@ class GamesCheckTest {
         assertTrue(l.fix().contains("enable-gamemode-share-handling: false"), l.fix());
     }
 
+    /**
+     * The Mailbox opens in every economy world and the break fix (0.37.3) sends a broken block's stock there, so the
+     * economy worlds must share one Multiverse-Inventories group (spec §4.13, §4.15 (6), red team D-m20).
+     */
+    @Test
+    void twoEconomyWorldsInDifferentGroupsAreAWarning() {
+        Good g = new Good();
+        g.inv = new MvInv(Map.of("survival", List.of("world"), "hubs", List.of("hub"), "games", List.of("games")),
+                false);
+        Line l = only(GamesCheck.run(g));
+        assertEquals(Status.WARN, l.status());
+        assertEquals("Economy worlds 'world' and 'hub' are in different Multiverse-Inventories groups - the Mailbox "
+                + "would carry things between them", l.what());
+        assertTrue(l.fix().contains("one group") && l.fix().contains("groups.yml"), l.fix());
+
+        String all = String.join("\n", GamesCheck.render(GamesCheck.run(new Good())));
+        assertTrue(all.contains("The economy worlds share a Multiverse-Inventories group"), all);
+
+        g = new Good();
+        g.inv = new MvInv(Map.of("survival", List.of("world"), "both", List.of("world", "hub"),
+                "games", List.of("games")), false);
+        assertEquals(List.of(), bad(GamesCheck.run(g)), "sharing one group is enough, whatever else they are in");
+
+        g = new Good();
+        g.inv = new MvInv(Map.of("survival", List.of("world"), "games", List.of("games")), false);
+        assertEquals(List.of(), bad(GamesCheck.run(g)),
+                "a world in no group isn't compared: what happens to it is Multiverse-Inventories' own setting");
+
+        g = new Good();
+        g.economy = List.of("world", "hub", "end");
+        g.loaded = Set.of("world", "hub", "end", "games");
+        g.inv = new MvInv(Map.of("a", List.of("world", "hub"), "b", List.of("end"), "games", List.of("games")),
+                false);
+        l = only(GamesCheck.run(g));
+        assertTrue(l.what().startsWith("Economy worlds 'world' and 'end'"), l.what());
+    }
+
     @Test
     void multiverseInventoriesFilesOfBothVersionsAreRead() throws Exception {
         YamlConfiguration groups5 = new YamlConfiguration();

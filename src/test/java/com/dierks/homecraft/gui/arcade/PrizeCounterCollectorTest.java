@@ -16,8 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A collector's tile on the Prize Counter (HALLOWEEN-SPEC §3.1 row 12): its year, that it is kept,
- * and the last day it is sold; and the "Give a present" entry's place on the Cosmetics tab.
+ * A collector's tile on the Prize Counter (HALLOWEEN-SPEC §3.1 row 12; SHOP-V2-SPEC §5.7): its season and
+ * year, that it is kept, and the last day it is sold; and the "Give a present" entry's place on the
+ * Cosmetics tab.
  */
 class PrizeCounterCollectorTest {
 
@@ -34,11 +35,38 @@ class PrizeCounterCollectorTest {
     }
 
     @Test
+    void theSantaCapsTileSaysChristmas() {
+        assertEquals(List.of("&cChristmas 2026 collector", "&aYours for good!", "&7On sale until 31 Dec"),
+                PrizeCounterMenu.collectorLines(row("cap_santa_2026").collector()));
+    }
+
+    @Test
+    void theTwinkleTileLeavesOnTheSixthOfJanuary() {
+        assertEquals(List.of("&cChristmas 2026 collector", "&aYours for good!", "&7On sale until 6 Jan"),
+                PrizeCounterMenu.collectorLines(row("trail_twinkle_2026").collector()),
+                "the 2026 collector, though it is sold into 2027");
+    }
+
+    @Test
     void theDateIsTheLocalDayWithoutAZeroOrAYear() {
         Collector c = new Collector(2027, LocalDate.of(2027, 12, 1), LocalDate.of(2028, 1, 6), true, null);
         assertEquals("&7On sale until 6 Jan", PrizeCounterMenu.collectorLines(c).get(2));
-        assertEquals("&6Halloween 2027 collector", PrizeCounterMenu.collectorLines(c).get(0),
+        assertEquals("&cChristmas 2027 collector", PrizeCounterMenu.collectorLines(c).get(0),
                 "the year is the collector's, not the season's end");
+    }
+
+    @Test
+    void eachSeasonHasItsOwnLineAndColour() {
+        assertEquals("&dSpring 2027 collector", PrizeCounterMenu.collectorLines(
+                new Collector(2027, LocalDate.of(2027, 4, 1), LocalDate.of(2027, 5, 31), true, null)).get(0));
+        assertEquals("&eSummer 2027 collector", PrizeCounterMenu.collectorLines(
+                new Collector(2027, LocalDate.of(2027, 7, 1), LocalDate.of(2027, 8, 31), true, null)).get(0));
+        assertEquals("&6Halloween 2027 collector", PrizeCounterMenu.collectorLines(
+                new Collector(2027, LocalDate.of(2027, 10, 1), LocalDate.of(2027, 10, 31), true, null)).get(0));
+    }
+
+    private static com.dierks.homecraft.config.PluginConfig.Prize row(String id) {
+        return Collectors.ROWS.stream().filter(p -> p.id().equals(id)).findFirst().orElseThrow();
     }
 
     @Test

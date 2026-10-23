@@ -54,7 +54,7 @@ final class Geometry {
      * {@link #firstHit} no lower than {@code floorY}: the move is cut to its part at or above the floor, then
      * tested as before; {@code NaN} when that part never touches the sphere. A Fresh Courses parkour checkpoint
      * counts with the feet up on its pad, never while they fall past its side or under it
-     * ({@link Progress#FEET_BELOW}).
+     * ({@link Progress#FEET_BELOW}; from 0.37.3 {@link #firstHitOver} keeps them over the pad too).
      */
     static double firstHitAbove(Point a, Point b, Point c, double r, double from, double floorY) {
         double lo = Math.max(0, from);
@@ -74,6 +74,50 @@ final class Geometry {
         }
         double t = firstHit(a, b, c, r, lo);
         return t > hi ? Double.NaN : t; // NaN > hi is false: a miss stays a miss
+    }
+
+    /**
+     * {@link #firstHitAbove} with the feet over a pad: the move is cut to its part inside the column
+     * {@code half} either side of {@code c} across (x and z), then tested as before against the sphere and the
+     * floor; {@code NaN} when that part never touches them. A Fresh Courses parkour mark counts with the feet over
+     * its pad, never beside it ({@link Progress}: the column and the floor are exact along a move).
+     */
+    static double firstHitOver(Point a, Point b, Point c, double r, double from, double half, double floorY) {
+        double[] cut = {Math.max(0, from), 1};
+        if (!within(cut, a.x(), b.x(), c.x() - half, c.x() + half)
+                || !within(cut, a.z(), b.z(), c.z() - half, c.z() + half)) {
+            return Double.NaN;
+        }
+        double t = firstHitAbove(a, b, c, r, cut[0], floorY);
+        return t > cut[1] ? Double.NaN : t; // NaN > cut[1] is false: a miss stays a miss
+    }
+
+    /**
+     * Whether feet at {@code p} stand on a pad: within {@code r} of {@code c}, within {@code half} and {@code hair}
+     * of it across (x and z), and within {@code hair} of its height. A point's test, for where a move ended, never a
+     * move's: a reported position may be a float step or two off (a Bedrock player's), but the straight line of a
+     * move through a band past the pad's side can be above its top while the feet never were ({@link
+     * Progress#PAD_HAIR}).
+     */
+    static boolean standsOn(Point p, Point c, double r, double half, double hair) {
+        return Math.abs(p.y() - c.y()) <= hair && Math.abs(p.x() - c.x()) <= half + hair
+                && Math.abs(p.z() - c.z()) <= half + hair && firstHit(p, p, c, r, 0) == 0;
+    }
+
+    /**
+     * Narrows {@code cut} (a fraction of the move, from and to) to where the move from {@code p0} to {@code p1}
+     * along one axis is within {@code min}..{@code max}; whether any of it is left.
+     */
+    private static boolean within(double[] cut, double p0, double p1, double min, double max) {
+        double d = p1 - p0;
+        if (d == 0) {
+            return min <= p0 && p0 <= max && cut[0] <= cut[1];
+        }
+        double t1 = (min - p0) / d;
+        double t2 = (max - p0) / d;
+        cut[0] = Math.max(cut[0], Math.min(t1, t2));
+        cut[1] = Math.min(cut[1], Math.max(t1, t2));
+        return cut[0] <= cut[1];
     }
 
     /** The point a fraction {@code t} of the way from {@code a} to {@code b}. */

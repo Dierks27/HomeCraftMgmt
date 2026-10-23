@@ -1,10 +1,15 @@
 package com.dierks.homecraft.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.block.CustomBlockGuard;
+import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.integration.EconomyService;
+import com.dierks.homecraft.marketplace.DeliveryService;
 import com.dierks.homecraft.mini.MiniService;
+import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.MiniListingDao;
 import com.dierks.homecraft.storage.MiniVendingDao;
+import com.dierks.homecraft.util.GiveAfterWrite;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -14,8 +19,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * The Mini secondary market's fixed-price venue. A Vending Machine holds MANY
@@ -28,6 +37,10 @@ public final class VendingService {
 
     public static final String VENDING = "VENDING";
     public static final String DISPLAY = "DISPLAY";
+
+    /** What the Display Case and the Vending Machine are called in the lines their owners see. */
+    public static final String DISPLAY_CASE = CustomBlockGuard.name(CustomBlockType.DISPLAY_CASE);
+    public static final String VENDING_MACHINE = CustomBlockGuard.name(CustomBlockType.MINI_VENDING_MACHINE);
 
     public record Result(boolean ok, String error) {
         static Result fail(String error) {
@@ -88,7 +101,10 @@ public final class VendingService {
         return Result.success();
     }
 
-    /** Owner empties a Display Case, returning the Mini. */
+    /**
+     * Owner empties a Display Case, returning the Mini. The row is deleted first and the Mini handed over after
+     * (0.37.3): a failed delete gives nothing, and a full bag sends it to the Mailbox, never the ground.
+     */
     public Result reclaim(Player owner, Location loc) {
         Optional<MiniListingDao.Listing> opt = at(loc);
         if (opt.isEmpty()) {
@@ -101,13 +117,7 @@ public final class VendingService {
         if (item == null) {
             return Result.fail("The stored Mini is unreadable.");
         }
-        giveOrDrop(owner, item);
-        try {
-            displayDao.deleteAt(loc);
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to clear display: " + e.getMessage());
-        }
-        return Result.success();
+        return takeOut(owner, item, DISPLAY_CASE, () -> displayDao.deleteAt(loc));
     }
 
     // ---- Vending Machine (many) -------------------------------------------
@@ -181,7 +191,10 @@ public final class VendingService {
         return Result.success();
     }
 
-    /** Owner takes a listing back out of the machine. */
+    /**
+     * Owner takes a listing back out of the machine: the listing is deleted first and the Mini handed over after
+     * (0.37.3), as {@link #reclaim}.
+     */
     public Result unlistVending(Player owner, long listingId) {
         Optional<MiniVendingDao.Listing> opt = vendingById(listingId);
         if (opt.isEmpty()) {
@@ -195,10 +208,42 @@ public final class VendingService {
         if (item == null) {
             return Result.fail("The stored Mini is unreadable.");
         }
-        giveOrDrop(owner, item);
-        shopsRefresh(listingId);
-        removeVending(listingId);
-        return Result.success();
+        Result r = takeOut(owner, item, VENDING_MACHINE, () -> vendingDao.remove(listingId));
+        shopsRefresh(new org.bukkit.Location(org.bukkit.Bukkit.getWorld(l.world()), l.x(), l.y(), l.z()));
+        return r;
+    }
+
+    /** A row's delete, for {@link #takeOut}: false when it was already gone. */
+    @FunctionalInterface
+    private interface Delete {
+        boolean delete() throws SQLException;
+    }
+
+    /**
+     * Take a Mini out of storage for {@code to}: in one transaction its row is deleted (and, if the bag is full, it is
+     * queued in their Mailbox), and only then does it go into the bag ({@link GiveAfterWrite}).
+     */
+    private Result takeOut(Player to, ItemStack item, String block, Delete delete) {
+        DeliveryService mail = plugin.deliveries();
+        String label = "From your " + block;
+        GiveAfterWrite.Outcome out = mail.handOver(to, item, item.getAmount(), label, VENDING,
+                toMailbox -> plugin.database().transaction(c -> {
+                    if (!delete.delete()) {
+                        return false;
+                    }
+                    mail.queueStacks(to.getUniqueId(), item, toMailbox, label, VENDING);
+                    return true;
+                }));
+        return switch (out.status()) {
+            case NOT_SAVED -> Result.fail("Could not save - try again.");
+            case GONE -> Result.fail("That listing is gone.");
+            case DONE -> {
+                if (out.mailed() > 0) {
+                    to.sendMessage(Text.of("&e✉ Your bag is full, so it went to your Mailbox (PC or Mailbox)."));
+                }
+                yield Result.success();
+            }
+        };
     }
 
     /** A buyer purchases one listing: Vault seller-payment, item transfer, tracked. */
@@ -233,7 +278,7 @@ public final class VendingService {
             economy.deposit(buyer, price);
             return Result.fail("Could not pay the seller — refunded.");
         }
-        giveOrDrop(buyer, item);
+        giveOrMail(buyer, item);
         plugin.miniService().transferOwner(l.uid(), buyer.getUniqueId());
         plugin.miniService().recordSale(l.uid(), l.miniId(), price, l.owner(), buyer.getUniqueId(), VENDING);
         removeVending(listingId);
@@ -247,29 +292,86 @@ public final class VendingService {
 
     // ---- break handling ---------------------------------------------------
 
-    /** On block break: return every loaded Mini (display + all vending listings) to the breaker. */
-    public void onBlockBroken(Location loc, Player breaker) {
+    /**
+     * One Mini going back to its owner's Mailbox from a broken block.
+     *
+     * @param owner the listing's owner: whoever stocked it, never whoever broke the block
+     * @param block {@link #DISPLAY_CASE} or {@link #VENDING_MACHINE}: the block it came out of
+     */
+    public record Return(UUID owner, String itemB64, String block) {
+
+        public String label() {
+            return "From your " + block;
+        }
+    }
+
+    /**
+     * What a broken {@code block} gives back (pure): every Mini in it, the single display row's and each Vending
+     * listing's, each to the owner of its listing. The breaker and the ground are never in it.
+     */
+    public static List<Return> returnPlan(String block, Optional<MiniListingDao.Listing> display,
+                                          List<MiniVendingDao.Listing> vending) {
+        List<Return> out = new ArrayList<>();
+        display.ifPresent(d -> out.add(new Return(d.owner(), d.itemB64(), block)));
+        for (MiniVendingDao.Listing l : vending) {
+            out.add(new Return(l.owner(), l.itemB64(), block));
+        }
+        return out;
+    }
+
+    /**
+     * A Vending Machine or Display Case is being broken (the break is final, 0.37.3): every Mini in it goes back to
+     * whoever stocked it, always into their Mailbox, in one transaction with the row deletes, so a crash can lose
+     * nothing and a failed write keeps every listing where it was. The Mailbox is used even when the owner breaks
+     * their own block: it survives a crash, never drops, and doesn't depend on which inventory group they stand in.
+     *
+     * @param block {@link #DISPLAY_CASE} or {@link #VENDING_MACHINE}: the block being broken, named in the Mailbox
+     * @return what went back (empty for an empty block)
+     * @throws SQLException when it couldn't be written: nothing changed, and the block should stay
+     */
+    public List<Return> returnStock(Location loc, String block) throws SQLException {
+        List<Return> back = returnStock(plugin.database(), displayDao, vendingDao, plugin.deliveries()::queueReady,
+                loc, block);
         if (plugin.effects() != null) {
             plugin.effects().unregisterBlock(loc);
         }
-        at(loc).ifPresent(display -> {
-            ItemStack item = Items.fromBase64(display.itemB64());
-            if (item != null) {
-                dropTo(breaker, loc, item);
-            }
-            try {
-                displayDao.deleteAt(loc);
-            } catch (SQLException ignored) {
-                // best effort
-            }
-        });
-        for (MiniVendingDao.Listing l : vendingAt(loc)) {
-            ItemStack item = Items.fromBase64(l.itemB64());
-            if (item != null) {
-                dropTo(breaker, loc, item);
-            }
-            removeVending(l.id());
+        Map<UUID, Integer> perOwner = new LinkedHashMap<>();
+        for (Return r : back) {
+            perOwner.merge(r.owner(), 1, Integer::sum);
         }
+        for (Map.Entry<UUID, Integer> e : perOwner.entrySet()) {
+            Player online = Bukkit.getPlayer(e.getKey());
+            if (online != null) {
+                online.sendMessage(Text.of(returnedLine(e.getValue(), back.get(0).block())));
+            }
+        }
+        return back;
+    }
+
+    /** {@link #returnStock(Location, String)}'s one transaction, over its DAOs and a Mailbox (a test's own). */
+    static List<Return> returnStock(Database db, MiniListingDao displayDao, MiniVendingDao vendingDao,
+                                    DeliveryService.Mailbox mailbox, Location loc, String block) throws SQLException {
+        return db.transaction(c -> {
+            Optional<MiniListingDao.Listing> display = displayDao.at(loc);
+            List<MiniVendingDao.Listing> vending = vendingDao.listingsAt(loc);
+            List<Return> plan = returnPlan(block, display, vending);
+            if (display.isPresent()) {
+                displayDao.deleteAt(loc);
+            }
+            for (MiniVendingDao.Listing l : vending) {
+                vendingDao.remove(l.id());
+            }
+            for (Return r : plan) {
+                mailbox.queueReady(r.owner(), r.itemB64(), r.label(), VENDING);
+            }
+            return plan;
+        });
+    }
+
+    /** What an owner is told when their Minis come home from a broken block. */
+    public static String returnedLine(int n, String block) {
+        return n == 1 ? "&e✉ Your Mini from your " + block + " is in your Mailbox (PC or Mailbox)."
+                : "&e✉ Your " + n + " Minis from your " + block + " are in your Mailbox (PC or Mailbox).";
     }
 
     // ---- helpers ----------------------------------------------------------
@@ -290,13 +392,20 @@ public final class VendingService {
         }
     }
 
-    private void giveOrDrop(Player player, ItemStack item) {
-        player.getInventory().addItem(item).values()
-                .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
-    }
-
-    private void dropTo(Player player, Location loc, ItemStack item) {
-        player.getInventory().addItem(item).values()
-                .forEach(drop -> loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop));
+    /**
+     * A bought Mini into the buyer's bag; with no room it goes to their Mailbox, not the ground. Only if that write
+     * fails too does it land at their feet, so a Mini that was paid for is never lost.
+     */
+    private void giveOrMail(Player player, ItemStack item) {
+        for (ItemStack left : player.getInventory().addItem(item).values()) {
+            try {
+                plugin.deliveries().queueReady(player.getUniqueId(), left, "From a Vending Machine", VENDING);
+                player.sendMessage(Text.of("&e✉ Your bag is full, so it went to your Mailbox (PC or Mailbox)."));
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to mail a bought Mini to " + player.getName() + ": "
+                        + e.getMessage());
+                player.getWorld().dropItemNaturally(player.getLocation(), left);
+            }
+        }
     }
 }

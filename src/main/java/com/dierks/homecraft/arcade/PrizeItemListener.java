@@ -14,7 +14,6 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.Skull;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
@@ -24,12 +23,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.block.BlockFromToEvent;
-import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -37,9 +32,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -54,12 +48,16 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini).</li>
- *   <li><b>Placed hats and trophies</b> remember exactly what they were, so breaking one (or
- *       blowing it up, pushing it, washing it away) gives the same prize back — never a plain head
- *       that has lost its tag and could be sold.</li>
+ *   <li><b>Placed hats and trophies</b> remember exactly what they were and who placed them. Only
+ *       that player (or an admin) may break one, and the same prize goes back into their bag (or
+ *       their Mailbox), never a plain head that has lost its tag and could be sold. Pistons, water,
+ *       lava and explosions can't move or break one (0.37.3).</li>
  * </ul>
  */
 public final class PrizeItemListener implements Listener {
+
+    /** The Mailbox source of a placed prize that didn't fit its breaker's bag (0.37.3). */
+    static final String MAILBOX_SOURCE = "PRIZE";
 
     private final HomeCraftManagement plugin;
 
@@ -357,6 +355,10 @@ public final class PrizeItemListener implements Listener {
     }
 
     // ---- prize heads placed as blocks --------------------------------------------------
+    //
+    // A placed head keeps its exact prize, who placed it and its prize id (PlacedPrizes). Pistons, flowing water
+    // and lava and explosions never move or break one: CustomBlockListener's guards refuse them (0.37.3), so a
+    // trophy can no longer be popped onto the ground for anyone to pick up.
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {
@@ -366,91 +368,81 @@ public final class PrizeItemListener implements Listener {
         }
         ItemStack one = item.clone();
         one.setAmount(1);
-        skull.getPersistentDataContainer().set(Keys.PRIZE_ITEM, PersistentDataType.STRING, Items.toBase64(one));
+        var pdc = skull.getPersistentDataContainer();
+        pdc.set(Keys.PRIZE_ITEM, PersistentDataType.STRING, Items.toBase64(one));
+        pdc.set(Keys.TROPHY_PLACER, PersistentDataType.STRING, event.getPlayer().getUniqueId().toString());
+        String id = TokenPrizes.prizeId(item);
+        if (id != null) {
+            pdc.set(Keys.PLACED_PRIZE_ID, PersistentDataType.STRING, id);
+        }
         skull.update(true, false);
     }
 
-    /** Stop the plain head dropping; harmless if a later handler cancels the break. */
+    /**
+     * Only whoever placed a prize head (or an admin) may break it ({@link PlacedPrizeRules}); one placed before
+     * 0.37.3 remembers no placer and stays breakable by anyone. Stop the plain head dropping; harmless if a later
+     * handler cancels the break.
+     */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreakCheck(BlockBreakEvent event) {
-        if (storedAt(event.getBlock()) != null) {
-            event.setDropItems(false);
+        Block block = event.getBlock();
+        if (PlacedPrizes.storedAt(block) == null) {
+            return;
         }
+        Player player = event.getPlayer();
+        UUID placer = PlacedPrizes.placer(block);
+        if (PlacedPrizeRules.breakRefused(player.getUniqueId().equals(placer), player.hasPermission("hcm.admin"),
+                placer != null)) {
+            event.setCancelled(true);
+            String name = plugin.getServer().getOfflinePlayer(placer).getName();
+            player.sendMessage(Text.of("&7That trophy belongs to " + (name == null ? "someone else" : name) + "."));
+            Sounds.refused(player);
+            return;
+        }
+        event.setDropItems(false);
     }
 
-    /** Drop the real prize only once the break is final, or a cancelled break would duplicate it. */
+    /**
+     * The real prize only once the break is final, or a cancelled break would duplicate it: into the breaker's bag,
+     * and if it doesn't fit, their Mailbox. Never the ground, where anyone could take it. If even the Mailbox can't
+     * be written, the break is called off and the prize stays standing.
+     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
-        ItemStack stored = storedAt(event.getBlock());
-        if (stored != null) {
-            dropAt(event.getBlock(), stored);
+        ItemStack stored = PlacedPrizes.storedAt(event.getBlock());
+        if (stored == null) {
+            return;
         }
-    }
+        Player player = event.getPlayer();
+        PlacedPrizeRules.Goes goes = PlacedPrizeRules.handOver(new PlacedPrizeRules.Hand<ItemStack>() {
+            @Override
+            public ItemStack toBag() {
+                var left = player.getInventory().addItem(stored);
+                return left.isEmpty() ? null : left.values().iterator().next();
+            }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onEntityExplode(EntityExplodeEvent event) {
-        dropAll(event.blockList());
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onBlockExplode(BlockExplodeEvent event) {
-        dropAll(event.blockList());
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPiston(BlockPistonExtendEvent event) {
-        List<Block> candidates = new ArrayList<>(event.getBlocks());
-        BlockFace dir = event.getDirection();
-        candidates.add(event.getBlock().getRelative(dir, event.getBlocks().size() + 1));
-        for (Block b : candidates) {
-            ItemStack stored = storedAt(b);
-            if (stored != null) {
-                b.setType(Material.AIR, false);
-                dropAt(b, stored);
+            @Override
+            public void toMailbox(ItemStack rest) throws java.sql.SQLException {
+                plugin.deliveries().queueReady(player.getUniqueId(), rest, label(rest), MAILBOX_SOURCE);
+            }
+        });
+        switch (goes) {
+            case BAG -> {
+            }
+            case MAILBOX -> player.sendMessage(
+                    Text.of("&e✉ Your bag is full, so it went to your Mailbox (PC or Mailbox)."));
+            case STAYS -> {
+                plugin.getLogger().severe("Couldn't mail a placed prize to " + player.getName()
+                        + ", so it stays standing");
+                event.setCancelled(true);
+                player.sendMessage(Text.of("&cCould not save - try again."));
             }
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onFlow(BlockFromToEvent event) {
-        Block to = event.getToBlock();
-        ItemStack stored = storedAt(to);
-        if (stored != null) {
-            to.setType(Material.AIR, false);
-            dropAt(to, stored);
-        }
-    }
-
-    private void dropAll(List<Block> blocks) {
-        List<Block> found = new ArrayList<>();
-        for (Block b : blocks) {
-            if (storedAt(b) != null) {
-                found.add(b);
-            }
-        }
-        for (Block b : found) {
-            ItemStack stored = storedAt(b);
-            blocks.remove(b);
-            b.setType(Material.AIR, false);
-            dropAt(b, stored);
-        }
-    }
-
-    private static ItemStack storedAt(Block b) {
-        Material t = b.getType();
-        if (t != Material.PLAYER_HEAD && t != Material.PLAYER_WALL_HEAD) {
-            return null;
-        }
-        if (!(b.getState(false) instanceof Skull skull)) {
-            return null;
-        }
-        String b64 = skull.getPersistentDataContainer().get(Keys.PRIZE_ITEM, PersistentDataType.STRING);
-        return b64 == null ? null : Items.fromBase64(b64);
-    }
-
-    private static void dropAt(Block b, ItemStack item) {
-        if (item != null) {
-            b.getWorld().dropItemNaturally(b.getLocation().toCenterLocation(), item);
-        }
+    /** A prize's name for its Mailbox row. */
+    private String label(ItemStack item) {
+        var row = plugin.config().arcade().prize(TokenPrizes.prizeId(item));
+        return row != null ? Text.plain(row.display()) : "Arcade prize";
     }
 }

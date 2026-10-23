@@ -21,6 +21,7 @@ import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -34,9 +35,10 @@ import java.util.List;
  * Makes a Mini head placed as a block a first-class placed Mini: on placement the
  * block records the Mini's full identity (id, uid, mint, grade, finish, owner, exact
  * item) and joins the placed-Mini registry so its effects run; right-clicking opens
- * the public info card; breaking it (by hand, explosion, piston or water) always
- * returns the exact copy — never a plain head, never a fresh mint. Towny/WorldGuard
- * are respected on break. Wild spawns are claimed by touching them instead.
+ * the public info card; breaking it (by hand, explosion, piston, water or a wither) always
+ * returns the exact copy — never a plain head, never a fresh mint, and by hand only
+ * once the break is final (0.37.3). Towny/WorldGuard are respected on break. Wild
+ * spawns are claimed by touching them instead.
  */
 public final class MiniHeadListener implements Listener {
 
@@ -90,28 +92,52 @@ public final class MiniHeadListener implements Listener {
         new MiniInfoMenu(plugin, player, ref, display, null).open(player);
     }
 
+    /**
+     * A break only decides here (HIGH): never a plain head, a wild Mini is caught, and a player who may not take a
+     * placed one is refused ({@link PlacedMiniRules#decide}). The exact copy drops in {@link #onBreakFinal}, once no
+     * other plugin can cancel the break (0.37.3, red team D-M6).
+     */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
-        BlockState state = event.getBlock().getState();
-        if (!(state instanceof Skull skull)) {
-            return;
-        }
-        var pdc = skull.getPersistentDataContainer();
-        if (plugin.miniService().refFrom(pdc) == null) {
+        if (!isMiniHead(event.getBlock())) {
             return;
         }
         event.setDropItems(false); // never a plain head
-        if (plugin.hunt() != null && plugin.hunt().isWild(event.getBlock())) {
-            plugin.hunt().claim(event.getPlayer(), event.getBlock(), false);
+        boolean wild = huntWild(event.getBlock());
+        boolean mayBreak = !wild && plugin.placedMinis().mayBreak(event.getPlayer(), event.getBlock());
+        switch (PlacedMiniRules.decide(wild, mayBreak)) {
+            case CATCH -> plugin.hunt().claim(event.getPlayer(), event.getBlock(), false);
+            case REFUSE -> {
+                event.setCancelled(true);
+                event.getPlayer().sendMessage(Text.of("&cYou can't take that Mini here."));
+            }
+            case WAIT -> {
+            }
+        }
+    }
+
+    /**
+     * The break is final (MONITOR, {@code ignoreCancelled}: a break any plugin cancelled never gets here, so the
+     * head keeps its copy and its row). Return the exact minted copy and forget the head; the block is removed by
+     * the event itself. A wild head was caught at HIGH and carries no copy.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBreakFinal(BlockBreakEvent event) {
+        if (!isMiniHead(event.getBlock()) || !PlacedMiniRules.dropsCopy(huntWild(event.getBlock()))) {
             return;
         }
-        if (!plugin.placedMinis().mayBreak(event.getPlayer(), event.getBlock())) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(Text.of("&cYou can't take that Mini here."));
-            return;
-        }
-        // Return the exact minted copy (the block is removed by the event itself).
         plugin.placedMinis().dropAndForget(event.getBlock(), false);
+    }
+
+    /** A skull carrying a Mini, placed or wild. */
+    private boolean isMiniHead(Block block) {
+        BlockState state = block.getState();
+        return state instanceof Skull skull && plugin.miniService().refFrom(skull.getPersistentDataContainer()) != null;
+    }
+
+    /** A wild head while the hunt is on; with the hunt off, a wild-tagged head breaks like a placed one, as before. */
+    private boolean huntWild(Block block) {
+        return plugin.hunt() != null && plugin.hunt().isWild(block);
     }
 
     // ---- destruction that isn't a player break: the copy still comes back --------
@@ -157,6 +183,19 @@ public final class MiniHeadListener implements Listener {
         Block to = event.getToBlock();
         if (plugin.placedMinis().isPlacedMini(to)) {
             plugin.placedMinis().dropAndForget(to, true);
+        }
+    }
+
+    /** A hurt wither chewing through the head: we clear it ourselves so the exact copy drops, not a plain head. */
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        Block b = event.getBlock();
+        if (b.getType() != Material.PLAYER_HEAD && b.getType() != Material.PLAYER_WALL_HEAD) {
+            return;
+        }
+        if (plugin.placedMinis().isPlacedMini(b)) {
+            event.setCancelled(true);
+            plugin.placedMinis().dropAndForget(b, true);
         }
     }
 

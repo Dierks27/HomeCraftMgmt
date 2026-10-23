@@ -117,6 +117,36 @@ public final class DeliveryDao {
         }
     }
 
+    /**
+     * {@link #updateStatus}, only while the row still has status {@code from}: false when it didn't (already
+     * collected), so a hand-over that reads one state and writes another never acts twice.
+     */
+    public boolean updateStatusIf(long id, String from, String to) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("UPDATE deliveries SET status=? WHERE id=? AND status=?")) {
+                ps.setString(1, to);
+                ps.setLong(2, id);
+                ps.setString(3, from);
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
+
+    /** {@link #updateItem}, only while the row still has status {@code status}: false when it didn't. */
+    public boolean updateItemIf(long id, String status, String itemB64) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE deliveries SET item_b64=? WHERE id=? AND status=?")) {
+                ps.setString(1, itemB64);
+                ps.setLong(2, id);
+                ps.setString(3, status);
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
+
     /** Replace the stored item (used when only part of a stack fit into the inventory). */
     public void updateItem(long id, String itemB64) throws SQLException {
         Connection c = conn();

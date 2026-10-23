@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.Collectors;
 import com.dierks.homecraft.arcade.PrizeItems;
 import com.dierks.homecraft.config.PluginConfig.Collector;
 import com.dierks.homecraft.config.PluginConfig.Prize;
@@ -85,8 +86,7 @@ public final class PrizeCounterMenu extends Menu {
                     current ? null : e -> new PrizeCounterMenu(plugin, player, back, t, 0).open(player));
         }
         if (tab == PrizeTab.COSMETICS && GiftPickerMenu.entryShown(plugin)) {
-            set(GIFT_SLOT, Menus.icon(Material.CAKE, "&dGive a present",
-                            "&7Buy a Halloween collector", "&7for someone who's online."),
+            set(GIFT_SLOT, Menus.icon(Material.CAKE, "&dGive a present", giftEntryLore()),
                     e -> new GiftPickerMenu(plugin, player, this::reopen).open(player));
         }
 
@@ -215,13 +215,20 @@ public final class PrizeCounterMenu extends Menu {
     }
 
     /**
+     * The "Give a present" tile's two lines. They name no season, so they read true for whichever
+     * collectors are on sale.
+     */
+    static String[] giftEntryLore() {
+        return new String[] {"&7Buy a collector", "&7for someone who's online."};
+    }
+
+    /**
      * A collector's lines after its description: the year it belongs to, that it is kept, and the last
      * day it is sold ("On sale until 31 Oct"). The year is in the name as well, for Bedrock's sake.
      */
     static List<String> collectorLines(Collector c) {
         List<String> out = new ArrayList<>();
-        // Every collector so far is Halloween's, as on the cap's own lore (PrizeItems.collectorLore).
-        out.add("&6Halloween " + c.year() + " collector");
+        out.add(Collectors.collectorLine(c)); // as on the cap's own lore (PrizeItems.collectorLore)
         out.add("&aYours for good!");
         if (c.to() != null) {
             out.add("&7On sale until " + UNTIL.format(c.to()));

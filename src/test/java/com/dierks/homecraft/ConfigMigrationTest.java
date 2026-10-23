@@ -190,6 +190,25 @@ class ConfigMigrationTest {
     }
 
     /**
+     * A config.yml a newer HomeCraft wrote (0.38's revision 22, with this jar rolled back under it) runs no step
+     * and keeps its revision; the start logs the one WARN this names (SHOP-V2-SPEC §7.9, S1b).
+     */
+    @Test
+    void aNewerConfigRunsNothingAndIsNamed() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        int newer = HomeCraftManagement.CONFIG_REVISION + 1;
+        onDisk.set("config_revision", newer);
+
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "no step runs");
+        assertEquals(newer, onDisk.getInt("config_revision"), "and the revision is never lowered");
+        assertEquals("This config was written by a newer HomeCraft (revision " + newer
+                        + "); rows this version doesn't know are skipped.",
+                HomeCraftManagement.newerConfigWarning(newer));
+        assertNull(HomeCraftManagement.newerConfigWarning(HomeCraftManagement.CONFIG_REVISION), "this build's own");
+        assertNull(HomeCraftManagement.newerConfigWarning(0), "no revision at all is an old file, not a newer one");
+    }
+
+    /**
      * The Candy Apple shower's section is all new keys (HALLOWEEN-SPEC §2.2), so a 0.37.1 file gets it from the
      * backfill, every leaf with its comment, and the section's own explanatory block. No revision is needed.
      */

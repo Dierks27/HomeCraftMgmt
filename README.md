@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.37.2-quiet-rails`
+- **Version:** `0.37.3-christmas`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -33,6 +33,9 @@ and the How It Works **Guide**.
   the **Locker** if you're offline or your bag is full.
 - **Marketplace & Pallets:** player-to-player selling through placeable Pallet seller boxes,
   auto-sorted into departments, with commission and an admin ban list.
+- **Shop blocks stay yours (0.37.3):** only whoever placed a Vending Machine, Display Case or
+  Pallet (or an admin) can break it, and everything in it goes back to whoever stocked it, in their
+  Mailbox. See [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
   (signs, holograms, TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
   `/api/minis`, `/api/news`, `/api/arcade`) also drive the LilahCraft website, behind an
@@ -77,12 +80,14 @@ Tokens are **earned by playing and never become dollars**.
     off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
   Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
-  LuckPerms and EssentialsX), and a numbered Arcade Trophy; Halloween collectors you keep for good
-  and can give to someone online (the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail).
+  LuckPerms and EssentialsX), and a numbered Arcade Trophy; holiday collectors you keep for good
+  and can give to someone online (Halloween: the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail;
+  Christmas: the Santa Cap 2026 and the Twinkle 2026 trail).
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
-  money path.
+  money path, inside a bundle or shulker box too (one packed too deep to check counts as a prize).
 - **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bundle
-  or shulker box), and can't be washed, renamed, re-trimmed or enchanted.
+  or shulker box), and can't be washed, renamed, re-trimmed or enchanted. A placed hat or trophy
+  can't be pushed, washed or blown off, and only whoever placed it can break it (0.37.3).
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -173,6 +178,22 @@ Trick-or-Treat Bags and candy apples are kept, but a bag takes anything until yo
 (one holding anything but candy drops on death). Nothing is deleted. See
 [Halloween 2026](#halloween-2026-0371) and [The Candy Apple shower](#the-candy-apple-shower-0371).
 
+**Back to 0.37.2 from 0.37.3:** the jar alone (0.37.3 changes no schema and no config). The
+Christmas collectors' tiles go, and owned Twinkle trails stop drawing until you upgrade again (an
+owned trail shows only while its row exists); Santa Caps stay in players' bags. The break fix
+reverts: anyone with build rights can break a shop block again and gets what is in it, and a
+piston, water, lava or TNT can pop a placed hat or trophy again. A Fresh Courses parkour checkpoint
+counts beside its pad again (a jump that fell short, or the edge of the pad before), and the
+fair-play watch judges modifier names again: any modifier on a watched movement attribute but
+sprinting and powder snow, or a base off a player's own, voids a run. Anything already in a Mailbox
+stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
+and [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
+
+**A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
+by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
+config was written by a newer HomeCraft (revision 22); rows this version doesn't know are skipped."
+Nothing runs and nothing is changed: the file keeps its revision and the database its version.
+
 Check which you have before trusting a downloaded jar:
 
 ```bash
@@ -230,6 +251,36 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   so its join-time sync sees them. If a recipe still doesn't show in JEI, the
   result item's custom head/PDC is the likely reason on the proxy side.
 
+### Shop blocks and the Mailbox (0.37.3)
+
+- **Who can break one.** A Vending Machine, a Display Case or a Pallet can be broken only by the
+  player who placed it, or an admin (`hcm.admin`), empty or not. Anyone else is told
+  "This is <name>'s Vending Machine. Only they can take it down." The town check is as before.
+- **Where its things go.** Every Mini in a Vending Machine or Display Case goes back to whoever
+  stocked it, and a Pallet's stock to its owner (one Mailbox row per full stack): always into their
+  **Mailbox** (collect at a Mailbox block or the PC), even when the owner breaks their own. Never
+  to whoever broke it, never on the ground. An owner who is online is told ("Your 2 Minis from
+  your Vending Machine are in your Mailbox"); an admin who breaks someone else's is told where it
+  went. The Mailbox keeps things until they are collected and survives a crash.
+- **Nothing happens until the break is final.** The break is decided first and done last, so if a
+  protection plugin says no, the block, its record and its stock stay exactly as they were. If the
+  database can't save, the block stays standing ("Could not save - try again."). A Mini head placed
+  as a block works the same way: its exact copy drops only once the break is final.
+- **Pistons, flowing water and lava, explosions and a wither** can't move or break any HomeCraft
+  block, a Vending Machine's top, or a placed hat or trophy (nor fire, for a block set to something
+  that burns).
+- **Taking things back saves first.** "Take it back" on a Display Case, taking a listing out of a
+  Vending Machine, "Take it all back" on a Pallet and collecting from the Mailbox write the change
+  first and hand over after: a failed save gives nothing, and what doesn't fit your bag goes to (or
+  stays in) your Mailbox. Mailbox tiles say where returned things came from ("From your Pallet").
+- **Every economy world in one Multiverse-Inventories group.** The Mailbox opens in any economy
+  world. If two economy worlds have inventories of their own, it would carry things from one to the
+  other, so `/hcm games check` warns: "Economy worlds 'world' and 'hub' are in different
+  Multiverse-Inventories groups - the Mailbox would carry things between them". Put them in one
+  group in `plugins/Multiverse-Inventories/groups.yml`.
+- **Rolling back to 0.37.2** is the jar only; the old break comes back and nothing in the database
+  needs changing.
+
 ### Recipes, skins and block variants (0.19)
 
 - **Recipes** live under `recipes:` in `config.yml` — one SHAPED 3×3 entry per
@@ -249,8 +300,8 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
 - **Vending Machine** — **two blocks tall**: the lower head (`skins.vending_lower`)
   is the real block; the upper head (`skins.vending_upper`) is placed automatically
   (the space above must be air or placement is refused). Right-click either half
-  to open it; break either half and the whole machine drops as one item. Machines
-  placed before 0.19 get their upper head on the first start (blocked ones are
+  to open it; break either half and the whole machine drops as one item (only its
+  owner or an admin can break it, 0.37.3). Machines placed before 0.19 get their upper head on the first start (blocked ones are
   logged with coordinates).
 - **Mailbox** — eight colour variants (`wood`, `light_blue`, `black`, `white`,
   `purple`, `blue`, `orange`, `yellow`): `/hcm give mailbox [variant] [player]`
@@ -501,6 +552,34 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
   the leaves particle needs no data. Each problem is one WARN. So is a clock on UTC (a blank or
   unknown `clock.time_zone`), which would end Halloween at 7 PM in Chicago.
 
+### Christmas 2026 (0.37.3)
+
+Two more collectors, for Christmas: kept for good, one each, sold only in their season and given
+as presents, all exactly as Halloween's above.
+
+| Collector | Price | On sale (local dates, `clock.time_zone`) | What it is |
+|---|---|---|---|
+| **Santa Cap 2026** (`cap_santa_2026`) | 250 tokens | 1 to 31 Dec 2026 | A red leather cap with a white band (the vanilla rib trim in quartz). No armour, and it never wears out. Worn like the Pumpkin Cap |
+| **Twinkle 2026** (`trail_twinkle_2026`) | 400 tokens | 1 Dec 2026 to 6 Jan 2027 | A trail of little sparks at your feet as you walk |
+
+- **The season is in the line.** The cap and both tiles say "Christmas 2026 collector", in red
+  (Halloween's line stays gold), and "Yours for good!". Twinkle is a 2026 collector, though it is
+  sold into January.
+- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock), as the
+  first two tiles of the Cosmetics tab. The cap leaves at midnight going into 1 January, Twinkle at
+  midnight going into 7 January. Before 1 December neither is on the counter, in Give a present or
+  in the website feed. Don't use `/hcm give prize` to look at one early: given to a player, it is
+  their one Santa Cap.
+- **Give a present** offers both through December, and Twinkle alone from 1 to 6 January. Its tile
+  now reads "Buy a collector for someone who's online", with no season in it.
+- **On Bedrock** the cap is dyed leather like the Pumpkin Cap, so the red shows either way; if the
+  Pumpkin Cap's trim shows on a Bedrock screen, the Santa Cap's band will too. Twinkle's particle,
+  `ELECTRIC_SPARK`, is in Paper 26.2 and 26.3 and needs no data, so Twinkle is sold on both.
+- **The startup self-test** checks the Santa Cap (its red, its band, its zero armour and its tag)
+  and Twinkle's particle as it does Halloween's: one `Self-test: collector … OK` line each, four in
+  all, and a WARN for anything missing.
+- No config edit and no config revision: like Halloween's, they are built into the plugin.
+
 ### Give a present
 
 - **The Give a present tile** (a cake, top right of the Cosmetics tab) shows while a collector is
@@ -550,9 +629,10 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
   show on a Bedrock screen, update Geyser.
 - The orange poplar leaves are new in Paper **26.3**. **On 26.2 the trail is not sold or given:** it
   has no counter tile, "Give a present" doesn't offer it, the website feed leaves it out, and
-  `/hcm give prize trail_leaves_2026` answers "That trail needs Paper 26.3." One already owned stays
-  in the database and shows after the upgrade to 26.3. The collector self-test's WARN at startup says
-  why (and an owned trail switched on logs that its particle is missing when its owner joins).
+  `/hcm give prize trail_leaves_2026` answers "That trail can't show on this server yet." One
+  already owned stays in the database and shows after the upgrade to 26.3. The collector self-test's
+  WARN at startup says why (and an owned trail switched on logs that its particle is missing when
+  its owner joins).
 - Bedrock shows lore only on a long press, so the year is in the name as well.
 
 ### Prizes are safe (every prize, for everyone)
@@ -573,6 +653,13 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Workstations:** a cauldron won't wash a prize ("That's a prize - it stays just as it is."), and
   an anvil, a smithing table, a grindstone or an enchanting table won't change one. Crafting,
   crafters, brewing and villager trades already refused prizes.
+- **A placed hat or trophy (0.37.3)** can be broken only by whoever placed it, or an admin
+  ("That trophy belongs to <name>."). The same prize goes back into their bag, or their Mailbox
+  when the bag is full, never on the ground. Pistons, water, lava, TNT and a wither leave it
+  standing. One placed before 0.37.3 doesn't know who placed it, so anyone can still break it (and
+  gets it in their bag).
+- **A prize packed deep inside bundles (0.37.3)** can't be sold either: a bundle or shulker box
+  holding anything more than four containers in, or one that can't be read, counts as a prize.
 
 ### Owner knobs (`arcade.collectors`)
 
@@ -1087,10 +1174,13 @@ Easy, Medium, Hard and "Why did we build this?".
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
   finish. On a Fresh Courses parkour course a checkpoint counts with your feet up on its pad, not
-  while falling past it or under it (0.37.1); a hand-built (or kept) course's checkpoints count
-  anywhere in their sphere, as they always did. Each move is checked as the line it really
-  travelled, so a fast glide through a ring counts and no checkpoint can be skipped. The action bar
-  shows the clock and the checkpoints so far.
+  while falling past it or under it (0.37.1). From 0.37.3 the feet must be over the pad itself too:
+  a checkpoint or the finish counts anywhere on its pad, corners included, or a hair past its edge
+  (a Bedrock player standing on the very edge still counts), but never from a jump that fell short
+  beside it, one that hit its side and slid down, or the edge of the pad before it. A hand-built (or
+  kept) course's checkpoints count anywhere in their sphere, as they always did. Each move is
+  checked as the line it really travelled, so a fast glide through a ring counts and no checkpoint
+  can be skipped. The action bar shows the clock and the checkpoints so far.
 - **Going wrong** sends you back to your last checkpoint, facing the next one, and the clock keeps
   running. On parkour that's a fall `fall_depth` (6) blocks below the lower of the last and next
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
@@ -1102,25 +1192,34 @@ Easy, Medium, Hard and "Why did we build this?".
   (Geyser doesn't pass the no-push team's rule to a Bedrock client, so a Bedrock player's own
   client may still nudge them a little; the Java player no longer pushes, or is pushed.)
 - **Fair play.** Flying, a game mode other than adventure, any potion effect, a walk speed other
-  than the usual 0.2 (`/speed`) or a changed movement voids the run the moment it's seen ("This
+  than the usual 0.2 (`/speed`) or a boosted movement voids the run the moment it's seen ("This
   run won't count - …"); you can still finish it for fun. Movement means movement speed, jump
-  strength, step height, gravity and safe fall distance: each must be at its usual value, with no
-  modifier on it but sprinting or powder snow's slow-down. At the finish, a run quicker than the
-  course's shortest time (`min_seconds`) doesn't count, and nor does a leg between two checkpoints
-  covered faster than the kind allows (parkour 14, elytra 80, boat 75 blocks a second, over the
-  gap between the two checkpoints' spheres). Either way the finish says "That run didn't count."
+  strength, step height, gravity and safe fall distance, and from 0.37.3 the watch judges what they
+  add up to, never a modifier's name: a run is voided only when one is boosted past an honest
+  run's, a speed above a vanilla sprint's 0.13, a higher jump, step or safe fall than a player's
+  own, or a base raised past the player's own. Gravity must stay the player's own either way
+  (lighter is a longer jump or glide, heavier a faster Dropper fall or dive). Sprinting (under any
+  name), powder snow and anything else that only slows never void. So another plugin's speed boost
+  while walking passes until you sprint with it, since until then it is no faster than an honest
+  sprint. At the finish, a run quicker than the course's shortest time (`min_seconds`) doesn't
+  count, and nor does a leg between two checkpoints covered faster than the kind allows (parkour
+  14, elytra 80, boat 75 blocks a second, over the gap between the two checkpoints' spheres). Either way the finish says "That run didn't count."
   with why, and nothing is recorded. Every leg gets 0.05 s of slack, and a server stall (over
   250 ms between two ticks) never voids an honest run: a leg it touched isn't checked. Nothing is
   recorded either for a run whose course changed layout while it ran, or was deleted and made
-  again. The red line says what tripped it: the attribute and the modifier, or the value that
-  changed ("your movement changed (minecraft:movement_speed: modifier x:y)"), and for a finish too
-  fast, which leg and how fast. The console gets one "Time trials: ..." line a void, with when it
-  fired ("at Go" or "3.2 s in", from that player's own Go, so a racer who set off late still reads
-  "at Go") and whether the player was sprinting, and
-  **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now. Should a
-  server key vanilla's sprint modifier otherwise than `minecraft:sprinting`, a sprint still
-  counts: exactly one modifier of sprinting's shape, only while sprinting, is read as sprinting,
-  and the console WARNs its real key once.
+  again. The red line says what tripped it: the attribute, its value against the honest one, its
+  base and every modifier on it ("your movement changed (minecraft:movement_speed 0.156, over 0.13;
+  base 0.1; minecraft:sprinting 0.3 multiply_scalar_1; someplugin:boost 0.2 multiply_scalar_1)"),
+  and for a finish too fast, which leg and how fast. The console gets one "Time trials: ..." line a
+  void, with when it fired ("at Go" or "3.2 s in", from that player's own Go, so a racer who set off
+  late still reads "at Go") and whether the player was sprinting, and
+  **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now: each
+  watched attribute's base and the player's own, its value and the most an honest run has (the
+  only one, for gravity), VOIDS when it is past that, and every modifier. The first time a run sees a
+  modifier other than vanilla's sprint or powder snow on a watched attribute, boost or not, the
+  console notes it once ("Time trials: <name> carries someplugin:boost 0.2 multiply_scalar_1 on
+  minecraft:movement_speed (not vanilla's sprint or powder snow); ..."), so whatever another plugin
+  or a datapack puts on players is named.
 - **Nobody else can touch a run.** For anyone in a world game, an effect from anything but a
   plugin or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
   charge, a hit) and a fishing rod reeling them in are cancelled. A bystander can't spoil a run,
@@ -2303,8 +2402,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
-- **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or
-  safe-fall attribute void the run). The game's own hops to the next ledge are never speed-checked;
+- **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or a
+  longer safe fall void the run). The game's own hops to the next ledge are never speed-checked;
   a run quicker than 90% of the levels' walk-off falls doesn't count. A run going at the weekly change
   finishes and counts on its own set's board. Two fallers in one shaft can't push each other (a
   no-push scoreboard team for the run; a player on another plugin's team, for nametags, goes back on
@@ -3264,7 +3363,11 @@ the backfill never replaces a single value you wrote where a section belongs, it
     and Leave game; a 3-2-1 holds you there, then "Go!". Its tile on the Courses tab opens the
     course screen, with Start, instead.
 30. Each checkpoint shows "Checkpoint 1 of 2 - 0:04.1" with a ping. Fall well below the
-    checkpoints: "Back to checkpoint 1", and the clock keeps going.
+    checkpoints: "Back to checkpoint 1", and the clock keeps going. On today's Fresh Easy parkour
+    (`/hcm games course fresh_parkour_easy test` is enough), jump short of a checkpoint so you fall
+    past its side: no "Checkpoint" line, and the fall sends you back to the last pad you really
+    landed on, not onto the one you missed (0.37.3). Landing on its very edge or a corner still
+    counts, on Java and on Bedrock.
 31. Finish: your time, "★ Your first finish on Cliffs!", "★ New course record!", "+10 tokens (Cliffs:
     first finish)" and the best-this-week reward (up to the daily cap). You're sent home with your
     things, and the result screen offers Play again. Finish faster: "★ New best! (was …)", and no
@@ -3287,7 +3390,12 @@ the backfill never replaces a single value you wrote where a section belongs, it
 37. `/speed walk 2` mid-run: "This run won't count - your walk speed changed" (`/speed walk 1`
     after). `/attribute @s minecraft:jump_strength base set 0.6` mid-run: "…your movement changed"
     (set it back to 0.42). Sprinting the whole way, or `/save-all flush` mid-run, doesn't stop a
-    run counting.
+    run counting. From 0.37.3: `/attribute @s minecraft:movement_speed modifier add test:slow -0.02
+    add_value` mid-run still counts, sprinting too, and the console notes `test:slow` once (remove
+    it with `... modifier remove test:slow`). On a new run, `/attribute @s minecraft:movement_speed
+    modifier add test:fast 0.2 add_multiplied_total` still counts while you walk; sprint, and "…your
+    movement changed (minecraft:movement_speed 0.156, over 0.13; …)" (remove it after). The
+    daughter's tablet run on Easy and a Java sprint race against the daughter both count.
 38. `/hcm games course create auto parkour` is refused ("'auto' is a word /hcm games feature keeps
     for itself."). `cliffs fall 200` is refused (a fall height must be under the course's lowest
     point), and so is a y under the world's floor.

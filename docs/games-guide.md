@@ -1207,7 +1207,7 @@ These are played in the Games world, on courses the server's builders make. Each
 3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line with only the course kit.
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
-6. Land on every checkpoint in order. On the Fresh Courses, falling past one doesn't count. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
+6. Land on every checkpoint in order. On the Fresh Courses, a checkpoint counts only when your feet are over its pad: falling past it, jumping short beside it or standing on the pad before it doesn't count. Anywhere on the pad counts, even the very edge or a corner. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Fall too far and you go back to your last checkpoint, facing the next one. The clock keeps running.
 8. After the last checkpoint, reach the finish. You see your time, your best and the course record.
 9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.

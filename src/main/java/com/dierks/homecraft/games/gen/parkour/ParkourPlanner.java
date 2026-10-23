@@ -78,10 +78,19 @@ public final class ParkourPlanner implements Planner {
      * feet can stand, and a player's feet can be {@link #STAND} past a pad's edge: its far corner
      * is {@code hypot(1.8, 1.8) = 2.55} from the middle, so a child who lands on the corner of a
      * turning checkpoint and hops on is counted. (The block corner, 2.12, isn't enough.) No
-     * checkpoint's mark reaches the pad before or after it ({@link Search#reachesNeighbour}).
+     * checkpoint's mark reaches the pad before or after it ({@link Search#reachesNeighbour}), and
+     * {@link com.dierks.homecraft.games.trial.Progress} counts a mark only over its own pad's column
+     * ({@link com.dierks.homecraft.games.trial.Progress#PAD_HAIR}), so feet over the edge of the pad
+     * before never count it.
      */
     public static final double CHECKPOINT_RADIUS = 2.6;
     public static final double FINISH_RADIUS = 3.0;
+    /**
+     * A checkpoint pad's side and the finish pad's (both square). {@link com.dierks.homecraft.games.trial.Progress}
+     * reads them for the pad under a generated mark, which is always at its pad's middle.
+     */
+    public static final int CHECKPOINT_PAD = 3;
+    public static final int FINISH_PAD = 5;
     /** How far past a pad's edge feet can still stand on it: half a player's width. */
     public static final double STAND = 0.3;
     /** The deepest {@code fall_depth} a layout is shaped for; deeper settings give the same layout. */
@@ -401,8 +410,9 @@ public final class ParkourPlanner implements Planner {
 
         int[] size(Kind kind, GenRandom r) {
             return switch (kind) {
-                case START, FINISH -> new int[]{5, 5};
-                case CHECKPOINT -> new int[]{3, 3};
+                case START -> new int[]{5, 5};
+                case FINISH -> new int[]{FINISH_PAD, FINISH_PAD};
+                case CHECKPOINT -> new int[]{CHECKPOINT_PAD, CHECKPOINT_PAD};
                 case PATH -> switch (level) {
                     case EASY -> new int[]{3, 3};
                     case MEDIUM -> r.chance(0.6) ? new int[]{2, 2} : new int[]{1, 1};

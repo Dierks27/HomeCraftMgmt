@@ -10,7 +10,7 @@ import java.util.List;
  * reached with a jump. {@code /hcm games course <id> checkpoint add} and {@code finish} warn when the builder
  * isn't standing on a block, and {@code /hcm games check} lists the points of each hand-built parkour course that
  * aren't on one. Fresh Courses' own marks always sit on their pad's top (their proof needs a solid block under
- * each), and only those get {@link Progress}'s floor. Pure: the world comes in as {@link Solid}.
+ * each), and only those get {@link Progress}'s floor and pad column. Pure: the world comes in as {@link Solid}.
  */
 public final class Footing {
 

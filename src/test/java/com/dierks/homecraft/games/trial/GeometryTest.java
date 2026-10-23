@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.trial;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -13,8 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * starts inside touches at once; a move that stops short, or passes beside, doesn't touch; the
  * search can start part-way along (for the next checkpoint of the same move); a move that doesn't
  * move is simply inside or not; grazing the surface counts; the parkour form ({@code firstHitAbove})
- * tests only the part of the move at or above a floor; and the facing used when a run goes back looks
- * at the next checkpoint in Minecraft's yaw convention.
+ * tests only the part of the move at or above a floor, and its 0.37.3 form ({@code firstHitOver}) only the
+ * part over the pad's column too, so a move beside the column never touches; and the facing used when a run
+ * goes back looks at the next checkpoint in Minecraft's yaw convention.
  */
 class GeometryTest {
 
@@ -101,6 +103,54 @@ class GeometryTest {
                 Geometry.firstHitAbove(O, new Point(10, 0, 0), c, 1, 0.5, -0.5), EPS, "part-way along, as before");
         assertTrue(Double.isNaN(Geometry.firstHitAbove(O, new Point(3, 0, 0), c, 1, 0, -0.5)),
                 "a miss stays a miss");
+    }
+
+    /** A real Easy checkpoint: its pad is x 4138-4140, z 4153-4155, top 170; the mark is the top's middle. */
+    private static final Point PAD_MARK = new Point(4139.5, 170, 4154.5);
+    /** A 3x3 pad's column: half the pad, half a player's width and a hair (1.5 + 0.3 + 0.02). */
+    private static final double HALF = 1.82;
+    /** The column's floor: a hair under the pad's top. */
+    private static final double FLOOR = 169.98;
+
+    @Test
+    void aMoveBesideThePadsColumnNeverTouches() {
+        // a standing jump that fell short past the pad's side: the box 0.55 clear of its face at x 4141
+        Point a = new Point(4141.985, 170.495, 4155.1);
+        Point b = new Point(4141.850, 170.121, 4155.1);
+        assertFalse(Double.isNaN(Geometry.firstHitAbove(a, b, PAD_MARK, 2.6, 0, 169.5)),
+                "0.37.1's floor alone: inside the sphere, above the floor, so it touched");
+        assertTrue(Double.isNaN(Geometry.firstHitOver(a, b, PAD_MARK, 2.6, 0, HALF, FLOOR)),
+                "beside the pad's column the whole move: nothing");
+    }
+
+    @Test
+    void aLandingTouchesWhereTheFeetCrossIntoTheColumn() {
+        Point a = new Point(4142.2, 171.0, 4154.5);
+        Point b = new Point(4141.0, 170.0, 4154.5);
+        assertEquals(0.88 / 1.2, Geometry.firstHitOver(a, b, PAD_MARK, 2.6, 0, HALF, FLOOR), EPS,
+                "in the sphere from the start, but over the pad only from x 4141.32");
+        Point high = new Point(4140.0, 174, 4154.5);
+        Point low = new Point(4140.0, 170, 4154.5);
+        assertEquals(Geometry.firstHit(high, low, PAD_MARK, 2.6, 0),
+                Geometry.firstHitOver(high, low, PAD_MARK, 2.6, 0, HALF, FLOOR), EPS,
+                "a move wholly inside the column: where it enters the sphere, as before");
+        assertEquals(Geometry.firstHit(high, low, PAD_MARK, 2.6, 0.5),
+                Geometry.firstHitOver(high, low, PAD_MARK, 2.6, 0.5, HALF, FLOOR), EPS, "part-way along, as before");
+        assertTrue(Double.isNaN(Geometry.firstHitOver(high, low, PAD_MARK, 2.6, 1.5, HALF, FLOOR)),
+                "past the end of the move");
+    }
+
+    @Test
+    void underTheColumnsFloorNothingTouches() {
+        Point under = new Point(4141.0, 169.95, 4154.5);
+        assertTrue(Double.isNaN(Geometry.firstHitOver(under, under, PAD_MARK, 2.6, 0, HALF, FLOOR)),
+                "standing still over the pad but 0.05 under its top: nothing");
+        Point on = new Point(4141.0, 169.99, 4154.5);
+        assertEquals(0.0, Geometry.firstHitOver(on, on, PAD_MARK, 2.6, 0, HALF, FLOOR), EPS,
+                "a hundredth under the top, within the hair: touched at once");
+        Point beside = new Point(4141.33, 170.0, 4154.5);
+        assertTrue(Double.isNaN(Geometry.firstHitOver(beside, beside, PAD_MARK, 2.6, 0, HALF, FLOOR)),
+                "standing still 0.33 past the pad's edge, on its top's height: beside the column, nothing");
     }
 
     @Test

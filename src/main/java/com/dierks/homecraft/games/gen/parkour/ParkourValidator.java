@@ -34,7 +34,8 @@ import java.util.Set;
  *   <li>fall consistency: no pad sits within 2 of the height that sends a run back, using the live
  *       {@code trials.fall_depth};</li>
  *   <li>a checkpoint after exactly every N jumps, the finish after the last; every mark sits on
- *       its pad and reaches no other pad; a checkpoint's covers every spot of its pad where feet
+ *       its pad, at its middle (a run counts it only over that pad, read from the mark and the pad's
+ *       size), and reaches no other pad; a checkpoint's covers every spot of its pad where feet
  *       can stand (a half-width past its edges), so any landing on it counts;</li>
  *   <li>every block and sign inside the half;</li>
  *   <li>no enclosed walkable cell (the air over every pad reaches open sky);</li>
@@ -450,6 +451,9 @@ public final class ParkourValidator {
         for (int k = 0; k < marks.size(); k++) {
             Course.Mark m = marks.get(k);
             Pad p = on.get(k);
+            if (Math.abs(m.x() - p.cx()) > EPS || Math.abs(m.z() - p.cz()) > EPS) {
+                out.add("the " + what + " at " + at(m.x(), m.y(), m.z()) + " isn't at its pad's middle");
+            }
             double halfSide = Math.min(p.sx(), p.sz()) / 2.0;
             // where feet can stand: the pad and a half-width past its edges
             double corner = Math.hypot(Math.max(m.x() - p.x1, p.x2 + 1 - m.x()) + ParkourPlanner.STAND,
@@ -475,8 +479,9 @@ public final class ParkourValidator {
     private static void checkPad(List<String> out, JumpRules.Level level, Pad p, int k, String kind, String pathColour,
                                  Map<Long, String> blocks) {
         boolean sizeOk = switch (kind) {
-            case "start", "finish" -> p.sx() == 5 && p.sz() == 5;
-            case "checkpoint" -> p.sx() == 3 && p.sz() == 3;
+            case "start" -> p.sx() == 5 && p.sz() == 5;
+            case "finish" -> p.sx() == ParkourPlanner.FINISH_PAD && p.sz() == ParkourPlanner.FINISH_PAD;
+            case "checkpoint" -> p.sx() == ParkourPlanner.CHECKPOINT_PAD && p.sz() == ParkourPlanner.CHECKPOINT_PAD;
             default -> switch (level) {
                 case EASY -> p.sx() == 3 && p.sz() == 3;
                 case MEDIUM -> p.sx() == p.sz() && p.sx() <= 2;

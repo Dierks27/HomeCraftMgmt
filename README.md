@@ -182,8 +182,9 @@ Trick-or-Treat Bags and candy apples are kept, but a bag takes anything until yo
 Christmas collectors' tiles go, and owned Twinkle trails stop drawing until you upgrade again (an
 owned trail shows only while its row exists); Santa Caps stay in players' bags. The break fix
 reverts: anyone with build rights can break a shop block again and gets what is in it, and a
-piston, water, lava or TNT can pop a placed hat or trophy again. Anything already in a Mailbox
-stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
+piston, water, lava or TNT can pop a placed hat or trophy again. A Fresh Courses parkour checkpoint
+counts beside its pad again (a jump that fell short, or the edge of the pad before). Anything
+already in a Mailbox stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
 and [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
@@ -1171,10 +1172,13 @@ Easy, Medium, Hard and "Why did we build this?".
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
   finish. On a Fresh Courses parkour course a checkpoint counts with your feet up on its pad, not
-  while falling past it or under it (0.37.1); a hand-built (or kept) course's checkpoints count
-  anywhere in their sphere, as they always did. Each move is checked as the line it really
-  travelled, so a fast glide through a ring counts and no checkpoint can be skipped. The action bar
-  shows the clock and the checkpoints so far.
+  while falling past it or under it (0.37.1). From 0.37.3 the feet must be over the pad itself too:
+  a checkpoint or the finish counts anywhere on its pad, corners included, or a hair past its edge
+  (a Bedrock player standing on the very edge still counts), but never from a jump that fell short
+  beside it, one that hit its side and slid down, or the edge of the pad before it. A hand-built (or
+  kept) course's checkpoints count anywhere in their sphere, as they always did. Each move is
+  checked as the line it really travelled, so a fast glide through a ring counts and no checkpoint
+  can be skipped. The action bar shows the clock and the checkpoints so far.
 - **Going wrong** sends you back to your last checkpoint, facing the next one, and the clock keeps
   running. On parkour that's a fall `fall_depth` (6) blocks below the lower of the last and next
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
@@ -3348,7 +3352,11 @@ the backfill never replaces a single value you wrote where a section belongs, it
     and Leave game; a 3-2-1 holds you there, then "Go!". Its tile on the Courses tab opens the
     course screen, with Start, instead.
 30. Each checkpoint shows "Checkpoint 1 of 2 - 0:04.1" with a ping. Fall well below the
-    checkpoints: "Back to checkpoint 1", and the clock keeps going.
+    checkpoints: "Back to checkpoint 1", and the clock keeps going. On today's Fresh Easy parkour
+    (`/hcm games course fresh_parkour_easy test` is enough), jump short of a checkpoint so you fall
+    past its side: no "Checkpoint" line, and the fall sends you back to the last pad you really
+    landed on, not onto the one you missed (0.37.3). Landing on its very edge or a corner still
+    counts, on Java and on Bedrock.
 31. Finish: your time, "★ Your first finish on Cliffs!", "★ New course record!", "+10 tokens (Cliffs:
     first finish)" and the best-this-week reward (up to the daily cap). You're sent home with your
     things, and the result screen offers Play again. Finish faster: "★ New best! (was …)", and no

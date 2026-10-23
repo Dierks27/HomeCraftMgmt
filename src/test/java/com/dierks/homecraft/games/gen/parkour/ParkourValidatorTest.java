@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The independent check of a parkour plan (GEN-SPEC §4.1): a real plan passes it, and one
  * hand-made bad plan per rule is caught — a flat 4-gap, a 2-block climb, a head-hitter, a skip,
- * a pad under the fall floor, a block outside the half — each with words an admin can act on.
+ * a pad under the fall floor, a block outside the half, a mark off its pad's middle — each with
+ * words an admin can act on.
  */
 class ParkourValidatorTest {
 
@@ -293,6 +294,21 @@ class ParkourValidatorTest {
         assertTrue(says(ParkourValidator.problems(bad, "easy", 6), "doesn't cover its pad"),
                 "a child who lands on a corner 2.4 from the middle and hops on would never be counted");
         assertEquals(List.of(), ParkourValidator.problems(p, "easy", 6), "the planner's own 2.6 covers it");
+    }
+
+    @Test
+    void aMarkOffItsPadsMiddleIsRefused() throws GenFailed {
+        Plan p = real(EASY, 4);
+        Course c = ((PlannedTrial) p.course()).course();
+        List<Course.Mark> moved = new ArrayList<>(c.checkpoints());
+        Course.Mark m = moved.get(1);
+        moved.set(1, new Course.Mark(m.x() + 0.5, m.y(), m.z(), m.radius())); // still over its pad, half a block off
+        Plan bad = Plan.of(p.slot(), p.algo(), p.seed(), p.half(), p.palette(), p.ops(), p.signs(), p.keepClear(),
+                new PlannedTrial(c.withCheckpoints(moved), ((PlannedTrial) p.course()).refMs()), p.summary(),
+                p.work());
+        assertTrue(says(ParkourValidator.problems(bad, "easy", 6), "isn't at its pad's middle"),
+                "a run counts a mark only over the pad it reads from the mark: the mark must be its middle");
+        assertFalse(says(ParkourValidator.problems(p, "easy", 6), "middle"), "the planner's own marks are");
     }
 
     @Test

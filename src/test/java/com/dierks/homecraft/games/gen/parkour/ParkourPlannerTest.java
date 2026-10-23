@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -373,6 +374,185 @@ class ParkourPlannerTest {
                         assertEquals(0, alongX.reachedCheckpoints() + alongZ.reachedCheckpoints(), slot.id() + " day "
                                 + day + ": a level pass a block under the pad's top, " + dx + " off its middle, doesn't"
                                 + " count it");
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- 0.37.3: a mark counts only over its own pad --------------------------------------------
+
+    /** One target of a tagged layout on a course of its own: the checkpoint (with a finish far away), or the finish. */
+    private static Course alone(Slots.Def slot, Plan p, Course.Mark m, boolean finish) {
+        return new Course(slot.id(), TrialKind.PARKOUR, slot.name(), Tier.EASY, "", null,
+                finish ? List.of() : List.of(m), finish ? m : new Course.Mark(0, -100, 0, 1), null, null, true, false, 1,
+                tag(p, ParkourPlanner.ALGO));
+    }
+
+    /** Whether standing still at (x, y, z) counts the first target. */
+    private static boolean standCounts(Course c, double x, double y, double z) {
+        Point at = new Point(x, y, z);
+        Progress run = new Progress(c, at, 0);
+        run.move(at, 1);
+        return run.reachedTargets() > 0;
+    }
+
+    /** Whether one move from {@code a} to {@code b} counts the first target. */
+    private static boolean moveCounts(Course c, Point a, Point b) {
+        Progress run = new Progress(c, a, 0);
+        run.move(b, 1);
+        return run.reachedTargets() > 0;
+    }
+
+    @Test
+    void everyCheckpointCountsWhereverFeetCanStandOnItsPadUnderItsTag() throws GenFailed {
+        double[] edges = {-1.8004, -1.8, 1.8, 1.8004};
+        for (Slots.Def slot : SLOTS) {
+            for (int day = 0; day < 100; day++) {
+                Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
+                Course built = ((PlannedTrial) p.course()).course();
+                for (Course.Mark m : built.checkpoints()) {
+                    Course one = alone(slot, p, m, false);
+                    // a 3 x 3 pad under the mark; feet stand up to a half-width past its edges
+                    for (double dx = -1.8; dx <= 1.801; dx += 0.18) {
+                        for (double dz = -1.8; dz <= 1.801; dz += 0.18) {
+                            assertTrue(moveCounts(one, new Point(m.x() + 9, m.y() + 3, m.z()),
+                                    new Point(m.x() + dx, m.y(), m.z() + dz)), slot.id() + " day " + day
+                                    + ": landing at " + dx + "," + dz + " from the middle of the checkpoint counts it");
+                        }
+                    }
+                    // its very edges and corners, as Java puts the feet (1.8) and a few float steps past (Bedrock)
+                    for (double dx : edges) {
+                        for (double dz : new double[]{-1.8004, 0, 1.8004}) {
+                            for (double y : new double[]{m.y(), m.y() - 1e-5}) {
+                                assertTrue(standCounts(one, m.x() + dx, y, m.z() + dz), slot.id() + " day " + day
+                                        + ": standing at " + dx + "," + dz + " (y " + y + ") counts it");
+                                assertTrue(standCounts(one, m.x() + dz, y, m.z() + dx), slot.id() + " day " + day
+                                        + ": standing at " + dz + "," + dx + " (y " + y + ") counts it");
+                            }
+                        }
+                    }
+                }
+                // the finish's 5 x 5 pad: every spot within a half-width past it that its 3.0 reaches
+                Course.Mark f = built.finish();
+                Course last = alone(slot, p, f, true);
+                for (double dx = -2.8; dx <= 2.801; dx += 0.2) {
+                    for (double dz = -2.8; dz <= 2.801; dz += 0.2) {
+                        if (Math.hypot(dx, dz) > ParkourPlanner.FINISH_RADIUS - 1e-6) {
+                            continue;
+                        }
+                        assertTrue(standCounts(last, f.x() + dx, f.y(), f.z() + dz), slot.id() + " day " + day
+                                + ": standing at " + dx + "," + dz + " on the finish pad finishes");
+                    }
+                }
+            }
+        }
+    }
+
+    /** A pad of a plan, from its blocks: x1..x2, z1..z2, standing on top. */
+    private record Block(int x1, int z1, int x2, int z2, int top) {
+
+        boolean under(Course.Mark m) {
+            return m.y() == top && m.x() >= x1 && m.x() <= x2 + 1 && m.z() >= z1 && m.z() <= z2 + 1;
+        }
+    }
+
+    /** The plan's pads, grouped from its blocks: side by side at one height is one pad. */
+    private static List<Block> pads(Plan p) {
+        Set<List<Integer>> blocks = new HashSet<>();
+        for (BlockOp op : p.ops()) {
+            blocks.add(List.of(op.x(), op.y(), op.z()));
+        }
+        Set<List<Integer>> seen = new HashSet<>();
+        List<Block> out = new ArrayList<>();
+        for (BlockOp op : p.ops()) {
+            if (!seen.add(List.of(op.x(), op.y(), op.z()))) {
+                continue;
+            }
+            int x1 = op.x();
+            int x2 = op.x();
+            int z1 = op.z();
+            int z2 = op.z();
+            List<int[]> todo = new ArrayList<>(List.<int[]>of(new int[]{op.x(), op.z()}));
+            while (!todo.isEmpty()) {
+                int[] c = todo.remove(todo.size() - 1);
+                x1 = Math.min(x1, c[0]);
+                x2 = Math.max(x2, c[0]);
+                z1 = Math.min(z1, c[1]);
+                z2 = Math.max(z2, c[1]);
+                for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                    List<Integer> n = List.of(c[0] + d[0], op.y(), c[1] + d[1]);
+                    if (blocks.contains(n) && seen.add(n)) {
+                        todo.add(new int[]{c[0] + d[0], c[1] + d[1]});
+                    }
+                }
+            }
+            out.add(new Block(x1, z1, x2, z2, op.y() + 1));
+        }
+        return out;
+    }
+
+    @Test
+    void noTargetCountsFromThePadBeforeOrAfterIt() throws GenFailed {
+        for (Slots.Def slot : SLOTS) {
+            for (int day = 0; day < 100; day++) {
+                Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
+                Course built = ((PlannedTrial) p.course()).course();
+                List<Block> pads = pads(p);
+                List<Course.Mark> targets = built.targets();
+                for (int i = 0; i < targets.size(); i++) {
+                    Course.Mark m = targets.get(i);
+                    Course one = alone(slot, p, m, i == targets.size() - 1);
+                    for (Block q : pads) {
+                        // every pad but its own within reach: the one before it and the one after it among them
+                        double ex = Math.max(0, Math.max(q.x1() - 0.3 - m.x(), m.x() - (q.x2() + 1.3)));
+                        double ez = Math.max(0, Math.max(q.z1() - 0.3 - m.z(), m.z() - (q.z2() + 1.3)));
+                        if (q.under(m) || Math.hypot(Math.hypot(ex, ez), q.top() - m.y()) > m.radius()) {
+                            continue;
+                        }
+                        // where feet can stand on it: its footprint and a half-width past its edges, at its top
+                        for (double x = q.x1() - 0.3; x <= q.x2() + 1.3001; x += (q.x2() - q.x1() + 1.6) / 8) {
+                            for (double z = q.z1() - 0.3; z <= q.z2() + 1.3001; z += (q.z2() - q.z1() + 1.6) / 8) {
+                                assertFalse(standCounts(one, x, q.top(), z), slot.id() + " day " + day + ": standing at "
+                                        + x + "," + q.top() + "," + z + " on another pad counts target " + (i + 1));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void noTargetCountsBesideItsPad() throws GenFailed {
+        for (Slots.Def slot : SLOTS) {
+            for (int day = 0; day < 100; day++) {
+                Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
+                List<Course.Mark> targets = ((PlannedTrial) p.course()).course().targets();
+                for (int i = 0; i < targets.size(); i++) {
+                    Course.Mark m = targets.get(i);
+                    boolean finish = i == targets.size() - 1;
+                    Course one = alone(slot, p, m, finish);
+                    double face = (finish ? ParkourPlanner.FINISH_PAD : ParkourPlanner.CHECKPOINT_PAD) / 2.0
+                            + ParkourPlanner.STAND;
+                    // straight down beside the pad's column, from over the top to well under it
+                    for (double d = face + 0.03; d <= m.radius() + 1e-9; d += 0.05) {
+                        for (double s = -d; s <= d + 1e-9; s += d / 4) {
+                            for (double[] at : new double[][]{{d, s}, {-d, s}, {s, d}, {s, -d}}) {
+                                assertFalse(moveCounts(one, new Point(m.x() + at[0], m.y() + 1.5, m.z() + at[1]),
+                                        new Point(m.x() + at[0], m.y() - 8, m.z() + at[1])), slot.id() + " day " + day
+                                        + ": a drop at " + at[0] + "," + at[1] + " beside target " + (i + 1)
+                                        + " counts it");
+                            }
+                        }
+                    }
+                    // pinned against the pad's side, a half-width past its edge, sliding down from just under its top
+                    for (double s = -face; s <= face + 1e-9; s += face / 6) {
+                        for (double[] at : new double[][]{{face, s}, {-face, s}, {s, face}, {s, -face}}) {
+                            assertFalse(moveCounts(one, new Point(m.x() + at[0], m.y() - 0.03, m.z() + at[1]),
+                                    new Point(m.x() + at[0], m.y() - 8, m.z() + at[1])), slot.id() + " day " + day
+                                    + ": sliding down the side at " + at[0] + "," + at[1] + " counts target " + (i + 1));
+                        }
                     }
                 }
             }

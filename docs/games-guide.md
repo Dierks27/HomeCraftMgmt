@@ -1228,7 +1228,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
+- These make a run not count: flying, your game mode changing, any potion effect, your walk speed being changed, or something making you move faster, jump higher or fall differently than a normal player (sprinting is fine). You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one checkpoint to the next faster than parkour allows (14 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.
@@ -1303,7 +1303,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying (like creative flying), your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
+- These make a run not count: flying (like creative flying), your game mode changing, any potion effect, your walk speed being changed, or something making you move faster, jump higher or fall differently than a normal player (sprinting is fine). You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one ring to the next faster than elytra courses allow (80 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.
@@ -1379,7 +1379,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
+- These make a run not count: flying, your game mode changing, any potion effect, your walk speed being changed, or something making you move faster, jump higher or fall differently than a normal player (sprinting is fine). You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one checkpoint to the next faster than boat courses allow (75 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.

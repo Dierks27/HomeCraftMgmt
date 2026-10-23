@@ -20,8 +20,8 @@ import java.util.function.Predicate;
  * ({@code min_seconds}); a leg between two checkpoints covered faster than the kind of course
  * allows, counting only the distance that must really be travelled, {@code max(0, d − r_prev −
  * r_cur)}, so big spheres close together never trip it; and flying, a changed game mode, a
- * potion effect or a changed walk speed or movement attribute, which void the run the moment
- * they are seen.
+ * potion effect, a changed walk speed or a movement attribute boosted past an honest run's (judged
+ * on its value, never a modifier's key), which void the run the moment they are seen.
  *
  * <p><b>Server stalls.</b> A move is timed when the server handles it. While the server stalls
  * (an autosave, new chunks, a GC pause) the client's moves queue up and are then handled
@@ -61,18 +61,30 @@ public final class FairPlay {
 
     /** A player's walk speed when nothing has changed it. */
     public static final float DEFAULT_WALK_SPEED = 0.2f;
-    /** The movement modifiers an honest run has: vanilla sprinting, on the movement speed. */
+    /**
+     * Vanilla's own sprint modifier, on the movement speed. Never judged by its key (0.37.3): the watch judges the
+     * value, and a sprint under any key is no faster than this one.
+     */
     public static final String SPRINTING = "minecraft:sprinting";
-    /** Vanilla's powder-snow slow-down: it only slows, so a course built with powder snow is fair. */
+    /** Vanilla's own powder-snow slow-down: it only slows, so it never voids, under this key or any other. */
     public static final String POWDER_SNOW = "minecraft:powder_snow";
     public static final String MOVEMENT_SPEED = "minecraft:movement_speed";
+    /**
+     * The one watched attribute judged both ways: less gravity is a longer, slower fall (a parkour jump, an elytra's
+     * glide), more a faster one (a Dropper's fall, an elytra's dive).
+     */
+    public static final String GRAVITY = "minecraft:gravity";
     /** The movement attributes a run watches, and a player's own base value of each. */
     public static final Map<String, Double> PLAYER_BASES = Map.of(
             MOVEMENT_SPEED, 0.1,
             "minecraft:jump_strength", 0.42,
             "minecraft:step_height", 0.6,
-            "minecraft:gravity", 0.08,
+            GRAVITY, 0.08,
             "minecraft:safe_fall_distance", 3.0);
+    /** The fastest an honest player moves on foot: their own 0.1 with vanilla sprinting's +30% of the total. */
+    public static final double SPRINT_SPEED = 0.1 * 1.3;
+    /** A value within this share of its mark is on it: a float's rounding, never a boost. */
+    public static final double BOOST_SLACK = 1e-4;
 
     private FairPlay() {
     }
@@ -275,20 +287,32 @@ public final class FairPlay {
     }
 
     /**
+     * One modifier on an attribute, as the player has it.
+     *
+     * @param key       its key ({@code minecraft:sprinting})
+     * @param operation its Bukkit operation's name ({@code MULTIPLY_SCALAR_1})
+     * @param amount    its amount
+     */
+    public record Modifier(String key, String operation, double amount) {
+    }
+
+    /**
      * One movement attribute as the player has it.
      *
      * @param key       the attribute's key ({@code minecraft:gravity})
      * @param base      its base value
-     * @param modifiers the keys of the modifiers on it
+     * @param value     its value with every modifier applied (Paper's {@code getValue()})
+     * @param modifiers every modifier on it
      */
-    public record Stat(String key, double base, Collection<String> modifiers) {
+    public record Stat(String key, double base, double value, List<Modifier> modifiers) {
     }
 
     /**
      * Why the player's movement voids a run, or {@code null} when it is a player's own: a walk
      * speed other than {@value #DEFAULT_WALK_SPEED} ({@code /speed}), or a watched attribute
-     * ({@link #PLAYER_BASES}) with its base value changed or any modifier on it but vanilla
-     * sprinting or powder snow's slow-down — another plugin's speed, jump, step, gravity or safe-fall boost. A value that
+     * ({@link #PLAYER_BASES}) boosted past an honest run's ({@link #boost}) — another plugin's speed, jump, step,
+     * gravity or safe-fall boost. Judged on the values, never a modifier's key (0.37.3), so vanilla's sprint under
+     * any key, powder snow and anything that only slows never void; gravity, either way, still does. A value that
      * isn't a number counts as changed.
      */
     public static String movement(float walkSpeed, Collection<Stat> stats) {
@@ -301,12 +325,13 @@ public final class FairPlay {
      * what, so the player's line and the log name it.
      *
      * @param reason {@link #WALK_SPEED} or {@link #MOVEMENT}
-     * @param detail "walk speed 0.4, not 0.2", "minecraft:jump_strength base 0.6, not 0.42" or
-     *               "minecraft:gravity: modifier someplugin:floaty"
+     * @param detail "walk speed 0.4, not 0.2", "minecraft:jump_strength base 0.6, over 0.42; value 0.6; no
+     *               modifiers" or "minecraft:gravity 0.04, under 0.08; base 0.08; someplugin:floaty -0.5
+     *               multiply_scalar_1"
      */
     public record Finding(String reason, String detail) {
 
-        /** "your movement changed (minecraft:gravity: modifier someplugin:floaty)". */
+        /** "your movement changed (minecraft:jump_strength base 0.6, over 0.42; value 0.6; no modifiers)". */
         public String line() {
             return detail == null || detail.isBlank() ? reason : reason + " (" + detail + ")";
         }
@@ -318,85 +343,97 @@ public final class FairPlay {
             return new Finding(WALK_SPEED, "walk speed " + num(walkSpeed) + ", not " + num(DEFAULT_WALK_SPEED));
         }
         for (Stat st : stats) {
-            Double base = PLAYER_BASES.get(st.key());
-            if (base == null) {
-                continue;
-            }
-            if (!(Math.abs(st.base() - base) <= 1e-6)) {
-                return new Finding(MOVEMENT, st.key() + " base " + num(st.base()) + ", not " + num(base));
-            }
-            for (String m : st.modifiers()) {
-                if (!allowed(st.key(), m)) {
-                    return new Finding(MOVEMENT, st.key() + ": modifier " + m);
-                }
+            String b = boost(st);
+            if (b != null) {
+                return new Finding(MOVEMENT, b);
             }
         }
         return null;
     }
 
-    /** Vanilla sprinting's shape: +30% of the total (Bukkit's MULTIPLY_SCALAR_1 is vanilla's add_multiplied_total). */
-    public static boolean sprintShaped(String bukkitOperation, double amount) {
-        return "MULTIPLY_SCALAR_1".equals(bukkitOperation) && Math.abs(amount - 0.3) <= 1e-6;
+    /**
+     * The most an honest run has of watched attribute {@code key} (exactly that, for {@link #GRAVITY}): {@link
+     * #SPRINT_SPEED} for the movement speed, the player's own base ({@link #PLAYER_BASES}) for the others;
+     * {@code NaN} for an attribute the watch doesn't read.
+     */
+    public static double mark(String key) {
+        if (MOVEMENT_SPEED.equals(key)) {
+            return SPRINT_SPEED;
+        }
+        Double own = PLAYER_BASES.get(key);
+        return own == null ? Double.NaN : own;
+    }
+
+    /** Whether watched attribute {@code key} is judged both ways, so any change is a boost: gravity only. */
+    public static boolean bothWays(String key) {
+        return GRAVITY.equals(key);
     }
 
     /**
-     * One modifier on an attribute, as the player has it.
-     *
-     * @param key       its key ({@code minecraft:sprinting})
-     * @param operation its Bukkit operation's name ({@code MULTIPLY_SCALAR_1})
-     * @param amount    its amount
+     * How {@code st} is boosted past an honest run's, for the void's line, or {@code null} when it isn't: its base
+     * past the player's own (a raised movement speed base would otherwise hide under the sprint's headroom while
+     * walking), or its value past its {@link #mark}, by more than {@link #BOOST_SLACK} of it, upward or, for
+     * gravity, either way ({@link #bothWays}). A base or value that isn't a number can't be judged, so it is a
+     * boost. Anything that only slows or lowers (gravity aside) is never one, and nor is any modifier, under any
+     * key, that leaves the value within the mark: vanilla's sprint renamed, a 0 amount, another plugin's
+     * slow-down. Every modifier is listed ({@link #listed}). {@code null} for an attribute the watch doesn't
+     * read.
      */
-    public record Modifier(String key, String operation, double amount) {
+    public static String boost(Stat st) {
+        Double own = PLAYER_BASES.get(st.key());
+        if (own == null) {
+            return null;
+        }
+        String mods = listed(st.modifiers());
+        if (!Double.isFinite(st.base()) || !Double.isFinite(st.value())) {
+            return st.key() + " base " + num(st.base()) + ", value " + num(st.value()) + "; " + mods;
+        }
+        boolean both = bothWays(st.key());
+        if (past(st.base(), own, both)) {
+            return st.key() + " base " + num(st.base()) + ", " + side(st.base(), own) + num(own) + "; value "
+                    + num(st.value()) + "; " + mods;
+        }
+        double mark = mark(st.key());
+        if (past(st.value(), mark, both)) {
+            return st.key() + " " + num(st.value()) + ", " + side(st.value(), mark) + num(mark) + "; base "
+                    + num(st.base()) + "; " + mods;
+        }
+        return null;
     }
 
-    /**
-     * The modifier keys the watch reads on one attribute.
-     *
-     * @param keys    the keys, for {@link Stat#modifiers()}
-     * @param renamed the real key of a modifier read as {@link #SPRINTING} ({@link #sprintRead}), or {@code null}
-     */
-    public record SprintRead(List<String> keys, String renamed) {
+    private static boolean past(double v, double mark, boolean both) {
+        return v > mark * (1 + BOOST_SLACK) || (both && v < mark * (1 - BOOST_SLACK));
     }
 
-    /**
-     * The modifier keys the watch reads on attribute {@code key}: their own keys, with one fallback. Should the
-     * server key vanilla's sprint modifier other than {@link #SPRINTING}, every sprint would void a run. So on the
-     * movement speed, while the player is sprinting and carries no {@link #SPRINTING} modifier, exactly one
-     * modifier of sprinting's shape ({@link #sprintShaped}) under a key the watch doesn't allow is read as
-     * {@link #SPRINTING}. Everything else is read as it is and still voids: a second such modifier, one while not
-     * sprinting, one next to a real {@link #SPRINTING}, one on another attribute, or any other shape.
-     *
-     * @param sprinting whether the player is sprinting now
-     */
-    public static SprintRead sprintRead(String key, List<Modifier> modifiers, boolean sprinting) {
-        List<String> keys = new ArrayList<>(modifiers.size());
+    private static String side(double v, double mark) {
+        return v > mark ? "over " : "under ";
+    }
+
+    /** "minecraft:sprinting 0.3 multiply_scalar_1; someplugin:boost 0.2 multiply_scalar_1", or "no modifiers". */
+    public static String listed(List<Modifier> modifiers) {
+        if (modifiers == null || modifiers.isEmpty()) {
+            return "no modifiers";
+        }
+        List<String> out = new ArrayList<>(modifiers.size());
         for (Modifier m : modifiers) {
-            keys.add(m.key());
+            out.add(m.key() + " " + num(m.amount()) + " " + m.operation().toLowerCase(Locale.ROOT));
         }
-        if (!sprinting || !MOVEMENT_SPEED.equals(key) || keys.contains(SPRINTING)) {
-            return new SprintRead(keys, null);
-        }
-        int at = -1;
-        for (int i = 0; i < modifiers.size(); i++) {
-            Modifier m = modifiers.get(i);
-            if (!allowed(key, m.key()) && sprintShaped(m.operation(), m.amount())) {
-                if (at >= 0) {
-                    return new SprintRead(keys, null); // two of them: neither is the player's own sprint
-                }
-                at = i;
+        return String.join("; ", out);
+    }
+
+    /**
+     * The modifiers on {@code st} under any key but vanilla's sprint and powder snow ({@link #SPRINTING}, {@link
+     * #POWDER_SNOW}): what the console notes once a key, boost or not, so whatever another plugin or a datapack
+     * adds is named.
+     */
+    public static List<Modifier> foreign(Stat st) {
+        List<Modifier> out = new ArrayList<>();
+        for (Modifier m : st.modifiers()) {
+            if (!SPRINTING.equals(m.key()) && !POWDER_SNOW.equals(m.key())) {
+                out.add(m);
             }
         }
-        if (at < 0) {
-            return new SprintRead(keys, null);
-        }
-        String renamed = keys.get(at);
-        keys.set(at, SPRINTING);
-        return new SprintRead(keys, renamed);
-    }
-
-    /** Whether modifier {@code modifier} on attribute {@code key} is an honest run's: sprinting or powder snow, on the movement speed. */
-    public static boolean allowed(String key, String modifier) {
-        return (SPRINTING.equals(modifier) || POWDER_SNOW.equals(modifier)) && MOVEMENT_SPEED.equals(key);
+        return out;
     }
 
     /** A value for a line: at most 6 decimals, no trailing zeros ("0.42" for a stored 0.41999998688697815). */

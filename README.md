@@ -183,8 +183,10 @@ Christmas collectors' tiles go, and owned Twinkle trails stop drawing until you 
 owned trail shows only while its row exists); Santa Caps stay in players' bags. The break fix
 reverts: anyone with build rights can break a shop block again and gets what is in it, and a
 piston, water, lava or TNT can pop a placed hat or trophy again. A Fresh Courses parkour checkpoint
-counts beside its pad again (a jump that fell short, or the edge of the pad before). Anything
-already in a Mailbox stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
+counts beside its pad again (a jump that fell short, or the edge of the pad before), and the
+fair-play watch judges modifier names again: any modifier on a watched movement attribute but
+sprinting and powder snow, or a base off a player's own, voids a run. Anything already in a Mailbox
+stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
 and [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
@@ -1190,25 +1192,34 @@ Easy, Medium, Hard and "Why did we build this?".
   (Geyser doesn't pass the no-push team's rule to a Bedrock client, so a Bedrock player's own
   client may still nudge them a little; the Java player no longer pushes, or is pushed.)
 - **Fair play.** Flying, a game mode other than adventure, any potion effect, a walk speed other
-  than the usual 0.2 (`/speed`) or a changed movement voids the run the moment it's seen ("This
+  than the usual 0.2 (`/speed`) or a boosted movement voids the run the moment it's seen ("This
   run won't count - …"); you can still finish it for fun. Movement means movement speed, jump
-  strength, step height, gravity and safe fall distance: each must be at its usual value, with no
-  modifier on it but sprinting or powder snow's slow-down. At the finish, a run quicker than the
-  course's shortest time (`min_seconds`) doesn't count, and nor does a leg between two checkpoints
-  covered faster than the kind allows (parkour 14, elytra 80, boat 75 blocks a second, over the
-  gap between the two checkpoints' spheres). Either way the finish says "That run didn't count."
+  strength, step height, gravity and safe fall distance, and from 0.37.3 the watch judges what they
+  add up to, never a modifier's name: a run is voided only when one is boosted past an honest
+  run's, a speed above a vanilla sprint's 0.13, a higher jump, step or safe fall than a player's
+  own, or a base raised past the player's own. Gravity must stay the player's own either way
+  (lighter is a longer jump or glide, heavier a faster Dropper fall or dive). Sprinting (under any
+  name), powder snow and anything else that only slows never void. So another plugin's speed boost
+  while walking passes until you sprint with it, since until then it is no faster than an honest
+  sprint. At the finish, a run quicker than the course's shortest time (`min_seconds`) doesn't
+  count, and nor does a leg between two checkpoints covered faster than the kind allows (parkour
+  14, elytra 80, boat 75 blocks a second, over the gap between the two checkpoints' spheres). Either way the finish says "That run didn't count."
   with why, and nothing is recorded. Every leg gets 0.05 s of slack, and a server stall (over
   250 ms between two ticks) never voids an honest run: a leg it touched isn't checked. Nothing is
   recorded either for a run whose course changed layout while it ran, or was deleted and made
-  again. The red line says what tripped it: the attribute and the modifier, or the value that
-  changed ("your movement changed (minecraft:movement_speed: modifier x:y)"), and for a finish too
-  fast, which leg and how fast. The console gets one "Time trials: ..." line a void, with when it
-  fired ("at Go" or "3.2 s in", from that player's own Go, so a racer who set off late still reads
-  "at Go") and whether the player was sprinting, and
-  **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now. Should a
-  server key vanilla's sprint modifier otherwise than `minecraft:sprinting`, a sprint still
-  counts: exactly one modifier of sprinting's shape, only while sprinting, is read as sprinting,
-  and the console WARNs its real key once.
+  again. The red line says what tripped it: the attribute, its value against the honest one, its
+  base and every modifier on it ("your movement changed (minecraft:movement_speed 0.156, over 0.13;
+  base 0.1; minecraft:sprinting 0.3 multiply_scalar_1; someplugin:boost 0.2 multiply_scalar_1)"),
+  and for a finish too fast, which leg and how fast. The console gets one "Time trials: ..." line a
+  void, with when it fired ("at Go" or "3.2 s in", from that player's own Go, so a racer who set off
+  late still reads "at Go") and whether the player was sprinting, and
+  **`/hcm games movement [player]`** (admin) shows what the watch reads on a player now: each
+  watched attribute's base and the player's own, its value and the most an honest run has (the
+  only one, for gravity), VOIDS when it is past that, and every modifier. The first time a run sees a
+  modifier other than vanilla's sprint or powder snow on a watched attribute, boost or not, the
+  console notes it once ("Time trials: <name> carries someplugin:boost 0.2 multiply_scalar_1 on
+  minecraft:movement_speed (not vanilla's sprint or powder snow); ..."), so whatever another plugin
+  or a datapack puts on players is named.
 - **Nobody else can touch a run.** For anyone in a world game, an effect from anything but a
   plugin or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
   charge, a hit) and a fishing rod reeling them in are cancelled. A bystander can't spoil a run,
@@ -2391,8 +2402,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
-- **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or
-  safe-fall attribute void the run). The game's own hops to the next ledge are never speed-checked;
+- **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or a
+  longer safe fall void the run). The game's own hops to the next ledge are never speed-checked;
   a run quicker than 90% of the levels' walk-off falls doesn't count. A run going at the weekly change
   finishes and counts on its own set's board. Two fallers in one shaft can't push each other (a
   no-push scoreboard team for the run; a player on another plugin's team, for nametags, goes back on
@@ -3379,7 +3390,12 @@ the backfill never replaces a single value you wrote where a section belongs, it
 37. `/speed walk 2` mid-run: "This run won't count - your walk speed changed" (`/speed walk 1`
     after). `/attribute @s minecraft:jump_strength base set 0.6` mid-run: "…your movement changed"
     (set it back to 0.42). Sprinting the whole way, or `/save-all flush` mid-run, doesn't stop a
-    run counting.
+    run counting. From 0.37.3: `/attribute @s minecraft:movement_speed modifier add test:slow -0.02
+    add_value` mid-run still counts, sprinting too, and the console notes `test:slow` once (remove
+    it with `... modifier remove test:slow`). On a new run, `/attribute @s minecraft:movement_speed
+    modifier add test:fast 0.2 add_multiplied_total` still counts while you walk; sprint, and "…your
+    movement changed (minecraft:movement_speed 0.156, over 0.13; …)" (remove it after). The
+    daughter's tablet run on Easy and a Java sprint race against the daughter both count.
 38. `/hcm games course create auto parkour` is refused ("'auto' is a word /hcm games feature keeps
     for itself."). `cliffs fall 200` is refused (a fall height must be under the course's lowest
     point), and so is a y under the world's floor.

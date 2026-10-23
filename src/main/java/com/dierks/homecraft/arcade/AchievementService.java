@@ -85,6 +85,9 @@ public final class AchievementService {
             player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
             player.showTitle(Title.title(Text.of("&6Achievement!"), Text.of("&e" + def.display()),
                     Title.Times.times(Duration.ofMillis(250), Duration.ofMillis(2000), Duration.ofMillis(500))));
+            if (plugin.looks() != null) {
+                plugin.looks().titleShown(player, 2_750); // a looks heads-up waits behind it
+            }
         } catch (Throwable ignored) {
             // cosmetic
         }
@@ -218,6 +221,16 @@ public final class AchievementService {
             if (def.type() == AchievementType.FINISH && shiny && "SHINY".equalsIgnoreCase(def.key())) {
                 tryAward(player, def.id());
             }
+        }
+    }
+
+    /**
+     * The player has just received Minis some other way than a mint (0.38: the trade window, SHOP-V2-SPEC §4.6
+     * step 8): the collection count is checked again. Today only a mint ran it.
+     */
+    public void onMinisReceived(Player player) {
+        if (player != null) {
+            checkCollection(player);
         }
     }
 

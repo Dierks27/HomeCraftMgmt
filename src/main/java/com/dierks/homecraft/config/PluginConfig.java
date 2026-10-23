@@ -404,10 +404,13 @@ public final class PluginConfig {
         }
     }
 
-    /** The Prize Counter's tabs, in the order they appear. */
+    /**
+     * The Prize Counter's tabs, in the order they appear. LOOKS holds the worn looks (hats, caps, golf balls);
+     * KEEPERS holds only the plugin's own Keepers ({@code arcade.Keepers}): a config row may not use it.
+     */
     public enum PrizeTab {
-        BOOSTS("Boosts"), HUNT("Hunt Gear"), COSMETICS("Cosmetics"), PERKS("Perks"),
-        TROPHIES("Trophies"), MINIS("Minis");
+        BOOSTS("Boosts"), HUNT("Hunt Gear"), COSMETICS("Cosmetics"), LOOKS("Looks"), PERKS("Perks"),
+        TROPHIES("Trophies"), MINIS("Minis"), KEEPERS("Keepers");
 
         private final String label;
 
@@ -425,11 +428,15 @@ public final class PluginConfig {
         BOOST, RADAR, LURE, FIREWORK, TRAIL, HAT, COMMAND, TROPHY,
         FILAMENT, BLOCK, PACK, PITY, TRADE_IN, QUEST_REROLL,
         /** One more Essentials home on top of the player's own, as many times as its limit allows. */
-        HOME_SLOT
+        HOME_SLOT,
+        /** A golf ball colour, kept for good: an unlock, not an item ({@link PrizeExtra#ballLook}). */
+        BALL,
+        /** Party Time: harmless fireworks around everyone playing, for {@link PrizeExtra#seconds}. */
+        PARTY
     }
 
-    /** How often a limit resets: per local day, per local week, or never. */
-    public enum LimitPer {DAY, WEEK, LIFETIME}
+    /** How often a limit resets: per local day, per local week, per local calendar month, or never. */
+    public enum LimitPer {DAY, WEEK, MONTH, LIFETIME}
 
     /** "At most {@code count} per {@code per}". */
     public record PrizeLimit(LimitPer per, int count) {
@@ -481,6 +488,66 @@ public final class PluginConfig {
     public record CapLook(int rgb, String trimPattern, String trimMaterial) {
     }
 
+    /** When a COMMAND row may be bought ({@code only_if}): any time, only at night, only while it rains. */
+    public enum OnlyIf {ANY, NIGHT, RAIN}
+
+    /**
+     * A worn Keeper's look (SHOP-V2-SPEC §5.2), built from data components: {@code base} (LEATHER_HELMET or
+     * IRON_HELMET), the dye ({@code rgb}, -1 = none), the trim keys (null = none), the Java-only equipment asset
+     * and item model (null = none, e.g. "minecraft:gold" and "minecraft:golden_helmet"), and the glint.
+     */
+    public record KeeperLook(Material base, int rgb, String trimPattern, String trimMaterial, String javaAsset,
+                             String javaModel, boolean glint) {
+    }
+
+    /**
+     * What makes a row a Keeper ({@code arcade.Keepers}, SHOP-V2-SPEC §5.1): its worn look (null for a trail),
+     * whether it is a companion that is never a tile (the Legend Crown's Royal Trail), the trail that comes with
+     * it ({@code withTrail}, a Keeper id, or null) and its mark (a particle puffed above a worn Keeper hat, or
+     * null).
+     */
+    public record Keeper(KeeperLook look, boolean companion, String withTrail, org.bukkit.Particle mark) {
+    }
+
+    /**
+     * The owner's three Keeper switches (SHOP-V2-SPEC §5.1, §5.2, §7.7), read at enable: {@code arcade.keepers.on_sale}
+     * (false = the Keepers nobody owns yet are not sold; owned ones keep working), {@code arcade.keepers.looks.<id>}
+     * (each Keeper's shipped form, {@code default} or {@code fallback}, keyed by its lower-case id) and
+     * {@code arcade.keepers.marks} (the worn Keepers' small sparkle, on or off).
+     */
+    public record KeeperSwitches(boolean onSale, Map<String, String> looks, boolean marks) {
+        /** Every Keeper on sale in its default form, with its mark: what the bundled file ships. */
+        public static final KeeperSwitches DEFAULTS = new KeeperSwitches(true, Map.of(), true);
+
+        public KeeperSwitches {
+            looks = looks == null ? Map.of() : Map.copyOf(looks);
+        }
+    }
+
+    /**
+     * The 0.38 fields of a row (SHOP-V2-SPEC §8 C0), zero or null where they do not apply:
+     * <ul>
+     *   <li>HAT: {@code hatMaterial} (CREEPER_HEAD, DRAGON_HEAD or LEATHER_HELMET: a cap dyed with the row's
+     *       {@code color}; null = a textured head), {@code renewTokens} (a lower buy-again price; 0 = the same
+     *       price)</li>
+     *   <li>BALL: {@code ballLook} (the block the ball is drawn as)</li>
+     *   <li>COMMAND: {@code onlyIf}</li>
+     *   <li>PARTY: {@code seconds}</li>
+     *   <li>a Keeper ({@code arcade.Keepers} only, never a config row): {@code keeper}</li>
+     * </ul>
+     */
+    public record PrizeExtra(Material hatMaterial, int renewTokens, Material ballLook, OnlyIf onlyIf, int seconds,
+                             Keeper keeper) {
+        /** A row with none of them: every row before 0.38, and every type that has none. */
+        public static final PrizeExtra NONE = new PrizeExtra(null, 0, null, OnlyIf.ANY, 0, null);
+
+        public PrizeExtra {
+            if (onlyIf == null) {
+                onlyIf = OnlyIf.ANY;
+            }
+        }
+    }
+
     /**
      * A GUI icon: a head texture, and the plain material every Bedrock player sees instead (and
      * every Java player too, while the texture is blank).
@@ -515,14 +582,54 @@ public final class PluginConfig {
      * </ul>
      *
      * <p>{@code collector} is set only on the plugin's own collectors ({@code arcade.Collectors}),
-     * and null for every config row.
+     * and null for every config row. {@code extra} holds the 0.38 fields ({@link PrizeExtra}); it is never
+     * null, and the 25-argument constructor, every row's before 0.38, gives {@link PrizeExtra#NONE}.
      */
     public record Prize(String id, PrizeTab tab, String display, List<String> description, int costTokens,
                         Icon icon, PrizeType type, boolean enabled, PrizeLimit limit,
                         int amount, org.bukkit.DyeColor color, String blockKey, String packId,
                         String effect, int amplifier, int minutes, String particle, int days, String texture,
                         List<String> commands, List<String> requiresPlugins, String ownedIfPermission,
-                        String requiresPrize, List<Integer> costs, Collector collector) {
+                        String requiresPrize, List<Integer> costs, Collector collector, PrizeExtra extra) {
+        public Prize {
+            if (extra == null) {
+                extra = PrizeExtra.NONE;
+            }
+        }
+
+        /** A row as every row was before 0.38: no {@link PrizeExtra}. */
+        public Prize(String id, PrizeTab tab, String display, List<String> description, int costTokens,
+                     Icon icon, PrizeType type, boolean enabled, PrizeLimit limit,
+                     int amount, org.bukkit.DyeColor color, String blockKey, String packId,
+                     String effect, int amplifier, int minutes, String particle, int days, String texture,
+                     List<String> commands, List<String> requiresPlugins, String ownedIfPermission,
+                     String requiresPrize, List<Integer> costs, Collector collector) {
+            this(id, tab, display, description, costTokens, icon, type, enabled, limit, amount, color, blockKey,
+                    packId, effect, amplifier, minutes, particle, days, texture, commands, requiresPlugins,
+                    ownedIfPermission, requiresPrize, costs, collector, PrizeExtra.NONE);
+        }
+
+        /** True for one of the plugin's own Keepers ({@code arcade.Keepers}). */
+        public boolean keeper() {
+            return extra.keeper() != null;
+        }
+
+        /**
+         * True for a rental (SHOP-V2-SPEC §3.1): a TRAIL or HAT row that is neither a collector nor a Keeper. It
+         * lasts {@code days} and can be bought again from 7 days before it ends.
+         */
+        public boolean rental() {
+            return (type == PrizeType.TRAIL || type == PrizeType.HAT) && collector == null && !keeper();
+        }
+
+        /**
+         * What buying it again costs while its window is open (SHOP-V2-SPEC §3.4): a HAT row's {@code renew_tokens}
+         * when it sets one, else the full price. A trail never reads it (a crate's free day opens a window too).
+         */
+        public int renewPrice() {
+            return type == PrizeType.HAT && extra.renewTokens() > 0 ? extra.renewTokens() : costTokens;
+        }
+
         /** True if the buyer picks the filament colour at purchase time. */
         public boolean choosesColor() {
             return type == PrizeType.FILAMENT && color == null;
@@ -547,7 +654,26 @@ public final class PluginConfig {
                          int pityTokens, Rarity pityRarity, int pityPerWeek, Lotto lotto,
                          Map<Rarity, Integer> tradeIn,
                          BlockDef block, Map<String, BlockDef> machines,
-                         boolean collectorsOnSale, boolean collectorsGifting) {
+                         boolean collectorsOnSale, boolean collectorsGifting, KeeperSwitches keepers) {
+
+        public Arcade {
+            if (keepers == null) {
+                keepers = KeeperSwitches.DEFAULTS;
+            }
+        }
+
+        /** An Arcade as before the Keepers' switches (0.38's S4): every Keeper on sale, its default form, marks on. */
+        public Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
+                      boolean playtimeEnabled, int playtimeMinutesPerToken,
+                      Map<String, Crate> crates, List<Prize> prizes,
+                      int pityTokens, Rarity pityRarity, int pityPerWeek, Lotto lotto,
+                      Map<Rarity, Integer> tradeIn,
+                      BlockDef block, Map<String, BlockDef> machines,
+                      boolean collectorsOnSale, boolean collectorsGifting) {
+            this(enabled, streakEnabled, streakRewards, playtimeEnabled, playtimeMinutesPerToken, crates, prizes,
+                    pityTokens, pityRarity, pityPerWeek, lotto, tradeIn, block, machines, collectorsOnSale,
+                    collectorsGifting, KeeperSwitches.DEFAULTS);
+        }
 
         /** Every prize on one tab, in config order. */
         public List<Prize> prizes(PrizeTab tab) {
@@ -647,6 +773,55 @@ public final class PluginConfig {
 
     /** The per-world economy sandbox (§11 #1): where money/tokens may move, and whether to log refusals. */
     public record Worlds(List<String> economyEnabled, boolean logBlockedAttempts) {
+    }
+
+    /**
+     * The trade window ({@code trade:}, 0.38, SHOP-V2-SPEC §4.14), written by the backfill (no revision). Every
+     * number is squeezed into its range with one WARN naming the key; a missing key reads as the shipped value, so
+     * the bundled section parses to {@link #DEFAULTS} without a word.
+     *
+     * @param enabled          the window's switch
+     * @param requestSeconds   how long a request waits for an answer (10-600)
+     * @param countdownSeconds the 3, 2, 1 once both are ready (1-10)
+     * @param changeLockMs     after any change, Ready waits this long (0-10,000)
+     * @param maxDistance      blocks apart, 0 = anywhere in the same world
+     * @param money            dollars (Vault) may go in; false = items only
+     * @param logKeepDays      the log's age limit, 0 = keep it for ever
+     * @param refuse           {@code refuse_items}: more things that can't be traded
+     */
+    public record Trade(boolean enabled, int requestSeconds, int countdownSeconds, long changeLockMs, int maxDistance,
+                        boolean money, int logKeepDays, com.dierks.homecraft.trade.TradeRules.Refuse refuse) {
+
+        /** The shipped settings. */
+        public static final Trade DEFAULTS = new Trade(true, 30, 3, 1_500, 0, true, 90,
+                com.dierks.homecraft.trade.TradeRules.Refuse.NONE);
+    }
+
+    /** Read {@code trade:} (absent keys are the shipped values; numbers clamped with a WARN each). */
+    public static Trade readTrade(ConfigurationSection c, java.util.function.Consumer<String> warn) {
+        Trade d = Trade.DEFAULTS;
+        if (c == null) {
+            return d;
+        }
+        return new Trade(c.getBoolean("enabled", d.enabled()),
+                clampKey(c, "request_seconds", d.requestSeconds(), 10, 600, warn),
+                clampKey(c, "countdown_seconds", d.countdownSeconds(), 1, 10, warn),
+                clampKey(c, "change_lock_ms", (int) d.changeLockMs(), 0, 10_000, warn),
+                clampKey(c, "max_distance", d.maxDistance(), 0, 100_000, warn),
+                c.getBoolean("money", d.money()),
+                clampKey(c, "log_keep_days", d.logKeepDays(), 0, 36_500, warn),
+                com.dierks.homecraft.trade.TradeRules.Refuse.parse(c.getStringList("refuse_items"), warn));
+    }
+
+    /** {@code trade.<key>} as an int inside {@code [min, max]}; one WARN when it had to change. */
+    private static int clampKey(ConfigurationSection c, String key, int fallback, int min, int max,
+                                java.util.function.Consumer<String> warn) {
+        int v = c.getInt(key, fallback);
+        int clamped = Math.max(min, Math.min(max, v));
+        if (clamped != v && warn != null) {
+            warn.accept("trade." + key + ": " + v + " is outside " + min + "-" + max + " - using " + clamped + ".");
+        }
+        return clamped;
     }
 
     /** SQLite backup schedule (§11 #6). */
@@ -780,6 +955,7 @@ public final class PluginConfig {
     private Announce announce;
     private Worlds worlds = new Worlds(List.of(), true);
     private Backups backups = new Backups(true, 24, 14);
+    private Trade trade = Trade.DEFAULTS;
     private Shops shops = new Shops(true, 16, Map.of(), true, 3, 6);
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
@@ -1022,6 +1198,11 @@ public final class PluginConfig {
         return backups;
     }
 
+    /** The trade window ({@code trade:}, 0.38). Never null. */
+    public Trade trade() {
+        return trade;
+    }
+
     /** Shop glow / hologram / peek presentation. */
     public Shops shops() {
         return shops;
@@ -1211,6 +1392,8 @@ public final class PluginConfig {
 
         // ---- Crate Marketplace (Phase 5) ----
         this.marketplace = readMarketplace(c);
+        // ---- The trade window (0.38) ----
+        this.trade = readTrade(c.getConfigurationSection("trade"), log::warning);
 
         // ---- Sound Muffler ----
         this.soundMuffler = readSoundMuffler(c);
@@ -1605,6 +1788,7 @@ public final class PluginConfig {
         prizes = mergeCollectors(prizes, log::warning);
         boolean collectorsOnSale = c.getBoolean("arcade.collectors.on_sale", true);
         boolean collectorsGifting = c.getBoolean("arcade.collectors.gifting", true);
+        KeeperSwitches keepers = keeperSwitches(c, log::warning);
 
         Lotto lotto = lotto(c, log::warning);
         // The ticket isn't clamped like the games of chance (RtpLimits): say so when its return is outside
@@ -1630,7 +1814,45 @@ public final class PluginConfig {
 
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
                 crates, prizes, pityTokens, pityRarity, pityPerWeek,
-                lotto, tradeIn, block, machines, collectorsOnSale, collectorsGifting);
+                lotto, tradeIn, block, machines, collectorsOnSale, collectorsGifting, keepers);
+    }
+
+    /**
+     * {@code arcade.keepers}: {@code on_sale} (default true), one {@code looks.<id>} per shipped Keeper ({@code default}
+     * or {@code fallback}; anything else reads {@code default}, with one WARN) and {@code marks} ({@code on} or
+     * {@code off}; YAML reads a bare on/off as true/false, and both are taken; anything else reads on, with one WARN).
+     * Static, with the warnings handed to {@code warn}, so a test reads it exactly as the load does.
+     */
+    public static KeeperSwitches keeperSwitches(org.bukkit.configuration.ConfigurationSection c,
+                                                java.util.function.Consumer<String> warn) {
+        java.util.function.Consumer<String> warning = warn != null ? warn : line -> { };
+        boolean onSale = c.getBoolean("arcade.keepers.on_sale", true);
+        Map<String, String> looks = new LinkedHashMap<>();
+        for (String id : com.dierks.homecraft.arcade.Keepers.SHIPPED_IDS) {
+            String path = "arcade.keepers.looks." + id;
+            Object raw = c.get(path);
+            com.dierks.homecraft.arcade.Keepers.Variant v = raw == null
+                    ? com.dierks.homecraft.arcade.Keepers.Variant.DEFAULT
+                    : com.dierks.homecraft.arcade.Keepers.Variant.parse(String.valueOf(raw));
+            if (v == null) {
+                warning.accept(path + " is '" + raw + "' - use default or fallback. Using default.");
+                v = com.dierks.homecraft.arcade.Keepers.Variant.DEFAULT;
+            }
+            looks.put(id.toLowerCase(Locale.ROOT), v.key());
+        }
+        Object rawMarks = c.get("arcade.keepers.marks");
+        boolean marks = true;
+        if (rawMarks instanceof Boolean b) {
+            marks = b;
+        } else if (rawMarks != null) {
+            String m = String.valueOf(rawMarks).trim().toLowerCase(Locale.ROOT);
+            if (m.equals("off") || m.equals("false") || m.equals("no")) {
+                marks = false;
+            } else if (!m.equals("on") && !m.equals("true") && !m.equals("yes")) {
+                warning.accept("arcade.keepers.marks is '" + rawMarks + "' - use on or off. Using on.");
+            }
+        }
+        return new KeeperSwitches(onSale, looks, marks);
     }
 
     /**
@@ -1688,34 +1910,60 @@ public final class PluginConfig {
     }
 
     /**
-     * The Prize Counter's rows: the plugin's own collectors ({@code arcade.Collectors}) first, so they
-     * are the first tiles on the Cosmetics tab, then the config rows, minus any that takes a collector's
-     * id (or a candy one) — one warning each. The collectors are always merged, whatever
-     * {@code arcade.collectors.on_sale} says, so an owned collector trail always resolves.
+     * The Prize Counter's rows: the plugin's own Keepers ({@code arcade.Keepers}) first, then its collectors
+     * ({@code arcade.Collectors}), so they are the first tiles on their tabs, then the config rows, minus any
+     * that takes a Keeper's id ({@code keeper_...}), a collector's (or a candy one) — one warning each. The
+     * Keepers and the collectors are always merged, whatever {@code arcade.collectors.on_sale} says, so an owned
+     * one always resolves.
      */
     public static List<Prize> mergeCollectors(List<Prize> configRows, java.util.function.Consumer<String> warn) {
-        List<Prize> merged = new ArrayList<>(com.dierks.homecraft.arcade.Collectors.ROWS);
+        List<Prize> merged = new ArrayList<>(com.dierks.homecraft.arcade.Keepers.ROWS);
+        merged.addAll(com.dierks.homecraft.arcade.Collectors.ROWS);
         for (Prize p : configRows) {
-            if (com.dierks.homecraft.arcade.Collectors.reserved(p.id())) {
+            String skipped = com.dierks.homecraft.arcade.Keepers.reserved(p.id())
+                    ? com.dierks.homecraft.arcade.Keepers.skipWarning(p.id())
+                    : com.dierks.homecraft.arcade.Collectors.reserved(p.id())
+                    ? com.dierks.homecraft.arcade.Collectors.skipWarning(p.id()) : null;
+            if (skipped != null) {
                 if (warn != null) {
-                    warn.accept(com.dierks.homecraft.arcade.Collectors.skipWarning(p.id()));
+                    warn.accept(skipped);
                 }
                 continue;
+            }
+            if (warn != null && p.type() == PrizeType.TRAIL
+                    && com.dierks.homecraft.arcade.Keepers.reservedParticle(p.particle())) {
+                warn.accept(com.dierks.homecraft.arcade.Keepers.reservedWarning(p.id(), p.particle()));
             }
             merged.add(p);
         }
         return List.copyOf(merged);
     }
 
+    private Prize readPrize(Map<?, ?> row, int pityTokens, int pityPerWeek) {
+        return readPrize(row, pityTokens, pityPerWeek, log::warning);
+    }
+
     /**
      * Read one Prize Counter row. A row that names something that does not exist is skipped
      * with a warning rather than failing the load — the same convention the crate table uses,
-     * so one bad row never costs an admin the whole Arcade.
+     * so one bad row never costs an admin the whole Arcade. Static, with the warnings handed to
+     * {@code warn}, so a test can read a row exactly as the load does.
      */
-    private Prize readPrize(Map<?, ?> row, int pityTokens, int pityPerWeek) {
+    public static Prize readPrize(Map<?, ?> row, int pityTokens, int pityPerWeek,
+                                  java.util.function.Consumer<String> warn) {
+        return readPrize(row, pityTokens, pityPerWeek, warn, Material::isItem, m -> m.isBlock() && !m.isAir());
+    }
+
+    /**
+     * {@link #readPrize(Map, int, int, java.util.function.Consumer)} with the two material facts that need a running
+     * server handed in: {@code item} (it can be held) and {@code block} (it can be placed). A test gives name rules.
+     */
+    static Prize readPrize(Map<?, ?> row, int pityTokens, int pityPerWeek, java.util.function.Consumer<String> warn,
+                           java.util.function.Predicate<Material> item, java.util.function.Predicate<Material> block) {
+        java.util.function.Consumer<String> warning = warn != null ? warn : line -> { };
         String id = str(row.get("id"), null);
         if (id == null || id.isBlank()) {
-            log.warning("Arcade prize row has no id: — skipped.");
+            warning.accept("Arcade prize row has no id: — skipped.");
             return null;
         }
         id = id.trim();
@@ -1727,8 +1975,8 @@ public final class PluginConfig {
         try {
             type = PrizeType.valueOf(typeName);
         } catch (IllegalArgumentException e) {
-            log.warning("Arcade prize '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use boost, "
-                    + "radar, lure, firework, trail, hat, command, trophy, filament, block, pack, pity, "
+            warning.accept("Arcade prize '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use boost, "
+                    + "radar, lure, firework, trail, hat, ball, party, command, trophy, filament, block, pack, pity, "
                     + "trade_in, quest_reroll or home_slot.");
             return null;
         }
@@ -1747,7 +1995,7 @@ public final class PluginConfig {
         int cost = (int) number(row.get("cost_tokens"), type == PrizeType.PITY ? pityTokens
                 : costs.isEmpty() ? 0 : costs.get(0));
         if (cost <= 0 && type != PrizeType.TRADE_IN) {
-            log.warning("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
+            warning.accept("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
                     + "something. Skipped.");
             return null;
         }
@@ -1761,21 +2009,32 @@ public final class PluginConfig {
                     limit = new PrizeLimit(per, count);
                 }
             } catch (IllegalArgumentException e) {
-                log.warning("Arcade prize '" + id + "' has a limit per '" + lm.get("per")
-                        + "' — use DAY, WEEK or LIFETIME. The limit is ignored.");
+                warning.accept("Arcade prize '" + id + "' has a limit per '" + lm.get("per")
+                        + "' — use DAY, WEEK, MONTH or LIFETIME. The limit is ignored.");
             }
         }
         if (type == PrizeType.PITY && limit == null && pityPerWeek > 0) {
             limit = new PrizeLimit(LimitPer.WEEK, pityPerWeek);
         }
+        if (type == PrizeType.BALL) {
+            limit = new PrizeLimit(LimitPer.LIFETIME, 1); // a ball is yours for good: one each, whatever the row says
+        }
 
         PrizeTab tab = defaultTab(type);
         if (row.get("tab") != null) {
+            PrizeTab named = null;
             try {
-                tab = PrizeTab.valueOf(str(row.get("tab"), "").trim().toUpperCase(Locale.ROOT));
+                named = PrizeTab.valueOf(str(row.get("tab"), "").trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                log.warning("Arcade prize '" + id + "' names unknown tab '" + row.get("tab") + "' — shown under "
-                        + tab + ". Tabs: BOOSTS, HUNT, COSMETICS, PERKS, TROPHIES, MINIS.");
+                warning.accept("Arcade prize '" + id + "' names unknown tab '" + row.get("tab") + "' — shown under "
+                        + tab + ". Tabs: BOOSTS, HUNT, COSMETICS, LOOKS, PERKS, TROPHIES, MINIS (KEEPERS holds "
+                        + "only the plugin's own Keepers).");
+            }
+            if (named == PrizeTab.KEEPERS) {
+                warning.accept("Arcade prize '" + id + "' names tab KEEPERS — that tab holds only the plugin's own "
+                        + "Keepers, so it is shown under " + tab + ".");
+            } else if (named != null) {
+                tab = named;
             }
         }
 
@@ -1786,10 +2045,10 @@ public final class PluginConfig {
             String mat = str(im.get("material"), null);
             material = mat == null ? null : Material.matchMaterial(mat.trim().toUpperCase(Locale.ROOT));
             if (mat != null && material == null) {
-                log.warning("Arcade prize '" + id + "' icon material '" + mat + "' is not a material — using the default.");
+                warning.accept("Arcade prize '" + id + "' icon material '" + mat + "' is not a material — using the default.");
             }
         }
-        if (material == null || !material.isItem()) {
+        if (material == null || !item.test(material)) {
             material = defaultIcon(type);
         }
         Icon icon = new Icon(texture == null ? "" : texture.trim(), material);
@@ -1808,12 +2067,28 @@ public final class PluginConfig {
         List<String> requiresPlugins = stringList(row.get("requires_plugins"));
         String ownedIf = blankToNull(str(row.get("owned_if_permission"), null));
         String requiresPrize = blankToNull(str(row.get("requires_prize"), null));
+        Material hatMaterial = null;
+        int renewTokens = 0;
+        Material ballLook = null;
+        OnlyIf onlyIf = OnlyIf.ANY;
+        int seconds = 0;
+
+        if (row.get("renew_tokens") != null) {
+            if (type == PrizeType.HAT) {
+                renewTokens = Math.max(0, (int) number(row.get("renew_tokens"), 0));
+            } else {
+                // A trail's window opens after a crate's free day too, so a lower price there would be a discount
+                // anyone could pull from a 15-token crate (SHOP-V2-SPEC §3.4).
+                warning.accept("Arcade prize '" + id + "' has renew_tokens, but only a hat row can be bought again "
+                        + "for less — ignored.");
+            }
+        }
 
         switch (type) {
             case BOOST -> {
                 effect = str(row.get("effect"), null);
                 if (effect == null || effect.isBlank()) {
-                    log.warning("Arcade prize '" + id + "' is a boost with no effect: — skipped.");
+                    warning.accept("Arcade prize '" + id + "' is a boost with no effect: — skipped.");
                     return null;
                 }
                 effect = effect.trim().toLowerCase(Locale.ROOT);
@@ -1823,27 +2098,61 @@ public final class PluginConfig {
             case TRAIL -> {
                 particle = str(row.get("particle"), null);
                 if (particle == null || particle.isBlank()) {
-                    log.warning("Arcade prize '" + id + "' is a trail with no particle: — skipped.");
+                    warning.accept("Arcade prize '" + id + "' is a trail with no particle: — skipped.");
                     return null;
                 }
                 particle = particle.trim().toUpperCase(Locale.ROOT);
                 days = Math.max(1, (int) number(row.get("days"), 7));
             }
+            case HAT -> {
+                // Worn for `days` (90 unless the row says, at most a year), then bought again (SHOP-V2-SPEC §3).
+                days = Math.min(365, Math.max(1, (int) number(row.get("days"), 90)));
+                String mat = str(row.get("material"), null);
+                if (mat != null) {
+                    Material m = Material.matchMaterial(mat.trim().toUpperCase(Locale.ROOT));
+                    if (m == Material.CREEPER_HEAD || m == Material.DRAGON_HEAD || m == Material.LEATHER_HELMET) {
+                        hatMaterial = m;
+                    } else {
+                        warning.accept("Arcade prize '" + id + "' is a hat with material '" + mat + "' — use "
+                                + "CREEPER_HEAD, DRAGON_HEAD or LEATHER_HELMET (a cap, with color:). Ignored.");
+                    }
+                }
+            }
+            case BALL -> {
+                String look = str(row.get("look"), null);
+                Material m = look == null ? null : Material.matchMaterial(look.trim().toUpperCase(Locale.ROOT));
+                if (m == null || !block.test(m) || !item.test(m)) {
+                    warning.accept("Arcade prize '" + id + "' is a golf ball whose look '" + look + "' is not a block "
+                            + "— skipped. Use a block such as PINK_CONCRETE.");
+                    return null;
+                }
+                ballLook = m;
+            }
+            case PARTY -> seconds = Math.min(30, Math.max(5, (int) number(row.get("seconds"), 10)));
             case COMMAND -> {
                 commands = stringList(row.get("commands"));
                 if (commands.isEmpty()) {
                     commands = stringList(row.get("command"));
                 }
                 if (commands.isEmpty()) {
-                    log.warning("Arcade prize '" + id + "' is a command row with no commands: — skipped.");
+                    warning.accept("Arcade prize '" + id + "' is a command row with no commands: — skipped.");
                     return null;
+                }
+                String when = str(row.get("only_if"), null);
+                if (when != null) {
+                    try {
+                        onlyIf = OnlyIf.valueOf(when.trim().toUpperCase(Locale.ROOT));
+                    } catch (IllegalArgumentException e) {
+                        warning.accept("Arcade prize '" + id + "' has only_if '" + when + "' — use night or rain. "
+                                + "Ignored.");
+                    }
                 }
             }
             case BLOCK -> {
                 String key = str(row.get("block"), null);
                 com.dierks.homecraft.block.CustomBlockType bt = parseBlockType(key);
                 if (bt == null) {
-                    log.warning("Arcade prize '" + id + "' names unknown block '" + key
+                    warning.accept("Arcade prize '" + id + "' names unknown block '" + key
                             + "' — skipped. Valid: display_case, pallet, vending, mailbox, printer, pc, arcade.");
                     return null;
                 }
@@ -1853,28 +2162,31 @@ public final class PluginConfig {
             case PACK -> {
                 String pack = str(row.get("pack"), null);
                 if (pack == null || pack.isBlank()) {
-                    log.warning("Arcade prize '" + id + "' needs a pack: id — skipped.");
+                    warning.accept("Arcade prize '" + id + "' needs a pack: id — skipped.");
                     return null;
                 }
                 packId = pack.trim();
                 amount = 1;
             }
             default -> {
-                // radar, lure, firework, hat, trophy, filament, pity, trade_in, quest_reroll:
+                // radar, lure, firework, trophy, filament, pity, trade_in, quest_reroll, home_slot:
                 // nothing more to read
             }
         }
+        // a config row is never a Keeper (arcade.Keepers): the merge skips any that takes a keeper_ id
+        PrizeExtra extra = new PrizeExtra(hatMaterial, renewTokens, ballLook, onlyIf, seconds, null);
         return new Prize(id, tab, display, description, Math.max(0, cost), icon, type, enabled, limit,
                 amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
                 headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize,
-                List.copyOf(costs), null);
+                List.copyOf(costs), null, extra);
     }
 
     private static PrizeTab defaultTab(PrizeType type) {
         return switch (type) {
             case BOOST, QUEST_REROLL -> PrizeTab.BOOSTS;
             case RADAR, LURE -> PrizeTab.HUNT;
-            case FIREWORK, TRAIL, HAT -> PrizeTab.COSMETICS;
+            case FIREWORK, TRAIL, PARTY -> PrizeTab.COSMETICS;
+            case HAT, BALL -> PrizeTab.LOOKS;
             case COMMAND, HOME_SLOT -> PrizeTab.PERKS;
             case TROPHY -> PrizeTab.TROPHIES;
             case FILAMENT, BLOCK, PACK, PITY, TRADE_IN -> PrizeTab.MINIS;
@@ -1891,6 +2203,8 @@ public final class PluginConfig {
             case FIREWORK -> Material.FIREWORK_ROCKET;
             case TRAIL -> Material.BLAZE_POWDER;
             case HAT -> Material.LEATHER_HELMET;
+            case BALL -> Material.WHITE_CONCRETE;
+            case PARTY -> Material.CAKE;
             case COMMAND -> Material.NAME_TAG;
             case HOME_SLOT -> Material.RED_BED;
             case TROPHY -> Material.GOLD_BLOCK;
@@ -1918,7 +2232,7 @@ public final class PluginConfig {
     }
 
     /** A {@code block:} name from a prize row, tolerant of the short names the GUI uses. */
-    private com.dierks.homecraft.block.CustomBlockType parseBlockType(String key) {
+    private static com.dierks.homecraft.block.CustomBlockType parseBlockType(String key) {
         if (key == null || key.isBlank()) {
             return null;
         }
@@ -2653,7 +2967,7 @@ public final class PluginConfig {
         return new com.dierks.homecraft.mini.CardSpec(cardCap, grades, filament);
     }
 
-    private org.bukkit.DyeColor parseDye(String s) {
+    private static org.bukkit.DyeColor parseDye(String s) {
         if (s == null || s.isBlank()) {
             return null;
         }
@@ -2759,7 +3073,7 @@ public final class PluginConfig {
         }
     }
 
-    private String str(Object value, String fallback) {
+    private static String str(Object value, String fallback) {
         return value != null ? String.valueOf(value) : fallback;
     }
 

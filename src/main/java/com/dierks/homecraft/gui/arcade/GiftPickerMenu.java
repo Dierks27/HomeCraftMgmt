@@ -24,24 +24,27 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * "Give a present" (HALLOWEEN-SPEC D8): buy a collector for someone who's online. Reached only from
- * its own tile on the Cosmetics tab, never from a collector's tile (that one buys it for yourself).
- * Every screen takes plain taps only, because Bedrock touch can't shift- or right-click reliably:
+ * "Give a present" (HALLOWEEN-SPEC D8; SHOP-V2-SPEC §3.13): buy a collector, a rented look or a golf ball for someone
+ * who's online. Reached only from its own tile on the Cosmetics and Looks tabs (slot 47), never from a row's own tile
+ * (that one buys it for yourself), and from a giver's {@code [Give it again]} line ({@link #openFor}). Every screen
+ * takes plain taps only, because Bedrock touch can't shift- or right-click reliably:
  * <ol>
- *   <li>"Which present?" (27 slots): one tile per giftable collector on sale, Back on 22. A giver
- *       who can't afford one is told how many more tokens at once.</li>
+ *   <li>"Which present?" (54 slots): one tile per present that can be given ({@link PrizeService#giftable}: the
+ *       collectors on sale, the rented looks, the golf balls; never a Keeper, a perk, a trophy or a boost), 36 a page,
+ *       the arrows on 45/53, Back on 49. A giver who can't afford one is told how many more tokens at once.</li>
  *   <li>"Who is it for?" (54 slots): one tile per other online player the giver can see, by name.
- *       Why someone can't get it is in the NAME ("has it", "bag full", "not here"), because Bedrock
- *       shows lore only on a long press; only the green ones can be tapped. 36 a page, the arrows
- *       on 45/53, Back on 49. There is no "For me" tile.</li>
+ *       Why someone can't get it is in the NAME ("has it until 18 Jan", "has it", "bag full", "not here",
+ *       "in a game"), because Bedrock shows lore only on a long press; only the green ones can be tapped. 36 a
+ *       page, the arrows on 45/53, Back on 49. There is no "For me" tile.</li>
  *   <li>The confirm, with the RECEIVER in the middle (a buy's middle tile is the item), so a present
- *       never looks like a purchase. Cancel goes back to the people.</li>
+ *       never looks like a purchase, the price for that receiver in its name (the buy-again price while their
+ *       window is open). Cancel goes back to the people.</li>
  * </ol>
  *
  * <p>The confirm hands the receiver's UUID to {@link PrizeService#gift}, which looks them up again and
  * re-checks everything before any token moves. On success it closes this menu and gives both players
  * their moment itself, so nothing here reopens a menu or plays a sound after a present. A menu never
- * shows a tagged item: a cap is drawn from its untagged look, a trail from its row's icon.
+ * shows a tagged item: a cap is drawn from its untagged look, a trail or a ball from its row's icon.
  */
 public final class GiftPickerMenu extends Menu {
 
@@ -65,7 +68,22 @@ public final class GiftPickerMenu extends Menu {
         this.back = back;
         this.present = present;
         this.page = Math.max(0, page);
-        init(present == null ? 27 : 54, Text.of(present == null ? "&5Which present?" : "&5Who is it for?"));
+        init(54, Text.of(present == null ? "&5Which present?" : "&5Who is it for?"));
+    }
+
+    /**
+     * "Give a present" on one look and one person ({@code /hcm looks gift <id> <player>}, the giver's
+     * {@code [Give it again]} link): straight to the confirm when they can get it, else the person screen saying
+     * why. Nothing is bought from chat: the confirm is the giver's own tap.
+     */
+    public static void openFor(HomeCraftManagement plugin, Player giver, Prize p, UUID receiver) {
+        GiftPickerMenu people = new GiftPickerMenu(plugin, giver, null, p, 0);
+        if (people.current(p.id()) == null) {
+            giver.sendMessage(Text.of("&cThat isn't for sale right now."));
+            Sounds.refused(giver);
+            return;
+        }
+        people.pickPerson(receiver);
     }
 
     @Override
@@ -79,7 +97,7 @@ public final class GiftPickerMenu extends Menu {
 
     // ---- the counter's entry -----------------------------------------------------------
 
-    /** Whether the counter shows "Give a present": gifting is on and a giftable collector is on sale. */
+    /** Whether the counter shows "Give a present": gifting is on and something giftable is on the shelf. */
     public static boolean entryShown(HomeCraftManagement plugin) {
         return !presents(plugin).isEmpty();
     }
@@ -88,7 +106,7 @@ public final class GiftPickerMenu extends Menu {
     private static List<Prize> presents(HomeCraftManagement plugin) {
         List<Prize> visible = new ArrayList<>();
         for (Prize p : plugin.config().arcade().prizes()) {
-            if (p.collector() != null && plugin.prizes().visible(p)) {
+            if (PrizeService.giftable(p) && plugin.prizes().visible(p)) {
                 visible.add(p);
             }
         }
@@ -96,8 +114,10 @@ public final class GiftPickerMenu extends Menu {
     }
 
     /**
-     * The giftable collectors among {@code visible} (rows already on sale and in season), and none
-     * at all while {@code arcade.collectors.gifting} is off. Pure, so the entry's rule is tested.
+     * The presents among {@code visible} (rows already on the shelf: a collector on sale and in season), in counter
+     * order: a giftable collector, a rented look, a golf ball ({@link PrizeService#giftable}); never a Keeper. None at
+     * all while {@code arcade.collectors.gifting} is off (it switches every present). Pure, so the entry's rule is
+     * tested.
      */
     static List<Prize> presents(boolean giftingOn, List<Prize> visible) {
         List<Prize> out = new ArrayList<>();
@@ -105,7 +125,7 @@ public final class GiftPickerMenu extends Menu {
             return out;
         }
         for (Prize p : visible) {
-            if (p.collector() != null && p.collector().giftable()) {
+            if (PrizeService.giftable(p)) {
                 out.add(p);
             }
         }
@@ -125,26 +145,56 @@ public final class GiftPickerMenu extends Menu {
     // ---- 1. which present ----------------------------------------------------------------
 
     private void buildPresents() {
-        for (int i = 0; i < 27; i++) {
+        for (int i = 0; i < 9; i++) {
+            set(i, Menus.FILLER, null);
+        }
+        for (int i = 45; i < 54; i++) {
             set(i, Menus.FILLER, null);
         }
         set(4, Menus.icon(Material.CAKE, "&dGive a present",
                 "&7Pick a present, then", "&7pick who it's for."), null);
         List<Prize> rows = presents(plugin);
         if (rows.isEmpty()) {
-            set(13, Menus.icon(Material.BARRIER, "&7No presents right now", "&8Check back soon!"), null);
+            set(22, Menus.icon(Material.BARRIER, "&7No presents right now", "&8Check back soon!"), null);
         }
+        int p = clampPage(page, rows.size());
         int balance = plugin.tokens().balance(giver.getUniqueId());
-        int[] slots = rowSlots(rows.size());
+        int[] slots = presentSlots(rows.size(), p);
+        int from = p * GRID_SIZE;
         for (int i = 0; i < slots.length; i++) {
-            Prize p = rows.get(i);
-            set(slots[i], presentTile(p, balance), e -> pickPresent(p.id()));
+            Prize row = rows.get(from + i);
+            set(slots[i], presentTile(row, balance), e -> pickPresent(row.id()));
         }
-        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> goBack());
+        if (p > 0) {
+            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+                    e -> new GiftPickerMenu(plugin, giver, back, null, p - 1).open(giver));
+        }
+        if (p < pages(rows.size()) - 1) {
+            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+                    e -> new GiftPickerMenu(plugin, giver, back, null, p + 1).open(giver));
+        }
+        // Slot 49 is the way out and never an arrow (NavAnchorTest).
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> goBack());
     }
 
     /**
-     * Where {@code n} present tiles go on the middle row (slots 9-17): centred, a gap between them
+     * Where page {@code page}'s present tiles go: up to a row's worth centred on the row under the header
+     * ({@link #rowSlots}), more than that filling the grid (slots 9-44) in order, {@value #GRID_SIZE} a page.
+     */
+    static int[] presentSlots(int count, int page) {
+        int onPage = Math.max(0, Math.min(GRID_SIZE, count - page * GRID_SIZE));
+        if (count <= 9) {
+            return rowSlots(count);
+        }
+        int[] out = new int[onPage];
+        for (int i = 0; i < onPage; i++) {
+            out[i] = GRID_START + i;
+        }
+        return out;
+    }
+
+    /**
+     * Where {@code n} present tiles go on the row under the header (slots 9-17): centred, a gap between them
      * while five or fewer fit that way, side by side after that, and never more than the row holds.
      */
     static int[] rowSlots(int n) {
@@ -162,22 +212,52 @@ public final class GiftPickerMenu extends Menu {
         return out;
     }
 
-    /** A present's tile: its name and price, the collector lines, then whether the giver can afford it. */
+    /**
+     * A present's tile: its name and price, the collector or rental lines, then whether the giver can afford it. A
+     * rented look's price is its first-buy price here; the confirm says what it costs for the one it is for (their
+     * buy-again price while their window is open).
+     */
     private ItemStack presentTile(Prize p, int balance) {
-        int cost = plugin.prizes().price(giver.getUniqueId(), p);
+        int cost = cheapest(p);
         List<String> lore = new ArrayList<>();
         for (String line : p.description()) {
             lore.add("&7" + line);
         }
-        lore.addAll(PrizeCounterMenu.collectorLines(p.collector()));
+        if (p.collector() != null) {
+            lore.addAll(PrizeCounterMenu.collectorLines(p.collector()));
+        } else if (p.rental()) {
+            lore.add("&7Theirs for " + com.dierks.homecraft.arcade.looks.LookRules.days(Math.max(1, p.days())) + ".");
+        } else {
+            lore.add("&aTheirs for good!");
+        }
         lore.add(balance >= cost ? "&eClick to pick who it's for" : "&cNeed " + (cost - balance) + " more tokens");
-        return look(p, p.display() + " &7- &6" + cost + " tokens", lore);
+        int price = p.collector() != null ? plugin.prizes().price(giver.getUniqueId(), p) : p.costTokens();
+        return look(giver, p, p.display() + " &7- &6" + price + " tokens", lore);
     }
 
-    /** A present's picture, never a tagged item: a cap's untagged look, or a trail's row icon. */
-    private static ItemStack look(Prize p, String name, List<String> lore) {
+    /** The least a present can cost anyone: a rented look's buy-again price may be lower than its first. */
+    private int cheapest(Prize p) {
+        if (p.rental()) {
+            return Math.min(p.costTokens(), p.renewPrice());
+        }
+        return plugin.prizes().price(giver.getUniqueId(), p);
+    }
+
+    /**
+     * A present's picture, never a tagged item: a cap's untagged look, a mob hat or a cap from its row's material, a
+     * textured hat's head on Java, else the row's icon (a trail, a ball's block).
+     */
+    private static ItemStack look(Player viewer, Prize p, String name, List<String> lore) {
         if (p.collector() != null && p.collector().look() != null) {
             return PrizeItems.capLook(p.collector().look(), name, lore);
+        }
+        ItemStack hat = PrizeItems.hatLook(p, name, lore);
+        if (hat != null) {
+            return hat;
+        }
+        if (p.type() == com.dierks.homecraft.config.PluginConfig.PrizeType.HAT && p.texture() != null
+                && !p.texture().isBlank() && !Bedrock.is(viewer)) {
+            return com.dierks.homecraft.util.Heads.textured(p.texture(), name, lore);
         }
         return Menus.icon(p.icon().material(), name, lore.toArray(new String[0]));
     }
@@ -189,7 +269,7 @@ public final class GiftPickerMenu extends Menu {
             refresh();
             return;
         }
-        int cost = plugin.prizes().price(giver.getUniqueId(), p);
+        int cost = cheapest(p);
         int have = plugin.tokens().balance(giver.getUniqueId());
         if (have < cost) {
             refuse("You need " + (cost - have) + " more tokens."); // as a buy says it
@@ -216,7 +296,7 @@ public final class GiftPickerMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         String item = Text.plain(present.display());
-        set(4, look(present, "&dWho is it for?", List.of("&7Pick who gets the " + item + ".",
+        set(4, look(giver, present, "&dWho is it for?", List.of("&7Pick who gets the " + item + ".",
                 "&7Presents go to someone who's online.")), null);
 
         List<Player> people = people();
@@ -272,11 +352,14 @@ public final class GiftPickerMenu extends Menu {
      * the confirm's to refuse, and the same for everyone.
      */
     static String note(GiftFacts f) {
-        if (!f.receiverEconomyWorld() || f.receiverGamesWorld() || f.receiverInGame()) {
-            return "not here"; // another world, a Games world, or in a game
+        if (!f.receiverEconomyWorld() || f.receiverGamesWorld()) {
+            return "not here"; // another world, or a Games world
+        }
+        if (f.receiverInGame()) {
+            return "in a game";
         }
         if (f.receiverHasIt()) {
-            return "has it";
+            return f.until() != null ? "has it until " + f.until() : "has it";
         }
         if (f.cap() && !f.headEmpty() && !f.bagHasRoom()) {
             return "bag full";
@@ -314,17 +397,25 @@ public final class GiftPickerMenu extends Menu {
         Player r = Bukkit.getPlayer(id);
         if (refused != null || r == null) {
             refuse(refused != null ? refused : "That player isn't online.");
-            refresh();
+            if (isOpenFor(giver)) {
+                refresh();
+            } else {
+                open(giver); // from a chat link: the people, with why in their names
+            }
             return;
         }
-        new ConfirmMenu(plugin, "&5Give " + f.item() + " to " + r.getName() + "?", receiverTile(r, f.item()),
-                List.of("&7Costs &6" + f.cost() + " tokens&7.", "&7You have &6" + f.balance() + "&7."),
-                "&7Click to give it.", () -> give(p, id), this::reopenPeople).open(giver);
+        int cost = f.cost();
+        new ConfirmMenu(plugin, "&5Give " + f.item() + " to " + r.getName() + "?", receiverTile(r, f.item(), cost),
+                List.of("&7Costs &6" + cost + " tokens&7.", "&7You have &6" + f.balance() + "&7."),
+                "&7Click to give it.", () -> give(p, id, cost), this::reopenPeople).open(giver);
     }
 
-    /** The confirm's middle tile: the person, not the item (paper on Bedrock, their head on Java). */
-    private ItemStack receiverTile(Player r, String item) {
-        String name = "&a" + r.getName();
+    /**
+     * The confirm's middle tile: the person, not the item (paper on Bedrock, their head on Java), with the price
+     * for them in its NAME (a rented look's buy-again price while their window is open).
+     */
+    private ItemStack receiverTile(Player r, String item, int cost) {
+        String name = "&a" + r.getName() + " &7- &6" + cost + " tokens";
         String line = "&7Gets the " + item;
         return Bedrock.is(giver) ? Menus.icon(Material.PAPER, name, line) : ScoresMenu.playerHead(r, name, line);
     }
@@ -334,8 +425,8 @@ public final class GiftPickerMenu extends Menu {
      * their moment ({@link PrizeService#gift}), so only a refusal is shown here, and the picker
      * comes back so the giver can try someone else.
      */
-    private void give(Prize p, UUID receiver) {
-        Outcome out = plugin.prizes().gift(giver, receiver, p);
+    private void give(Prize p, UUID receiver, int shownCost) {
+        Outcome out = plugin.prizes().gift(giver, receiver, p, shownCost);
         if (out.ok()) {
             return;
         }
@@ -347,7 +438,7 @@ public final class GiftPickerMenu extends Menu {
         }
     }
 
-    private void reopenPeople() {
+    void reopenPeople() {
         new GiftPickerMenu(plugin, giver, back, present, page).open(giver);
     }
 

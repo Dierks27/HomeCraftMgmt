@@ -431,12 +431,30 @@ public final class MiniDao {
         }
     }
 
-    /** @return the most recent sale price for a Mini type (any copy), or null if never sold. */
+    /** The newest sale of one copy (any venue, a price-0 trade or gift too), or empty when it was never sold. */
+    public java.util.Optional<Sale> latestSale(String uid) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT uid, mini_id, price, seller, buyer, venue, sold_at FROM mini_sales "
+                            + "WHERE uid = ? ORDER BY sold_at DESC, id DESC LIMIT 1")) {
+                ps.setString(1, uid);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? java.util.Optional.of(mapSale(rs)) : java.util.Optional.empty();
+                }
+            }
+        }
+    }
+
+    /**
+     * @return the most recent sale price for a Mini type (any copy), or null if never sold. Only a sale WITH a price
+     *         counts (0.38, SHOP-V2-SPEC T9): a trade or a gift logs price 0, which is not what a Mini is worth.
+     */
     public Double lastSalePrice(String miniId) throws SQLException {
         Connection c = conn();
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT price FROM mini_sales WHERE mini_id = ? ORDER BY sold_at DESC LIMIT 1")) {
+                    "SELECT price FROM mini_sales WHERE mini_id = ? AND price > 0 ORDER BY sold_at DESC LIMIT 1")) {
                 ps.setString(1, miniId);
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? rs.getDouble(1) : null;
@@ -464,6 +482,44 @@ public final class MiniDao {
                 ps.setString(2, uid);
                 ps.executeUpdate();
             }
+        }
+    }
+
+    /**
+     * Set a copy's owner back to {@code back} only while it is still {@code now} (a void of the trade
+     * that moved it, red-team finding D4); {@code back} null clears it. Returns whether it was.
+     */
+    public boolean ownerBack(String uid, UUID now, UUID back) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE mini_individuals SET owner = ? WHERE uid = ? AND owner = ?")) {
+                ps.setString(1, back != null ? back.toString() : null);
+                ps.setString(2, uid);
+                ps.setString(3, now.toString());
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
+
+    /** Delete the price-0 sale a trade wrote for one copy (its buyer and time), when that trade is undone. */
+    public int deleteTradeSale(String uid, UUID buyer, long soldAt, java.util.Collection<String> venues)
+            throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            int n = 0;
+            for (String venue : venues) {
+                try (PreparedStatement ps = c.prepareStatement(
+                        "DELETE FROM mini_sales WHERE uid = ? AND buyer = ? AND sold_at = ? AND price = 0"
+                                + " AND venue = ?")) {
+                    ps.setString(1, uid);
+                    ps.setString(2, buyer.toString());
+                    ps.setLong(3, soldAt);
+                    ps.setString(4, venue);
+                    n += ps.executeUpdate();
+                }
+            }
+            return n;
         }
     }
 

@@ -122,7 +122,7 @@ public final class GuideMenu extends Menu {
                     "&7See them in your Wallet."), true), null);
             set(14 + row * 9, arrow("→"), null);
         }
-        step(15, Material.CHEST, "&dOpen a crate", "&7Boosts, trails, hats…", "&7or a Card!");
+        step(15, Material.CHEST, "&dOpen a crate", "&7Boosts, trails, fireworks…", "&7or a Card!");
         step(24, Material.FILLED_MAP, "&dScratch a ticket", "&7Match three to win.");
         step(33, Material.ITEM_FRAME, "&dPrize Counter", "&7Pick exactly what you want.");
         step(42, Material.PAPER, "&dCard Packs", "&7Some packs take tokens too.");
@@ -161,7 +161,7 @@ public final class GuideMenu extends Menu {
     /** Crate, Scratch Ticket, Rare Card and Card trade-in, each over what it gives. */
     private void arcade() {
         step(19, Material.CHEST, "&6Crates", "&7Pay tokens, get a surprise.");
-        step(28, Material.FIREWORK_ROCKET, "&7Boosts, trails, hats…", "&7and sometimes a Card!");
+        step(28, Material.FIREWORK_ROCKET, "&7Boosts, trails, fireworks…", "&7and sometimes a Card!");
         step(21, Material.FILLED_MAP, "&6Scratch Ticket",
                 "&7" + plugin.config().arcade().lotto().ticketTokens() + " tokens a ticket.");
         step(30, Material.GOLD_BLOCK, "&7Match three to win", "&7The jackpot grows", "&7with every ticket!");
@@ -202,7 +202,13 @@ public final class GuideMenu extends Menu {
             step(28, Material.TARGET, "&aSkill games", "&7Free to play.", "&7Beat your best!");
             set(29, arrow("→"), null);
             step(30, Material.GOLD_INGOT, "&aMilestones", "&7Bronze, silver and gold.", "&7Each pays once, ever.");
-            step(31, Material.CLOCK, "&aDaily challenge", "&7One scored try a day.", "&7Meet the goal to earn.");
+            if (common.everydayCap() > 0) {
+                // games.everyday_cap is on (0.38, S6b): the arcade goals pay only the first few each day
+                step(31, Material.CLOCK, "&aDaily challenge", "&7One scored try a day.", "&7Meet the goal to earn.",
+                        com.dierks.homecraft.games.SkillRewards.everydayLine(common.everydayCap()));
+            } else {
+                step(31, Material.CLOCK, "&aDaily challenge", "&7One scored try a day.", "&7Meet the goal to earn.");
+            }
             set(32, arrow("→"), null);
             int cap = common.skillDailyCap();
             step(33, Material.SUNFLOWER, "&6Up to " + cap + " token" + (cap == 1 ? "" : "s") + " a day",

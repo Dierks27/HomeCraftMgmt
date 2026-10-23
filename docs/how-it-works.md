@@ -10,8 +10,8 @@ You earn them by playing:
 
 | How | What you get |
 |---|---|
-| **Log in every day** | Your streak pays more each day in a row: 2, 2, 3, 3, 4, 4, then 5 a day. |
-| **Play** | A token for every hour you play. |
+| **Log in every day** | Your streak pays more each day in a row: 2, 2, 3, 3, 4, 4, then 5 a day. It counts in the Games world too. |
+| **Play** | A token for every hour you play, in the Games world too. |
 | **Quests** | Three daily jobs and two weekly ones, different for everyone, like "Catch 8 fish" or "Visit 3 different biomes". |
 | **Achievements** | Big moments pay once, like your first Mini or a 7-day streak. |
 | **Wild Minis** | Catching one counts toward quests and achievements. |
@@ -19,30 +19,109 @@ You earn them by playing:
 
 Spend them in the **Arcade** (`/hcm arcade`):
 
-- **Crates.** Pay tokens and get a surprise: a boost, a Mini Radar, a trail, a hat… or, rarely, a Card for any Mini.
+- **Crates.** Pay tokens and get a surprise: a boost, a Mini Radar, fireworks, a 1-day trail… or, rarely, a Card for any Mini. Hats are never in a crate: you buy them.
 - **Scratch Ticket.** 10 tokens. Scratch three squares; three the same wins. The jackpot grows with every ticket anyone buys.
 - **Prize Counter.** Pick exactly what you want, at a fixed price:
-  - Boosts: speed, mining, night vision, water breathing, lucky fishing.
-  - Hunt gear: a Mini Radar and a Mini Lure.
-  - Cosmetics: fireworks, trails and hats.
-    - Halloween collectors: the Pumpkin Cap 2026 (October) and the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
-    - Christmas collectors: the Santa Cap 2026 (December) and the Twinkle 2026 trail (1 December to 6 January). Yours for good, and they can be presents too.
+  - Boosts: speed, mining, night vision, water breathing, lucky fishing, Bouncy Boots (jump high) and Floaty Feather (float down). **Make it Day!** turns night into day in your world, and **Sunny Day** stops the rain for 10 minutes. You can't buy them when it's already day or not raining, so you never pay for nothing.
+  - Hunt gear: a Mini Radar and a Mini Lure (when wild Minis are on).
+  - Cosmetics: fireworks, trails for a month, and **Party Time!**: 10 seconds of fireworks around everyone who's playing.
+    - Halloween collectors: the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
+    - Christmas collectors: the Twinkle 2026 trail (1 December to 6 January). Yours for good, and it can be a present too.
+  - **Looks:** hats and caps for 90 days (the Creeper Hat, the Dragon Hat and four colourful caps), golf balls you keep, and the collector caps: the Pumpkin Cap 2026 (October) and the Santa Cap 2026 (December), yours for good.
   - Perks: an extra home, `/hat`.
-  - Trophies: a numbered Arcade Trophy.
+  - Trophies: a numbered Arcade Trophy (each one costs a bit more), a trophy ladder from Bronze to Legend, and a Trophy of the Month.
   - Minis: a Rare Card once a week, filament, a Display Case.
+  - **Keepers:** the Legend Crown, three keeper trails and two keeper hats. Yours for good.
 - **Card Packs.** Some packs can be bought with tokens as well as dollars.
 
 Your **Wallet** (top of the Arcade) shows your tokens, your streak, when your next playtime token
 comes, and your last ten token changes.
 
 Arcade prizes can't be sold for money. Shops, Pallets, vending machines, the Auction House and
-Courier runs all say no.
+Courier runs all say no. In the trade window they can be swapped for other things, but never for
+money.
 
 Prizes stay with you when you die. Carry them loose, not inside a bundle or a shulker box: a prize
 inside one drops with it.
 
 A hat or trophy you place stays put: pistons, water, lava, TNT and withers can't move it, and only
 you (or an admin) can break it. It goes back in your bag (or your Mailbox, if your bag is full).
+**Tap a placed Arcade Trophy and the Arcade opens** (crouch to build next to it instead).
+
+## Looks that run out, and buying again
+
+Hats, caps and trails you wear are **yours for a while**: hats and caps for 90 days, trails for 30.
+Everything else stays yours for good: trophies, golf balls, `/hat`, extra homes, the collectors and
+the Keepers.
+
+- A look's name says how long it's yours: "Pink Cap - until 18 Jan". It ends at midnight.
+- A week before it ends, and the day before, a message on your screen says so (on Bedrock it waits
+  until you close a menu or an Arcade game, so you see it). When it ends, it "went back to the shop".
+  A crate's 1-day trail just says so in chat.
+- **Buy it again** from a week before it ends until a month after, for the same price. It never buys
+  itself again, so nothing is ever spent without you.
+- Your hat stays with you: it can't be dropped, put in a chest or traded (your ender chest is fine).
+  Lost it? My Looks makes it again for free.
+- Someone can buy you a look as a present (Give a present). When it's a week from ending, they hear
+  about it too (if you weren't on that week, they hear when you next are).
+- A rented cap is a dyed leather cap and the mob hats are the game's own heads, so anyone could craft
+  the same look. What the tokens buy is that yours can't be lost and comes back free.
+
+## My Looks
+
+Open **My Looks** from your Wallet, or type `/hcm looks` (or `/hcm trail`).
+
+- **Tap a hat** to put it on. **Tap a trail** to switch it on. Only one trail shows at a time, and only
+  while you walk.
+- The top row shows what's on your head (tap to take it off) and your trail (tap to switch it off, tap
+  again to switch it back on).
+- Each look says how long it's yours. A small number on it means only a few days are left.
+- Your collector caps are there too, with where each one is.
+- **"Other people's trails and parties"** (bottom row): tap to hide other people's trails, sparkles
+  and Party Time fireworks, just for you. Your own trail always shows to you.
+
+## The Keepers
+
+The Keepers are the biggest things on the Prize Counter, and they are yours for good:
+
+| Keeper | Tokens | What it is |
+|---|---|---|
+| **Legend Crown** | 5,000 | A gold crown with your number on it, and its own Royal Trail. |
+| **Aurora Trail** | 3,000 | Green and purple lights float up around you. |
+| **Stardust Trail** | 3,000 | Golden sparkles drift down behind you. |
+| **Frost Trail** | 3,000 | Icy sparkles and snow at your feet. |
+| **Wizard Hat** | 2,500 | A midnight hat with golden swirls. A little magic floats above it. |
+| **Knight's Helm** | 2,500 | A shining knight's helmet, just for looks. A tiny flame on its crest. |
+
+Only one of each, and only you can wear yours. A Keeper can't be given as a present, traded or
+dropped. A worn Keeper hat shows a small sparkle of its own above your head as you walk: nobody can
+craft that.
+
+## Trading
+
+Type `/trade <name>`, or crouch and right-click someone with an empty hand. On Bedrock, a "Trade?"
+screen asks if you want to: tap Yes. The PC's Trade site works too.
+
+1. **Put things on the table:** tap them in your bag. On Bedrock, tap something on the table to take
+   half of it back.
+2. **Money** can go in too, but never with an Arcade prize on the table. Tokens never.
+3. **Both press Ready.** If anything changes, both have to press it again. Giving something away for
+   nothing needs a second tap: "Give it away? Tap again".
+4. **3, 2, 1, traded!** Nothing leaves your bag until then. If something you get doesn't fit, it's in
+   your Mailbox.
+
+If the server stops in the middle of the swap, nothing is lost: an admin checks the trade and puts it
+right. If it has to be undone, what you gave comes back to your Mailbox ("Back from your trade with
+..."), and a Mini you gave is yours again too. Nothing is taken out of your bag on its own, and a trade
+that finished stays finished: what it put in your Mailbox stays there. Money isn't paid back that way:
+an admin checks it. A trade that couldn't quite finish while the server kept
+running says "will reach your Mailbox once the trade is checked": that happens after the server's next
+restart, once an admin has looked. If money you put on the table couldn't reach the other player, you
+are told it went back to you (or, if even that failed, to ask an admin, with the trade's number).
+
+Close the window and nothing happens: everything is still yours. Game items, Keepers, rented looks,
+Courier packages and the Trick-or-Treat Bag can't be traded. Minis change owner when they're traded.
+Type `/trade off` (or use the Trade site's tile) to stop people asking you.
 
 ## Candy apples (until 31 Oct)
 
@@ -98,7 +177,7 @@ The Arcade shows if a wild Mini is out right now, who it's near and how long is 
 
 | Game | Cost | What you can get |
 |---|---|---|
-| **Crate** | 15 tokens | Boosts, hunt gear, trails, hats, filament, tokens back, or a Card for any Mini |
+| **Crate** | 15 tokens | Boosts, hunt gear, fireworks, a 1-day trail, filament, tokens back, or a Card for any Mini |
 | **Scratch Ticket** | 10 tokens | Tokens back, up to the jackpot |
 | **Rare Card** | 150 tokens, once a week | A Card that's Rare or better |
 | **Card trade-in** | Your spare Cards | 3 to 50 tokens each; rarer Cards give more |
@@ -119,7 +198,7 @@ server turns them on.
 | **Coin Flip** | You and a friend put in the same. One flip, one winner. | Put in 5, 10 or 25 |
 | **Cabinets** | Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie, Connect Four and Tic-Tac-Toe. | Free |
 | **Time trials** | Race a parkour, elytra or boat course through every checkpoint. Beat the clock! | Free |
-| **Mini golf** | Putt the ball into the cup in as few strokes as you can. Your Mini is the ball! | Free |
+| **Mini golf** | Putt the ball into the cup in as few strokes as you can. A golf ball you bought, or one of your Minis, is the ball! | Free |
 
 ### Games of chance give back less than you put in
 

@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.golf;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.TokenService;
+import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.Game;
@@ -42,6 +43,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -58,7 +61,9 @@ import java.util.logging.Level;
  * ball" screen and remembered in {@code game_prefs} ({@value #BALL_PREF}). Only its texture is
  * borrowed: the head is a fresh plain one (never tagged as a Mini), and the Mini never leaves the
  * player's collection. No Mini (or one without a texture) is a plain white ball, and a Bedrock
- * player's ball is a white block, which Bedrock draws reliably.
+ * player's ball is a white block, which Bedrock draws reliably. A golf ball bought at the Prize Counter
+ * (0.38, SHOP-V2-SPEC §5.10) is a block, so it plays as that block on both editions: the pref then holds
+ * {@code ball:<prize id>} ({@link #shopBallPref}), which is never a Mini's id.
  *
  * <p><b>Rewards</b> are small and capped (§6.1): the first finish of a course, finishing at par or
  * better (once per course a day), each hole-in-one of a round that was finished (once per hole a
@@ -81,8 +86,10 @@ public final class MiniGolf implements Game {
             MiniGolfSettings.KEYS, MiniGolfSettings.defaults(), MiniGolfSettings::parse,
             MiniGolf::new, null);
 
-    /** The player's chosen ball: a Mini id, or unset for the plain white ball. */
+    /** The player's chosen ball: a Mini id, a shop ball ({@code ball:<prize id>}), or unset for the white ball. */
     public static final String BALL_PREF = "golf.ball";
+    /** The prefix of a shop golf ball's choice, so it is never read as a Mini id. */
+    public static final String SHOP_BALL = "ball:";
     /**
      * The plain white ball: a snowball head (minecraft-heads.com "Snowball", texture
      * 1dfd7724c69a024dcfc60b16e00334ab5738f4a92bafb8fbc76cf15322ea0293).
@@ -520,7 +527,7 @@ public final class MiniGolf implements Game {
         }
     }
 
-    /** Choose a Mini ({@code null} = the plain white ball). */
+    /** Choose a Mini, or a shop ball ({@link #shopBallPref}); {@code null} = the plain white ball. */
     public boolean chooseBall(UUID player, String miniId) {
         try {
             games().dao().setPref(player, BALL_PREF, miniId == null || miniId.isBlank() ? null : miniId);
@@ -532,16 +539,20 @@ public final class MiniGolf implements Game {
     }
 
     /**
-     * The ball this player plays with: a white block on Bedrock; else the head of their chosen Mini
-     * if they still own it and it has a texture; else the plain white ball. Reads what they own
-     * once (call it once per round).
+     * The ball this player plays with: a shop ball they chose and still own, as its block, on both editions;
+     * else a white block on Bedrock; else the head of their chosen Mini if they still own it and it has a
+     * texture; else the plain white ball. Reads what they own once (call it once per round).
      */
     ItemStack ballItem(Player player) {
+        String chosen = chosenBall(player.getUniqueId());
+        Material shop = shopBall(chosen, this::ballRow, id -> ownsBall(player.getUniqueId(), id));
+        if (shop != null) {
+            return new ItemStack(shop);
+        }
         if (Bedrock.is(player)) {
             return new ItemStack(Material.WHITE_CONCRETE);
         }
         String texture = WHITE_BALL;
-        String chosen = chosenBall(player.getUniqueId());
         MiniService minis = ctx.plugin() == null ? null : ctx.plugin().miniService();
         if (chosen != null && minis != null && minis.ownedIds(player.getUniqueId()).contains(chosen)) {
             MiniDef def = minis.def(chosen);
@@ -550,6 +561,91 @@ public final class MiniGolf implements Game {
             }
         }
         return Heads.base(texture);
+    }
+
+    /** The pref value that picks shop ball {@code prizeId}: {@code ball:ball_pink}. */
+    public static String shopBallPref(String prizeId) {
+        return SHOP_BALL + prizeId;
+    }
+
+    /** The shop ball's prize id in a choice ({@code ball:ball_pink} → {@code ball_pink}); null for a Mini or none. */
+    public static String shopBallId(String chosen) {
+        return chosen != null && chosen.startsWith(SHOP_BALL) && chosen.length() > SHOP_BALL.length()
+                ? chosen.substring(SHOP_BALL.length()) : null;
+    }
+
+    /**
+     * The block a shop-ball choice plays as (P4): a {@code ball:} choice whose row exists as a golf ball, enabled or
+     * not (an owned ball keeps working while its row is switched off), and which the player owns; else null (a
+     * Mini, white, or a ball they don't own, which plays white). Pure, with the rows and the claims passed in.
+     */
+    static Material shopBall(String chosen, Function<String, PluginConfig.Prize> rows, Predicate<String> owns) {
+        String id = shopBallId(chosen);
+        if (id == null) {
+            return null;
+        }
+        PluginConfig.Prize p = rows.apply(id);
+        if (p == null || p.type() != PluginConfig.PrizeType.BALL || p.extra().ballLook() == null
+                || !owns.test(p.id())) {
+            return null;
+        }
+        return p.extra().ballLook();
+    }
+
+    /** A golf ball row of the Prize Counter by id (enabled or not), or null. */
+    private PluginConfig.Prize ballRow(String id) {
+        HomeCraftManagement plugin = ctx.plugin();
+        PluginConfig.Prize p = plugin == null || plugin.config() == null || plugin.config().arcade() == null ? null
+                : plugin.config().arcade().prize(id);
+        return p != null && p.type() == PluginConfig.PrizeType.BALL ? p : null;
+    }
+
+    /** Whether the player owns shop ball {@code prizeId}: its {@code 'life'} claim. Unknown is "no" (white). */
+    private boolean ownsBall(UUID player, String prizeId) {
+        HomeCraftManagement plugin = ctx.plugin();
+        if (plugin == null || plugin.prizes() == null) {
+            return false;
+        }
+        try {
+            return plugin.prizes().dao().purchases(player, prizeId, "life") > 0;
+        } catch (SQLException e) {
+            log(Level.WARNING, "Mini golf: could not read a player's golf balls", e);
+            return false;
+        }
+    }
+
+    /**
+     * The shop's golf balls this player owns, in counter order, for "Pick your ball" on both editions. An owned
+     * ball whose row is switched off is still listed: it was bought for good.
+     */
+    public List<PluginConfig.Prize> shopBalls(UUID player) {
+        HomeCraftManagement plugin = ctx.plugin();
+        if (plugin == null || plugin.config() == null || plugin.config().arcade() == null) {
+            return List.of();
+        }
+        List<PluginConfig.Prize> out = new ArrayList<>();
+        for (PluginConfig.Prize p : plugin.config().arcade().prizes()) {
+            if (p.type() == PluginConfig.PrizeType.BALL && p.extra().ballLook() != null && ownsBall(player, p.id())) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * "Pick your ball"'s order of choices, as prefs: the shop balls owned (both editions), then the Minis (Java:
+     * Bedrock doesn't draw head textures reliably), then the plain white ball ({@code null}).
+     */
+    public static List<String> ballOrder(List<String> shopIds, List<String> miniIds, boolean bedrock) {
+        List<String> out = new ArrayList<>();
+        for (String id : shopIds) {
+            out.add(shopBallPref(id));
+        }
+        if (!bedrock) {
+            out.addAll(miniIds);
+        }
+        out.add(null);
+        return out;
     }
 
     /** The plain white ball, for screens. */

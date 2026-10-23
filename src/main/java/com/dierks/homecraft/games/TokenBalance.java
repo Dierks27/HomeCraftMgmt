@@ -42,6 +42,13 @@ public final class TokenBalance {
 
     /** {@code games.skill_daily_cap}: all skill games together, a day. */
     public static final int SKILL_DAILY_CAP = 60;
+    /**
+     * {@code games.everyday_cap}: every game's daily challenge together (the arcade goals, {@link
+     * RewardKind#DAILY_CHALLENGE}), a day, on top of {@link #SKILL_DAILY_CAP}. Ships 0 = off (0.38, SHOP-V2-SPEC
+     * §5.12, S6b): the owner never asked for it and it lowers their own income too; 15 closes the grinder gap
+     * (a grinder 653 a week, the others' 543).
+     */
+    public static final int EVERYDAY_CAP = 0;
     /** {@code games.featured_bonus}: today's pick, first finish, once a day across games. */
     public static final int FEATURED_BONUS = 5;
 

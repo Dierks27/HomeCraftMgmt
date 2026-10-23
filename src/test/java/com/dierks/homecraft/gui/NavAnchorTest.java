@@ -37,6 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the Store is one Site among several and its 49 is an ordinary way out. The launcher is the root
  * now, and it has no exit tile at all.
  *
+ * <p>One screen is outside the rule on purpose: the trade window ({@code gui/trade/TradeMenu}, 0.38) has no pages,
+ * and SHOP-V2-SPEC §4.3 lays out Cancel on 45 and How to trade on 53. Nothing on it pages, so there is no arrow a
+ * hand could have learned there; its slots are named constants that {@code TradeMenuLayoutTest} pins.
+ *
  * <p>Registry-free: this reads source text, so it needs no server and no Bukkit call.
  */
 class NavAnchorTest {

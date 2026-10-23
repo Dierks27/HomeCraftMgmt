@@ -104,6 +104,39 @@ public final class Keys {
     public static NamespacedKey PLACED_PRIZE_ID;
     /** On a Firework Show rocket: marks it harmless. */
     public static NamespacedKey FIREWORK_SHOW;
+    /**
+     * {@code hcm:bound_to} — on a key that works only for one player (0.38: a rented hat or cap, a Keeper): their
+     * UUID (String). The right is in the database; the item is only a key to it, and it stays with its owner
+     * ({@code PrizeService.bound}). In the shared {@code hcm} namespace, like {@link #TOKEN_PRIZE}.
+     */
+    public static NamespacedKey BOUND_TO;
+    /** On a rented look's key (0.38): the {@code expires_at} its name was written for (Long, display only). */
+    public static NamespacedKey LOOK_END;
+    /** On the copy a preview stand wears (0.38, {@code /hcm looks preview}): marks it a stray key (Byte). */
+    public static NamespacedKey LOOK_PREVIEW;
+    /**
+     * On a Keeper's key (0.38): the form of its look it was built in, {@code default} or {@code fallback} (String). A
+     * sweep finding one of another form than {@code arcade.keepers.looks} picks rebuilds its look in place.
+     */
+    public static NamespacedKey LOOK_VARIANT;
+    /**
+     * {@code hcm:trade_ghost} — on the picture of an offered stack the trade window shows (0.38, SHOP-V2-SPEC §4.3):
+     * a copy with every plugin key taken off, so it is no Mini, prize, kit item or bound key (Byte). The real stack
+     * stays in its owner's bag until the swap. Nothing with it can be traded.
+     */
+    public static NamespacedKey TRADE_GHOST;
+    /**
+     * {@code hcm:trade_seen} — on a player (0.38, red-team findings TCS-2, TCS-3): the newest trade id whose result
+     * their bag holds (Long), set as the swap hands the stacks over, so it reaches the disk with the bag. A trade the
+     * server stopped in reads it at the next start to tell which bags were saved with it.
+     */
+    public static NamespacedKey TRADE_SEEN;
+    /**
+     * {@code hcm:trade_seen_at} — on a player, set with {@link #TRADE_SEEN}: when that trade swapped (its
+     * {@code closed_at}, Long). A restored database starts its trade ids again, so the id alone can name another
+     * trade (red-team finding TCR-FA-4); the two together name one.
+     */
+    public static NamespacedKey TRADE_SEEN_AT;
 
     /** On a Display Case item / placed tile: its pedestal style (a DisplayCaseVariant name, String). */
     public static NamespacedKey DISPLAY_VARIANT;
@@ -189,6 +222,13 @@ public final class Keys {
         TROPHY_PLACER = new NamespacedKey(plugin, "trophy_placer");
         PLACED_PRIZE_ID = new NamespacedKey(plugin, "placed_prize_id");
         FIREWORK_SHOW = new NamespacedKey(plugin, "firework_show");
+        BOUND_TO = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:bound_to"));
+        LOOK_END = new NamespacedKey(plugin, "look_end");
+        LOOK_PREVIEW = new NamespacedKey(plugin, "look_preview");
+        LOOK_VARIANT = new NamespacedKey(plugin, "look_variant");
+        TRADE_GHOST = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:trade_ghost"));
+        TRADE_SEEN = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:trade_seen"));
+        TRADE_SEEN_AT = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:trade_seen_at"));
         WILD_FINISH = new NamespacedKey(plugin, "wild_finish");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");

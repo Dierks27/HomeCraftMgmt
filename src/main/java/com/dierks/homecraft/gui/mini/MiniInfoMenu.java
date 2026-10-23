@@ -110,8 +110,8 @@ public final class MiniInfoMenu extends Menu {
             for (int k = sales.size() - shown; k < sales.size(); k++) {
                 MiniDao.Sale s = sales.get(k);
                 lore.add(Component.text("  " + DATE.format(Instant.ofEpochMilli(s.soldAt())) + ": "
-                        + name(s.seller()) + " -> " + name(s.buyer()) + " ("
-                        + plugin.economy().format(s.price()) + ")", NamedTextColor.DARK_GRAY)
+                        + name(s.seller()) + " -> " + name(s.buyer()) + " "
+                        + saleNote(s, plugin.economy()::format), NamedTextColor.DARK_GRAY)
                         .decoration(TextDecoration.ITALIC, false));
             }
         }
@@ -126,16 +126,36 @@ public final class MiniInfoMenu extends Menu {
         return icon;
     }
 
-    /** Value = last sale of this copy, else last sale of the type, else mint price. */
+    /** Value = the last sale of this copy with a price, else the type's last priced sale, else the mint price. */
     private double value(MiniDef def, List<MiniDao.Sale> sales) {
-        if (!sales.isEmpty()) {
-            return sales.get(sales.size() - 1).price();
+        return valueOf(sales, plugin.miniService().lastSalePrice(ref.miniId()), def != null ? def.price() : 0);
+    }
+
+    /**
+     * A copy's current value (SHOP-V2-SPEC T9): the last sale of this copy WITH a price, else {@code lastPriced}
+     * (the type's last priced sale, or null), else {@code mintPrice}. A trade or a gift logs price 0, and a $0
+     * "last sale" would say a traded Mini is worth nothing.
+     */
+    static double valueOf(List<MiniDao.Sale> sales, Double lastPriced, double mintPrice) {
+        for (int k = sales.size() - 1; k >= 0; k--) {
+            if (sales.get(k).price() > 0) {
+                return sales.get(k).price();
+            }
         }
-        Double last = plugin.miniService().lastSalePrice(ref.miniId());
-        if (last != null) {
-            return last;
+        return lastPriced != null ? lastPriced : mintPrice;
+    }
+
+    /** A sale's note on the trail: its price, or {@code (traded)} / {@code (gift)} for a trade window's price-0 row. */
+    static String saleNote(MiniDao.Sale s, java.util.function.DoubleFunction<String> money) {
+        if (s.price() <= 0) {
+            if (MiniService.VENUE_GIFT.equals(s.venue())) {
+                return "(gift)";
+            }
+            if (MiniService.VENUE_TRADE.equals(s.venue())) {
+                return "(traded)";
+            }
         }
-        return def != null ? def.price() : 0;
+        return "(" + money.apply(s.price()) + ")";
     }
 
     private Component grey(String label, String value) {

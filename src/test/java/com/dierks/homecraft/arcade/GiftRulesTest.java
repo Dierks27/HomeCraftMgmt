@@ -24,6 +24,7 @@ class GiftRulesTest {
     /** The facts as a mutable bag, so each case changes only what it is about. */
     private static final class Facts {
         boolean giverMaySpend = true;
+        boolean keeper = false;
         boolean giftingOn = true;
         boolean giftableCollector = true;
         boolean onSale = true;
@@ -34,6 +35,7 @@ class GiftRulesTest {
         boolean receiverGamesWorld = false;
         boolean receiverInGame = false;
         boolean receiverHasIt = false;
+        String until = null;
         boolean cap = true;
         boolean headEmpty = true;
         boolean bagHasRoom = true;
@@ -41,9 +43,9 @@ class GiftRulesTest {
         int cost = 250;
 
         String refusal() {
-            return PrizeService.giftRefusal(new GiftFacts(giverMaySpend, giftingOn, giftableCollector, onSale,
+            return PrizeService.giftRefusal(new GiftFacts(giverMaySpend, keeper, giftingOn, giftableCollector, onSale,
                     receiverOnline, giverCanSee, self, receiverEconomyWorld, receiverGamesWorld, receiverInGame,
-                    receiverHasIt, cap, headEmpty, bagHasRoom, balance, cost, NAME, ITEM));
+                    receiverHasIt, until, cap, headEmpty, bagHasRoom, balance, cost, NAME, ITEM));
         }
     }
 
@@ -169,7 +171,7 @@ class GiftRulesTest {
 
     @Test
     void anUnknownReceiverStillGetsASentence() {
-        assertEquals("That player isn't online.", PrizeService.giftRefusal(new GiftFacts(true, true, true, true,
-                false, false, false, false, false, false, false, true, true, true, 300, 250, null, ITEM)));
+        assertEquals("That player isn't online.", PrizeService.giftRefusal(new GiftFacts(true, false, true, true, true,
+                false, false, false, false, false, false, false, null, true, true, true, 300, 250, null, ITEM)));
     }
 }

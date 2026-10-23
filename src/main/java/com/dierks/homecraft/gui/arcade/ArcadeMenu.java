@@ -31,9 +31,9 @@ import java.util.Set;
  * <pre>
  *  row 0  border ........ [4 Wallet]
  *  row 1  [9 Games / Luck]  10-12 crates · 14 Scratch Ticket (jackpot in its name) · 16 wild Mini
- *  row 2  [18 Prize Counter]  19 Boosts · 20 Hunt Gear · 21 Cosmetics · 22 Perks · 23 Trophies ·
- *                             24 Minis · 25 Card Packs
- *  row 3  [27 You]  29 Quests · 31 Achievements · 33 How It Works
+ *  row 2  [18 Prize Counter]  19 Boosts · 20 Hunt Gear · 21 Cosmetics · 22 Looks · 23 Perks ·
+ *                             24 Trophies · 25 Minis · 26 Keepers (only while there are Keepers)
+ *  row 3  [27 You]  29 Quests · 31 Achievements · 33 How It Works · 35 Card Packs
  *  row 4  border — or, while the games are on, [36 Play]  37 All games · 38 Today's pick ·
  *         39 Luck · 40 Cabinets · 41 Courses · 42 Mini golf · 43 Take a break
  *  row 5  border · 49 Close
@@ -57,8 +57,10 @@ public final class ArcadeMenu extends Menu {
     private static final int[] CRATES = {10, 11, 12};
     private static final int MORE_CRATES = 13;
     private static final int SCRATCH = 14;
-    private static final int[] TABS = {19, 20, 21, 22, 23, 24};
-    private static final int PACKS = 25;
+    /** The Prize Counter's tabs, in {@link PrizeTab} order: row 2 after its label. */
+    static final int[] TABS = {19, 20, 21, 22, 23, 24, 25, 26};
+    /** Card Packs: row 3's free end, since the eight tabs fill row 2. */
+    static final int PACKS = 35;
     private static final int QUESTS = 29;
     private static final int ACHIEVEMENTS = 31;
     private static final int GUIDE = 33;
@@ -289,6 +291,9 @@ public final class ArcadeMenu extends Menu {
         PrizeTab[] tabs = PrizeTab.values();
         for (int i = 0; i < TABS.length && i < tabs.length; i++) {
             PrizeTab t = tabs[i];
+            if (!PrizeCounterMenu.tabShown(t, plugin.config().arcade())) {
+                continue;
+            }
             set(TABS[i], PrizeCounterMenu.tabIcon(plugin, player, t, false),
                     e -> new PrizeCounterMenu(plugin, player, this::reopen, t, 0).open(player));
         }

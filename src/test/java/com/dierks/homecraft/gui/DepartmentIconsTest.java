@@ -117,6 +117,26 @@ class DepartmentIconsTest {
         }
     }
 
+    /**
+     * The PC's Trade site (0.38) wears an icon of its own: no department's, nothing of the menu chrome, and opaque
+     * (the rules every tab here keeps, so the launcher's tiles read the same way).
+     */
+    @Test
+    void theTradeSiteIconIsNoTabAndNoChrome() throws Exception {
+        Material icon = SiteLauncherMenu.TRADE_ICON;
+        assertFalse(MENU_CHROME.contains(icon), "the Trade site would look like a button: " + icon);
+        for (String tab : shippedTabs()) {
+            assertFalse(DepartmentIcons.of(tab) == icon, "the Trade site wears the '" + tab + "' tab's icon");
+        }
+        assertFalse(icon == DepartmentIcons.FALLBACK);
+        String name = icon.name();
+        assertFalse(name.endsWith("_STAINED_GLASS_PANE") || name.startsWith("GRAY_") || name.startsWith("LIGHT_GRAY_")
+                || name.startsWith("WHITE_"), name);
+        for (Material other : List.of(Material.COMPASS, Material.KNOWLEDGE_BOOK, Material.FILLED_MAP)) {
+            assertFalse(icon == other, "another Site's icon: " + other);
+        }
+    }
+
     /** The fallback is what an admin's own department gets, so it has to be visible too. */
     @Test
     void anUnknownDepartmentGetsTheFallback() {

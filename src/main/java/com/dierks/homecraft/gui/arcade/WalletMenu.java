@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.TokenService;
+import com.dierks.homecraft.arcade.looks.LookRules;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
@@ -16,7 +17,7 @@ import java.util.List;
  * The Wallet: your tokens, how you're earning them, and where they went.
  *
  * <p>Balance on top; the login streak (with tomorrow's reward), playtime progress, an armed Mini
- * Lure and your trail (click for the next one you own, then off) in the next row; the ways to earn
+ * Lure and My Looks (your hats, caps and trails, SHOP-V2-SPEC §3.11) in the next row; the ways to earn
  * in the row after; and the last ten token moves at the bottom, one per tile, in plain words —
  * "+5 Quest: Catch 8 fish", "−25 Mini Radar" — with the words in each tile's NAME so they read on
  * Bedrock too. Replaces the old Token Counter.
@@ -69,21 +70,8 @@ public final class WalletMenu extends Menu {
                 lure ? "&7The next wild Mini will appear near you." : "&7Get one at the Prize Counter (Hunt Gear)."),
                 lure), null);
 
-        var trail = plugin.trails() == null ? null : plugin.trails().current(player);
-        int trails = plugin.trails() == null ? 0 : plugin.trails().owned(player).size();
-        boolean hasAny = trails > 0;
-        set(16, Menus.glint(Menus.icon(trail != null ? Material.BLAZE_POWDER : Material.GRAY_DYE,
-                trail != null ? "&dTrail: &f" + Text.plain(trail.prize().display()) + " &aon"
-                        : hasAny ? "&dTrail: &7off" : "&7No trail yet",
-                trail == null ? "" : trail.prize().collector() != null ? "&aYours for good" // a collector never ends
-                        : "&7Ends in " + Menus.duration(trail.expiresAt() - System.currentTimeMillis()),
-                trails >= 2 ? "&eClick for the next trail"
-                        : hasAny ? "&eClick to turn it " + (trail != null ? "off" : "on") : "&7Get one at the Prize Counter."),
-                trail != null), hasAny ? e -> {
-                    // Off, then each trail you own in turn, then off again (with one trail: on and off).
-                    player.sendMessage(Text.of(plugin.trails().cycle(player)));
-                    refresh();
-                } : null);
+        set(16, myLooksTile(), plugin.looks() == null ? null
+                : e -> new MyLooksMenu(plugin, player, this::reopen).open(player));
 
         set(18, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lWays to earn"), null);
         set(19, Menus.icon(Material.OAK_DOOR, "&aLog in every day", "&7Your streak pays more each day."), null);
@@ -121,6 +109,32 @@ public final class WalletMenu extends Menu {
         // Take a break: a Material.BLUE_BED named with its state (not a CLOCK: that's the streak).
         set(51, com.dierks.homecraft.gui.games.BreakMenu.stateTile(plugin, player),
                 e -> new com.dierks.homecraft.gui.games.BreakMenu(plugin, player, this::reopen).open(player));
+    }
+
+    /**
+     * The My Looks tile (§3.11): what's on now, a trail and a hat, each with its end; one tap opens My Looks, where
+     * one more tap switches a trail or puts a hat on. (The trail cycle stays for {@code /hcm trail next}.)
+     */
+    private org.bukkit.inventory.ItemStack myLooksTile() {
+        var trail = plugin.trails() == null ? null : plugin.trails().current(player);
+        var hat = plugin.looks() == null ? null : plugin.looks().worn(player);
+        java.util.List<String> lore = new java.util.ArrayList<>();
+        if (trail != null) {
+            lore.add("&7Trail: &f" + Text.plain(trail.prize().display()) + " &a(on)");
+        }
+        if (hat != null) {
+            var right = plugin.looks().look(player.getUniqueId(), hat.id());
+            String until = right == null ? ""
+                    : LookRules.kept(right, plugin.clock().nowMillis()) ? " (yours for good)"
+                    : " (until " + LookRules.until(LookRules.lastDay(right.expiresAt(), plugin.clock().zone())) + ")";
+            lore.add("&7Hat: &f" + Text.plain(hat.display()) + "&7" + until);
+        }
+        if (lore.isEmpty()) {
+            lore.add("&7Your hats, caps and trails.");
+        }
+        lore.add("&eClick to open");
+        return Menus.glint(Menus.icon(Material.ARMOR_STAND, "&dMy Looks", lore.toArray(new String[0])),
+                trail != null || hat != null);
     }
 
     /**

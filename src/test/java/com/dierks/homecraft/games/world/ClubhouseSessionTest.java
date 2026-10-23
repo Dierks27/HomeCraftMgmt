@@ -187,21 +187,21 @@ class ClubhouseSessionTest {
 
     @Test
     void onlyTheOwnerAndTheirOneRiderMayGetIntoAGameBoat() {
-        UUID dad = UUID.randomUUID();
+        UUID driver = UUID.randomUUID();
         UUID kid = UUID.randomUUID();
         UUID other = UUID.randomUUID();
         try {
-            assertTrue(WorldEntities.mayEnter(dad, dad), "the owner");
-            assertFalse(WorldEntities.mayEnter(dad, kid), "nobody else, before a ride");
-            WorldEntities.passenger(dad, kid);
-            assertTrue(WorldEntities.mayEnter(dad, kid), "their rider");
-            assertFalse(WorldEntities.mayEnter(dad, other), "and nobody else");
-            assertFalse(WorldEntities.mayEnter(kid, dad), "a rider's own boat isn't the driver's");
-            assertFalse(WorldEntities.mayEnter(dad, null), "no one");
-            WorldEntities.passenger(dad, null);
-            assertFalse(WorldEntities.mayEnter(dad, kid), "the ride over: not any more");
+            assertTrue(WorldEntities.mayEnter(driver, driver), "the owner");
+            assertFalse(WorldEntities.mayEnter(driver, kid), "nobody else, before a ride");
+            WorldEntities.passenger(driver, kid);
+            assertTrue(WorldEntities.mayEnter(driver, kid), "their rider");
+            assertFalse(WorldEntities.mayEnter(driver, other), "and nobody else");
+            assertFalse(WorldEntities.mayEnter(kid, driver), "a rider's own boat isn't the driver's");
+            assertFalse(WorldEntities.mayEnter(driver, null), "no one");
+            WorldEntities.passenger(driver, null);
+            assertFalse(WorldEntities.mayEnter(driver, kid), "the ride over: not any more");
         } finally {
-            WorldEntities.passenger(dad, null);
+            WorldEntities.passenger(driver, null);
         }
     }
 

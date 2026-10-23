@@ -66,21 +66,42 @@ class GiftPickerTest {
     }
 
     @Test
-    void onlyGiftableCollectorsArePresents() {
+    void presentsAreGiftableCollectorsRentedLooksAndGolfBalls() {
         List<Prize> mixed = new ArrayList<>();
         mixed.add(row("trail_heart", PrizeType.TRAIL));
         mixed.add(row("hat_creeper", PrizeType.HAT));
+        mixed.add(row("ball_pink", PrizeType.BALL));
+        mixed.add(row("speed_boost", PrizeType.BOOST));
+        mixed.add(row("arcade_trophy", PrizeType.TROPHY));
+        mixed.add(row("hat_command", PrizeType.COMMAND));
+        mixed.add(row("home_slot", PrizeType.HOME_SLOT));
         mixed.add(notGiftable());
         mixed.addAll(Collectors.ROWS);
-        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026"),
+        assertEquals(List.of("trail_heart", "hat_creeper", "ball_pink", "cap_pumpkin_2026", "trail_leaves_2026",
+                        "cap_santa_2026", "trail_twinkle_2026"),
                 GiftPickerMenu.presents(true, mixed).stream().map(Prize::id).toList(),
-                "a config row is never giftable in this slice, nor a collector marked not giftable");
+                "rented looks (SHOP-V2-SPEC §3.13) and golf balls too; never a boost, a trophy, a perk, nor a "
+                        + "collector marked not giftable");
     }
 
-    /** The counter's entry names no season, so it is true in October and in December alike. */
     @Test
-    void theEntrySaysACollectorForSomeoneOnline() {
-        assertArrayEquals(new String[] {"&7Buy a collector", "&7for someone who's online."},
+    void presentsComeThirtySixAPageCentredWhileFew() {
+        assertArrayEquals(new int[] {12, 14}, GiftPickerMenu.presentSlots(2, 0), "a few: centred under the header");
+        assertEquals(9, GiftPickerMenu.presentSlots(9, 0).length);
+        int[] full = GiftPickerMenu.presentSlots(40, 0);
+        assertEquals(36, full.length);
+        assertEquals(9, full[0]);
+        assertEquals(44, full[35], "the grid ends above the arrows' row");
+        assertArrayEquals(new int[] {9, 10, 11, 12}, GiftPickerMenu.presentSlots(40, 1), "the second page");
+    }
+
+    /**
+     * The counter's entry names no season, so it is true in October and in December alike, and it names every kind
+     * of present (0.38: rented looks and golf balls as well as the collectors).
+     */
+    @Test
+    void theEntrySaysAPresentForSomeoneOnline() {
+        assertArrayEquals(new String[] {"&7Buy a look, a trail or a ball", "&7for someone who's online."},
                 PrizeCounterMenu.giftEntryLore());
         for (String line : PrizeCounterMenu.giftEntryLore()) {
             assertFalse(line.contains("Halloween") || line.contains("Christmas"), line);
@@ -122,9 +143,11 @@ class GiftPickerTest {
         boolean headEmpty = true;
         boolean bagRoom = true;
 
+        String until = null;
+
         GiftFacts facts() {
-            return new GiftFacts(true, true, true, true, true, true, false, economyWorld, gamesWorld, inGame,
-                    hasIt, cap, headEmpty, bagRoom, 300, 250, NAME, "Pumpkin Cap 2026");
+            return new GiftFacts(true, false, true, true, true, true, true, false, economyWorld, gamesWorld, inGame,
+                    hasIt, until, cap, headEmpty, bagRoom, 300, 250, NAME, "Pumpkin Cap 2026");
         }
 
         String note() {
@@ -148,14 +171,22 @@ class GiftPickerTest {
         f.bagRoom = false;
         assertEquals("&7Friend &8- bag full", GiftPickerMenu.tileName(NAME, f.note()));
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 2; i++) {
             f = new Facts();
             f.economyWorld = i != 0;
             f.gamesWorld = i == 1;
-            f.inGame = i == 2;
             assertEquals("&7Friend &8- not here", GiftPickerMenu.tileName(NAME, f.note()),
-                    "another world, a Games world, or in a game (E10, E22)");
+                    "another world or a Games world (E10, E22)");
         }
+        f = new Facts();
+        f.inGame = true;
+        assertEquals("&7Friend &8- in a game", GiftPickerMenu.tileName(NAME, f.note()), "SHOP-V2-SPEC §3.13");
+
+        f = new Facts();
+        f.hasIt = true;
+        f.until = "18 Jan";
+        assertEquals("&7Friend &8- has it until 18 Jan", GiftPickerMenu.tileName(NAME, f.note()),
+                "a rented look they have: until when");
     }
 
     @Test
@@ -165,7 +196,7 @@ class GiftPickerTest {
         f.hasIt = true;
         f.headEmpty = false;
         f.bagRoom = false;
-        assertEquals("not here", f.note(), "where they are is checked before what they have");
+        assertEquals("in a game", f.note(), "where they are is checked before what they have");
         f.inGame = false;
         assertEquals("has it", f.note(), "having it is checked before room");
     }

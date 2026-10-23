@@ -20,6 +20,13 @@ public final class DeliveryDao {
     public static final String IN_TRANSIT = "IN_TRANSIT";
     public static final String READY = "READY";
     public static final String COLLECTED = "COLLECTED";
+    /**
+     * Held for a trade that hasn't finished (0.38, SHOP-V2-SPEC §4.6, §4.7): what a trade sends to a Mailbox is
+     * written HELD in the swap's own transaction and turned READY ({@link #release}) only once both bags are saved.
+     * Neither the Mailbox list nor the delivery tick reads it (they name IN_TRANSIT and READY), so a server that
+     * stopped mid-swap hands nothing out twice; and a 0.37 jar, which knows only those two, can't release it either.
+     */
+    public static final String HELD = "HELD";
 
     public record Delivery(long id, UUID player, String itemB64, String label, String source,
                            long placedAt, long deliverAt, String status) {
@@ -156,6 +163,55 @@ public final class DeliveryDao {
                 ps.setLong(2, id);
                 ps.executeUpdate();
             }
+        }
+    }
+
+    /**
+     * Turn every HELD row of {@code source} (one trade's, {@code TRADE#<id>}) READY, ready to collect now. Joins a
+     * caller's transaction.
+     *
+     * @return how many rows it released
+     */
+    public int release(String source, long now) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE deliveries SET status=?, deliver_at=? WHERE status=? AND source=?")) {
+                ps.setString(1, READY);
+                ps.setLong(2, now);
+                ps.setString(3, HELD);
+                ps.setString(4, source);
+                return ps.executeUpdate();
+            }
+        }
+    }
+
+    /** Delete every HELD row of {@code source} (an admin voiding a trade that didn't finish). */
+    public int deleteHeld(String source) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM deliveries WHERE status=? AND source=?")) {
+                ps.setString(1, HELD);
+                ps.setString(2, source);
+                return ps.executeUpdate();
+            }
+        }
+    }
+
+    /** Every row of {@code source}, whatever its status, oldest first (for {@code /hcm trades show}). */
+    public List<Delivery> bySource(String source) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            List<Delivery> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM deliveries WHERE source=? ORDER BY id ASC")) {
+                ps.setString(1, source);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(map(rs));
+                    }
+                }
+            }
+            return out;
         }
     }
 

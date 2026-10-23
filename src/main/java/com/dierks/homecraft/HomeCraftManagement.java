@@ -84,10 +84,12 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 21 = the v4 areas: Golf of the Week and Classic Golf (128 x 16 x 224 now) move to x 8768 and the Ice
      * Boat (the Mountain Run v2, 480 x 176 x 640) north to z 2880, wherever the owner kept the shipped spot
      * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the engine empties their old areas.
-     * Each of 20 and 21 also refreshes the comments it makes stale, where they are still the plugin's own
+     * 22 = the token shop: trails a month, hats and caps on the Looks tab for 90 days, 32 new rows, the Arcade
+     * Trophy's rising price, crates without hats ({@link ShopMigration}).
+     * Each of 20, 21 and 22 also refreshes the comments it makes stale, where they are still the plugin's own
      * words ({@link ShippedComments}).
      */
-    static final int CONFIG_REVISION = 21;
+    static final int CONFIG_REVISION = 22;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -183,6 +185,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.trade.StandService stands;
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
+    /** The trade window (0.38). */
+    private com.dierks.homecraft.trade.TradeService tradeService;
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
@@ -190,6 +194,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.PrizeService prizes;
     private com.dierks.homecraft.arcade.homes.HomeService homes;
     private com.dierks.homecraft.arcade.TrailService trails;
+    private com.dierks.homecraft.arcade.PartyService party;
+    private com.dierks.homecraft.arcade.looks.LookService looks;
     private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
@@ -235,6 +241,23 @@ public final class HomeCraftManagement extends JavaPlugin {
             e.printStackTrace();
             getServer().getPluginManager().disablePlugin(this);
             return;
+        }
+        // The start that brings schema v37 (the 0.38 wardrobe) says whether any hat was sold before 0.38: such a
+        // hat stays a plain prize, kept for good (SHOP-V2-SPEC §3.15). A read-only query, so nobody runs SQL on
+        // the live database to find out.
+        if (database.openedAt() < 37) {
+            try {
+                getLogger().info(ShopMigration.legacyHatsLine(ShopMigration.legacyHats(database.connection()),
+                        id -> getServer().getOfflinePlayer(id).getName()));
+            } catch (SQLException | RuntimeException e) {
+                getLogger().warning("Could not read the hats bought before 0.38: " + e.getMessage());
+            }
+            // Ends 0.37 already had get no heads-up (red-team finding F1): only a trail still running ends in 0.38.
+            try {
+                new com.dierks.homecraft.storage.LookDao(database).endsBeforeUpgrade(config.clock().nowMillis());
+            } catch (SQLException | RuntimeException e) {
+                getLogger().warning("Could not mark the trails that ended before 0.38: " + e.getMessage());
+            }
         }
         // The Games layout (LayoutGuard): decided once the database can say what was built, and before
         // anything reads the Games settings. The Games only start once it has finished, so nothing is
@@ -343,6 +366,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         com.dierks.homecraft.storage.PrizeDao prizeDao = new com.dierks.homecraft.storage.PrizeDao(database);
         this.prizes = new com.dierks.homecraft.arcade.PrizeService(this, prizeDao);
         this.trails = new com.dierks.homecraft.arcade.TrailService(this, prizeDao);
+        this.party = new com.dierks.homecraft.arcade.PartyService(this); // Party Time: one at a time
+        party.hidesOthers(trails::hidesOthers); // no fireworks around a player who hides others' trails and parties
+        // The wardrobe (0.38): rented hats, caps and trails, their bound keys, My Looks and the heads-up.
+        this.looks = new com.dierks.homecraft.arcade.looks.LookService(
+                this, new com.dierks.homecraft.storage.LookDao(database));
         this.radar = new com.dierks.homecraft.arcade.RadarService(this);
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
@@ -354,6 +382,18 @@ public final class HomeCraftManagement extends JavaPlugin {
         // progress is recorded from the existing market/printer/crate/pack hooks.
         this.quests = new com.dierks.homecraft.arcade.QuestService(
                 this, new com.dierks.homecraft.storage.QuestDao(database));
+
+        // The trade window (0.38): /trade, the crouch gesture and the PC's Trade site. Nothing leaves a bag until
+        // both press Ready and the countdown ends; the swap is one tick, its overflow goes to the Mailbox.
+        this.tradeService = new com.dierks.homecraft.trade.TradeService(this,
+                new com.dierks.homecraft.storage.TradeDao(database),
+                new com.dierks.homecraft.storage.DeliveryDao(database), prizeDao,
+                new com.dierks.homecraft.storage.GamesDao(database));
+        tradeService.screens((t, side) -> new com.dierks.homecraft.gui.trade.TradeMenu(this, t, side),
+                (to, request) -> new com.dierks.homecraft.gui.trade.TradeAskMenu(this, tradeService, to, request)
+                        .open(to));
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.trade.TradeListener(tradeService), this);
 
         // Courier — paid delivery runs, and the building at the far end of one. The
         // BuildingService owns every block it places and is the only thing that removes them,
@@ -438,7 +478,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
         getServer().getPluginManager().registerEvents(trails, this);
+        trails.loadOnline(); // a reload: the hide-others switch of everyone already on, as their join would read it
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
+        // The wardrobe: rows read at join and swept after it; a bound key stays with its owner (§3.7).
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.LookListener(looks), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.BoundItemGuard(this), this);
         // Prizes are kept on death, safe on the ground, and can't be changed at a workstation (on for everyone).
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeSafetyListener(this), this);
         // The Candy Apple shower: pickups and counting, the treat, the Bedrock taps, and the candy's guards.
@@ -464,6 +508,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             hcm.setExecutor(executor);
             hcm.setTabCompleter(executor);
         }
+        PluginCommand trade = getCommand("trade");
+        if (trade != null) {
+            com.dierks.homecraft.command.TradeCommand executor = new com.dierks.homecraft.command.TradeCommand(this);
+            trade.setExecutor(executor);
+            trade.setTabCompleter(executor);
+        }
 
         // Market Web Dashboard (Phase 6) — embedded read-only web server.
         this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
@@ -473,9 +523,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService.start();
         startMarketSim(); // load, replay the missed ticks, arm the pump (§11.2)
         this.tokens.start(); // the five-minute streak + playtime tick
+        this.looks.start(); // the wardrobe's minute: a run that ends, the sweep, the heads-up
         this.candy.start(); // the Candy Apple shower's 5-tick task, only inside its window
         this.arcade.start();
         this.radar.start(); // the Mini Radar's two-second ping
+        this.tradeService.start(); // prune the trade log, a WARN per trade that didn't finish, the trade clock
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
         this.courier.start(); // sweep abandoned delivery runs
 
@@ -483,6 +535,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         com.dierks.homecraft.mini.ItemSelfTest.run(this);
         // The collectors' look on the live API (dye, trim, no armour, tags), their trail particle, the clock's zone.
         com.dierks.homecraft.arcade.CollectorSelfTest.run(this);
+        // The Keepers' looks in both forms (dye, trim, no armour, tags, the Crown's gold for Java) and their particles.
+        com.dierks.homecraft.arcade.KeeperSelfTest.run(this);
 
         // Once the worlds are up: rebuild placed-Mini effects, natural spawns, placed
         // heads and shop displays from the datastore (nothing leaks after a crash),
@@ -562,6 +616,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Multiverse-Inventories, which disables (and saves) before this plugin, the recovery
         // listener has closed them already, at its PluginDisableEvent: a menu closes once.
         com.dierks.homecraft.gui.Menu.closeAll(getServer().getOnlinePlayers(), getLogger());
+        if (tradeService != null) {
+            tradeService.stop(); // every trade the closes above didn't reach is cancelled: nothing had moved
+            tradeService = null;
+        }
         if (games != null) {
             // Synchronously, while the tokens and the database are still here: no task can run now,
             // so world sessions restore in place and OPEN rounds wait for the next start.
@@ -592,6 +650,9 @@ public final class HomeCraftManagement extends JavaPlugin {
             effects.stop(); // removes every hologram/display/light we own
             effects = null;
         }
+        if (party != null) {
+            party.stop(); // no firework round after the plugin has gone
+        }
         if (candy != null) {
             candy.stop(); // removes every live candy and boss bar, while the worlds are still up
             candy = null;
@@ -599,6 +660,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (tokens != null) {
             tokens.stop();
             tokens = null;
+        }
+        if (looks != null) {
+            looks.stop(); // the minute's task, and every preview stand comes down
+            looks = null;
         }
         breaks = null;
         if (radar != null) {
@@ -1202,6 +1267,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             // shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
             com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c, log);
             ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
+        }
+        if (from < 22) {
+            // The token shop: the changed rows, the new rows and the crate, wherever the owner hasn't changed them;
+            // the owner's own stay, with a WARN each and the line to paste. See ShopMigration.
+            ShopMigration.apply(c, log);
+            ShippedComments.refresh(c, ShopMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2386,6 +2457,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         return deliveries;
     }
 
+    /** The trade window (0.38), or null before enable. */
+    public com.dierks.homecraft.trade.TradeService trades() {
+        return tradeService;
+    }
+
     public com.dierks.homecraft.marketplace.PalletService pallets() {
         return pallets;
     }
@@ -2412,6 +2488,16 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Particle trails bought with tokens. */
     public com.dierks.homecraft.arcade.TrailService trails() {
         return trails;
+    }
+
+    /** Party Time: one party at a time on the server. */
+    public com.dierks.homecraft.arcade.PartyService party() {
+        return party;
+    }
+
+    /** The wardrobe: rented looks, their keys, My Looks and the heads-up notices. */
+    public com.dierks.homecraft.arcade.looks.LookService looks() {
+        return looks;
     }
 
     /** The Mini Radar (hunt gear). */

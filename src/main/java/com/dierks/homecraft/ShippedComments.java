@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The comments in the owner's config.yml that config revisions 20 and 21 make stale, refreshed from the
- * bundled file (the v4 audit, ECON02).
+ * The comments in the owner's config.yml that config revisions 20, 21 and 22 make stale, refreshed from the
+ * bundled file (the v4 audit, ECON02; SHOP-V2-SPEC §7.6).
  *
  * <p><b>Why.</b> A revision moves values, and the backfill only comments keys it adds, so a comment on a key
  * that was already there keeps describing the old version. After 0.37's two revisions the owner's file still
@@ -22,13 +22,16 @@ import java.util.Set;
  * v2 run is about 0.4 MB), so the file's own "don't build here" leaves out both new areas. Revision 20
  * refreshes the comments of the keys it moves itself ({@link EconomyMigration}); these are the rest, with the
  * {@code games.fresh} header ("Adventure Golf": its golf is Golf v4 now) and {@code keep.area}'s (which courses fit a
- * plot: Golf v4 does, a Mountain Run v2 can't be kept).
+ * plot: Golf v4 does, a Mountain Run v2 can't be kept). Revision 22 (the token shop, {@link ShopMigration}) makes
+ * three more stale: the Prize Counter's header (no Looks tab, no MONTH, "a hat with a blank texture is HIDDEN"), the
+ * icon keys (no {@code looks} or {@code keepers}) and the collectors' (it names 0.37.1's two, and "no presents"
+ * now covers looks and golf balls too).
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
- * an earlier version of this plugin shipped on that key (0.35.0's or 0.36.0's), told apart by a fingerprint
- * of its text ({@link #fingerprint}), its inline comment included. A comment the owner wrote or edited, even
- * by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's and
- * 0.36.0's config.yml.
+ * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's or 0.37.2's), told apart by a
+ * fingerprint of its text ({@link #fingerprint}), its inline comment included. A comment the owner wrote or edited,
+ * even by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's, 0.36.0's
+ * and 0.37.2's config.yml.
  *
  * <p>Pure on a {@link FileConfiguration}; quiet (the values' own lines say what moved); a server without the
  * comment API keeps its comments.
@@ -40,7 +43,7 @@ final class ShippedComments {
      *
      * @param key      the key it sits on
      * @param revision the config revision whose change makes it stale (it is refreshed in that step)
-     * @param shipped  the {@link #fingerprint}s of what 0.35.0 and 0.36.0 shipped on it
+     * @param shipped  the {@link #fingerprint}s of what 0.35.0, 0.36.0 and 0.37.2 shipped on it
      */
     record Stale(String key, int revision, Set<String> shipped) {
 
@@ -52,8 +55,21 @@ final class ShippedComments {
     /** {@code GamesAreaMigration.REVISION}: the v4 areas (Golf v4 and the Mountain Run v2). */
     private static final int REV_AREAS = com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION;
 
-    /** Every comment revisions 20 and 21 make stale, in file order (frozen: 0.35.0's and 0.36.0's texts). */
+    /** {@code ShopMigration.REVISION}: the token shop. */
+    private static final int REV_SHOP = ShopMigration.REVISION;
+
+    /**
+     * Every comment revisions 20, 21 and 22 make stale, in file order (frozen: 0.35.0's, 0.36.0's and 0.37.2's
+     * texts).
+     */
     static final List<Stale> STALE = List.of(
+            // the icon keys without looks and keepers (0.35.0 = 0.36.0 = 0.37.2)
+            new Stale("arcade.icons", REV_SHOP, Set.of("c2c17c8139179f82")),
+            // the Prize Counter's header: no LOOKS tab, no MONTH, ball, party or only_if, "a hat with a blank texture
+            // is HIDDEN" (0.35.0 = 0.36.0 = 0.37.2)
+            new Stale("arcade.prizes", REV_SHOP, Set.of("ce1063df21e19949")),
+            // 0.37.1's two collectors named, and "no presents" without looks and golf balls (0.37.1 = 0.37.2)
+            new Stale("arcade.collectors", REV_SHOP, Set.of("155cbe62c18e8000")),
             // "skill games pay small, capped rewards" (0.35 = 0.36): the token balance pays about a token a minute
             new Stale("games", EconomyMigration.REVISION, Set.of("50d8aba597d7fd59")),
             // "mini golf" (0.35) and "Adventure Golf" (0.36): Golf of the Week and Tiny Golf are Golf v4 now

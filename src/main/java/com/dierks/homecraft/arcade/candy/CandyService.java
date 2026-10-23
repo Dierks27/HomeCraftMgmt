@@ -17,6 +17,7 @@ import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Fireworks;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
+import com.dierks.homecraft.util.Whereabouts;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
@@ -1552,13 +1553,11 @@ public final class CandyService implements Listener {
     }
 
     private boolean homeFromGames(Player p) {
-        var games = plugin.games();
-        return games == null || (games.sessions().session(p) == null && games.sessions().home(p));
+        return Whereabouts.homeFromGames(plugin, p);
     }
 
     private boolean gamesWorld(World w) {
-        var g = plugin.config().games();
-        return w != null && g != null && CandyRules.gamesWorld(w.getName(), g.common().worlds());
+        return Whereabouts.gamesWorld(plugin, w);
     }
 
     /** The Games' restart hold, or one built from the games config when the Games aren't running. */

@@ -67,7 +67,15 @@ commands:
       /hcm display sign|hologram|tv [commodity|@news]|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade hub
       /hcm arcade odds       - what each game of chance gives back (admins: per stake, Scratch Ticket and crates too)
-      /hcm trail [name|off]  - turn your particle trail on or off
+      /hcm trail             - My Looks: your hats, caps and trails (one tap wears or switches)
+      /hcm trail <name>|off|toggle  - switch your particle trail on, off, or off and back on
+      /hcm trail next        - switch to your next trail (and off after the last)
+      /hcm trail hide|show   - hide or show other people's trails and parties, just for you
+      /hcm looks             - My Looks
+      /hcm looks renew <id>|gift <id> <player>  - the look screen (buy again); give a look as a present
+      /hcm looks list|give|end <player> ...  - admin: someone's looks, a free look, end one now or in [days]
+      /hcm looks preview <id>  - admin: a look on a stand for 30 seconds (claims nothing)
+      /hcm account move <from> <to> [confirm]  - admin: move one account's tokens, looks and Minis to another
       /hcm achievements      - your achievements
       /hcm config reset <section> [confirm]  - admin: put arcade/games/packs/hunt/effects/clock back to defaults
       /hcm homes refresh [player]  - admin: recheck the +1 Home perk
@@ -96,10 +104,20 @@ commands:
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
       /hcm games boat flights  - admin: how far Ice Boats really jump off the Mountain Run's drops
       /hcm games movement [player]  - admin: what the courses' fair-play watch reads on a player (it only looks)
+      /hcm trade <player>    - trade with someone (the same as /trade, if another plugin owns /trade)
+      /hcm trades [player] [n]  - admin: the last trades, one line each
+      /hcm trades show <id>  - admin: one trade in full, and its Mailbox rows
+      /hcm trades settle <id> release|void [player] [confirm]  - admin: a trade the server didn't see finish
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.
     aliases: [homecraft]
+  trade:
+    description: >-
+      The trade window: both put things on the table, both press Ready, and it swaps in one
+      go. Crouch and right-click someone with an empty hand does the same as /trade <player>.
+    usage: /trade <player>|accept|deny|cancel|on|off
+    # Not gated here: the command checks hcm.trade.use itself, as /hcm's subcommands do.
 
 permissions:
   hcm.admin:
@@ -240,4 +258,10 @@ permissions:
     description: >-
       Take and hand in Courier delivery runs. The board is a Site on the PC; the
       /hcm courier subcommand is admin/testing only.
+    default: true
+  hcm.trade.use:
+    description: >-
+      Trade with another player in the trade window (/trade, the crouch gesture, the PC's
+      Trade site). Nothing leaves a bag until both press Ready; money can go in except with
+      an Arcade prize; tokens never.
     default: true

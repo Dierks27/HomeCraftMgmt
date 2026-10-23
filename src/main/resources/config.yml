@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 21
+config_revision: 22
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -111,6 +111,20 @@ marketplace:
   ban_list: [ BEDROCK, COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK,
               COMMAND_BLOCK_MINECART, BARRIER, STRUCTURE_BLOCK, STRUCTURE_VOID, JIGSAW,
               LIGHT, DEBUG_STICK, KNOWLEDGE_BOOK ]
+
+# ---- The trade window (0.38): /trade <player>, or crouch and right-click someone with an empty hand. Both put
+# things on the table, both press Ready, and the swap happens in one go; nothing leaves a bag before that. Money
+# (Vault) can go in, except in a trade with an Arcade prize; tokens never. Game items, Keepers and rented looks
+# can't be traded. What doesn't fit goes to the Mailbox. Every trade is logged (/hcm trades).
+trade:
+  enabled: true
+  request_seconds: 30        # how long a request waits for an answer (10-600)
+  countdown_seconds: 3       # the 3, 2, 1 once both are ready (1-10)
+  change_lock_ms: 1500       # after any change, Ready waits this long
+  max_distance: 0            # blocks apart, 0 = anywhere in the same world
+  money: true                # false = items only
+  log_keep_days: 90          # 0 = keep the log for ever
+  refuse_items: []           # extra things that can't be traded: MATERIAL names or pdc:<namespace>:<key>
 
 crafting:
   # Respect Towny / WorldGuard build permissions when placing/using/breaking
@@ -1290,7 +1304,7 @@ arcade:
   # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
   # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
   # wild_none, packs, quests, achievements, guide, and the Prize Counter tabs (boosts, hunt,
-  # cosmetics, perks, trophies, minis).
+  # cosmetics, looks, perks, trophies, minis, keepers).
   icons:
     wallet:       { texture: "", material: SUNFLOWER }
     crate:        { texture: "", material: CHEST }
@@ -1304,9 +1318,11 @@ arcade:
     boosts:       { texture: "", material: SUGAR }
     hunt:         { texture: "", material: COMPASS }
     cosmetics:    { texture: "", material: FIREWORK_ROCKET }
+    looks:        { texture: "", material: LEATHER_HELMET }
     perks:        { texture: "", material: NAME_TAG }
     trophies:     { texture: "", material: GOLD_BLOCK }
     minis:        { texture: "", material: AMETHYST_SHARD }
+    keepers:      { texture: "", material: NETHER_STAR }
   # The crate spin: about spin_ticks long (20 = 1 second), in `frames` steps that slow down as it
   # lands. Bedrock gets bedrock_frames steps — rapid inventory updates stutter through Geyser.
   reveal:
@@ -1343,33 +1359,42 @@ arcade:
       cost_tokens: 15
       rewards:
         - { type: prize, prize: [speed_boost, mining_boost, night_vision, lucky_fishing], weight: 40 }
-        - { type: prize, prize: firework_show, weight: 15 }
+        - { type: prize, prize: firework_show, weight: 18 }
         - { type: prize, prize: mini_radar, weight: 12 }
         - { type: filament, amount: 8, weight: 10 }
         - { type: tokens, amount: 8, weight: 10 }
         - { type: trail, days: 1, weight: 8 }
-        - { type: prize, prize: [hat_bunny, hat_panda, hat_fox, hat_penguin, hat_frog, hat_cake], weight: 3 }
         - { type: card, tag: "*", weight: 2 }
   # ---- The Prize Counter: KNOWN-OUTCOME token purchases, one screen per tab.
   # A crate is a pull; a prize is a price. Rows:
-  #   id / tab (BOOSTS | HUNT | COSMETICS | PERKS | TROPHIES | MINIS) / display /
+  #   id / tab (BOOSTS | HUNT | COSMETICS | LOOKS | PERKS | TROPHIES | MINIS) / display /
   #   description (lines) / cost_tokens / icon { texture, material } / type / enabled /
-  #   limit { per: DAY | WEEK | LIFETIME, count }   (local days; optional)
+  #   limit { per: DAY | WEEK | MONTH | LIFETIME, count }   (local days; optional)
+  #   costs: [a, b, ...] the price of the 1st, 2nd, ... one (the last repeats; optional)
   # Types and their extra keys:
-  #   boost      effect (speed, haste, night_vision, water_breathing, luck …), amplifier
-  #              (0 = level I), minutes. An item; right-click to use; stacks up to 3× its time.
-  #   radar      the Mini Radar: right-click while a wild Mini is out — Cold/Warm/Hot/Burning!
+  #   boost      effect (speed, haste, night_vision, water_breathing, luck ...), amplifier
+  #              (0 = level I), minutes. An item; right-click to use; stacks up to 3x its time.
+  #   radar      the Mini Radar: right-click while a wild Mini is out. Hidden with no wild hunt.
   #   lure       the Mini Lure: the next wild Mini that rolls for ANYONE lands near you.
   #   firework   a harmless three-second firework show.
-  #   trail      particle, days — a particle trail while you walk (/hcm trail toggles it).
-  #   hat        texture — a head to wear. A hat with a blank texture is HIDDEN.
+  #   trail      particle, days - a particle trail while you walk, for `days` (it ends at local
+  #              midnight). It can be bought again, at its price, from 7 days before it ends.
+  #              One trail shows at a time; /hcm looks or the Wallet picks it.
+  #   hat        days (90), texture (a head; blank = HIDDEN) or material (CREEPER_HEAD, DRAGON_HEAD,
+  #              or LEATHER_HELMET with color: a cap), renew_tokens (optional: a lower price to buy
+  #              it again; blank = the same price). Worn on the head for `days`; it can't be placed,
+  #              dropped, traded or put in a chest (the owner's ender chest is fine).
+  #   ball       look (a block): a golf ball colour, yours for good (limit LIFETIME 1).
+  #   party      seconds: harmless fireworks around everyone playing (one party at a time).
   #   command    commands (console; %player% %uuid%), requires_plugins, owned_if_permission
-  #              (shows "Owned" and blocks rebuying), requires_prize. Hidden if a plugin is missing.
-  #   trophy     texture (blank = the Arcade machine's head) — a numbered, placeable trophy.
-  #   filament | block | pack    as before (filament: amount, color — omit to let them pick)
+  #              (shows "Owned" and blocks rebuying), requires_prize, only_if (night | rain:
+  #              refused at no charge otherwise). Hidden if a plugin is missing.
+  #   trophy     texture (blank = the Arcade machine's head) - a numbered, placeable trophy.
+  #   filament | block | pack    as before (filament: amount, color - omit to let them pick)
   #   pity       the Rare-or-better Card (price and weekly limit from arcade.pity)
   #   trade_in   opens Card trade-in (values in arcade.trade_in)
   #   quest_reroll  swap one of today's quests for another
+  # The Keepers and the Collectors are built into the plugin, not rows here.
   # Every physical prize is tagged hcm:token_prize: it can't be sold anywhere for money.
   # Anything costing 100+ asks "are you sure?" first.
   prizes:
@@ -1385,16 +1410,17 @@ arcade:
     - { id: mini_lure, tab: HUNT, display: "&dMini Lure", description: ["The next wild Mini", "appears near you."], cost_tokens: 40, icon: { texture: "", material: HEART_OF_THE_SEA }, type: lure }
     # -- Cosmetics
     - { id: firework_show, tab: COSMETICS, display: "&cFirework Show", description: ["A big firework show", "all around you!"], cost_tokens: 15, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework }
-    - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 7 }
-    - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 7 }
-    - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for 7 days."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 7 }
-    # Hats: paste a minecraft-heads.com "Value" into texture to show one (blank = hidden).
-    - { id: hat_bunny, tab: COSMETICS, display: "&fBunny Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
-    - { id: hat_panda, tab: COSMETICS, display: "&fPanda Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
-    - { id: hat_fox, tab: COSMETICS, display: "&6Fox Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
-    - { id: hat_penguin, tab: COSMETICS, display: "&fPenguin Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
-    - { id: hat_frog, tab: COSMETICS, display: "&aFrog Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
-    - { id: hat_cake, tab: COSMETICS, display: "&dCake Hat", description: ["Wear it on your head!"], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "" }
+    - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 30 }
+    - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 30 }
+    - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 30 }
+    # Hats: paste a minecraft-heads.com "Value" into texture to show one (blank = hidden). On Bedrock a
+    # textured head shows as a plain head unless its skin is listed in Geyser's custom-skulls.yml.
+    - { id: hat_bunny, tab: LOOKS, display: "&fBunny Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
+    - { id: hat_panda, tab: LOOKS, display: "&fPanda Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
+    - { id: hat_fox, tab: LOOKS, display: "&6Fox Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
+    - { id: hat_penguin, tab: LOOKS, display: "&fPenguin Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
+    - { id: hat_frog, tab: LOOKS, display: "&aFrog Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
+    - { id: hat_cake, tab: LOOKS, display: "&dCake Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: LEATHER_HELMET }, type: hat, texture: "", days: 90 }
     # Name colours need your chat format to show %luckperms_meta_hcm_name_color% — off until it does.
     - { id: name_color_aqua, tab: COSMETICS, display: "&bAqua Name", description: ["Your name in aqua."], cost_tokens: 150, icon: { texture: "", material: LIGHT_BLUE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &b"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
     - { id: name_color_gold, tab: COSMETICS, display: "&6Gold Name", description: ["Your name in gold."], cost_tokens: 150, icon: { texture: "", material: ORANGE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &6"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
@@ -1416,12 +1442,48 @@ arcade:
     - { id: title_hunter, tab: PERKS, display: "&bTitle: Hunter", description: ["Show [Hunter] in chat."], cost_tokens: 500, icon: { texture: "", material: SPYGLASS }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Hunter"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
     - { id: title_farmer, tab: PERKS, display: "&6Title: Farmer", description: ["Show [Farmer] in chat."], cost_tokens: 500, icon: { texture: "", material: WHEAT }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Farmer"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
     # -- Trophies
-    - { id: arcade_trophy, tab: TROPHIES, display: "&6Arcade Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 750, icon: { texture: "", material: GOLD_BLOCK }, type: trophy, texture: "" }
+    - { id: arcade_trophy, tab: TROPHIES, display: "&6Arcade Trophy", description: ["A numbered trophy", "with your name on it.", "Each one costs a bit more."], costs: [750, 1000, 1250, 1500], icon: { texture: "", material: GOLD_BLOCK }, type: trophy, texture: "", limit: { per: LIFETIME, count: 99 } }
     # -- Minis
     - { id: pity, tab: MINIS, display: "&bRare Card", description: ["A Rare-or-better Card.", "One a week."], icon: { texture: "", material: NETHER_STAR }, type: pity }
     - { id: filament_bundle, tab: MINIS, display: "&fFilament Bundle", description: ["8 filament.", "You pick the colour."], cost_tokens: 3, icon: { texture: "", material: WHITE_DYE }, type: filament, amount: 8 }
     - { id: display_case, tab: MINIS, display: "&bDisplay Case", description: ["Show off a Mini!"], cost_tokens: 10, icon: { texture: "", material: GLASS }, type: block, block: display_case }
     - { id: trade_in, tab: MINIS, display: "&dTrade In Cards", description: ["Swap Cards you don't need", "for tokens."], icon: { texture: "", material: HOPPER }, type: trade_in }
+    # -- 0.38: little treats
+    - { id: jump_boost, tab: BOOSTS, display: "&aBouncy Boots", description: ["Jump extra high", "for 10 minutes!"], cost_tokens: 6, icon: { texture: "", material: SLIME_BALL }, type: boost, effect: jump_boost, amplifier: 1, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: feather_fall, tab: BOOSTS, display: "&fFloaty Feather", description: ["Float down gently", "for 10 minutes."], cost_tokens: 6, icon: { texture: "", material: FEATHER }, type: boost, effect: slow_falling, amplifier: 0, minutes: 10, limit: { per: DAY, count: 5 } }
+    - { id: make_it_day, tab: BOOSTS, display: "&eMake it Day!", description: ["Night turns into day", "in the world you're in."], cost_tokens: 20, icon: { texture: "", material: CLOCK }, type: command, commands: ["execute as %uuid% at @s run time set day"], only_if: night, limit: { per: DAY, count: 1 } }
+    - { id: sunny_day, tab: BOOSTS, display: "&bSunny Day", description: ["The rain stops for 10 minutes", "in the world you're in."], cost_tokens: 20, icon: { texture: "", material: SUNFLOWER }, type: command, commands: ["execute as %uuid% at @s run weather clear 12000"], only_if: rain, limit: { per: DAY, count: 1 } }
+    # -- 0.38: trails (100 for a month) and Party Time
+    - { id: trail_snow, tab: COSMETICS, display: "&fSnow Trail", description: ["Snowflakes follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: SNOWBALL }, type: trail, particle: SNOWFLAKE, days: 30 }
+    - { id: trail_stars, tab: COSMETICS, display: "&eStar Trail", description: ["Little stars follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: END_ROD }, type: trail, particle: END_ROD, days: 30 }
+    - { id: trail_clover, tab: COSMETICS, display: "&aClover Trail", description: ["Green sparkles follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: EMERALD }, type: trail, particle: HAPPY_VILLAGER, days: 30 }
+    - { id: trail_glow, tab: COSMETICS, display: "&bGlow Trail", description: ["Glowing dots follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: GLOW_INK_SAC }, type: trail, particle: GLOW, days: 30 }
+    - { id: trail_magic, tab: COSMETICS, display: "&dMagic Trail", description: ["Magic letters follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: ENCHANTED_BOOK }, type: trail, particle: ENCHANT, days: 30 }
+    - { id: party_time, tab: COSMETICS, display: "&dParty Time!", description: ["Fireworks around everyone", "who's playing right now!"], cost_tokens: 300, icon: { texture: "", material: CAKE }, type: party, seconds: 10, limit: { per: DAY, count: 1 } }
+    # -- 0.38: looks (hats and caps for 90 days; golf balls are yours for good)
+    - { id: hat_creeper, tab: LOOKS, display: "&aCreeper Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 120, icon: { texture: "", material: CREEPER_HEAD }, type: hat, material: CREEPER_HEAD, days: 90 }
+    - { id: hat_dragon, tab: LOOKS, display: "&5Dragon Hat", description: ["Wear it on your head!", "Yours for 90 days."], cost_tokens: 150, icon: { texture: "", material: DRAGON_HEAD }, type: hat, material: DRAGON_HEAD, days: 90 }
+    - { id: cap_pink, tab: LOOKS, display: "&dPink Cap", description: ["A comfy cap to wear!", "Yours for 90 days."], cost_tokens: 60, icon: { texture: "", material: LEATHER_HELMET }, type: hat, material: LEATHER_HELMET, color: PINK, days: 90 }
+    - { id: cap_purple, tab: LOOKS, display: "&5Purple Cap", description: ["A comfy cap to wear!", "Yours for 90 days."], cost_tokens: 60, icon: { texture: "", material: LEATHER_HELMET }, type: hat, material: LEATHER_HELMET, color: PURPLE, days: 90 }
+    - { id: cap_lime, tab: LOOKS, display: "&aLime Cap", description: ["A comfy cap to wear!", "Yours for 90 days."], cost_tokens: 60, icon: { texture: "", material: LEATHER_HELMET }, type: hat, material: LEATHER_HELMET, color: LIME, days: 90 }
+    - { id: cap_sky, tab: LOOKS, display: "&bSky Cap", description: ["A comfy cap to wear!", "Yours for 90 days."], cost_tokens: 60, icon: { texture: "", material: LEATHER_HELMET }, type: hat, material: LEATHER_HELMET, color: LIGHT_BLUE, days: 90 }
+    - { id: ball_pink, tab: LOOKS, display: "&dPink Golf Ball", description: ["Play golf with a pink ball!"], cost_tokens: 40, icon: { texture: "", material: PINK_CONCRETE }, type: ball, look: PINK_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_purple, tab: LOOKS, display: "&5Purple Golf Ball", description: ["Play golf with a purple ball!"], cost_tokens: 40, icon: { texture: "", material: PURPLE_CONCRETE }, type: ball, look: PURPLE_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_lime, tab: LOOKS, display: "&aLime Golf Ball", description: ["Play golf with a lime ball!"], cost_tokens: 40, icon: { texture: "", material: LIME_CONCRETE }, type: ball, look: LIME_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_sky, tab: LOOKS, display: "&bSky Golf Ball", description: ["Play golf with a sky-blue ball!"], cost_tokens: 40, icon: { texture: "", material: LIGHT_BLUE_CONCRETE }, type: ball, look: LIGHT_BLUE_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_orange, tab: LOOKS, display: "&6Orange Golf Ball", description: ["Play golf with an orange ball!"], cost_tokens: 40, icon: { texture: "", material: ORANGE_CONCRETE }, type: ball, look: ORANGE_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_red, tab: LOOKS, display: "&cRed Golf Ball", description: ["Play golf with a red ball!"], cost_tokens: 40, icon: { texture: "", material: RED_CONCRETE }, type: ball, look: RED_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_yellow, tab: LOOKS, display: "&eYellow Golf Ball", description: ["Play golf with a yellow ball!"], cost_tokens: 40, icon: { texture: "", material: YELLOW_CONCRETE }, type: ball, look: YELLOW_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_black, tab: LOOKS, display: "&8Black Golf Ball", description: ["Play golf with a black ball!"], cost_tokens: 40, icon: { texture: "", material: BLACK_CONCRETE }, type: ball, look: BLACK_CONCRETE, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_gold, tab: LOOKS, display: "&6Gold Golf Ball", description: ["Play golf with a gold ball!"], cost_tokens: 250, icon: { texture: "", material: GOLD_BLOCK }, type: ball, look: GOLD_BLOCK, limit: { per: LIFETIME, count: 1 } }
+    - { id: ball_diamond, tab: LOOKS, display: "&bDiamond Golf Ball", description: ["Play golf with a diamond ball!"], cost_tokens: 600, icon: { texture: "", material: DIAMOND_BLOCK }, type: ball, look: DIAMOND_BLOCK, limit: { per: LIFETIME, count: 1 } }
+    # -- 0.38: the trophy ladder and the Trophy of the Month (yours for good)
+    - { id: trophy_bronze, tab: TROPHIES, display: "&6Bronze Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 300, icon: { texture: "", material: COPPER_BLOCK }, type: trophy, texture: "", limit: { per: LIFETIME, count: 1 } }
+    - { id: trophy_silver, tab: TROPHIES, display: "&fSilver Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 1000, icon: { texture: "", material: IRON_BLOCK }, type: trophy, texture: "", requires_prize: trophy_bronze, limit: { per: LIFETIME, count: 1 } }
+    - { id: trophy_gold, tab: TROPHIES, display: "&eGold Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 2000, icon: { texture: "", material: GOLD_BLOCK }, type: trophy, texture: "", requires_prize: trophy_silver, limit: { per: LIFETIME, count: 1 } }
+    - { id: trophy_diamond, tab: TROPHIES, display: "&bDiamond Trophy", description: ["A numbered trophy", "with your name on it."], cost_tokens: 3500, icon: { texture: "", material: DIAMOND_BLOCK }, type: trophy, texture: "", requires_prize: trophy_gold, limit: { per: LIFETIME, count: 1 } }
+    - { id: trophy_legend, tab: TROPHIES, display: "&5Legend Trophy", description: ["The top of the ladder!"], cost_tokens: 5000, icon: { texture: "", material: NETHERITE_BLOCK }, type: trophy, texture: "", requires_prize: trophy_diamond, limit: { per: LIFETIME, count: 1 } }
+    - { id: trophy_month, tab: TROPHIES, display: "&eTrophy of the Month", description: ["A new trophy every month,", "named for the month."], cost_tokens: 1000, icon: { texture: "", material: CLOCK }, type: trophy, texture: "", limit: { per: MONTH, count: 1 } }
   # The Rare-or-better Card: a guaranteed Card at or above `guarantees_rarity`, weighted by
   # rarity, cap-aware. `per_week` per player (local weeks).
   pity:
@@ -1554,14 +1616,32 @@ arcade:
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
   # ---- Collectors: holiday looks you keep for good, sold only in their season and stamped with the
-  # year (0.37.1: the Pumpkin Cap 2026 in October, the Autumn Leaves 2026 trail in October and
-  # November). They are built into the plugin, so they are not rows in arcade.prizes, and the ones
-  # players own never go away. Tap one at the Prize Counter to buy it, or tap Give a present to buy
-  # one for someone online. on_sale: false = this season's collectors are not sold or given; owned
-  # ones keep working. gifting: false = no presents; your own buys still work.
+  # year (this season's are at the Prize Counter). They are built into the plugin, so they are not rows
+  # in arcade.prizes, and the ones players own never go away. Tap one at the Prize Counter to buy it,
+  # or tap Give a present to buy one for someone online. on_sale: false = this season's collectors are
+  # not sold or given; owned ones keep working. gifting: false = no presents at all (looks, golf balls
+  # and collectors); your own buys still work.
   collectors:
     on_sale: true
     gifting: true
+  # ---- Keepers: the Legend Crown (with its Royal Trail), three keeper trails and two keeper hats, kept for
+  # good, one each, never given or traded. They are built into the plugin, so they are not rows in
+  # arcade.prizes. A worn Keeper shows a small sparkle of its own above the head while walking.
+  keepers:
+    # false = the Keepers you don't own yet are not sold; owned ones keep working.
+    on_sale: true
+    # default or fallback: pick each Keeper's look after looking at it on both editions (/hcm looks preview
+    # <id>). Owned ones change at the next check.
+    looks:
+      keeper_legend_crown: default
+      keeper_trail_royal: default
+      keeper_trail_aurora: default
+      keeper_trail_stardust: default
+      keeper_trail_frost: default
+      keeper_wizard_hat: default
+      keeper_knight_helm: default
+    # the small sparkle above a worn Keeper hat; off = none
+    marks: "on"
   # ---- Halloween: the Candy Apple shower (0.37.1). Candy apples fall around each player in an economy
   # world, with a "Trick or treat!". Only you see and pick up your own candy. Never in a Games world, a
   # game or a race, and never for anyone idle 5+ minutes. Collect `goal` for the Trick-or-Treat Bag
@@ -1614,6 +1694,9 @@ games:
   # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day. The games
   # pay about a token a minute of first-time play; 60 holds a busy evening's first finishes and goals.
   skill_daily_cap: 60
+  # All arcade goals (each game's daily challenge) together, a day, inside skill_daily_cap. 0 = no
+  # cap (as shipped); 15 stops a grinder out-earning everyone (their first three goals each day pay).
+  everyday_cap: 0
   # Today's featured game: auto (a skill game or course picked each day) or a game/course id.
   featured: auto
   # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).

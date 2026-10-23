@@ -70,12 +70,23 @@ class PrizeCounterCollectorTest {
     }
 
     @Test
-    void theGiftEntryIsTheTopRightTileAndNoTab() {
-        assertEquals(8, PrizeCounterMenu.GIFT_SLOT, "top right of the Cosmetics tab (D8 step 1)");
-        for (int tab : new int[] {2, 3, 4, 5, 6, 7}) {
+    void theGiftEntryIsInTheBottomRowAndNoTab() {
+        assertEquals(47, PrizeCounterMenu.GIFT_SLOT, "0.38: the bottom row, since the eight tabs fill row 0 "
+                + "(SHOP-V2-SPEC §5.9; PrizeTabSlotsTest has the whole plan)");
+        for (int tab : PrizeCounterMenu.TAB_SLOTS) {
             assertTrue(tab != PrizeCounterMenu.GIFT_SLOT);
         }
         assertTrue(PrizeCounterMenu.GIFT_SLOT != 0, "slot 0 is the balance");
+    }
+
+    @Test
+    void theGiftEntryShowsOnTheCosmeticsAndLooksTabs() {
+        for (com.dierks.homecraft.config.PluginConfig.PrizeTab t
+                : com.dierks.homecraft.config.PluginConfig.PrizeTab.values()) {
+            boolean where = t == com.dierks.homecraft.config.PluginConfig.PrizeTab.COSMETICS
+                    || t == com.dierks.homecraft.config.PluginConfig.PrizeTab.LOOKS;
+            assertEquals(where, PrizeCounterMenu.giftTab(t), t + ": the caps are on Looks now, Twinkle on Cosmetics");
+        }
     }
 
     /**
@@ -93,7 +104,7 @@ class PrizeCounterCollectorTest {
         assertTrue(entry >= 0 && text.indexOf("new GiftPickerMenu(") > entry
                 && text.indexOf("new GiftPickerMenu(") < text.indexOf(';', entry), "and that place is the gift tile");
         int click = text.indexOf("private void click(Prize p)");
-        int end = text.indexOf("private void buy(Prize p)");
+        int end = text.indexOf("private void buy(Prize p, int shown)");
         assertTrue(click > 0 && end > click);
         assertFalse(text.substring(click, end).contains("collector"), "the tile's click is today's buy, unchanged");
     }

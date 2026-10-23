@@ -576,6 +576,36 @@ class ArcadeFeedTest {
         assertEquals(List.of(), ArcadeFeed.prizes(null), "no counter, no prizes");
     }
 
+    /**
+     * 0.38's shelf (SHOP-V2-SPEC §10): the Looks and Keepers tabs publish as categories {@code looks} and
+     * {@code keepers}, a golf ball and Party Time are prizes like any other, a Keeper is listed with its price, and
+     * the Arcade Trophy publishes its first price; the keys of a row are unchanged.
+     */
+    @Test
+    void theLooksAndKeepersTabsGolfBallsAndPartiesFlowThrough() {
+        List<ArcadeFeed.PrizeRow> rows = ArcadeFeed.prizes(List.of(
+                prize("ball_pink", PrizeTab.LOOKS, "&dPink Golf Ball", List.of("Play golf with a pink ball!"), 40,
+                        PrizeType.BALL, true, List.of()),
+                prize("cap_pink", PrizeTab.LOOKS, "&dPink Cap", List.of("A comfy cap to wear!", "Yours for 90 days."),
+                        60, PrizeType.HAT, true, List.of()),
+                prize("party_time", PrizeTab.COSMETICS, "&dParty Time!", List.of("Fireworks around everyone"), 300,
+                        PrizeType.PARTY, true, List.of()),
+                prize("keeper_legend_crown", PrizeTab.KEEPERS, "&6&lLegend Crown", List.of("The rarest look of all."),
+                        5000, PrizeType.HAT, true, List.of()),
+                prize("arcade_trophy", PrizeTab.TROPHIES, "&6Arcade Trophy", List.of("A numbered trophy"), 750,
+                        PrizeType.TROPHY, true, List.of(750, 1000, 1250, 1500))));
+        assertEquals(List.of("ball_pink", "cap_pink", "party_time", "keeper_legend_crown", "arcade_trophy"),
+                rows.stream().map(ArcadeFeed.PrizeRow::id).toList(), "none of them is an action");
+        assertEquals(List.of("looks", "looks", "cosmetics", "keepers", "trophies"),
+                rows.stream().map(ArcadeFeed.PrizeRow::category).toList());
+        assertEquals(5000, rows.get(3).cost(), "a Keeper with its price");
+        assertEquals(750, rows.get(4).cost(), "the Arcade Trophy's first price");
+        JsonObject root = root(new ArcadeFeed(false).json(T, null, null, rows, null, null));
+        JsonObject ball = root.getAsJsonArray("prizes").get(0).getAsJsonObject();
+        assertEquals(Set.of("id", "name", "category", "cost", "description"), keys(ball), "the same keys as ever");
+        assertEquals("Pink Golf Ball", ball.get("name").getAsString(), "colours left out");
+    }
+
     @Test
     void packsAreTheTokenPacksWithTheirConfiguredOddsAsPercents() {
         Pack.PackDef handoff = new Pack.PackDef("handoff", "Handoff", 0, 25, 1, "",

@@ -16,7 +16,7 @@ import java.util.UUID;
  * from 0.37.3 also who placed it ({@link Keys#TROPHY_PLACER}) and the plain prize id ({@link Keys#PLACED_PRIZE_ID}).
  *
  * <p>Every read looks at the material first, so the guards on hot paths (pistons, flowing water, explosions) cost a
- * material compare for any block that isn't a head. A lookup that fails is "not a placed prize".
+ * material compare for any block that isn't a head. Every head counts, the mob heads too (0.38). A lookup that fails is "not a placed prize".
  */
 public final class PlacedPrizes {
 
@@ -68,14 +68,30 @@ public final class PlacedPrizes {
         return skull.getPersistentDataContainer().get(Keys.PLACED_PRIZE_ID, PersistentDataType.STRING);
     }
 
-    /** The skull at {@code b} when it is a player head (floor or wall); null for anything else. */
+    /**
+     * Whether {@code m} is a head a prize can be placed as: a player head and every mob head and skull, floor or
+     * wall (0.38). A placed prize of any head type gives its prize back; a creeper-head prize used to break into a
+     * plain, sellable creeper head.
+     */
+    public static boolean headMaterial(Material m) {
+        if (m == null) {
+            return false;
+        }
+        return switch (m) {
+            case PLAYER_HEAD, PLAYER_WALL_HEAD, CREEPER_HEAD, CREEPER_WALL_HEAD, DRAGON_HEAD, DRAGON_WALL_HEAD,
+                 ZOMBIE_HEAD, ZOMBIE_WALL_HEAD, SKELETON_SKULL, SKELETON_WALL_SKULL, WITHER_SKELETON_SKULL,
+                 WITHER_SKELETON_WALL_SKULL, PIGLIN_HEAD, PIGLIN_WALL_HEAD -> true;
+            default -> false;
+        };
+    }
+
+    /** The skull at {@code b} when it is a head ({@link #headMaterial}, floor or wall); null for anything else. */
     private static Skull skull(Block b) {
         if (b == null || Keys.PRIZE_ITEM == null) {
             return null;
         }
         try {
-            Material t = b.getType();
-            if (t != Material.PLAYER_HEAD && t != Material.PLAYER_WALL_HEAD) {
+            if (!headMaterial(b.getType())) {
                 return null;
             }
             return b.getState(false) instanceof Skull skull ? skull : null;

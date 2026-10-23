@@ -23,9 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * course (a mark set in the air above its pad included) and the other kinds keep the whole sphere.
  *
  * <p>0.37.3, on a real Easy layout's pads: a target counts only with the feet over its pad's column, so a
- * jump that falls short beside the pad, one that hits its side and slides down, feet on the edge of the pad
- * before, and anything under the pad never count, while a landing anywhere on the pad (its corners, and a
- * Bedrock player's rounded stand on an edge) and a jump over it still do, at the time the sphere gives.
+ * jump that falls short beside the pad, one that hits its side and slides down, one stopped flat against its
+ * side from just beside it (the checkpoint and the finish: the column has no hair along a move), feet on the
+ * edge of the pad before, and anything under the pad never count, while a landing anywhere on the pad (its
+ * corners, and a Bedrock player's rounded stand or landing on an edge, a hair off only where the move ends at
+ * the top's height) and a jump over it still do, at the time the sphere gives.
  */
 class ProgressTest {
 
@@ -235,6 +237,25 @@ class ProgressTest {
     }
 
     @Test
+    void aJumpStoppedFlatAgainstThePadsSideFromJustBesideItDoesNotCount() {
+        // Java moves down before across: the tick before, the box was 0.03 clear of the face and the feet 0.12 over
+        // the top; the player fell past the edge and was stopped flat against the face 0.28 under it
+        Progress p = new Progress(EASY, new Point(4141.33, 170.12, 4154.5), 0);
+        assertEquals(List.of(), p.move(new Point(4141.30, 169.72, 4154.5), 50),
+                "the line between crosses 0.02 past the edge at y 169.987, which a 0.02 band counted: nothing");
+        assertEquals(List.of(), p.move(new Point(4141.30, 169.16, 4154.5), 100), "sliding on down: nothing");
+        assertEquals(-1, p.lastCheckpoint(), "so the fall at 166 goes back to the start, not onto the missed pad");
+    }
+
+    @Test
+    void aJumpStoppedFlatAgainstTheFinishPadsSideDoesNotFinish() {
+        Progress p = new Progress(EASY.withCheckpoints(List.of()), new Point(4122.62, 170.12, 4127.33), 0);
+        assertEquals(List.of(), p.move(new Point(4122.62, 169.72, 4127.30), 50),
+                "the same move against the finish pad's side, which a 0.02 band finished: nothing");
+        assertFalse(p.finished(), "not finished: the run never landed on the finish pad");
+    }
+
+    @Test
     void standingOnTheFrontEdgeOfThePadBeforeDoesNotCount() {
         // another Easy layout: the checkpoint one step down past a 1-block gap from the pad before (x 4110-4112, top 171)
         Course.Mark cp = new Course.Mark(4115.5, 170, 4102.5, 2.6);
@@ -275,6 +296,27 @@ class ProgressTest {
             Progress p = new Progress(EASY, stand, 0);
             assertEquals(1, p.move(stand, 50).size(), "standing still at " + stand + ": counted");
         }
+    }
+
+    @Test
+    void aBedrockLandingOnThePadsVeryEdgeCounts() {
+        // a Bedrock position: a float step past where Java would put the feet, and a hair under the top
+        Point from = new Point(4142.0, 171.0, 4154.5);
+        Point edge = new Point(4141.3004, 169.99999, 4154.5);
+        Progress p = new Progress(EASY, from, 0);
+        long at = Math.round(1000 * Geometry.firstHitAbove(from, edge, EASY_CP.center(), 2.6, 0,
+                170 - Progress.FEET_BELOW));
+        assertEquals(List.of(new Progress.Reached(0, false, at)), p.move(edge, 1000),
+                "where the move ended stands on the pad within the hair: counted, at the time the sphere gives");
+    }
+
+    @Test
+    void aHairPastTheEdgeCountsOnlyStandingAtTheTopsHeight() {
+        Progress p = new Progress(EASY, new Point(4141.6, 170.6, 4154.5), 0);
+        assertEquals(List.of(), p.move(new Point(4141.3004, 170.3, 4154.5), 50),
+                "a hair past the edge in the air beside the pad (a jump falling past it): nothing");
+        assertEquals(List.of(), p.move(new Point(4141.3004, 169.998, 4154.5), 100), "nor two hairs under its top");
+        assertEquals(-1, p.lastCheckpoint(), "not reached");
     }
 
     @Test

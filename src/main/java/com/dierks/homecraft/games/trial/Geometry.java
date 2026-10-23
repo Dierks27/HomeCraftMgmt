@@ -80,7 +80,7 @@ final class Geometry {
      * {@link #firstHitAbove} with the feet over a pad: the move is cut to its part inside the column
      * {@code half} either side of {@code c} across (x and z), then tested as before against the sphere and the
      * floor; {@code NaN} when that part never touches them. A Fresh Courses parkour mark counts with the feet over
-     * its pad, never beside it ({@link Progress#PAD_HAIR}).
+     * its pad, never beside it ({@link Progress}: the column and the floor are exact along a move).
      */
     static double firstHitOver(Point a, Point b, Point c, double r, double from, double half, double floorY) {
         double[] cut = {Math.max(0, from), 1};
@@ -90,6 +90,18 @@ final class Geometry {
         }
         double t = firstHitAbove(a, b, c, r, cut[0], floorY);
         return t > cut[1] ? Double.NaN : t; // NaN > cut[1] is false: a miss stays a miss
+    }
+
+    /**
+     * Whether feet at {@code p} stand on a pad: within {@code r} of {@code c}, within {@code half} and {@code hair}
+     * of it across (x and z), and within {@code hair} of its height. A point's test, for where a move ended, never a
+     * move's: a reported position may be a float step or two off (a Bedrock player's), but the straight line of a
+     * move through a band past the pad's side can be above its top while the feet never were ({@link
+     * Progress#PAD_HAIR}).
+     */
+    static boolean standsOn(Point p, Point c, double r, double half, double hair) {
+        return Math.abs(p.y() - c.y()) <= hair && Math.abs(p.x() - c.x()) <= half + hair
+                && Math.abs(p.z() - c.z()) <= half + hair && firstHit(p, p, c, r, 0) == 0;
     }
 
     /**

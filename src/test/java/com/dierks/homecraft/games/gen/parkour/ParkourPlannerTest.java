@@ -553,6 +553,15 @@ class ParkourPlannerTest {
                                     new Point(m.x() + at[0], m.y() - 8, m.z() + at[1])), slot.id() + " day " + day
                                     + ": sliding down the side at " + at[0] + "," + at[1] + " counts target " + (i + 1));
                         }
+                        // stopped flat against it from 0.03 clear and 0.12 over the top, to 0.28 under (0.37.3)
+                        for (double[] at : new double[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                            double nx = at[0] == 0 ? s : at[0] * face;
+                            double nz = at[1] == 0 ? s : at[1] * face;
+                            Point near = new Point(m.x() + nx + at[0] * 0.03, m.y() + 0.12, m.z() + nz + at[1] * 0.03);
+                            assertFalse(moveCounts(one, near, new Point(m.x() + nx, m.y() - 0.28, m.z() + nz)),
+                                    slot.id() + " day " + day + ": stopped against the side at " + nx + "," + nz
+                                            + " from just beside it counts target " + (i + 1));
+                        }
                     }
                 }
             }

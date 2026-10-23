@@ -253,11 +253,12 @@ public final class ArcadeFeed implements FeedWriter {
     }
 
     /**
-     * One Prize Counter row.
+     * One Prize Counter row: any row the counter shows but its actions, so 0.38's golf balls and Party Time are
+     * prizes like the rest, and the Keepers are listed with their price.
      *
-     * @param category its counter tab, lower case ({@code boosts}, {@code hunt}, {@code cosmetics},
-     *                 {@code perks}, {@code trophies}, {@code minis})
-     * @param cost     tokens; a row priced per purchase (the +1 Home) gives its first price
+     * @param category its counter tab, lower case ({@code boosts}, {@code hunt}, {@code cosmetics}, {@code looks},
+     *                 {@code perks}, {@code trophies}, {@code minis}, {@code keepers})
+     * @param cost     tokens; a row priced per purchase (the +1 Home, the Arcade Trophy) gives its first price
      */
     public record PrizeRow(String id, String name, String category, int cost, String description) {
     }
@@ -1286,8 +1287,9 @@ public final class ArcadeFeed implements FeedWriter {
 
     /**
      * The {@code prizes} rows from the Prize Counter's VISIBLE rows (the server passes
-     * {@code PrizeService.visible(tab)} tab by tab): Trade In, Quest Reroll and the Rare Card are
-     * actions, not prizes, and a disabled row never shows. The +1 Home publishes its first price.
+     * {@code PrizeService.visible(tab)} tab by tab, the Looks and Keepers tabs too): Trade In, Quest Reroll and
+     * the Rare Card are actions, not prizes, and a disabled row never shows; a golf ball and Party Time are
+     * prizes. The +1 Home and the Arcade Trophy publish their first price.
      * Only the id, name, tab, price and the lines the counter shows go out — never a row's
      * commands, permissions, textures or limits.
      */

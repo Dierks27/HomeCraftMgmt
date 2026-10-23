@@ -37,6 +37,12 @@ public final class SiteLauncherMenu extends Menu {
      */
     private static final int[] SLOTS = {11, 12, 13, 14, 15, 20, 21, 22, 23, 24};
 
+    /**
+     * The Trade site's icon (0.38, SHOP-V2-SPEC §4.2): a bundle, a bag of things to swap. Like every Site's, it is
+     * neither a department tab's nor a piece of the menu chrome ({@code DepartmentIconsTest}).
+     */
+    static final Material TRADE_ICON = Material.BUNDLE;
+
     /** One destination on the launcher. */
     private record Site(Material icon, String name, String blurb, Consumer<Player> open) {
     }
@@ -95,6 +101,12 @@ public final class SiteLauncherMenu extends Menu {
         out.add(new Site(Material.CHEST_MINECART, "&eMailbox & Orders",
                 "Track deliveries and collect what has arrived.",
                 p -> new MailboxMenu(plugin, p, this::reopen).open(p)));
+        var trades = plugin.trades();
+        if (trades != null && trades.settings().enabled()
+                && player.hasPermission(com.dierks.homecraft.trade.TradeService.PERMISSION)) {
+            out.add(new Site(TRADE_ICON, "&aTrade", "Swap things with someone who's here.",
+                    p -> new com.dierks.homecraft.gui.trade.TradePickerMenu(plugin, trades, p, this::reopen).open(p)));
+        }
         out.add(new Site(Material.KNOWLEDGE_BOOK, "&bGuide",
                 "How tokens, Minis, wild Minis and the Arcade work.",
                 p -> new com.dierks.homecraft.gui.arcade.GuideMenu(plugin, p,

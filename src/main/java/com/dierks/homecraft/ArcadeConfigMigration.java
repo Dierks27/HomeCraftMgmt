@@ -535,27 +535,47 @@ final class ArcadeConfigMigration {
     /** Words YAML reads as something other than text when bare. */
     private static final Set<String> YAML_WORDS = Set.of("true", "false", "yes", "no", "on", "off", "y", "n", "null", "~");
 
-    /** A row as one line of YAML to paste: {@code - { id: a, type: B, target: 3, display: "Say it" }}. */
+    /**
+     * A row as one line of YAML to paste: {@code - { id: a, type: B, target: 3, display: "Say it" }}. A nested
+     * map or list is written inline as the bundled file writes it ({@code icon: { texture: "", material: SUGAR }},
+     * {@code description: ["Line one", "Line two"]}, {@code prize: [a, b]}).
+     */
     static String flowRow(Map<String, Object> row) {
-        StringBuilder sb = new StringBuilder("- { ");
+        return "- " + flowMap(row);
+    }
+
+    private static String flowMap(Map<?, ?> map) {
+        StringBuilder sb = new StringBuilder("{ ");
         boolean first = true;
-        for (Map.Entry<String, Object> e : row.entrySet()) {
+        for (Map.Entry<?, ?> e : map.entrySet()) {
             if (!first) {
                 sb.append(", ");
             }
             first = false;
-            sb.append(e.getKey()).append(": ");
-            Object v = e.getValue();
-            if (v instanceof Number || v instanceof Boolean) {
-                sb.append(v);
-            } else {
-                String text = String.valueOf(v);
-                boolean bare = text.matches("[A-Za-z_][A-Za-z0-9_]*") && !YAML_WORDS.contains(text.toLowerCase(Locale.ROOT));
-                sb.append(bare && !e.getKey().equals("display") && !e.getKey().equals("group") ? text
-                        : "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
-            }
+            String key = String.valueOf(e.getKey());
+            sb.append(key).append(": ").append(flowValue(key, e.getValue()));
         }
         return sb.append(" }").toString();
+    }
+
+    private static String flowValue(String key, Object v) {
+        if (v instanceof Number || v instanceof Boolean) {
+            return String.valueOf(v);
+        }
+        if (v instanceof Map<?, ?> m) {
+            return flowMap(m);
+        }
+        if (v instanceof List<?> l) {
+            List<String> parts = new ArrayList<>();
+            for (Object o : l) {
+                parts.add(flowValue(key, o));
+            }
+            return "[" + String.join(", ", parts) + "]";
+        }
+        String text = String.valueOf(v);
+        boolean bare = text.matches("[A-Za-z_][A-Za-z0-9_]*") && !YAML_WORDS.contains(text.toLowerCase(Locale.ROOT));
+        return bare && !key.equals("display") && !key.equals("group") ? text
+                : "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     // ---- helpers --------------------------------------------------------------------------

@@ -3,6 +3,7 @@ package com.dierks.homecraft.arcade;
 import com.dierks.homecraft.arcade.PrizeService.CapPlacement;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.trade.TradeService;
 import org.bukkit.inventory.InventoryHolder;
 import org.junit.jupiter.api.Test;
 
@@ -54,5 +55,60 @@ class CapPlacementTest {
             }
         };
         assertFalse(PrizeService.hidesTheMoment(game), "a game screen: left open, the game goes on");
+    }
+
+    /**
+     * Red-team finding BR-3: a present (or {@code /hcm looks give}) closed an open trade window, which cancelled the
+     * trade and told the other player she closed it, and closed her "Trade?" screen, which is shown only once. Both
+     * stay open now, and the moment plays over them.
+     */
+    @Test
+    void theMomentLeavesATradeOpen() {
+        class Window extends Menu implements TradeService.Window {
+            Window() {
+                super(null);
+            }
+
+            @Override
+            protected void build() {
+            }
+
+            @Override
+            public void open() {
+            }
+
+            @Override
+            public boolean showing() {
+                return true;
+            }
+
+            @Override
+            public void repaint() {
+            }
+
+            @Override
+            public void close() {
+            }
+
+            @Override
+            public void hint(String line) {
+            }
+        }
+        class Ask extends Menu implements TradeService.AskScreen {
+            Ask() {
+                super(null);
+            }
+
+            @Override
+            protected void build() {
+            }
+
+            @Override
+            public long requestId() {
+                return 1;
+            }
+        }
+        assertFalse(PrizeService.hidesTheMoment(new Window()), "[X] the trade window: left open, the trade goes on");
+        assertFalse(PrizeService.hidesTheMoment(new Ask()), "[X] the Trade? screen: left open, she can still say yes");
     }
 }

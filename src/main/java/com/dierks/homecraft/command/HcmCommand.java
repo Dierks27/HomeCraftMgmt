@@ -8,6 +8,7 @@ import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
 import com.dierks.homecraft.util.Text;
+import com.dierks.homecraft.util.Whereabouts;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -56,6 +57,14 @@ import java.util.function.Predicate;
  *       (hcm.arcade.use)</li>
  *   <li>{@code /hcm candy now [player]|status|clear|bag <player>|add <player> <n>} — run the Candy
  *       Apple shower. (admin)</li>
+ *   <li>{@code /hcm looks ...} and {@code /hcm account move ...} — My Looks, the wardrobe's admin tools and
+ *       the account move; see {@link LooksCommand}. {@code /hcm trail} with nothing after it opens My Looks;
+ *       {@code /hcm trail toggle} switches the trail off and back on, {@code next} goes to the next one, and
+ *       {@code hide} / {@code show} hide or show other people's trails, marks and parties for you.</li>
+ *   <li>{@code /hcm trade <player>|accept|deny|cancel|on|off} — the trade window, as {@code /trade}, for when
+ *       another plugin owns {@code /trade}; see {@link TradeCommand}. (hcm.trade.use)</li>
+ *   <li>{@code /hcm trades [player] [n]}, {@code /hcm trades show <id>}, {@code /hcm trades settle <id>
+ *       release|void [player] [confirm]} — the trade log, and a trade the server didn't see finish. (admin)</li>
  * </ul>
  *
  * <p>Each subcommand checks its own permission — the command node itself is ungated, so
@@ -75,11 +84,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private final MarketSimCommand liveMarket;
     /** {@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} (the Games). */
     private final GamesCommand gamesCommand;
+    /** {@code /hcm looks …} and {@code /hcm account move …} (the wardrobe). */
+    private final LooksCommand looksCommand;
+    /** {@code /hcm trade …} (as {@code /trade}) and {@code /hcm trades …} (the trade log). */
+    private final TradeCommand tradeCommand;
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
         this.liveMarket = new MarketSimCommand(plugin);
         this.gamesCommand = new GamesCommand(plugin);
+        this.looksCommand = new LooksCommand(plugin);
+        this.tradeCommand = new TradeCommand(plugin);
     }
 
     @Override
@@ -175,7 +190,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cOnly players have trails."));
                     return true;
                 }
-                if (args.length >= 2 && !args[1].equalsIgnoreCase("toggle")) {
+                if (args.length >= 2 && (args[1].equalsIgnoreCase("hide") || args[1].equalsIgnoreCase("show"))) {
+                    // other people's trails, marks and parties, for you only (SHOP-V2-SPEC §5.6)
+                    player.sendMessage(Text.of(plugin.trails().hideOthers(player, args[1].equalsIgnoreCase("hide"))));
+                } else if (args.length >= 2 && args[1].equalsIgnoreCase("next")) {
+                    player.sendMessage(Text.of(plugin.trails().cycle(player))); // the Wallet's old cycle
+                } else if (args.length >= 2 && !args[1].equalsIgnoreCase("toggle")) {
                     if (args[1].equalsIgnoreCase("off")) {
                         var cur = plugin.trails().current(player);
                         player.sendMessage(Text.of(cur == null ? "&7Your trail is already off."
@@ -183,10 +203,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     } else {
                         player.sendMessage(Text.of(plugin.trails().select(player, args[1])));
                     }
-                } else {
+                } else if (args.length >= 2 || plugin.looks() == null) {
                     player.sendMessage(Text.of(plugin.trails().toggle(player)));
+                } else {
+                    // /hcm trail on its own opens My Looks (SHOP-V2-SPEC §1.4 Q8); toggle keeps the old switch.
+                    new com.dierks.homecraft.gui.arcade.MyLooksMenu(plugin, player, null).open(player);
                 }
             }
+            case "looks", "look" -> looksCommand.looks(sender, args);
+            case "account" -> looksCommand.account(sender, args);
             case "tokens" -> handleTokens(sender, args);
             case "play" -> gamesCommand.play(sender, args);
             case "leave" -> gamesCommand.leave(sender, args);
@@ -289,6 +314,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 // (§3.2, §2.2) — this exists so a run can be driven without walking to one.
                 new com.dierks.homecraft.gui.courier.JobBoardMenu(plugin, player, null).open(player);
             }
+            case "trade" -> tradeCommand.trade(sender, TradeCommand.rest(args));
+            case "trades" -> tradeCommand.trades(sender, args);
             case "museum" -> handleMuseum(sender, args);
             case "hunt" -> handleHunt(sender, args);
             case "candy" -> handleCandy(sender, args);
@@ -1217,7 +1244,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
      * <p>A collector goes through {@link com.dierks.homecraft.arcade.PrizeService#restore}: its claim is
      * written, or found already there, so a restore never counts twice; a cap needs room by the
      * present's placement rule and never goes on the ground; and given by a player to someone else it
-     * is a present, with "A gift from" on the cap and the whole moment. Any other row is handed out as
+     * is a present, with "A gift from" on the cap and the whole moment. A Keeper (0.38) goes the same way,
+     * free, with its claim (§5.4): a hat's key as a present's, a trail switched on. Any other row is handed out as
      * a crate would ({@code grant}), and an item only into a free bag slot, never onto the ground.
      */
     private void handleGivePrize(CommandSender sender, String[] args) {
@@ -1232,7 +1260,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     + String.join(", ", com.dierks.homecraft.arcade.Collectors.SHIPPED_IDS) + "."));
             return;
         }
-        String refused = notGivenBack(p.type());
+        String refused = notGivenBack(p);
         if (refused != null) {
             sender.sendMessage(Text.of("&c" + refused));
             return;
@@ -1249,21 +1277,22 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&c" + target.getName() + " is respawning. Try again in a moment."));
             return;
         }
-        if (p.collector() == null && givesAnItem(p.type()) && target.getInventory().firstEmpty() == -1) {
+        boolean ownWay = p.collector() != null || p.keeper(); // given back by restore, its own placement rules
+        if (!ownWay && givesAnItem(p.type()) && target.getInventory().firstEmpty() == -1) {
             // A crate's hand-over drops what doesn't fit; a give-back never goes on the ground.
             sender.sendMessage(Text.of("&c" + target.getName() + "'s bag is full."));
             return;
         }
         String from = sender instanceof Player sp ? presentFrom(sp.getName(), sp.getUniqueId(), target.getUniqueId()) : null;
-        var out = p.collector() != null ? plugin.prizes().restore(target, p, from) : plugin.prizes().grant(target, p, 0);
+        var out = ownWay ? plugin.prizes().restore(target, p, from) : plugin.prizes().grant(target, p, 0);
         if (!out.ok()) {
             sender.sendMessage(Text.of("&c" + out.error()));
             return;
         }
         plugin.getLogger().info("Admin " + sender.getName() + " gave " + p.id() + " to " + target.getName());
         boolean self = sender instanceof Player me && me.getUniqueId().equals(target.getUniqueId());
-        if (p.collector() == null && !self) {
-            // A collector's restore tells the player itself (the present's moment, or "yours again").
+        if (!ownWay && !self) {
+            // A collector's or a Keeper's restore tells the player itself (the present's moment, or "yours again").
             target.sendMessage(Text.of("&a✔ You got " + out.label() + "&a!"));
             com.dierks.homecraft.util.Sounds.received(target);
         }
@@ -1304,6 +1333,22 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
+     * {@link #notGivenBack(com.dierks.homecraft.config.PluginConfig.PrizeType)} for a whole row: a rented hat or cap
+     * (0.38) is a right with a bound key, so a plain hat given here would be a permanent one, against the rule that
+     * worn looks run out; {@code /hcm looks give} gives the right (free) and its key. A golf ball (0.38) is an unlock
+     * kept by its claim, not an item: it said only "That prize can't be given like this." (red-team finding CMD-8).
+     */
+    static String notGivenBack(com.dierks.homecraft.config.PluginConfig.Prize p) {
+        if (p.rental() && p.type() == com.dierks.homecraft.config.PluginConfig.PrizeType.HAT) {
+            return "A rented hat or cap is a look, not an item: /hcm looks give <player> " + p.id() + " gives one free.";
+        }
+        if (p.type() == com.dierks.homecraft.config.PluginConfig.PrizeType.BALL) {
+            return "A golf ball is an unlock, not an item: Give a present on the Prize Counter's Looks tab gives one.";
+        }
+        return notGivenBack(p.type());
+    }
+
+    /**
      * Whether a (non-collector) row is handed over as an item, which needs a free bag slot: a give-back
      * never drops one on the ground. A trail, a command row and the rest are not items.
      */
@@ -1316,8 +1361,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
 
     /** Home from every game: no session, nothing on the way back, no saved-state row sending them back. */
     private boolean homeFromGames(Player player) {
-        var games = plugin.games();
-        return games == null || (games.sessions().session(player) == null && games.sessions().home(player));
+        return Whereabouts.homeFromGames(plugin, player);
     }
 
     /** {@code /hcm backup now} — write a SQLite backup immediately (hcm.admin). */
@@ -1811,8 +1855,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         for (String line : gamesCommand.helpLines(sender)) {
             sender.sendMessage(Text.of(line));
         }
+        for (String line : TradeCommand.helpLines(sender)) {
+            sender.sendMessage(Text.of(line));
+        }
         sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
-        sender.sendMessage(Text.of("&e/hcm trail [name|off] &7- turn your trail on or off"));
+        sender.sendMessage(Text.of("&e/hcm trail &7- My Looks; &e/hcm trail <name>|off|toggle|next &7- switch your trail"));
+        sender.sendMessage(Text.of("&e/hcm trail hide|show &7- hide or show other people's trails and parties"));
+        for (String line : LooksCommand.helpLines(sender)) {
+            sender.sendMessage(Text.of(line));
+        }
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
@@ -2217,9 +2268,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "candy", "trail", "achievements", "guide", "config", "homes");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "candy", "trail", "looks", "account", "achievements", "guide", "config", "homes");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "balance", "tokens", "quests", "courier", "trail", "looks", "achievements", "guide");
             }
             if (sender.hasPermission(GamesCommand.PLAY)) {
                 addMatches(out, args[0], "play", "leave");
@@ -2227,8 +2278,20 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission(GamesCommand.ADMIN)) {
                 addMatches(out, args[0], "games");
             }
+            if (sender.hasPermission(com.dierks.homecraft.trade.TradeService.PERMISSION)) {
+                addMatches(out, args[0], "trade");
+            }
+            if (sender.hasPermission("hcm.admin")) {
+                addMatches(out, args[0], "trades");
+            }
         } else if (List.of("play", "leave", "games").contains(args[0].toLowerCase(Locale.ROOT))) {
             out.addAll(gamesCommand.complete(sender, args));
+        } else if (List.of("looks", "look", "account").contains(args[0].toLowerCase(Locale.ROOT))) {
+            out.addAll(looksCommand.complete(sender, args));
+        } else if (args[0].equalsIgnoreCase("trade")) {
+            out.addAll(tradeCommand.complete(sender, TradeCommand.rest(args)));
+        } else if (args[0].equalsIgnoreCase("trades")) {
+            out.addAll(tradeCommand.completeTrades(sender, args));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[1], "reset");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
@@ -2367,7 +2430,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.arcade.use")) {
             addMatches(out, args[1], "odds");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("trail") && sender instanceof Player tp) {
-            addMatches(out, args[1], "off");
+            addMatches(out, args[1], "off", "toggle", "next", "hide", "show");
             for (var o : plugin.trails().owned(tp)) {
                 addMatches(out, args[1], o.prize().id());
             }

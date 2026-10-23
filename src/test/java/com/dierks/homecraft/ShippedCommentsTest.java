@@ -16,15 +16,17 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The comments config revisions 20 and 21 make stale in the owner's file ({@link ShippedComments}, the v4
- * audit ECON02/ECON05), against verbatim copies of 0.35.0's and 0.36.0's bundled config.yml.
+ * The comments config revisions 20, 21 and 22 make stale in the owner's file ({@link ShippedComments}, the v4
+ * audit ECON02/ECON05, SHOP-V2-SPEC §7.6), against verbatim copies of 0.35.0's, 0.36.0's and 0.37.2's bundled
+ * config.yml.
  *
  * <p>Pinned here: the owner's 0.36 file, migrated and backfilled, ends with exactly the bundled file's comments
  * on every key, so it no longer says "x 1760-8191 ... Keep the sky there free", "a Mountain Run about 50 KB",
  * "skill games pay small, capped rewards", "a short downhill sprint" or "Adventure Golf" in its header, and its
  * keep area says Golf v4 fits a plot and a Mountain Run v2 can't be kept; a 0.35 file's are refreshed too; a
  * comment the owner edited by one character is kept, word for word; each revision refreshes only its own;
- * and every fingerprint is what 0.35.0 or 0.36.0 shipped on that key.
+ * the owner's 0.37.2 file ends with the token shop's three comments (the Prize Counter's header, the icon keys
+ * and the collectors'); and every fingerprint is what 0.35.0, 0.36.0 or 0.37.2 shipped on that key.
  */
 class ShippedCommentsTest {
 
@@ -60,6 +62,26 @@ class ShippedCommentsTest {
         String keep = String.join("\n", after.getComments("games.fresh.keep.area"));
         assertTrue(keep.contains("Golf v4's") && keep.contains("128 x 16 x 224 does")
                 && keep.contains("a Mountain Run v2") && keep.contains("can't be kept"), "and what fits a plot: " + keep);
+    }
+
+    @Test
+    void theOwners0372FileEndsWithExactlyTheBundledCommentsAndTheShopsThree() {
+        YamlConfiguration after = migrated(LayoutFixtures.v0372());
+        YamlConfiguration bundled = LayoutFixtures.bundled();
+        for (String key : bundled.getKeys(true)) {
+            assertEquals(bundled.getComments(key), after.getComments(key), key + "'s comment is this version's");
+            assertEquals(bundled.getInlineComments(key), after.getInlineComments(key), key + "'s inline comment too");
+        }
+        String prizes = String.join("\n", after.getComments("arcade.prizes"));
+        assertTrue(prizes.contains("COSMETICS | LOOKS | PERKS") && prizes.contains("DAY | WEEK | MONTH | LIFETIME")
+                && prizes.contains("ball       look (a block)") && prizes.contains("party      seconds")
+                && prizes.contains("only_if (night | rain"), "the counter's header names 0.38's rows: " + prizes);
+        assertFalse(prizes.contains("A hat with a blank texture is HIDDEN."), "and not 0.37's hat line");
+        assertTrue(String.join("\n", after.getComments("arcade.icons")).contains("cosmetics, looks, perks, trophies,"
+                + " minis, keepers)."), "the icon keys");
+        String collectors = String.join("\n", after.getComments("arcade.collectors"));
+        assertFalse(collectors.contains("0.37.1"), "the collectors' comment names no version: " + collectors);
+        assertTrue(collectors.contains("no presents at all (looks, golf balls"), collectors);
     }
 
     @Test
@@ -104,7 +126,20 @@ class ShippedCommentsTest {
         assertEquals(LayoutFixtures.bundled().getComments("games.fresh.world"), at20.getComments("games.fresh.world"),
                 "while 21's are");
 
+        YamlConfiguration at21 = LayoutFixtures.v0372();
+        List<String> icons = new ArrayList<>(at21.getComments("arcade.icons"));
+        icons.add("my keys");
+        at21.setComments("arcade.icons", icons);
+        HomeCraftManagement.migrateConfig(at21, "world");
+        assertEquals(icons, at21.getComments("arcade.icons"), "22 keeps an icon comment the owner edited");
+        assertEquals(LayoutFixtures.bundled().getComments("arcade.prizes"), at21.getComments("arcade.prizes"),
+                "while refreshing the counter's header beside it");
+
         YamlConfiguration c = LayoutFixtures.v036();
+        assertEquals(List.of("arcade.icons", "arcade.prizes"), ShippedComments.refresh(c, ShopMigration.REVISION),
+                "22 on a 0.36 file: the two it has (no collectors yet)");
+        assertEquals(List.of("arcade.icons", "arcade.prizes", "arcade.collectors"),
+                ShippedComments.refresh(LayoutFixtures.v0372(), ShopMigration.REVISION), "and all three on 0.37.2's");
         assertEquals(List.of("games"), ShippedComments.refresh(c, EconomyMigration.REVISION), "20: the header");
         assertEquals(List.of("games.fresh", "games.fresh.world", "games.fresh.slots", "games.fresh.archive",
                 "games.fresh.keep.area", "games.race_night", "games.race_night.races",
@@ -114,25 +149,29 @@ class ShippedCommentsTest {
     }
 
     @Test
-    void everyFingerprintIsWhat035Or036ShippedAndNoneIsThisVersions() throws Exception {
+    void everyFingerprintIsWhat035Or036Or0372ShippedAndNoneIsThisVersions() throws Exception {
         YamlConfiguration v035 = LayoutFixtures.v035();
         YamlConfiguration v036 = LayoutFixtures.v036();
+        YamlConfiguration v0372 = LayoutFixtures.v0372();
         YamlConfiguration bundled = LayoutFixtures.bundled();
         Set<String> keys = new HashSet<>();
         for (ShippedComments.Stale s : ShippedComments.STALE) {
             assertTrue(keys.add(s.key()), s.key() + " once");
             Set<String> shipped = new HashSet<>();
-            for (YamlConfiguration old : List.of(v035, v036)) {
-                if (!old.getComments(s.key()).equals(bundled.getComments(s.key()))) {
+            for (YamlConfiguration old : List.of(v035, v036, v0372)) {
+                if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))) {
                     shipped.add(fingerprint(old, s.key()));
                 }
             }
-            assertEquals(shipped, s.shipped(), s.key() + ": exactly the stale texts 0.35.0 and 0.36.0 shipped");
+            assertEquals(shipped, s.shipped(),
+                    s.key() + ": exactly the stale texts 0.35.0, 0.36.0 and 0.37.2 shipped (where it had the key)");
             assertFalse(s.shipped().contains(fingerprint(bundled, s.key())), s.key() + ": never this version's");
-            YamlConfiguration saved = new YamlConfiguration();
-            saved.loadFromString(v036.saveToString());
-            assertEquals(fingerprint(v036, s.key()), fingerprint(saved, s.key()),
-                    s.key() + ": a file the plugin saved before reads the same");
+            for (YamlConfiguration old : List.of(v036, v0372)) {
+                YamlConfiguration saved = new YamlConfiguration();
+                saved.loadFromString(old.saveToString());
+                assertEquals(fingerprint(old, s.key()), fingerprint(saved, s.key()),
+                        s.key() + ": a file the plugin saved before reads the same");
+            }
         }
         assertNotEquals(ShippedComments.fingerprint(List.of("a"), List.of()),
                 ShippedComments.fingerprint(List.of(), List.of("a")), "block and inline are told apart");

@@ -477,6 +477,21 @@ public final class GamesDao {
     public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
                          String ref, int tokens, int capGame, int capAll, boolean once, boolean whole,
                          String detail, long now) throws SQLException {
+        return payReward(player, game, source, day, kind, ref, tokens, capGame, capAll, -1, once, whole, detail, now);
+    }
+
+    /**
+     * {@link #payReward(UUID, String, TokenService.Source, long, RewardKind, String, int, int, int, boolean,
+     * boolean, String, long)} with a third cap (0.38, SHOP-V2-SPEC §5.12, S6b): {@code capEveryday}
+     * ({@code games.everyday_cap}) holds every game's {@link RewardKind#DAILY_CHALLENGE} together, a day, paid
+     * partially like the other two. It reads only that kind ({@link #everydayToday}) and is ignored for every
+     * other one.
+     *
+     * @param capEveryday {@code games.everyday_cap}, or -1 for none (it ships off)
+     */
+    public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
+                         String ref, int tokens, int capGame, int capAll, int capEveryday, boolean once,
+                         boolean whole, String detail, long now) throws SQLException {
         if (tokens <= 0) {
             return 0;
         }
@@ -496,8 +511,14 @@ public final class GamesDao {
                     pay = Math.min(pay, capAll - cappedSum(c, player, day, null));
                 }
             }
+            int capEvery = kind == RewardKind.DAILY_CHALLENGE ? capEveryday : -1;
+            if (capEvery >= 0) {
+                pay = Math.min(pay, capEvery - everydaySum(c, player, day));
+            }
             if (whole) {
-                pay = wholePay(tokens, kind.capped() ? capGame : -1, kind.capped() ? capAll : -1, pay);
+                // the two server-wide caps hold a whole day the same way: the smaller one is what can fit
+                pay = wholePay(tokens, kind.capped() ? capGame : -1,
+                        smallerCap(kind.capped() ? capAll : -1, capEvery), pay);
             }
             if (pay <= 0) {
                 return 0; // nothing written: capped away today, still there another day
@@ -541,6 +562,22 @@ public final class GamesDao {
             whole = Math.min(whole, capAll);
         }
         return whole > 0 && left >= whole ? whole : 0;
+    }
+
+    /** The smaller of two caps, either of which may be -1 (none). */
+    static int smallerCap(int a, int b) {
+        if (a < 0) {
+            return b;
+        }
+        return b < 0 ? a : Math.min(a, b);
+    }
+
+    /** Every game's daily challenge paid to the player today (what {@code games.everyday_cap} counts). */
+    public int everydayToday(UUID player, long day) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            return everydaySum(c, player, day);
+        }
     }
 
     /** Capped rewards paid to the player today across every game (what the server-wide cap counts). */
@@ -1341,6 +1378,19 @@ public final class GamesDao {
             if (game != null) {
                 ps.setString(3, game);
             }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? (int) Math.min(Integer.MAX_VALUE, rs.getLong(1)) : 0;
+            }
+        }
+    }
+
+    /** {@link RewardKind#DAILY_CHALLENGE} rows paid to the player on {@code day}, every game together. */
+    private static int everydaySum(Connection c, UUID player, long day) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT COALESCE(SUM(tokens), 0) FROM game_rewards WHERE player = ? AND day = ? AND kind = ?")) {
+            ps.setString(1, player.toString());
+            ps.setLong(2, day);
+            ps.setString(3, RewardKind.DAILY_CHALLENGE.name());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? (int) Math.min(Integer.MAX_VALUE, rs.getLong(1)) : 0;
             }

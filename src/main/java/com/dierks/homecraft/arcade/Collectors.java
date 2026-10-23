@@ -47,12 +47,13 @@ public final class Collectors {
                     LocalDate.of(2026, 12, 1), LocalDate.of(2027, 1, 6), "ELECTRIC_SPARK", Material.SEA_LANTERN));
 
     /**
-     * A collector cap: a Cosmetics row, one each for good (LIFETIME 1), giftable, with a leather helmet as
-     * its icon and {@code look} as the cap. Its season name comes from {@code from}'s month.
+     * A collector cap: a Looks row (0.38; it was on Cosmetics before the Looks tab), one each for good
+     * (LIFETIME 1), giftable, with a leather helmet as its icon and {@code look} as the cap. Its season name
+     * comes from {@code from}'s month. The tab only says where its tile is drawn: nothing stores it.
      */
     static Prize cap(String id, String display, String desc, int price, int year, LocalDate from, LocalDate to,
                      CapLook look) {
-        return new Prize(id, PrizeTab.COSMETICS, display, List.of(desc), price, new Icon("", Material.LEATHER_HELMET),
+        return new Prize(id, PrizeTab.LOOKS, display, List.of(desc), price, new Icon("", Material.LEATHER_HELMET),
                 PrizeType.HAT, true, new PrizeLimit(LimitPer.LIFETIME, 1),
                 1, null, null, null, null, 0, 0, null, 0, "",
                 List.of(), List.of(), null, null, List.of(),

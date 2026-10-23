@@ -32,6 +32,18 @@ public final class SkillRewards {
 
     /** What a capped player reads, at most once per finish. */
     public static final String CAPPED = "&7You've won all the game tokens you can today — scores still count!";
+    /**
+     * What a player held back by {@code games.everyday_cap} reads (0.38, S6b; only while that cap is on), for a
+     * cap of {@code cap} tokens a day: "Arcade goals: your first three each day give tokens." The count is the
+     * cap over a cabinet's shipped daily reward ({@link TokenBalance#CABINET_DAILY}), at least one.
+     */
+    public static String everydayLine(int cap) {
+        int n = Math.max(1, cap / Math.max(1, TokenBalance.CABINET_DAILY));
+        String[] words = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"};
+        String count = n <= words.length ? words[n - 1] : String.valueOf(n);
+        return "&7Arcade goals: your first " + count + " each day give" + (n == 1 ? "s" : "") + " tokens.";
+    }
+
     /** What a player who can't earn where they are reads (creative mode, a world without games). */
     public static final String NOT_HERE = "&7No tokens can be earned here — scores still count!";
 
@@ -105,11 +117,13 @@ public final class SkillRewards {
         long day = games.host().clock().dayKey();
         int capGame = kind.acrossGames() ? -1 : Math.max(-1, gameDailyCap);
         int capAll = Math.max(-1, games.config().common().skillDailyCap());
+        // games.everyday_cap (0.38, S6b): every game's daily challenge together, a day; ships off
+        int capEvery = kind == RewardKind.DAILY_CHALLENGE ? games.config().common().everydayCapOrNone() : -1;
         String line = detail == null || detail.isBlank() ? (source == null ? game.source() : source).label() : detail;
         int paid;
         try {
             paid = games.dao().payReward(id, game.id(), source == null ? game.source() : source, day, kind, r, tokens,
-                    capGame, capAll, once, whole, line, games.host().clock().nowMillis());
+                    capGame, capAll, capEvery, once, whole, line, games.host().clock().nowMillis());
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not pay a " + game.id() + " reward", e);
             return 0;
@@ -123,9 +137,19 @@ public final class SkillRewards {
             // "come back another day" only when another day can pay it: nothing was paid, and no cap
             // is 0 (a reward bigger than a whole day's cap pays that cap and is done: CAPPED)
             boolean later = whole && paid == 0 && limitLine != null && capGame != 0 && capAll != 0;
-            sayOnce(player, later ? limitLine : CAPPED);
+            sayOnce(player, later ? limitLine : capEvery > 0 && everydayFull(id, day, capEvery)
+                    ? everydayLine(capEvery) : CAPPED);
         }
         return paid;
+    }
+
+    /** Whether today's daily challenges have used all of {@code games.everyday_cap} (what held this one back). */
+    private boolean everydayFull(UUID player, long day, int cap) {
+        try {
+            return games.dao().everydayToday(player, day) >= cap;
+        } catch (SQLException e) {
+            return false;
+        }
     }
 
     /**

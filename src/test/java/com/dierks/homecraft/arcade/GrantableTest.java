@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * No crate ever gives a collector (HALLOWEEN-SPEC E11): a crate's "any trail" pool would otherwise pay
- * the kept-for-good trail for a day, and a crated collector would skip its one-each claim.
+ * the kept-for-good trail for a day, and a crated collector would skip its one-each claim. Nor a hat
+ * (SHOP-V2-SPEC D11), a golf ball or a party, which are bought.
  */
 class GrantableTest {
 
@@ -32,9 +33,12 @@ class GrantableTest {
     }
 
     @Test
-    void configRowsAreAsBefore() {
+    void configRowsAreAsBeforeExceptWhatIsBought() {
         assertTrue(PrizeService.crateable(row("trail_heart", PrizeType.TRAIL, "HEART", 7)), "a 7-day config trail");
-        assertTrue(PrizeService.crateable(row("hat_creeper", PrizeType.HAT, null, 0)));
+        assertFalse(PrizeService.crateable(row("hat_creeper", PrizeType.HAT, null, 0)),
+                "a hat is bought for its days, never won (D11)");
+        assertFalse(PrizeService.crateable(row("ball_pink", PrizeType.BALL, null, 0)), "a golf ball is bought");
+        assertFalse(PrizeService.crateable(row("party_time", PrizeType.PARTY, null, 0)), "and so is a party");
         assertTrue(PrizeService.crateable(row("speed", PrizeType.BOOST, null, 0)));
         assertFalse(PrizeService.crateable(row("hat_command", PrizeType.COMMAND, null, 0)), "perks are bought");
         assertFalse(PrizeService.crateable(row("pity", PrizeType.PITY, null, 0)));

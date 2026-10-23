@@ -70,6 +70,28 @@ public final class DeliveryService {
         dao.insert(player, itemB64, label, source, now, now, DeliveryDao.READY);
     }
 
+    /**
+     * Put an item in {@code player}'s Mailbox for a trade that hasn't finished yet (0.38, SHOP-V2-SPEC §4.6, §4.7):
+     * status HELD, which nobody can collect until {@link #release} turns it READY once both bags are saved. Written
+     * inside the swap's transaction; it throws, so it rolls back with it.
+     *
+     * @param source the trade's own tag, {@code TRADE#<id>}, so its rows are released (or voided) together
+     */
+    public void queueHeld(UUID player, ItemStack item, String label, String source) throws SQLException {
+        queueHeld(player, Items.toBase64(item), label, source);
+    }
+
+    /** {@link #queueHeld(UUID, ItemStack, String, String)} for an item already stored as Base64. */
+    public void queueHeld(UUID player, String itemB64, String label, String source) throws SQLException {
+        long now = System.currentTimeMillis();
+        dao.insert(player, itemB64, label, source, now, now, DeliveryDao.HELD);
+    }
+
+    /** Release one trade's HELD rows: READY to collect now. Joins a caller's transaction. */
+    public int release(String source) throws SQLException {
+        return dao.release(source, System.currentTimeMillis());
+    }
+
     /** Flip due in-transit deliveries to READY and post a "you've got mail" notice. */
     public void tick() {
         try {

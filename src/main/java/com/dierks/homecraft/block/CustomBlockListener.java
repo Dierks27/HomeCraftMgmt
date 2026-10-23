@@ -1,6 +1,7 @@
 package com.dierks.homecraft.block;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.ArcadeTrophies;
 import com.dierks.homecraft.arcade.PlacedPrizes;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
@@ -308,6 +309,10 @@ public final class CustomBlockListener implements Listener {
      * nothing happened. Those open anyway ({@link #opensWhenCancelled}), still behind the economy sandbox and
      * the build-rights check below; a cancelled tap on any other block, or by a player in a world game (the
      * session's own guard says no to every block, and its screens), is left alone exactly as before.
+     *
+     * <p>A placed Arcade Trophy is the Arcade Machine here (SHOP-V2-SPEC §5.8, D17): its tap runs on the machine's own
+     * lines (the cancelled-tap rule, the economy check, build rights), plus a sneak passing through and
+     * {@code hcm.arcade.use}. Only the ARCADE case is reachable for a trophy, so the record is never read.
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
@@ -323,10 +328,20 @@ public final class CustomBlockListener implements Listener {
         // Right-clicking the upper head of a Vending Machine acts on the machine below.
         Block clicked = blocks.vendingLowerOf(clickedRaw).orElse(clickedRaw);
         Optional<PlacedBlock> placed = blocks.at(clicked.getLocation());
-        if (placed.isEmpty()) {
-            return;
+        boolean trophy = false;
+        CustomBlockType type;
+        if (placed.isPresent()) {
+            type = placed.get().type();
+        } else {
+            // A placed Arcade Trophy opens the Arcade (§5.8): the material is tested first, so any other block costs
+            // one compare. Sneaking passes the tap through, so she can build next to her trophy shelf.
+            if (!ArcadeTrophies.isPlacedArcadeTrophy(clicked)
+                    || ArcadeTrophies.tap(event.getPlayer().isSneaking(), true) == ArcadeTrophies.Tap.PASS) {
+                return;
+            }
+            type = CustomBlockType.ARCADE;
+            trophy = true;
         }
-        CustomBlockType type = placed.get().type();
         if (arrivedCancelled && !opensWhenCancelled(type, inGameSession(event.getPlayer()))) {
             return; // as with ignoreCancelled: someone else said no, and this block doesn't open anyway
         }
@@ -336,6 +351,10 @@ public final class CustomBlockListener implements Listener {
         event.setCancelled(true);
 
         Player player = event.getPlayer();
+        if (trophy && ArcadeTrophies.tap(false, player.hasPermission("hcm.arcade.use")) == ArcadeTrophies.Tap.REFUSE) {
+            player.sendMessage(Text.of("&cYou can't use the Arcade."));
+            return; // as /hcm arcade: the machine itself is left as it is
+        }
 
         if (type != CustomBlockType.SOUND_MUFFLER && !arcadeInGamesWorld(type, player)
                 && !plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
@@ -414,7 +433,7 @@ public final class CustomBlockListener implements Listener {
             }
         }
         if (arrivedCancelled) {
-            cancelledTap(player, type, clicked); // after the switch: only a screen that really opened is logged
+            cancelledTap(player, type, clicked, trophy); // after the switch: only a screen that really opened is logged
         }
     }
 
@@ -456,7 +475,7 @@ public final class CustomBlockListener implements Listener {
      * line a player a day says so. Nothing opened (something else closed or refused the screen): no line, and the
      * day's one line is kept for a tap that does open.
      */
-    private void cancelledTap(Player player, CustomBlockType type, Block at) {
+    private void cancelledTap(Player player, CustomBlockType type, Block at, boolean trophy) {
         try {
             if (!(player.getOpenInventory().getTopInventory().getHolder(false) instanceof Menu)) {
                 return;
@@ -469,7 +488,7 @@ public final class CustomBlockListener implements Listener {
             return;
         }
         plugin.getLogger().info(cancelledTapLine(player.getName(), type, at.getX(), at.getY(), at.getZ(),
-                at.getWorld().getName()));
+                at.getWorld().getName(), trophy));
     }
 
     /**
@@ -477,8 +496,15 @@ public final class CustomBlockListener implements Listener {
      * a protection plugin, a spectator or an item cooling down all arrive the same.
      */
     static String cancelledTapLine(String player, CustomBlockType type, int x, int y, int z, String world) {
-        return "Arcade: " + player + "'s tap on " + type.name().toLowerCase(Locale.ROOT) + " at " + x + " " + y + " "
-                + z + " in " + world + " arrived cancelled (by the server or another plugin); opened it";
+        return cancelledTapLine(player, type, x, y, z, world, false);
+    }
+
+    /** {@link #cancelledTapLine(String, CustomBlockType, int, int, int, String)}, marked "(trophy)" for an Arcade Trophy. */
+    static String cancelledTapLine(String player, CustomBlockType type, int x, int y, int z, String world,
+                                   boolean trophy) {
+        return "Arcade: " + player + "'s tap on " + type.name().toLowerCase(Locale.ROOT) + (trophy ? " (trophy)" : "")
+                + " at " + x + " " + y + " " + z + " in " + world
+                + " arrived cancelled (by the server or another plugin); opened it";
     }
 
     /** Friendly display label for a placed-block type (for the placement message). */

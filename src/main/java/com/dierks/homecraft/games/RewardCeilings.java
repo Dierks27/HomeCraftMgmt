@@ -49,6 +49,10 @@ import java.util.function.Consumer;
  * <p><b>Falling Floors' milestones together</b> as well as each on its own: one solo round passes every milestone
  * up to how long it lasted, so the one that first reaches the last passes them all at once (ECON-R3-00).
  *
+ * <p><b>The everyday cap</b> (0.38, SHOP-V2-SPEC §5.12, S6b): while {@code games.everyday_cap} is on, each game's
+ * {@code daily_reward} (the cabinets' and Falling Floors') bigger than it gives one WARN, since that daily challenge
+ * could never pay in full. The cap ships off, so the shipped settings give none.
+ *
  * <p><b>And the Weekly Cup's family rule</b> (BALANCE-SPEC §3.2): while the Cup is on, a
  * {@code server_topup} below twice its {@code entry} gives one WARN naming both keys, since third of a Cup
  * of 3 where everyone set a time then gets back less than they paid (the v4 audit, ECON01). An owner may
@@ -128,8 +132,26 @@ public final class RewardCeilings {
             together(out, floorsBase + ".milestone_rewards", secs, toks, floorsCap, skill);
         }
 
+        everyday(out, p);
         family(out, p.settings(WeeklyCup.SPEC));
         return out;
+    }
+
+    /** One WARN per {@code daily_reward} bigger than {@code games.everyday_cap}, only while that cap is on. */
+    private static void everyday(List<String> out, GamesConfig.Parsed p) {
+        int cap = p.common().everydayCap();
+        if (cap <= 0) {
+            return; // off: no third cap to pass
+        }
+        Cap every = new Cap(GamesConfig.PATH + ".everyday_cap", cap);
+        for (GameSpec<?> spec : GameCatalog.SPECS) {
+            Object s = p.settings(spec);
+            int daily = s instanceof CabinetSettings cab ? cab.dailyReward()
+                    : s instanceof FallingFloorsSettings floors ? floors.dailyReward() : 0;
+            if (daily > 0) {
+                check(out, GamesConfig.PATH + "." + GamesConfig.block(spec.id()) + ".daily_reward", daily, every);
+            }
+        }
     }
 
     /**

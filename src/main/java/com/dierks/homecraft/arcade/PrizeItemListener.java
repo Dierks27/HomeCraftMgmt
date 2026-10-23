@@ -28,6 +28,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -47,7 +48,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
- *       one of ours, such as the Arcade Machine or a Mini).</li>
+ *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
+ *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
+ *       bag (a key is deleted: My Looks makes it again), and never onto the ground.</li>
  *   <li><b>Placed hats and trophies</b> remember exactly what they were and who placed them. Only
  *       that player (or an admin) may break one, and the same prize goes back into their bag (or
  *       their Mailbox), never a plain head that has lost its tag and could be sold. Pistons, water,
@@ -132,14 +135,17 @@ public final class PrizeItemListener implements Listener {
             case HAT -> {
                 Block clicked = event.getClickedBlock();
                 boolean bedrock = Bedrock.is(player);
-                boolean tap = clicked != null && wearsOnBlockTap(bedrock, player.isSneaking(),
-                        clicked.getType().isInteractable(), item.getType() == Material.PLAYER_HEAD,
-                        bedrock && ours(plugin, clicked));
+                boolean bound = PrizeService.bound(item);
+                boolean tap = clicked != null && (bound
+                        ? keyWearsOnBlockTap(player.isSneaking(), clicked.getType().isInteractable(), ours(plugin, clicked))
+                        : wearsOnBlockTap(bedrock, player.isSneaking(), clicked.getType().isInteractable(),
+                        isHead(item.getType()) && !bound, bedrock && ours(plugin, clicked)));
                 if (a == Action.RIGHT_CLICK_AIR || tap) {
                     cancel(event);
-                    wear(player, hand);
+                    wear(plugin, player, hand);
                 }
-                // otherwise, on a block: let it be placed as a head (onPlace remembers it)
+                // otherwise, on a block: a hat from before 0.38 may be placed as a head (onPlace remembers it); a
+                // bound key never is (BoundItemGuard refuses the place)
             }
             default -> {
                 // a trophy is placed like any head
@@ -169,10 +175,25 @@ public final class PrizeItemListener implements Listener {
     }
 
     /**
+     * A bound key's tap on a block wears it, on both editions (SHOP-V2-SPEC §3.7): a key can never be placed, so
+     * there is nothing else a tap on a plain block could mean. Not while sneaking, not on a block that does something
+     * when tapped, and never on one of ours.
+     */
+    static boolean keyWearsOnBlockTap(boolean sneaking, boolean interactable, boolean ours) {
+        return !sneaking && !interactable && !ours;
+    }
+
+    /** Every head a hat can be: a player's, and the game's own mob heads (P3, the Creeper and Dragon Hats). */
+    static boolean isHead(Material m) {
+        return PlacedPrizes.headMaterial(m) && !m.name().contains("_WALL_");
+    }
+
+    /**
      * Whether {@code clicked} is one of ours: a placed HomeCraft block (the upper head of a Vending Machine acts
-     * for the machine, as in {@code CustomBlockListener}), a tagged join sign, or a Mini's head, placed or wild
-     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini). A lookup that fails is "no". Public
-     * for the Candy Apple shower's taps (the Bedrock eat fallback and the bag), which leave a block of ours alone too.
+     * for the machine, as in {@code CustomBlockListener}), a tagged join sign, a Mini's head, placed or wild
+     * (the head {@code MiniHeadListener} acts on: its skull carries a Mini), or a placed Arcade Trophy, whose tap
+     * opens the Arcade (§5.8). A lookup that fails is "no". Public for the Candy Apple shower's taps (the Bedrock
+     * eat fallback and the bag), which leave a block of ours alone too.
      */
     public static boolean ours(HomeCraftManagement plugin, Block clicked) {
         try {
@@ -184,12 +205,28 @@ public final class PrizeItemListener implements Listener {
                 return true;
             }
             Material type = clicked.getType();
-            return (type == Material.PLAYER_HEAD || type == Material.PLAYER_WALL_HEAD)
-                    && clicked.getState(false) instanceof Skull skull && plugin.miniService() != null
-                    && plugin.miniService().refFrom(skull.getPersistentDataContainer()) != null;
+            if (type != Material.PLAYER_HEAD && type != Material.PLAYER_WALL_HEAD) {
+                return false;
+            }
+            return miniHead(plugin, clicked) || ArcadeTrophies.isPlacedArcadeTrophy(clicked);
         } catch (RuntimeException | LinkageError e) {
             return false;
         }
+    }
+
+    /** A player head whose skull carries a Mini (placed or wild). */
+    private static boolean miniHead(HomeCraftManagement plugin, Block clicked) {
+        return clicked.getState(false) instanceof Skull skull && plugin.miniService() != null
+                && plugin.miniService().refFrom(skull.getPersistentDataContainer()) != null;
+    }
+
+    /**
+     * {@link #ours(HomeCraftManagement, Block)} on its facts, the order it asks them in: a placed HomeCraft block, a
+     * join sign, and on a player head a Mini or a placed Arcade Trophy (a hat tap on the trophy opens the Arcade and
+     * leaves the hat in the hand). Pure, for the test.
+     */
+    static boolean ours(boolean customBlock, boolean joinSign, boolean playerHead, boolean mini, boolean arcadeTrophy) {
+        return customBlock || joinSign || (playerHead && (mini || arcadeTrophy));
     }
 
     private static void cancel(PlayerInteractEvent event) {
@@ -256,41 +293,70 @@ public final class PrizeItemListener implements Listener {
     }
 
     /**
-     * Put a hat on, handing back whatever was on the player's head. A collector coming off the head
-     * needs a place in the bag: it is never dropped on the ground, where anyone could take it, so with
-     * no room the hat stays in the hand and the head is left as it was.
+     * Put a hat on. What was on the head: a bound key is deleted, never moved (it is in My Looks); anything else
+     * goes into the bag, and with no room the wear is refused and the head left as it was. Nothing goes on the
+     * ground any more (0.38). A key that isn't the wearer's, or whose look has ended, is taken away instead, once
+     * the wardrobe knows ({@code LookService}: never on an unknown answer).
      */
-    private static void wear(Player player, EquipmentSlot hand) {
-        ItemStack held = player.getInventory().getItem(hand);
-        if (held == null) {
+    private static void wear(HomeCraftManagement plugin, Player player, EquipmentSlot hand) {
+        PlayerInventory inv = player.getInventory();
+        ItemStack held = inv.getItem(hand);
+        if (held == null || held.getType().isAir()) {
             return;
         }
-        ItemStack old = player.getInventory().getHelmet();
-        if (old != null && !old.getType().isAir()
-                && keepsOldOn(PrizeSafety.ownerBound(TokenPrizes.prizeId(old)),
-                player.getInventory().firstEmpty() != -1, hand == EquipmentSlot.HAND && held.getAmount() == 1)) {
+        if (PrizeService.bound(held) && plugin.looks() != null) {
+            String refused = plugin.looks().keyRefusal(player, held);
+            if (refused != null) {
+                inv.setItem(hand, null);
+                player.sendMessage(Text.of("&7" + refused));
+                Sounds.refused(player);
+                return;
+            }
+        }
+        ItemStack old = inv.getHelmet();
+        boolean hasOld = old != null && !old.getType().isAir();
+        boolean heldSlotFrees = hand == EquipmentSlot.HAND && held.getAmount() == 1;
+        OldHelmet goes = hasOld ? oldHelmet(PrizeService.bound(old), inv.firstEmpty() != -1, heldSlotFrees)
+                : OldHelmet.NONE;
+        if (goes == OldHelmet.REFUSE) {
             player.sendMessage(Text.of("&7Make room in your bag first: what's on your head goes there."));
             Sounds.refused(player);
             return;
         }
+        // The old helmet's place is found before anything moves: a free bag slot, else the held stack's own.
+        int slot = goes == OldHelmet.BAG ? (inv.firstEmpty() != -1 ? inv.firstEmpty() : inv.getHeldItemSlot()) : -1;
         ItemStack hat = held.clone();
         hat.setAmount(1);
-        player.getInventory().setHelmet(hat);
         held.setAmount(held.getAmount() - 1);
-        if (old != null && !old.getType().isAir()) {
-            player.getInventory().addItem(old).values()
-                    .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        inv.setItem(hand, held.getAmount() > 0 ? held : null);
+        inv.setHelmet(hat);
+        if (goes == OldHelmet.BAG) {
+            inv.setItem(slot, old.clone());
+        }
+        if (plugin.looks() != null && (PrizeService.bound(hat) || goes == OldHelmet.DELETE)) {
+            plugin.looks().marks(player); // a worn Keeper's mark starts (or stops) with its key
         }
         Sounds.received(player);
     }
 
+    /** What happens to the helmet a hat replaces. Never the ground. */
+    enum OldHelmet { NONE, DELETE, BAG, REFUSE }
+
     /**
-     * A swap that would drop the old helmet is refused when the old one is a collector (review R1).
-     * The old helmet goes to the bag; it fits when there is a free bag slot, or when the held stack is
-     * the last one in the main hand, whose slot it then takes (the off-hand isn't part of the bag).
+     * The old helmet: a bound key is deleted ("Wear it" makes it again); anything else goes into the bag, which it
+     * fits when there is a free bag slot, or when the held stack is the last one in the main hand, whose slot it then
+     * takes (the off-hand isn't part of the bag); otherwise the wear is refused.
      */
-    static boolean keepsOldOn(boolean oldIsCollector, boolean bagHasRoom, boolean heldSlotFrees) {
-        return oldIsCollector && !bagHasRoom && !heldSlotFrees;
+    static OldHelmet oldHelmet(boolean oldBound, boolean bagHasRoom, boolean heldSlotFrees) {
+        if (oldBound) {
+            return OldHelmet.DELETE;
+        }
+        return keepsOldOn(bagHasRoom, heldSlotFrees) ? OldHelmet.REFUSE : OldHelmet.BAG;
+    }
+
+    /** A swap is refused when the old helmet has nowhere to go in the bag (review R1; 0.38: any helmet). */
+    static boolean keepsOldOn(boolean bagHasRoom, boolean heldSlotFrees) {
+        return !bagHasRoom && !heldSlotFrees;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

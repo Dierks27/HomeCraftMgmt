@@ -312,18 +312,65 @@ public final class TokenService {
 
     // ---- earning: login streak + playtime -------------------------------------------
 
+    /**
+     * What the login streak, the playtime tokens and the achievement sweep do in one world (0.38, SHOP-V2-SPEC
+     * §5.12, S6a; ECONOMY-V2 §5.1 A6).
+     */
+    public enum Earns {
+        /** Neither an economy world nor a world the Games are played in: nothing (the sandbox logs it). */
+        NOTHING,
+        /** A Games world the Games allow: the streak and the playtime, so a day spent there still counts. */
+        STREAK_AND_PLAYTIME,
+        /** An economy world: the streak, the playtime and the achievement sweep, as before. */
+        EVERYTHING;
+
+        /** Whether the streak and the playtime are paid here. */
+        public boolean pays() {
+            return this != NOTHING;
+        }
+
+        /** Whether the achievement sweep runs here: economy worlds only. */
+        public boolean sweeps() {
+            return this == EVERYTHING;
+        }
+    }
+
+    /**
+     * Where the streak and playtime are paid (pure): an economy world as always, and from 0.38 also a world the
+     * Games may be played in while they are on ({@code games.enabled} and {@code PlayGate.worldAllowed}), so the
+     * daughter's streak and playtime count on a day she spends in the Games world. Still one streak claim per
+     * local day ({@link #decideStreak}); the achievement sweep stays in economy worlds.
+     *
+     * @param economyWorld the economy sandbox allows the world
+     * @param gamesWorld   the Games are on and may be played in the world
+     */
+    public static Earns earnsHere(boolean economyWorld, boolean gamesWorld) {
+        if (economyWorld) {
+            return Earns.EVERYTHING;
+        }
+        return gamesWorld ? Earns.STREAK_AND_PLAYTIME : Earns.NOTHING;
+    }
+
+    /** {@link #earnsHere(boolean, boolean)} for where the player stands now. */
+    private Earns earnsHere(Player player) {
+        var games = plugin.games();
+        boolean gamesWorld = games != null && games.config().enabled() && games.gate().worldAllowed(player.getWorld());
+        return earnsHere(plugin.sandbox().allowed(player.getWorld()), gamesWorld);
+    }
+
     /** On join: today's streak token (once per local day) and any playtime catch-up. */
     public void onJoin(Player player) {
         if (!plugin.config().arcade().enabled()) {
             return;
         }
-        if (!plugin.sandbox().allowed(player.getWorld())) {
+        Earns here = earnsHere(player);
+        if (!here.pays()) {
             plugin.sandbox().log(player, "login-streak / playtime tokens");
             return;
         }
         claimStreak(player);
         grantPlaytime(player);
-        if (plugin.achievements() != null) {
+        if (here.sweeps() && plugin.achievements() != null) {
             plugin.achievements().sweep(player);
         }
     }
@@ -333,12 +380,16 @@ public final class TokenService {
      * midnight pays the next streak day without a relog) and any playtime milestone.
      */
     private void tick(Player player) {
-        if (!plugin.config().arcade().enabled() || !plugin.sandbox().allowed(player.getWorld())) {
+        if (!plugin.config().arcade().enabled()) {
+            return;
+        }
+        Earns here = earnsHere(player);
+        if (!here.pays()) {
             return;
         }
         claimStreak(player);
         grantPlaytime(player);
-        if (plugin.achievements() != null) {
+        if (here.sweeps() && plugin.achievements() != null) {
             plugin.achievements().sweep(player); // statistics, balance, collection: nothing pushes those
         }
     }

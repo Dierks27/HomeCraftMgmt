@@ -139,6 +139,38 @@ class MenusBeforeInventoriesSaveTest {
         assertEquals(1, tray.closes, "even when asked again directly");
     }
 
+    /**
+     * A trade window (SHOP-V2-SPEC §4.5): Multiverse-Inventories is about to save everyone's things, so the window
+     * closes first, once, and its close cancels the trade. Nothing had left either bag (the table only points at bag
+     * slots), so nothing moves and nothing is handed back.
+     */
+    @Test
+    void aTradeWindowClosedAtMultiverseInventoriesDisableCancelsAndMovesNothing() {
+        java.util.UUID a = java.util.UUID.randomUUID();
+        java.util.UUID b = java.util.UUID.randomUUID();
+        com.dierks.homecraft.trade.TradeSession<String> session =
+                new com.dierks.homecraft.trade.TradeSession<>(a, b, 1_500, 3);
+        String[] bag = {"diamond x3", "Creeper Mini"};
+        session.put(com.dierks.homecraft.trade.TradeSession.Side.A, 0, bag[0], 3, 0);
+        session.put(com.dierks.homecraft.trade.TradeSession.Side.A, 1, bag[1], 1, 0);
+        int[] closes = {0};
+        Viewer[] ava = new Viewer[1];
+        com.dierks.homecraft.gui.trade.TradeMenu window = new com.dierks.homecraft.gui.trade.TradeMenu(
+                com.dierks.homecraft.trade.TradeSession.Side.A, null, p -> {
+                    closes[0]++;
+                    session.cancel(com.dierks.homecraft.trade.TradeSession.Cause.CLOSED);
+                });
+        ava[0] = new Viewer(window);
+        assertTrue(SessionRecoveryListener.closeMenusBefore("Multiverse-Inventories", List.of(ava[0].player), LOG));
+        assertEquals(1, closes[0], "the trade window closed once, before the save");
+        assertEquals(com.dierks.homecraft.trade.TradeSession.Phase.CANCELLED, session.phase(), "the trade is off");
+        assertEquals("diamond x3", bag[0], "nothing left the bag");
+        assertEquals("Creeper Mini", bag[1]);
+        assertFalse(session.beginSwap(Long.MAX_VALUE), "and nothing can swap after it");
+        Menu.closeAll(List.of(ava[0].player), LOG);
+        assertEquals(1, closes[0], "this plugin's own disable doesn't close it again");
+    }
+
     @Test
     void otherPluginsDisablingLeaveTheMenusOpen() {
         Tray tray = new Tray(3);

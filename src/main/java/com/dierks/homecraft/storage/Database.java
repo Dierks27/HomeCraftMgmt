@@ -977,6 +977,56 @@ public final class Database {
                 payouts    TEXT    NOT NULL DEFAULT '',
                 PRIMARY KEY (course, week)
             )
+            """,
+            // v37 — the wardrobe (SHOP-V2-SPEC §3.2): the rights to worn looks. kind is TRAIL or HAT (a cap is a
+            //   HAT); every row written before v37 is a trail (TrailService.grant was the only writer). since is the
+            //   start of the current run (0 = a row from before v37). notice_for is the expires_at the last heads-up
+            //   was sent for, notice_stage what was sent (0 none, 7 the 7-day one, 1 the 1-day one, -1 the end).
+            //   given_by is the UUID of whoever paid for the current run as a present ('' = bought for themselves). A
+            //   HAT row's enabled is always 0, so a 0.37 jar's "any trail on" query and enableOnly never see it.
+            """
+            ALTER TABLE cosmetics_owned ADD COLUMN kind TEXT NOT NULL DEFAULT 'TRAIL';
+            ALTER TABLE cosmetics_owned ADD COLUMN since INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE cosmetics_owned ADD COLUMN notice_for INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE cosmetics_owned ADD COLUMN notice_stage INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE cosmetics_owned ADD COLUMN given_by TEXT NOT NULL DEFAULT ''
+            """,
+            // v38 — the trade window's log (SHOP-V2-SPEC §4.12): one row per trade that ended, written in the swap's
+            //   own transaction (PENDING, flipped to DONE once both bags are saved; VOID if an admin voids a PENDING
+            //   one) or when a trade with something on the table was cancelled (CANCELLED, summaries only). a_items /
+            //   b_items are one Items.toBase64 per line, kept whole while the trade is PENDING (red-team finding
+            //   TCR4-5), at most 64 KB a side after (past that, '' and the summary says so); summaries are plain
+            //   text; mailbox is the stacks sent to a Mailbox. moved is what the swap's transaction moved besides the
+            //   stacks, one line each (a Mini's owner, a collector claim, a cap going home), so a void puts them back
+            //   (red-team findings D4, R4FA-2). a_before / b_before are each side's balance just before the swap's
+            //   money moved (null: no money, or Vault couldn't say; red-team finding TCR4-3). (A 0.38 test build had
+            //   a checked column here; no start reads a finished trade now, so it is gone: red-team findings AW-1,
+            //   AW-2. A database that has it keeps it, unread.)
+            """
+            CREATE TABLE IF NOT EXISTS trades (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                a          TEXT    NOT NULL,
+                a_name     TEXT    NOT NULL,
+                b          TEXT    NOT NULL,
+                b_name     TEXT    NOT NULL,
+                world      TEXT    NOT NULL,
+                opened_at  INTEGER NOT NULL,
+                closed_at  INTEGER NOT NULL,
+                outcome    TEXT    NOT NULL,
+                reason     TEXT    NOT NULL DEFAULT '',
+                a_items    TEXT    NOT NULL DEFAULT '',
+                b_items    TEXT    NOT NULL DEFAULT '',
+                a_summary  TEXT    NOT NULL DEFAULT '',
+                b_summary  TEXT    NOT NULL DEFAULT '',
+                a_money    REAL    NOT NULL DEFAULT 0,
+                b_money    REAL    NOT NULL DEFAULT 0,
+                mailbox    INTEGER NOT NULL DEFAULT 0,
+                moved      TEXT    NOT NULL DEFAULT '',
+                a_before   REAL,
+                b_before   REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_trades_a ON trades (a, closed_at);
+            CREATE INDEX IF NOT EXISTS idx_trades_b ON trades (b, closed_at)
             """
     };
 
@@ -999,6 +1049,8 @@ public final class Database {
     private final java.util.logging.Logger log;
     private Connection connection;
     private File dbFile;
+    /** The schema version the file was at when it was opened, before any migration ran (0 = a new file). */
+    private int openedAt;
 
     public Database(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -1111,6 +1163,14 @@ public final class Database {
         return dbFile;
     }
 
+    /**
+     * The schema version this database was at when it opened, before this start's migrations (0 = a new file), so
+     * a one-time step can tell the start that brought a version (the 0.38 shop's "Hats bought before 0.38" line).
+     */
+    public int openedAt() {
+        return openedAt;
+    }
+
     private void migrate() throws SQLException {
         migrate(MIGRATIONS.length);
     }
@@ -1122,6 +1182,7 @@ public final class Database {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
+            openedAt = current;
             String newer = newerSchemaWarning(current);
             if (newer != null) {
                 // Written by a newer HomeCraft (this jar was rolled back under it): nothing runs and the stored
@@ -1135,16 +1196,30 @@ public final class Database {
             }
             for (int v = current + 1; v <= last; v++) {
                 log.info("Applying database migration v" + v + "…");
-                try (Statement st = connection.createStatement()) {
-                    for (String stmt : MIGRATIONS[v - 1].split(";")) {
-                        if (!stmt.isBlank()) {
-                            st.execute(stmt);
-                        }
-                    }
-                }
-                setSchemaVersion(v);
+                apply(v, MIGRATIONS[v - 1]);
             }
         }
+    }
+
+    /**
+     * Run one migration block and record it as schema {@code v}, in one {@link #transaction} (SHOP-V2-SPEC D39):
+     * SQLite DDL is transactional, so a block lands whole with its version or not at all, and a server that died
+     * half-way through one starts the next time on the version before it. Each statement used to commit on its
+     * own, so a failure after v37's second ALTER would have left a database that refuses to start ("duplicate
+     * column name"). No block holds a PRAGMA or a VACUUM, which can't run inside a transaction.
+     */
+    void apply(int v, String block) throws SQLException {
+        transaction(c -> {
+            try (Statement st = c.createStatement()) {
+                for (String stmt : block.split(";")) {
+                    if (!stmt.isBlank()) {
+                        st.execute(stmt);
+                    }
+                }
+            }
+            setSchemaVersion(v);
+            return null;
+        });
     }
 
     /**

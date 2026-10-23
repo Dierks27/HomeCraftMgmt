@@ -29,6 +29,11 @@ import java.util.UUID;
  */
 public final class MiniService {
 
+    /** {@code mini_sales.venue} of a copy that changed hands in the trade window (price 0; SHOP-V2-SPEC §4.11). */
+    public static final String VENUE_TRADE = "TRADE";
+    /** {@code mini_sales.venue} of a copy given away: a trade whose receiver gave nothing (price 0). */
+    public static final String VENUE_GIFT = "GIFT";
+
     public record MintResult(boolean ok, String error, long mintNumber) {
         static MintResult fail(String error) {
             return new MintResult(false, error, 0);
@@ -770,6 +775,67 @@ public final class MiniService {
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to log Mini sale for " + uid + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * One Mini copy the trade window moves (SHOP-V2-SPEC §4.6 step 5, §4.11).
+     *
+     * @param venue {@link #VENUE_TRADE}, or {@link #VENUE_GIFT} when the receiver's side gave nothing
+     */
+    public record MiniMove(String uid, String miniId, java.util.UUID receiver, String venue) {
+    }
+
+    /**
+     * Move the owner of every copy in {@code moves} and log each as a sale at price 0, inside the caller's
+     * transaction. Unlike {@link #transferOwner} and {@link #recordSale} it throws, so a half-done swap can't commit.
+     * The sale's seller is the copy's RECORDED owner (who handed it over is in the trade log: no code checks that a
+     * holder is its owner, red team D-m4); the buyer is the receiver.
+     *
+     * @return each copy's recorded owner before the move (null for none), in order, so the trade can put it back
+     */
+    public java.util.List<java.util.UUID> tradeOwners(java.util.List<MiniMove> moves, long now) throws SQLException {
+        return tradeOwners(dao, moves, now);
+    }
+
+    /** {@link #tradeOwners(java.util.List, long)} over any {@link MiniDao} (a test's in-memory one). */
+    public static java.util.List<java.util.UUID> tradeOwners(MiniDao dao, java.util.List<MiniMove> moves, long now)
+            throws SQLException {
+        java.util.List<java.util.UUID> before = new java.util.ArrayList<>();
+        for (MiniMove m : moves) {
+            java.util.UUID recorded = dao.individual(m.uid()).map(MiniDao.Individual::owner).orElse(null);
+            dao.updateOwner(m.uid(), m.receiver());
+            dao.recordSale(m.uid(), m.miniId(), 0, recorded, m.receiver(), m.venue(), now);
+            before.add(recorded);
+        }
+        return before;
+    }
+
+    /** {@link #tradeBack(MiniDao, String, java.util.UUID, java.util.UUID, long)} over this service's dao. */
+    public boolean tradeBack(String uid, java.util.UUID before, java.util.UUID receiver, long soldAt)
+            throws SQLException {
+        return tradeBack(dao, uid, before, receiver, soldAt);
+    }
+
+    /**
+     * A trade that moved a copy was voided (red-team finding D4): its owner goes back to {@code before} and the
+     * trade's price-0 sale row goes, inside the caller's transaction, but only while the copy is still as the swap
+     * left it: {@code receiver}'s, with that sale row (buyer {@code receiver}, at {@code soldAt}) still its newest. A
+     * later trade of the same copy (a redo of the same hand-over leaves the same owner) or any later sale writes a
+     * newer row, so it is left as it is (red-team findings R4FA-2, TCR4-1).
+     *
+     * @return false when the copy has moved on since (or has no record), and nothing was changed
+     */
+    public static boolean tradeBack(MiniDao dao, String uid, java.util.UUID before, java.util.UUID receiver,
+                                    long soldAt) throws SQLException {
+        MiniDao.Sale last = dao.latestSale(uid).orElse(null);
+        if (last == null || last.soldAt() != soldAt || !receiver.equals(last.buyer()) || last.price() != 0) {
+            return false;
+        }
+        if (!dao.ownerBack(uid, receiver, before)) {
+            return false;
+        }
+        dao.deleteTradeSale(uid, receiver, soldAt, java.util.List.of(VENUE_TRADE, VENUE_GIFT));
+        return true;
     }
 
     /**

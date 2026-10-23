@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.37.3-christmas`
+- **Version:** `0.38.0-shop-and-trade`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -36,6 +36,10 @@ and the How It Works **Guide**.
 - **Shop blocks stay yours (0.37.3):** only whoever placed a Vending Machine, Display Case or
   Pallet (or an admin) can break it, and everything in it goes back to whoever stocked it, in their
   Mailbox. See [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
+- **The trade window (0.38):** `/trade <name>`, or crouch and right-click someone with an empty
+  hand: both put things on one table, both press Ready, and it swaps in one go. Nothing leaves a bag
+  before that, Minis change owner, what doesn't fit goes to the Mailbox, and money can go in except
+  with an Arcade prize. See [The trade window](#the-trade-window-038).
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
   (signs, holograms, TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
   `/api/minis`, `/api/news`, `/api/arcade`) also drive the LilahCraft website, behind an
@@ -78,16 +82,26 @@ Tokens are **earned by playing and never become dollars**.
     you play, eight free arcade cabinets (Creeper Sweeper, Snake, Connect Four and more), and time
     trials and mini golf in a Games world. A Take a break screen sets your own limits. They ship
     off; see [Games (0.35)](#games-035).
-- **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
-  Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
-  LuckPerms and EssentialsX), and a numbered Arcade Trophy; holiday collectors you keep for good
-  and can give to someone online (Halloween: the Pumpkin Cap 2026 and the Autumn Leaves 2026 trail;
-  Christmas: the Santa Cap 2026 and the Twinkle 2026 trail).
+- **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck, Bouncy Boots,
+  Floaty Feather), Make it Day and Sunny Day, the Mini Radar and Lure, a Firework Show and Party
+  Time, particle trails for a month, hats and caps for 90 days and golf balls to keep on the
+  **Looks** tab, perks (extra homes and `/hat` via LuckPerms and EssentialsX), the numbered Arcade
+  Trophy (place it and tap it to open the Arcade), a trophy ladder and a Trophy of the Month;
+  holiday collectors you keep for good and can give to someone online (Halloween: the Pumpkin Cap
+  2026 and the Autumn Leaves 2026 trail; Christmas: the Santa Cap 2026 and the Twinkle 2026 trail);
+  and the **Keepers** (0.38): the Legend Crown, three keeper trails and two keeper hats, yours for
+  good. See [The token shop](#the-token-shop-my-looks-and-the-keepers-038).
+- **Worn looks run out, nothing else does (0.38):** hats and caps last 90 days and trails 30, with a
+  heads-up a week and a day before, and they can be bought again at the same price. **My Looks**
+  lists every hat, cap and trail you have, with its date: one tap wears one or switches it on, and a
+  switch hides other people's trails and parties, just for you.
 - **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
   money path, inside a bundle or shulker box too (one packed too deep to check counts as a prize).
 - **Prizes are safe:** kept when you die, never despawn or burn (carried loose, not inside a bundle
   or shulker box), and can't be washed, renamed, re-trimmed or enchanted. A placed hat or trophy
-  can't be pushed, washed or blown off, and only whoever placed it can break it (0.37.3).
+  can't be pushed, washed or blown off, and only whoever placed it can break it (0.37.3). A rented
+  hat or a Keeper can't be dropped, placed, traded or put in a chest (your own ender chest is fine),
+  and My Looks makes a lost one again for free (0.38).
 - **Animations are only a show:** every result is decided and paid first, so closing early
   just prints the result. Bedrock players get shorter animations and plain icons.
 
@@ -188,6 +202,14 @@ fair-play watch judges modifier names again: any modifier on a watched movement 
 sprinting and powder snow, or a base off a player's own, voids a run. Anything already in a Mailbox
 stays there and can be collected. Nothing is deleted. See [Christmas 2026](#christmas-2026-0373)
 and [Shop blocks and the Mailbox](#shop-blocks-and-the-mailbox-0373).
+
+**Back to 0.37.3 from 0.38.0:** the jar alone (0.37.3 reads revision 22 and the v38 database and
+runs nothing), with a few quirks while rolled back: the Trophy of the Month is unlimited, Make it Day
+and Sunny Day sell at noon and in sunshine, **a ladder trophy bought then is named "Arcade Trophy #N"
+for good**, rented hats and Keepers are ordinary prize items, and the Looks tab's rows show elsewhere
+or not at all. For more than an evening, switch off eight rows. See
+[If you roll back to 0.37.3](#if-you-roll-back-to-0373). Nothing else is lost, and the upgrade puts the
+rest back.
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
 by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
@@ -488,7 +510,9 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm quests` | `hcm.quests.use` | Your daily and weekly quests |
 | `/hcm achievements` | `hcm.achievements.use` | Your achievements, grouped, with progress |
 | `/hcm guide [tokens\|minis\|wild\|arcade\|games]` | `hcm.guide.use` | How It Works |
-| `/hcm trail [name\|off]` | all | Switch your particle trail |
+| `/hcm trail` | all | My Looks (0.38; it was a switch). `/hcm trail <name>\|off\|toggle\|next\|hide\|show`: [see 0.38](#commands-038) |
+| `/hcm looks` | `hcm.arcade.use` | My Looks: your hats, caps and trails (0.38) |
+| `/trade [player]` | `hcm.trade.use` | The trade window (0.38): [see below](#the-trade-window-038) |
 | `/hcm packs` | all / admin | The pack shop; admins get the pack editor |
 | `/hcm tokens` | all | Your token balance |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance (what it gives back). Admins: the per-stake detail, the Scratch Ticket RTP and each crate's value at counter prices |
@@ -513,6 +537,584 @@ per total under `sethome-multiple` in `plugins/Essentials/config.yml` (`hcm_2: 2
 
 ---
 
+## The token shop, My Looks and the Keepers (0.38)
+
+0.38.0 rebuilds the Prize Counter around the owner's rule: **anything worn on the player runs out;
+everything else is kept.** Hats and caps last 90 days and trails 30 days for 100 tokens, and a look
+can be bought again at the same price. Trophies, golf balls, `/hat`, the extra homes, the Collectors
+and the Keepers are yours for good. It adds a **Looks** tab and a **Keepers** tab, the trophy ladder,
+golf balls, Party Time, Make it Day and Sunny Day, **My Looks**, and a switch that hides other
+people's trails and parties. It is config revision 22 and database v38: see
+[Upgrading to 0.38](#upgrading-to-038-revision-22) and [If you roll back to 0.37.3](#if-you-roll-back-to-0373).
+
+### The shelf
+
+| Tab | New or changed in 0.38 | Tokens | Lasts |
+|---|---|---|---|
+| Boosts | **Bouncy Boots** (jump boost) and **Floaty Feather** (slow falling), items like the other boosts | 6 each, 5 a day | 10 minutes when used |
+| Boosts | **Make it Day!** | 20, 1 a day | at once, in the world you're in; refused at no charge while it is day ("It's already day!") |
+| Boosts | **Sunny Day** | 20, 1 a day | 10 minutes of clear sky in your world; refused at no charge when it isn't raining ("It isn't raining!") |
+| Hunt Gear | the Mini Radar and the Mini Lure | 25 / 40 | hidden (and out of crates) while the server has no wild hunt |
+| Cosmetics | the **Snow, Star, Clover, Glow** and **Magic** trails, next to the Heart, Music and Sparkle trails | 100 | **30 days** (the old three were 7) |
+| Cosmetics | **Party Time!** | 300, 1 a day | 10 seconds of harmless fireworks around everyone playing; one party at a time on the server |
+| Looks (new) | the **Creeper Hat** and the **Dragon Hat** (the game's own heads) | 120 / 150 | 90 days |
+| Looks | the **Pink, Purple, Lime** and **Sky Caps** (dyed leather, no armour, never wear out) | 60 | 90 days |
+| Looks | the six animal hats (Bunny, Panda, Fox, Penguin, Frog, Cake), moved from Cosmetics | 120 | 90 days; hidden until you paste a texture |
+| Looks | ten **golf balls**: Pink, Purple, Lime, Sky, Orange, Red, Yellow and Black (40 each), Gold (250), Diamond (600) | | for good |
+| Looks | the Pumpkin Cap 2026 and the Santa Cap 2026 (collectors), moved from Cosmetics | 250 | for good |
+| Trophies | the **Arcade Trophy** costs a bit more each time: 750, 1,000, 1,250, then 1,500 | | for good |
+| Trophies | the **trophy ladder**: Bronze 300, Silver 1,000, Gold 2,000, Diamond 3,500, Legend 5,000, each needing the one before | one each | for good |
+| Trophies | the **Trophy of the Month** ("November 2026 Trophy #4") | 1,000, one a month | for good |
+| Keepers (new) | the **Legend Crown** (with its own Royal Trail) 5,000; the **Aurora, Stardust** and **Frost** trails 3,000 each; the **Wizard Hat** and the **Knight's Helm** 2,500 each | one each | for good; never given or traded |
+
+- **The Arcade Crate holds no hats any more** (hats are bought, never won): its hat share went to the
+  Firework Show (weight 15 to 18), and its 1-day trail never draws a collector or a Keeper.
+- **A trophy is named from its row** ("Bronze Trophy #3", "Bought by <name>"). The server hears about
+  it ("✦ <name> got the Bronze Trophy #3!") at most once a minute a player. A trophy bought with a
+  full bag goes to the Mailbox, never the ground. The ladder trophies wear the Arcade machine's head
+  until you paste their pictures (`texture` on their rows).
+- **Every limited buy is one transaction:** the charge, the limit and a trophy's number are written
+  together, so a double tap on Confirm is charged once, and a failed save charges nothing ("That
+  couldn't be saved - nothing charged. Tell an admin.").
+- **Make it Day and Sunny Day act on the buyer's world** (`execute as <their uuid> at @s run time set
+  day`, `... weather clear 12000`). If the command ran but nothing changed (still night, still raining),
+  the tokens go back: "That didn't work - nothing charged. Tell an admin." Day and night are read on the
+  world's clock (night is 12523 to 23477, the hours the sky is dark in clear weather), so a
+  thunderstorm at noon is still day, and in the Nether or the End Make it Day is refused at no charge
+  ("There's no day or night here!").
+- **Party Time** sets off two fireworks around each player in an economy world every second, except
+  anyone in a game or a Games world and anyone who hides other people's trails and parties (the buyer
+  always gets theirs); "✦ <name> started a party!" goes out once. While one runs, another is refused
+  at no charge ("A party is on right now - try again in a moment."). A party is on until its own last
+  round, so one bought the moment the last ends always gets its full ten seconds.
+- **Good to know:** a rented cap is a dyed leather cap and the mob hats are the game's own heads, so
+  anyone can craft the look; what the tokens buy is that it can't be lost and comes back free. A
+  creeper head also makes creepers notice you later (a game rule). The worn Keepers carry a small
+  sparkle of their own (a **mark**) that nobody can craft.
+
+### Kept or rented, at a glance
+
+| Runs out (rented) | Kept for good |
+|---|---|
+| Hats and caps from the Looks tab: 90 days (Creeper, Dragon, the four caps, and the animal hats once switched on) | Collectors (caps and trails), Keepers (the Crown, the hats, the trails), trophies, golf balls, `/hat`, +1 Home, hats bought before 0.38 |
+| Trails from the Cosmetics tab: 30 days; a crate's trail: 1 day | Boosts, fireworks and other items are used up, not rented |
+
+### Rented looks
+
+- **The right is in the database; the hat is a key.** A rented hat or cap is an item bound to its
+  owner (`hcm:bound_to`). It works only on its owner's head and only while the rental runs, so a lost
+  one costs nothing: My Looks makes it again for free. A key that isn't its holder's is removed when
+  it is seen.
+- **It ends at local midnight** (`clock.time_zone`): a 90-day buy on 20 Oct is "yours until 18 Jan" and
+  ends at 00:00 on 19 Jan. The date is in the name ("Pink Cap - until 18 Jan"), because Bedrock shows
+  lore only on a long press.
+- **Buy again** opens 7 days before the end and stays open until 30 days after it, **at the same
+  price** (hats 120, the Dragon Hat 150, caps 60, trails 100). Before that a buy is refused at no
+  charge ("You have it until 18 Jan. You can buy it again from 12 Jan."). A renewal adds its days to
+  the last day. **Nothing renews by itself.**
+- **The heads-up:** 7 days before the end, the day before, and at the end, a title (Bedrock reads
+  titles: "Your Pink Cap: 7 days left", "Last day for your Pink Cap!", "Your Pink Cap went back to the
+  shop") and a chat line. On Java the chat line has a clickable `[Buy again]`, which only opens the look
+  screen: nothing is ever bought from chat. A heads-up waits while you're in a game or a Games world,
+  and on Bedrock while any chest screen is open (the Arcade's cabinet games too, since the screen
+  covers the title): it comes the minute after the screen closes. It comes about five seconds after
+  joining; someone who was offline gets only the latest one due. A crate's 1-day trail ends with one
+  chat line and no title or price, and so does a trail from before 0.38 (0.37 can't tell a crate's day
+  from a bought trail, and ended every trail with one line). Ends that happened before the upgrade
+  aren't said again. When several come at once, only those with a title of their own count toward
+  "2 looks end soon", so two crate trails ending together bring no title up.
+- **When a present is ending,** whoever gave it gets one chat line a week before ("The Lime Cap you
+  gave <name> ends on 18 Jan."), with a Java `[Give it again]` that opens Give a present on that look
+  and person. It comes with the receiver's own week-before heads-up; if they didn't come by that week,
+  it comes with whichever of theirs comes first (the last day's, or the end's: "... ended on 18
+  Jan."), so the giver always hears once. A giver who is offline then gets it at their next join, even
+  after a restart (it waits in `game_prefs`).
+- **At the end** the hat comes off, every key of that look is deleted when it is next seen, and a trail
+  switches off. If the trail that ended was the one on, your newest kept trail (a collector or a
+  Keeper) comes on instead ("Your Heart Trail ended - your Autumn Leaves 2026 are on now."); if a hat
+  came off your head and a collector cap is in your bag, the cap goes on. My Looks keeps an ended look
+  for 30 days, with Buy again.
+- **A key stays with its owner:** it can't be placed, dropped, put in any container but your own ender
+  chest, put on an armor stand, an item frame, a decorated pot, a shelf or an allay, traded or given.
+  One that reaches the ground anyway is deleted (Wear it makes it again). An admin's `/invsee` or `/ec`
+  of someone's things deletes nothing; a key left in a block's container is deleted when it closes.
+  **A bundle or shulker box with a key inside** (only Creative can put one there) is held to the same
+  rules: it can't be placed, dropped or put in a chest, and if one reaches a closed chest or the ground
+  anyway, the key is taken out and everything else in it stays.
+- **Hats bought before 0.38** (only possible where an owner pasted textures) stay exactly as they were:
+  kept for good, placeable and tradeable. The first start of 0.38 logs one line: `Hats bought before
+  0.38: none`, or who has which.
+- Rented hats can't be placed as blocks. Trophies still can.
+
+### My Looks
+
+Open it from the Wallet (its slot 16, "My Looks"), with `/hcm looks` or `/hcm trail`, or from the
+Keepers tab.
+
+- **The top row:** what's on your head (tap to take it off; it stays in My Looks) and your trail (tap to
+  switch it off, and tap again to switch the last one back on). A collector cap or any other helmet on
+  your head is named there too ("On your head: Pumpkin Cap 2026 (yours for good)"), with no tap.
+- **Hats & caps** and **Trails**, 16 of each a page, every tile named with its state: "✔ on your head",
+  "until 18 Jan", "6 days left" (and the stack shows the days left, so a child who can't read still sees
+  a small number), "ended", or "yours for good". Collector caps are listed too, with where each one is:
+  "on your head", "in your bag", "in your ender chest" or "not with you".
+- **One tap acts:** a hat tile wears it (made again if it was lost), a trail tile switches it on, and a
+  collector cap in your bag or off-hand goes on your head. The
+  worn hat, the trail that's on and an ended look open the look screen: Wear it or Take it off, Turn it
+  on or off, and **Buy again** while its window is open.
+- **Slot 46, "Other people's trails and parties: Shown - tap to hide"** (an ender eye; an ender pearl
+  while hidden), just for you: it hides other players' trails, the Keepers' marks and the Party Time
+  fireworks around you. Your own trail always shows to you. `/hcm trail hide` and `/hcm trail show` do
+  the same.
+- "Get more looks" and "Get more trails" go to the Prize Counter.
+
+### The Keepers
+
+The adults' long goals. They are built into the plugin, like the Collectors, so no config edit can
+change or remove one. One each, kept for good, bound to their owner, never a present, never traded.
+
+| Keeper | Tokens | What it is |
+|---|---|---|
+| **Legend Crown** | 5,000 | a gold crown with a trim and a glint, numbered "No. 1", "No. 2"...; it comes with its own **Royal Trail**, totem sparkles just over the crown |
+| **Aurora Trail** | 3,000 | green and purple lights floating up around you |
+| **Stardust Trail** | 3,000 | golden sparkles drifting down behind you |
+| **Frost Trail** | 3,000 | icy sparkles and snow at your feet |
+| **Wizard Hat** | 2,500 | a midnight-blue hat with golden swirls; its mark is a little magic |
+| **Knight's Helm** | 2,500 | a shining knight's helmet with a gold trim, no armour; its mark is a tiny flame |
+
+- **The Keepers tab** is a shelf: the Crown on top, the three trails, the two hats, and My Looks
+  below. A Keeper you don't own reads "<name> - 5000 tokens"; one you own, "Yours! Tap to wear it",
+  or "✔ Wearing it" for the trail that's on and the hat on your head.
+- **A buy is one transaction:** the claim, the rights kept for good (the Crown writes its Royal Trail
+  too), the Crown's number and the charge, so a double confirm is charged once. A hat goes on your
+  head (or into your bag, or My Looks), a trail switches on, and the Crown switches its Royal Trail on.
+- **The mark:** a worn Keeper shows one puff of its own sparkle over the head every 2 seconds while you
+  walk. The Crown's mark is its Royal Trail's puff, and it isn't drawn while the Royal Trail itself is
+  on. A mark isn't a trail: it never counts as "the trail that's on".
+- **Every trail and mark is sent to each viewer:** within 32 blocks, who can see the wearer and doesn't
+  hide others. None shows in a game, a Games world, in spectator mode or while invisible, so a vanished
+  admin's trail doesn't give them away. As before, only while walking and one trail at a time.
+- The Knight's Helm is iron, so no furnace smelts it.
+- **The daughter has no Keeper** (the owner's open question, answered by default): she sees the Crown,
+  but a Keeper can't be given, not even by you. One of her own at about 600 would be a new row in the
+  plugin.
+- `/hcm give prize keeper_<id> <player>` gives one back free (it claims the row; the Crown keeps its
+  number). The Royal Trail comes with the Crown: giving it alone answers "That comes with the Legend
+  Crown: give the Crown."
+
+**The look session (once, after installing 0.38.0, about 15 minutes; you on Java, her on her Bedrock
+screen).** For each Keeper, `/hcm looks preview <id>` puts a stand two blocks in front of you wearing
+it, or with the trail and its mark around it, for 30 seconds; it claims nothing. Look on both screens,
+then keep `default` or set `fallback` for each in `arcade.keepers.looks`, and set
+`arcade.keepers.marks: "off"` if a sparkle is too much on her screen. Judge the Royal Trail and
+Stardust's sparkle on her screen first: they may burst on Bedrock. Restart once at the end; owned
+Keepers change to the picked look at the next check (within a minute). A look neither form fixes is a
+change for 0.38.1.
+
+| Keeper | `default` | `fallback` |
+|---|---|---|
+| Legend Crown | gold leather, the spire trim in redstone, a glint; drawn as a golden helmet on Java | the spire trim in diamond, no glint |
+| Wizard Hat | the flow trim in gold | the silence trim in amethyst |
+| Knight's Helm | the sentry trim in gold | the ward trim in gold |
+| Royal Trail (and the Crown's mark) | totem sparkles | gold honey drips |
+| Aurora Trail | scrape, then reverse-portal sparkles | scrape, then portal sparkles |
+| Stardust Trail | wax sparkles twice, then a crit sparkle | wax sparkles twice, then nectar drips |
+| Frost Trail | dolphin sparkles, then snowball puffs | snowball puffs alone |
+
+At startup the Keeper self-test builds every worn Keeper in both forms and checks every trail step and
+mark: one WARN for anything missing. If the Crown's Java-only parts (its golden-helmet look) don't take,
+the Crown is made without them (the plain gold cap on both editions), with one WARN. Whether the
+golden look shows on a real Java client is one of the look session's checks.
+
+### The Arcade Trophy opens the Arcade
+
+- **Tap a placed Arcade Trophy and the Arcade opens,** with every rule the Arcade Machine has: the
+  economy world (or a Games world the Games use), a tap another plugin cancelled, and build rights when
+  `respect_town_perms` is on. Three more: sneaking passes the tap through (so she can build next to her
+  trophy shelf), `hcm.arcade.use` is checked ("You can't use the Arcade."), and a Bedrock tap on it
+  while holding a hat doesn't put the hat on.
+- Only the Arcade Trophy does this. The ladder trophies wear the same head until you paste their
+  pictures, so a Bronze Trophy tap does nothing.
+- It keeps its name and number, and only whoever placed it (or an admin) can break it (0.37.3). New
+  ones say "Place it and tap it to open the Arcade!". A trophy placed before 0.37.3 works too.
+
+### Golf balls
+
+A golf ball is an unlock you keep, not an item. **Pick your ball** lists the balls you own first, then
+your Minis (Java), then the plain white ball, and **a shop ball shows on both editions**: on Bedrock it
+replaces the white block. A ball keeps working if its row is switched off later, and its colour never
+changes how it rolls.
+
+### Give a present (0.38)
+
+**Give a present** moves to slot 47 and shows on the Cosmetics and Looks tabs. It now covers rented
+looks (a first buy, or buying again for someone whose window is open), golf balls and the collectors.
+Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
+
+- **Which present?** lists every look, trail, ball and collector on sale with its price, 36 a page.
+- **Who is it for?** says why a name can't be picked, in the name: "has it until 18 Jan", "has it",
+  "not here", "in a game". The confirm shows the price for that person (the buy-again price when their
+  window is open).
+- A rented hat as a present never fails for room: it goes on their head, else into their bag, else
+  into My Looks.
+- The giver is remembered and told when the present is a week from ending, or later if its receiver
+  wasn't on that week (above).
+- `arcade.collectors.gifting: false` switches every present off.
+
+### On Bedrock (0.38)
+
+- Notices are titles; every choice is a chest tile; the facts are in the tile's name.
+- A tap on the ground holding a rented hat or a Keeper hat wears it: a key is never placed, so a tap
+  never drops a head.
+- Every shipped worn look is a vanilla item: the game's mob heads, dyed and trimmed leather caps, a
+  gold crown, an iron helm. A cap may show a 1-point armour bar and the Knight's Helm 2: only a picture.
+- **The six animal hats need a texture, and Geyser for her screen.** They stay hidden while
+  `texture: ""`. To switch one on, paste a minecraft-heads.com "Value" into its `texture`, add its skin
+  hash to Geyser's `custom-skulls.yml`, and check it on her screen with `/hcm looks preview <id>`.
+- Keeper trims, the Royal Trail's and Stardust's sparkles, the trophy tap and the preview stands are
+  the look session's live checks.
+
+### Commands (0.38)
+
+| Command | Who | What |
+|---|---|---|
+| `/hcm looks` | `hcm.arcade.use` | My Looks |
+| `/hcm looks renew <id>` | `hcm.arcade.use` | the look screen for one look (the `[Buy again]` link) |
+| `/hcm looks gift <id> <player>` | `hcm.arcade.use` | Give a present on that look and person (the `[Give it again]` link); nothing is bought from chat |
+| `/hcm trail` | all | **opens My Looks** (it was a switch) |
+| `/hcm trail <id>` / `off` / `toggle` | all | switch a trail on, off, or off and back on (unchanged) |
+| `/hcm trail next` | all | your next trail, then off after the last |
+| `/hcm trail hide` / `show` | all | hide or show other people's trails, marks and parties, just for you |
+| `/hcm looks list <player>` | admin | each look: its id, kind, end (or "for good" / "ended") and the last heads-up sent |
+| `/hcm looks give <player> <id> [days]` | admin | a look free: a rental for its row's days (or `[days]`), a Keeper for good (a Keeper refuses `[days]`, since nothing ends one: `/hcm looks preview` shows one without giving it); it arrives like a present, with you as the giver. Their line and yours say where the key went: "It's yours until 23 Oct! It's on your head!" (or "in your bag", or "in My Looks - tap Wear it" when the head and the bag had no room). From the console it is a plain give, with no present moment and no giver: one chat line ("✔ Lime Cap - It's yours until 23 Oct! ...") |
+| `/hcm looks end <player> <id> [days]` | admin | end it now; with `[days]` (a decimal, `5` or `0.5`) move its end to now + days, to try the heads-up |
+| `/hcm looks preview <id>` | admin | the look on a stand in front of you for 30 seconds (a trail around it for 10); claims nothing |
+| `/hcm account move <from> <to> [confirm]` | admin | move every economy record of one account to another ([below](#her-own-java-account-later)) |
+| `/hcm give prize <id> [player]` | admin | as before, and now Keepers too (not a golf ball: it is an unlock, so Give a present gives one) |
+
+### Owner knobs (0.38)
+
+| Key | Default | What it does |
+|---|---|---|
+| `arcade.keepers.on_sale` | `true` | `false` = Keepers nobody owns yet aren't sold; owned ones keep working and still show on the tab |
+| `arcade.keepers.looks.<id>` | `default` | `default` or `fallback` for each of the seven Keepers (the look session above); any other value reads `default`, with one WARN |
+| `arcade.keepers.marks` | `"on"` | `"off"` = no marks. Keep the quotes: YAML reads a bare on/off as true/false (either is read) |
+| `renew_tokens` on a hat row | (none) | a lower price to buy that hat again; trails never read it |
+| `days` on a hat row | `90` | how long it lasts (1-365) |
+| `seconds` on the `party_time` row | `10` | how long a party lasts (5-30) |
+| `games.everyday_cap` | `0` (off) | all arcade goals (each game's daily challenge) together, a day; `15` stops a grinder out-earning everyone ([below](#the-token-shops-economy-038)) |
+| `trade.*` | | [the trade window](#the-trade-window-038) |
+
+The keys are new: the first start of 0.38 writes them into your config.yml with their comments.
+
+### Upgrading to 0.38 (revision 22)
+
+The first start runs config revision 22 (`ShopMigration`) and the database migrations v37 (five
+columns on `cosmetics_owned`: the wardrobe) and v38 (the trade log). Each migration block and its
+version are written in one transaction, so a block is never half done. Revision 22 changes only what
+still holds the value 0.35-0.37.3 shipped:
+
+- the Heart, Music and Sparkle trails last 30 days ("for a month");
+- the six animal hats move to the Looks tab as 90-day rentals; a hat you only gave a picture keeps
+  your picture, with one INFO;
+- the Arcade Trophy gets its rising price (and a lifetime limit of 99, which is what counts them);
+- the 32 new rows are appended at the end of `arcade.prizes`, whatever you did with the old ones (a
+  shipped row you deleted is not put back; an id you already use for a row of your own is kept, with
+  one WARN);
+- the Arcade Crate loses its hat row;
+- three comments are refreshed where they are still the plugin's own words.
+
+A row you changed is kept, with one WARN and the new row as a line to paste. The console reads
+"Config migration: Prize Counter - 32 new rows (...); 10 rows updated (...). Rows you wrote yourself
+are unchanged.", "Config migration: the Arcade Crate no longer holds hats ...", the database migrations
+v37 and v38, and "Hats bought before 0.38: none". Trails already bought keep their end; buying again
+adds 30 days.
+
+### Parent notes
+
+- `/hcm looks list <her name>`: what she has and when each one ends.
+- `/hcm trades show <id>`: exactly what went in a trade, and its Mailbox rows.
+- `/hcm give prize <collector id> <her name>` gives back a collector she traded away, out of season
+  too.
+- The PC's **Trade** site has a **Trade requests: on / off** tile: one tap switches her requests off.
+- **Try things on a free look,** never on what she paid for: `/hcm looks give <her name> cap_lime 2`.
+  Anything that ends, clears or spends on her account uses a free test look, or your own account.
+
+### Her own Java account, later
+
+**Move her things before linking, while both accounts can log in. Linking counts as a new account.** A
+Bedrock player linked to a Java account through Floodgate joins with the Java account's id, so
+everything saved under her Bedrock id stays behind; an unlinked Java account is a new account too.
+
+1. `/hcm account move <from> <to>` lists what would move. With `confirm` it moves every economy record
+   in one transaction: tokens (added, with one ledger line on each side), every buy, limit and claim
+   (golf balls, collectors, Keepers, the Arcade Trophy count), every look and trail, the Crown's
+   number, her settings (her golf ball, the hide switch, trade requests), achievements, quests,
+   counters, binder Cards and every Mini she owns. It is refused, with nothing changed, when the new
+   account already has one of the same looks, claims or Keeper numbers, owns a Mini, or either account
+   is in a game. **So move first and trade second:** Minis traded over first would make the new account
+   own them, and the move would be refused (it says so: trade them back, move, then trade them over).
+2. Her **items** are in the old account's inventory, and they stay there after the move. While both can log in at once (her Bedrock window
+   and the new Java window on the same PC), she trades them across in the trade window. Her rented hats
+   and Keepers can't be traded and don't need to be: the move carries the rights, and Wear it makes new
+   keys. A collector cap trades back to the account that holds its claim.
+
+### If you roll back to 0.37.3
+
+The jar alone is the usual way back: 0.37.3 reads `config_revision: 22` and runs nothing, and says
+once each that the config and the database were written by a newer HomeCraft. While rolled back:
+
+- the Looks rows show under their old tab with a WARN each, and the caps and mob hats are hidden;
+  golf ball and Party Time rows are skipped, and owned balls play white;
+- `limit: per MONTH` is ignored, so **the Trophy of the Month is unlimited**, and `only_if` is ignored,
+  so **Make it Day and Sunny Day sell at noon and in sunshine**;
+- **every trophy bought while rolled back is an "Arcade Trophy #N"**: 0.37.3 names and numbers every
+  trophy row as the Arcade Trophy, so a Bronze to Legend Trophy (or a Trophy of the Month) bought then
+  keeps that name after the upgrade, its one-for-good buy is used up, and the Arcade Trophy's own
+  numbers skip the ones it took. Nothing renames it;
+- a hat bought while rolled back is a plain prize hat, kept for good after the upgrade; rental keys
+  are ordinary prize hats (wearable, placeable, droppable) until the upgrade, when the checks delete a
+  key that ended or isn't its holder's, and Wear it makes it again;
+- Keeper items lose their guard (a chest or a drop can move them; prize safety still keeps them on
+  death), and keeper trails don't show until the upgrade;
+- no trade can lose anything, and the log stays; the Mailbox rows of a trade that didn't finish stay
+  held until `/hcm trades settle` after the upgrade.
+
+**For a rollback longer than an evening,** set `enabled: false` on the `trophy_bronze`,
+`trophy_silver`, `trophy_gold`, `trophy_diamond`, `trophy_legend`, `trophy_month`, `make_it_day` and
+`sunny_day` rows (and back to `true` after the upgrade). Upgrading again doesn't run revision 22
+again (the file says 22); a row deleted while rolled back is not added back (paste it from the WARN
+lines, or `/hcm config reset arcade.prizes`).
+
+**A clean rollback** (only for damaged data): stop the server, copy
+`backups/config-<stamp>-pre-migration.yml` over `config.yml` and `backups/hcm-<stamp>-pre-migration.db`
+over `homecraft.db` (both written at 0.38.0's first start). That **loses every token, buy, trade and
+Mini move since the upgrade.** A revision-21 config with the v38 database then runs revision 22 again
+safely.
+
+---
+
+## The trade window (0.38)
+
+Two players, one screen: both put things on the table, both press Ready, and it swaps in one go.
+**Nothing leaves a bag until then**, Minis change owner, what doesn't fit goes to the Mailbox, and
+money can go in, except in a trade with an Arcade prize. Tokens never. Every trade is logged.
+
+### How to trade
+
+1. **Ask.** `/trade <name>`, or crouch and right-click them **with an empty hand** (a held boost,
+   firework, hat or Mini would also fire on that click). Or the PC's **Trade** site: pick a green name;
+   a grey one says why not ("not here", "busy", "trades off"). If another plugin owns `/trade`, use
+   `/hcm trade <name>` or `/homecraftmanagement:trade <name>`.
+2. **They answer within 30 seconds.** Java gets a chat line with clickable `[Trade]` and `[No thanks]`
+   (`/trade accept` / `/trade deny`; the click itself runs `/homecraftmanagement:trade ...`, so it works
+   even where another plugin owns `/trade`, and the hints then say `/hcm trade`); crouch-clicking back
+   accepts too. The asker sees "Waiting for
+   <name>... (25)". **On Bedrock a "Trade?" screen opens** (the asker in the middle, Yes on the right,
+   No thanks on the left), but only while no chest, crafting table or other screen is open and nothing
+   is on her cursor, so it never closes a chest or drops a stack. Until then she gets the chat line and
+   a reminder over her hotbar every 10 seconds, and the screen opens as soon as she is free. Esc is not
+   an answer, and the screen closes by itself when the request runs out or is called off. **A yes waits
+   the same way:** if the asker opened a chest or a crafting table meanwhile, or carries a stack, the
+   windows open the second both have nothing open ("<name> said yes! Close what you have open and the
+   trade starts."), and a yes that can't start within the request's 30 seconds just runs out ("didn't
+   start in time - nothing changed hands"). A present that arrives mid-trade plays over the window and
+   leaves the trade going.
+3. **The window** (54 slots): your table on the left, theirs on the right, money and Ready along the
+   bottom. Click a stack in your bag to put it all on the table (right-click: one more); click your
+   thing on the table to take it off (right-click: one fewer). **On Bedrock** a tap on a bag stack puts
+   it all on, a tap on a bag stack that is already on adds one more, and a tap on your thing on the
+   table **halves** it. So she can give 3 of her 20 candy apples: tap the stack (20), tap the table
+   three times (10, 5, 2), then tap the stack once more (3). The book in the corner says so ("Tap your
+   things to add. Tap them on the table to take half back."); the book itself does nothing. Armour and
+   the off-hand can't be offered. The table shows pictures: the real things stay in each bag until the
+   swap.
+4. **Money:** `- $10` / `+ $10` on either side of "You give $0"; tap the middle to change the step ($1,
+   $10, $100, $1,000). It can't go past your balance. It reads "No money with Arcade prizes" while a
+   prize is on either table, and "No money here" without Vault.
+5. **Ready.** Both press Ready ("READY ✓"). Any change to either side un-readies both and makes Ready
+   wait 1.5 seconds ("Look again..."). When something you'd get won't fit your bag, your Ready says so:
+   "READY ✓ (2 to Mailbox)". **Giving something away for nothing needs a second tap:** the first tap
+   turns Ready yellow, "Give it away? Tap again", for 5 seconds, and the middle tile shows what is
+   leaving. A tap less than 0.6 seconds after the first (a quick double tap) only asks again.
+6. **3, 2, 1, swapped.** The swap happens in one tick: "Traded!", what you got, and "✉ 2 things from the
+   trade are in your Mailbox (PC or Mailbox)." when some didn't fit.
+
+Close the window, quit, die, change world or game mode, or get moved more than a block, and the trade
+just stops. Nothing has moved, so there is nothing to give back. A server stop or a crash before the
+swap moves nothing either. If something else takes from a stack on your table while the window is open
+(another plugin, `/invsee`), the table follows within half a second and both press Ready again: "Your
+Dirt changed - 32 on the table now.", or "... it's off the table." when none is left.
+
+### What can't be traded
+
+| Thing | What the table says |
+|---|---|
+| A game's kit item | "Game items stay in the game." |
+| A Keeper | "<item> is yours for good - it can't be traded." |
+| A rented look | "Rented looks can't be traded." |
+| A Courier package | "Deliver the package first." |
+| A Museum display copy | "Display copies can't be traded." |
+| The Trick-or-Treat Bag | "Your bag stays with you." |
+| Anything in `trade.refuse_items` | "That can't be traded." |
+| A collector cap the other player already has while you hold its claim too, or one nobody holds a claim for | "<name> already has the <item>!" / "This cap can't be traded - ask an admin." |
+| Bags inside bags too deep to check, or a container that can't be read | "Too many bags inside bags - take some out first." |
+
+A shulker box or bundle holding one of these is refused with the reason for what is inside it. Each
+check runs when something goes on the table and again on the real stacks at the swap. Trails, golf
+balls, homes and tokens aren't items, so they are never in a trade (Give a present carries them).
+Everything else can go: Minis, Cards, packs, filament, HomeCraft blocks, any vanilla item, and Arcade
+prizes item for item (trophies, boosts, fireworks, collector caps).
+
+### Money and barter
+
+- Dollars go through Vault, only in the swap; tokens have no field at all.
+- **No money in a trade with an Arcade prize** on either table: adding money then, or a prize while
+  money is set, is refused ("Take the money off first - Arcade prizes can't be sold."). A prize may go
+  for a Mini or for diamonds: that is barter between players, and it creates no money (a prize dropped
+  for someone does the same today). `trade.money: false` makes every trade items only.
+
+### Minis and collectors
+
+- A Mini that changes hands changes owner in the same transaction as the trade: the Museum, its card's
+  Owner line, the collection achievements and the golf ball follow. Its sale history says "(traded)"
+  or "(gift)" with no price, and its value is still read from its last sale with a price.
+- The same Mini can't be on both tables, or on a table and in a Vending Machine, a Display Case or the
+  Auction at once: that Mini is refused, with a WARN in the log ("Mini <uid> is on the table and in a
+  listing - a copy?").
+- A collector cap's claim moves with it, so its new owner "has it". A cap going back to the account
+  that holds its claim (after an account move) moves no claim.
+
+### The Mailbox and the log
+
+- What doesn't fit goes to the Mailbox, never the ground.
+- Every trade is logged: `/hcm trades [player] [n]` (one line each, 10 by default; a name the server
+  has never seen is said so, "No player called '<name>' has been here."), `/hcm trades show
+  <id>` (everything that went, and its Mailbox rows with what each holds). A trade cancelled with
+  something on the table keeps a short summary. The log keeps 90 days (`trade.log_keep_days`).
+- **A trade the server didn't see finish** logs one WARN at the next server start, and `/hcm trades
+  show <id>` says which way to settle it. Nothing is settled on its own: no bag, Mailbox row, Mini owner
+  or claim moves until you run the settle. The swap marks each bag with the trade (its number and when
+  it happened) as it hands things over, and the mark is saved with the bag, so the next start reads
+  which bags came back from after the trade and writes that on the trade. Each later start reads it
+  again (except "played on", below), counting only the trade's own mark: both bags reading otherwise
+  (a world folder put back) replace the answer, and one bag reading against it while the other can't
+  say makes it "couldn't be read" (the WARN then adds "an earlier start read its bags as ..."). A
+  later trade's mark never changes it. A player the server has no saved data for (a missing or unreadable file, a world folder
+  that isn't there yet), and a player file written since the trade without its mark (a reset player,
+  a fresh world), are never taken for a bag from before the trade: that bag couldn't be read. A
+  plugin reload reads nothing (the bags in memory can't say what is on disk); only a server start
+  does.
+  - **Neither bag was saved** (a hard stop in the few milliseconds of the swap): "Trade #12 between <a>
+    and <b> didn't finish - neither bag was saved with it, ... /hcm trades settle 12 void (release would
+    hand out copies)". Each bag still holds its own offer, so nothing is lost; money may already have
+    moved. **Void it:** releasing it would double its Mailbox rows.
+  - **Both were** (a stop just after the saves, or marking it done failed): "... both bags were saved
+    with it, so its held Mailbox rows are owed: /hcm trades settle 12 release". **Release it:** a void
+    is always refused here, since it would lose them.
+  - **Only one was** (a stop between the two saves): what that player gave is in no bag, and what the
+    other gave is in both. The WARN names both: "... take what <b> gave (64 Oak Log, 64 Oak Log, 64
+    Oak Log) out of <a>'s bag, less what /hcm trades show 12 lists as held for <a> ..., then /hcm
+    trades settle 12 void <a>: what <a> gave goes to their Mailbox". `show` names what each Mailbox
+    row holds ("#41 HELD for <a>: 40 Oak Log"): that part goes with the trade, so take out only the
+    rest (here 152 logs, not all 192: <a>'s own logs stay), then run `void <a>`: the held rows go,
+    and what <a> gave goes to their Mailbox ("Back from your trade with <b>") from the trade log. <a>
+    doesn't need to be online. (A trade an earlier 0.38 build kept too big to log says to give that
+    part back by hand.) This is named only when nobody played after the swap; see the next case.
+  - **Only one reads as saved, but they played on** (a bag save that didn't reach the disk while both
+    kept playing, or a later trade by the saved player): what each gave may have moved on since (the
+    other's bag, a chest, a shelf, another trade), so `void <a>` could hand out a copy. The WARN says
+    "only one bag reads as saved with it, but they played on after the swap ...: look at both bags
+    before you settle it" and names no verb. Look, then settle as for a bag that couldn't be read.
+  - **A bag couldn't be read:** look at both bags (`show` reads each one now), then `release` if both
+    hold the trade, `void` if neither does, or `void <player>` if only that player's does (take what
+    the other gave out of it first, less what `show` lists as held for that player, which goes with
+    the trade, as above; what that player gave goes to their Mailbox again, so only when it is nowhere
+    else). Or put the missing folder back and restart: the start reads them again.
+  - **A bag save didn't reach the disk** while the server kept running (the server's own "Failed to
+    save player data" line: vanilla only logs it, so the swap checks the player's file after each
+    save): the trade waits, and its players read "✉ 2 things from the trade will reach your Mailbox
+    once the trade is checked." While the server runs that bag still holds the trade, so every settle
+    is refused: put right what stopped the save (disk space, who owns the file), then restart the
+    server, and the start reads where both bags are.
+
+  A verb that doesn't fit is refused and names the one that does. `release` hands the Mailbox rows
+  out (and marks it done); `void` deletes them (and marks it void); `void <player>` also sends that
+  player's own offer to their Mailbox. A void also puts each Mini's owner and each collector claim the
+  trade moved back where it was (and deletes the trade's price-0 sale rows), except one that has moved
+  on since, which it names: a Mini sold or traded again since, or a Mini or cap a later trade that went
+  through carried (say the two of them did the trade again before you settled it). **Two waiting trades
+  that moved the same Mini or cap** (she gave it, then wanted it back) are voided newest first: a void
+  of the older one is refused while the newer one waits ("trade #13 moved Mini ... after this one and is
+  still waiting: settle #13 first"), even with `confirm`, since voiding the older first would leave the
+  Mini's owner or the claim with the wrong player. **If you looked at both bags and
+  the read is wrong** (a player file or world folder from an older copy was read), add `confirm`:
+  `release confirm` releases whatever the read, and `void confirm` or `void <player> confirm` voids
+  against it; the trade's log line says it was confirmed over the read. Money is never paid back: the
+  WARN, `show` and the settle name what each paid, with each balance just before the swap and now, so
+  you can see what really moved and set right only that (a payment a failed deposit already gave back
+  isn't named).
+- **Putting a player file or world folder back never reopens a trade.** A trade is marked done only once
+  both player files changed after the swap, and no start reads it again: its Mailbox rows, Mini owners
+  and claims stay as the trade left them. A file put back from before a trade undoes that trade in that
+  bag only, like anything else the player got since the backup. `/hcm trades <player>` lists the trades
+  since your backup, and `show <id>` reads each bag now ("<a>'s is from before it"); set right by hand
+  only what you want undone.
+
+### Where trades work
+
+Both players in the same world, an economy world that isn't a Games world, home from every game, alive,
+and in Survival or Adventure (a Creative client can copy any stack, so neither Creative nor Spectator
+trades). `trade.max_distance` (0 = anywhere in that world). **Every economy world must share one
+Multiverse-Inventories group,** since the Mailbox opens in each (`/hcm games check` warns).
+
+One request at a time per player, at most 3 a minute; after a no, a timeout or the asker calling it off,
+that pair waits 30 seconds. `/trade off` (or the PC's Trade requests tile) stops people asking you, and
+`/trade on` lets them again. `/trade cancel` takes your request back, or leaves the trade you are in.
+
+### Commands and permission
+
+| Command | Who | What |
+|---|---|---|
+| `/trade` | `hcm.trade.use` | the picker: who to trade with, and Trade requests on / off |
+| `/trade <player>` | `hcm.trade.use` | ask |
+| `/trade accept\|deny [player]` | `hcm.trade.use` | answer |
+| `/trade cancel` | `hcm.trade.use` | take your request back, or leave your trade |
+| `/trade on\|off` | `hcm.trade.use` | let people ask you, or not |
+| `/hcm trade ...` | `hcm.trade.use` | the same, for when another plugin owns `/trade` |
+| `/hcm trades [player] [n]` | admin | the last trades, one line each |
+| `/hcm trades show <id>` | admin | one trade in full, and its Mailbox rows |
+| `/hcm trades settle <id> release\|void [player] [confirm]` | admin | a trade the server didn't see finish |
+
+`hcm.trade.use` is new and defaults to true. A player without it can't trade and can't be asked.
+
+### Owner knobs (`trade`)
+
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | the window's switch |
+| `request_seconds` | `30` | how long a request waits for an answer (10-600) |
+| `countdown_seconds` | `3` | the 3, 2, 1 once both are ready (1-10) |
+| `change_lock_ms` | `1500` | after any change, Ready waits this long |
+| `max_distance` | `0` | blocks apart; 0 = anywhere in the same world |
+| `money` | `true` | `false` = items only |
+| `log_keep_days` | `90` | 0 = keep the log for ever (a trade waiting to be settled is never pruned, nor any trade after it) |
+| `refuse_items` | `[]` | more things that can't be traded: material names, or `pdc:<namespace>:<key>` for another plugin's tag |
+
+The section is new: the first start of 0.38 writes it, with its comments. A number out of its range is
+squeezed into it with one WARN naming the key.
+
+### Not yet seen on a Bedrock screen
+
+Two things have no live test yet: a Bedrock tap on a bag stack in the trade window, and a crouch and
+right-click on a player from Bedrock. If the crouch and right-click doesn't reach the server, the
+"Trade?" screen, `/trade` and the PC's Trade site still cover her: they ask and answer. **Nothing covers
+the bag tap:** it is the only way to put a stack on the table, so if it doesn't arrive she can still
+open a trade, receive things and give money (the money tiles are ordinary taps), but can't offer an
+item until a fix ships.
+
+---
+
 ## Halloween 2026 (0.37.1)
 
 0.37.1 adds the first **collectors**: holiday looks you keep for good, sold only in their season,
@@ -529,7 +1131,8 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Yours for good.** One of each per player, ever. They never run out, and no crate hands one
   out. Each cap carries its number ("No. 3"), and the cap and its tile say "Halloween 2026
   collector" and "Yours for good!".
-- **On the counter** they are the first two tiles of the Cosmetics tab, with "On sale until 31 Oct".
+- **On the counter** they are the first two tiles of the Cosmetics tab, with "On sale until 31 Oct"
+  (from 0.38 the caps are on the Looks tab).
   The cap leaves the shop at midnight going into 1 November (Chicago time on the shipped clock),
   the trail on 1 December. Out of season a collector is off the counter and the website feed, and
   can't be bought or given. What players own keeps working: the cap is the item itself, and an owned trail
@@ -537,8 +1140,9 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Buying one for yourself** is the tile's own tap, with a confirm (both cost over 100). The cap
   goes on your head if nothing is there, otherwise into your bag: a buy never takes your helmet off.
   With no free slot: "Make room in your bag first — nothing charged." A bought trail switches on.
-- **The Wallet's trail tile** goes to the next trail you own, then off ("Click for the next trail"
-  once you have two). A collector trail reads "Yours for good" there instead of an end date.
+- **The Wallet's My Looks tile** (slot 16; until 0.38 it stepped through your trails) opens My Looks,
+  which lists every trail you own: one tap switches one on, and a collector trail reads "yours for
+  good" instead of an end date. `/hcm trail next` still steps to the next trail you own, then off.
 - **Built into the plugin,** not rows in `arcade.prizes`, so there is no config revision and no
   edit or `/hcm config reset arcade` can take one away. A row of your own with a collector's id, or
   an id starting `candy_` or `bag_trick_or_treat_`, is skipped with a WARN. The prices and dates
@@ -566,7 +1170,8 @@ as presents, all exactly as Halloween's above.
   (Halloween's line stays gold), and "Yours for good!". Twinkle is a 2026 collector, though it is
   sold into January.
 - **On the counter from midnight going into 1 December** (Chicago time on the shipped clock), as the
-  first two tiles of the Cosmetics tab. The cap leaves at midnight going into 1 January, Twinkle at
+  first two tiles of the Cosmetics tab (from 0.38 the cap is on the Looks tab and Twinkle stays on
+  Cosmetics). The cap leaves at midnight going into 1 January, Twinkle at
   midnight going into 7 January. Before 1 December neither is on the counter, in Give a present or
   in the website feed. Don't use `/hcm give prize` to look at one early: given to a player, it is
   their one Santa Cap.
@@ -581,6 +1186,9 @@ as presents, all exactly as Halloween's above.
 - No config edit and no config revision: like Halloween's, they are built into the plugin.
 
 ### Give a present
+
+From 0.38 a present can also be a rented look or a golf ball, and the tile is in the bottom row of the
+Cosmetics and Looks tabs: see [Give a present (0.38)](#give-a-present-038). The rest is as below.
 
 - **The Give a present tile** (a cake, top right of the Cosmetics tab) shows while a collector is
   on sale and `arcade.collectors.gifting` is true. Tapping a collector's own tile only ever buys it
@@ -666,7 +1274,7 @@ as presents, all exactly as Halloween's above.
 | Key | Default | What it does |
 |---|---|---|
 | `on_sale` | `true` | `false` takes this season's collectors off the counter and out of presents. Owned ones keep working |
-| `gifting` | `true` | `false` hides Give a present and refuses presents. Buying for yourself still works, and `/hcm give prize` ignores it |
+| `gifting` | `true` | `false` hides Give a present and refuses presents (from 0.38 every present: looks, golf balls and collectors). Buying for yourself still works, and `/hcm give prize` ignores it |
 
 Both keys are new: the first start of 0.37.1 writes them, with their comment, into your
 config.yml. `config_revision` stays 21.
@@ -679,7 +1287,9 @@ config.yml. `config_revision` stays 21.
   offers the ids.
 - The player must be home from every game ("<name> is in a game. Try again when they're back."),
   and an item needs room in their bag: nothing goes on the ground. A +1 Home isn't an item:
-  `/hcm homes refresh <player>` gives back the homes they bought.
+  `/hcm homes refresh <player>` gives back the homes they bought. Nor is a golf ball (0.38), an
+  unlock kept by its claim: it is refused with "A golf ball is an unlock, not an item: Give a present
+  on the Prize Counter's Looks tab gives one." A rented hat or cap goes through `/hcm looks give`.
 - **Typed by you for someone else, a collector is a present:** "A gift from <you>" on the cap, and
   the whole moment above. To yourself or from the console it is a plain give-back ("… is yours
   again!"). Each one is logged as `Admin <sender> gave <id> to <player>`.
@@ -1045,6 +1655,37 @@ the old amount isn't topped up); and the Star Chart's tokens change from next we
 fixed once shown). No command is needed: `/hcm tokens audit 1` the next evening shows the new
 amounts.
 
+#### The token shop's economy (0.38)
+
+The prices come from re-running the economy model with the owner's rules (buy again at the same price,
+the animal hats hidden, no everyday cap). Week 1 is Mon 19 Oct 2026; each player's habits are guesses,
+so after two weeks live, `/hcm tokens audit 14 <player>` replaces them.
+
+| Income a week | Owner | Helper | Daughter |
+|---|---|---|---|
+| Login streak / playtime | 35 / 10.5 | 14 / 5 | 35 / 5.2 |
+| Daily / weekly quests | 77.5 / 39.2 | 33.2 / 19.6 | 19.5 / 13.3 |
+| Games: a Fresh set / daily repeatables | 143 / 112 | 115 / 70 | 33 / 70 |
+| Weekly Cup, net | 56 | 24 | 0 |
+| **Total** | **473** | **281** | **176** |
+
+| Target | 0.38 | Verdict |
+|---|---|---|
+| Over 12 weeks each player spends 75-100% of what they earn | 99 / 89 / 98% | pass |
+| The next want is at most 2 weeks of saving; hers a look in 1.5 | she saves 88 a week: a cap 0.7 weeks, a hat 1.4, the Dragon Hat 1.7, a collector cap 2.8, a collector trail 4.5 | pass |
+| Tokens held grow less than 15% of what is minted | 7% in year 1, 4% over two years (8% / 4% if the adults craft their keeper hats; 11% / 0% with no Keepers at all) | pass |
+| Games of chance under 10% of income | the owner 7%, the helper 6% | pass |
+| Something to renew for everyone | renewals, trails, parties, collectors, Keepers, the Monthly | pass |
+
+The Keepers are the adults' long goals: a keeper hat is about 10-13 weeks of an adult's saving, a
+keeper trail 11-15, the Crown 19-26. **The everyday cap** (`games.everyday_cap`) ships off: a player
+who grinds every daily challenge makes about 653 a week against the others' 543; `15` closes that gap
+(their first three goals each day pay; the Guide's Daily challenge tile and a chat line say so) and
+costs the owner about 20 a week. A `daily_reward` bigger than the cap gives one WARN at load. **The
+daughter's streak and playtime count in the Games world** (0.38): a day she spends there pays her
+login streak and playtime tokens like an economy world, still once a day; the achievement check still
+waits for an economy world.
+
 **For the youngest (optional):** `/hcm games break <player> limit 25` sets a daily limit on the
 tokens they can put into games of chance that they can't lift, or `/lp user <player> permission set
 hcm.games.chance false` takes the games of chance away from them altogether.
@@ -1069,6 +1710,7 @@ moves or grows is moved, and its old area emptied, by itself ("When an update mo
 | `chance_daily_tokens` | `100` | Most tokens a player can put into all games of chance in a day (`0` = off, at most 10000). While the games are on it also counts Crates, Scratch Tickets and token Card Packs |
 | `max_payout` | `250` | Most any single play of a game of chance can pay (never below the game's largest stake) |
 | `skill_daily_cap` | `60` | Most tokens all skill games together pay a player in a day (first clears, Cup and Race Night prizes don't count). Keep it at least as big as the biggest reward paid whole (the plugin WARNs at load when one can't fit) |
+| `everyday_cap` | `0` | 0.38: most tokens every game's daily challenge (the arcade goals) together pays a player in a day, inside `skill_daily_cap`, paid partly like the other caps. `0` = no cap (as shipped); `15` stops a grinder out-earning everyone (their first three goals each day pay, and the Guide and a chat line say so). A `daily_reward` bigger than it gives one WARN at load (0-1000) |
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `5` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
@@ -1390,10 +2032,12 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 - **Starting.** Golf always opens the **course screen** first, however you get there (a tile,
   `/hcm play <course>`, a join sign): the holes and par, your best, the record, **Pick your
   ball**, How to play and **Start**. Only Start takes you anywhere.
-- **Pick your ball:** any Mini you own that has a head. Only its look is borrowed, on a plain new
-  head: the Mini itself stays in your collection, untouched. The choice is remembered. With no
-  Mini it's a plain white ball, and so is a picked Mini you no longer own; a Bedrock player's
-  ball is always a white block (Bedrock can't draw head textures reliably).
+- **Pick your ball:** a golf ball you bought (0.38, the Looks tab: eight colours, Gold and Diamond),
+  or any Mini you own that has a head. Only a Mini's look is borrowed, on a plain new head: the Mini
+  itself stays in your collection, untouched. The choice is remembered. With neither it's a plain
+  white ball, and so is a picked Mini you no longer own. **A bought ball shows on both editions**;
+  otherwise a Bedrock player's ball is a white block (Bedrock can't draw head textures reliably). A
+  ball's look never changes how it rolls.
 - **Playing.** Start takes you to hole 1's tee with only the kit: five clubs (Tap, Putt, Chip,
   Swing and Drive, power 1 to 5), Go to my ball, Reset ball (+1 stroke), Scorecard and Leave game
   (click twice). Any click with a club putts the ball the way you look, once it's still and you're
@@ -3869,7 +4513,7 @@ is the test's (`ArcadeFeedTest`), shortened where it says `…`; a server publis
 | `tier` / `record` | A course's tier (`easy`…) and record `{ms, at}`. Golf has `holes`, `par` and `record` `{strokes, at}`. `at` is epoch ms |
 | `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games`, or `trials` / `golf` when the owner pinned a whole world game: then every course of that kind (`parkour`/`elytra`/`boat`/`dropper`, or `golf`) is the pick, and it is published while at least one of them is in `games` |
 | `jackpots` | The Scratch Ticket's pot now. Whenever it is there, `games` has the `scratch_ticket` entry too, so the site never shows a pot without its odds. Its `rtp` is the steady-state figure `/hcm arcade odds` prints for admins, floored to one decimal like every other RTP (the command rounds it, so the two can differ by 0.1) |
-| `prizes` | The visible Prize Counter rows, without Trade In, Quest Reroll and the Rare Card. `category` is the counter's tab in lower case (`boosts`, `hunt`, `cosmetics`, `perks`, `trophies`, `minis`); the +1 Home gives its first price |
+| `prizes` | The visible Prize Counter rows, without Trade In, Quest Reroll and the Rare Card. `category` is the counter's tab in lower case (`boosts`, `hunt`, `cosmetics`, `looks`, `perks`, `trophies`, `minis`, `keepers`; `looks` and `keepers` from 0.38); the +1 Home and the Arcade Trophy give their first price. Golf balls and Party Time are rows like the rest (0.38; there is no type field), and the Keepers are listed with their price while `arcade.keepers.on_sale` is true. A rented look's row is its first-buy price; how long it lasts is in its `description` ("Yours for 90 days.") |
 | `packs` | Packs sold for tokens, with the rarity odds they roll with, as percents |
 | `achievements` | Enabled achievements. `name` and `description` are both the one line the screen shows. One won by a game of chance (`jackpot`) is left out |
 
@@ -4531,6 +5175,7 @@ block without settings gets fresh ones.
 | `hcm.quests.use` | all | `/hcm quests` |
 | `hcm.achievements.use` | all | `/hcm achievements` |
 | `hcm.guide.use` | all | `/hcm guide` — How It Works |
+| `hcm.trade.use` | all | The trade window (0.38): `/trade`, `/hcm trade`, the crouch gesture and the PC's Trade site. Without it a player can't trade and can't be asked |
 | `hcm.muffler.use` | all | Place a Sound Muffler and change what your own mufflers hush (anyone may look; admins may change any) |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 

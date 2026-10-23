@@ -5,6 +5,7 @@ import com.dierks.homecraft.config.PluginConfig.Collector;
 import com.dierks.homecraft.config.PluginConfig.Icon;
 import com.dierks.homecraft.config.PluginConfig.LimitPer;
 import com.dierks.homecraft.config.PluginConfig.Prize;
+import com.dierks.homecraft.config.PluginConfig.PrizeExtra;
 import com.dierks.homecraft.config.PluginConfig.PrizeLimit;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
@@ -100,7 +101,7 @@ class CollectorsTest {
         Prize cap = row("cap_pumpkin_2026");
         assertEquals("&6Pumpkin Cap 2026", cap.display());
         assertEquals(250, cap.costTokens());
-        assertEquals(PrizeTab.COSMETICS, cap.tab());
+        assertEquals(PrizeTab.LOOKS, cap.tab(), "0.38: the caps are on the Looks tab");
         assertEquals(PrizeType.HAT, cap.type());
         assertEquals(LimitPer.LIFETIME, cap.limit().per());
         assertEquals(1, cap.limit().count());
@@ -198,11 +199,16 @@ class CollectorsTest {
         String src = Files.readString(Path.of("src", "main", "java", "com", "dierks", "homecraft", "arcade",
                 "PrizeService.java"), StandardCharsets.UTF_8).replaceAll("\\s+", " ");
         String visible = body(src, "public boolean visible(Prize p) {");
-        assertTrue(visible.contains("if (p.collector() != null) { return offered(p, plugin.config().arcade()"
-                + ".collectorsOnSale(), plugin.clock().today(), trailsNotHere); }"),
-                "visible(): a collector is shown, sold and given only where offered() says, trailsNotHere and all");
+        assertTrue(visible.contains("return shelved(p, shelf());"), "visible(): the shelf's rules, read now");
+        String shelved = body(src, "static boolean shelved(Prize p, Shelf s) {");
+        assertTrue(shelved.contains("if (p.collector() != null) { return offered(p, s.collectorsOnSale(), s.today(),"
+                        + " s.notHere()); }"),
+                "shelved(): a collector is shown, sold and given only where offered() says, trailsNotHere and all");
+        String shelf = body(src, "private Shelf shelf() {");
+        assertTrue(shelf.contains("new Shelf(plugin.config().arcade().collectorsOnSale(), plugin.clock().today(),"
+                + " notHere(),"), "the shelf reads the season switch, today and the trails this server can't show");
         String restore = body(src, "public Outcome restore(Player target, Prize p, String fromName) {");
-        assertTrue(restore.startsWith(" String refused = restoreRefusal(p, trailsNotHere); if (refused != null) "
+        assertTrue(restore.startsWith(" String refused = restoreRefusal(p, notHere()); if (refused != null) "
                 + "{ return Outcome.fail(refused); }"), "restore(): restoreRefusal first, and its answer returned");
     }
 
@@ -229,7 +235,7 @@ class CollectorsTest {
         assertEquals("&cSanta Cap 2026", cap.display());
         assertEquals(List.of("A cozy Santa cap for Christmas!"), cap.description());
         assertEquals(250, cap.costTokens());
-        assertEquals(PrizeTab.COSMETICS, cap.tab(), "no Looks tab before 0.38");
+        assertEquals(PrizeTab.LOOKS, cap.tab(), "0.38: the caps are on the Looks tab");
         assertEquals(PrizeType.HAT, cap.type());
         assertEquals(LimitPer.LIFETIME, cap.limit().per());
         assertEquals(1, cap.limit().count());
@@ -397,9 +403,22 @@ class CollectorsTest {
                     List.of(), List.of(), null, null, List.of(),
                     new Collector(2026, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 30), true, null)));
 
+    /**
+     * {@code p} on another tab: 0.38 moves the collector caps to the Looks tab (SHOP-V2-SPEC §5.7 (5)), the one
+     * field that changed. The tab only says where the tile is drawn; nothing stores it.
+     */
+    private static Prize onTab(Prize p, PrizeTab tab) {
+        return new Prize(p.id(), tab, p.display(), p.description(), p.costTokens(), p.icon(), p.type(), p.enabled(),
+                p.limit(), p.amount(), p.color(), p.blockKey(), p.packId(), p.effect(), p.amplifier(), p.minutes(),
+                p.particle(), p.days(), p.texture(), p.commands(), p.requiresPlugins(), p.ownedIfPermission(),
+                p.requiresPrize(), p.costs(), p.collector(), p.extra());
+    }
+
     @Test
     void theTwoHalloweenRowsAreTheirOldSelvesFieldByField() throws ReflectiveOperationException {
-        for (Prize old : ROWS_0371) {
+        for (Prize was : ROWS_0371) {
+            // the cap moved to the Looks tab in 0.38 and nothing else about either row changed
+            Prize old = was.type() == PrizeType.HAT ? onTab(was, PrizeTab.LOOKS) : was;
             Prize now = row(old.id());
             for (RecordComponent c : Prize.class.getRecordComponents()) {
                 assertEquals(c.getAccessor().invoke(old), c.getAccessor().invoke(now), old.id() + "." + c.getName());
@@ -410,8 +429,10 @@ class CollectorsTest {
             }
             assertEquals(old, now);
             assertEquals("Halloween", now.collector().season());
+            assertEquals(PrizeExtra.NONE, now.extra(), "a collector has none of the 0.38 row fields");
         }
-        assertEquals(ROWS_0371, Collectors.ROWS.subList(0, 2), "and they stay the first two, in that order");
+        assertEquals(List.of(onTab(ROWS_0371.get(0), PrizeTab.LOOKS), ROWS_0371.get(1)), Collectors.ROWS.subList(0, 2),
+                "and they stay the first two, in that order");
     }
 
     @Test

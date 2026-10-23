@@ -1,12 +1,17 @@
 package com.dierks.homecraft.command;
 
+import com.dierks.homecraft.config.PluginConfig.Icon;
+import com.dierks.homecraft.config.PluginConfig.Prize;
+import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,6 +63,20 @@ class GivePrizeCommandTest {
                 PrizeType.FIREWORK, PrizeType.COMMAND}) {
             assertNull(HcmCommand.notGivenBack(t), t + " is given back");
         }
+    }
+
+    /**
+     * Red-team finding CMD-8: a golf ball (0.38) went on to the hand-over, which has no case for it, and answered
+     * "That prize can't be given like this." with no hint. It is refused with what a ball is and how to give one.
+     */
+    @Test
+    void aGolfBallIsAnUnlockNotAnItem() {
+        Prize ball = new Prize("ball_pink", PrizeTab.LOOKS, "&dPink Golf Ball", List.of(), 150,
+                new Icon("", Material.SNOWBALL), PrizeType.BALL, true, null, 1, null, null, null, null, 0, 0, null, 0,
+                "", List.of(), List.of(), null, null, List.of(), null);
+        assertEquals("A golf ball is an unlock, not an item: Give a present on the Prize Counter's Looks tab gives one.",
+                HcmCommand.notGivenBack(ball));
+        assertNull(HcmCommand.notGivenBack(PrizeType.BALL), "the type alone says nothing: the row's rule does");
     }
 
     /** A give-back never goes on the ground: an item row needs a free bag slot, a trail or a perk doesn't. */

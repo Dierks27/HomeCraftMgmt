@@ -48,7 +48,8 @@ class AreaRevisionUpgradeTest {
             HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
             disk.text = c.saveToString();
             FileConfiguration after = disk.load();
-            assertEquals(21, after.getInt("config_revision"), "stamped revision 21");
+            assertEquals(HomeCraftManagement.CONFIG_REVISION, after.getInt("config_revision"),
+                    "stamped this version's revision (21's areas, then 22's shop)");
             assertEquals(List.of(8768, 160, 4096), list(after.get("games.fresh.slots.fresh_golf.origin")),
                     "Golf of the Week at Col G");
             assertEquals(List.of(6080, 96, 2880), list(after.get("games.fresh.slots.fresh_boat.origin")),

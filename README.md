@@ -667,8 +667,10 @@ a minute long; it would be for those special events".
   down. Pistons, water, lava, explosions and withers leave it standing. Economy worlds only, like the
   other HomeCraft blocks. It is a prize: kept when you die, safe on the ground, never sold for money,
   traded only item for item.
-- **To see it,** watch from within about 30-40 blocks: the server only draws rockets that close. Under
-  a roof a rocket bursts at the ceiling (harmlessly): keep the sky above the launchers clear.
+- **To see it,** watch from within about 30-40 blocks: rockets much further off may not be drawn at
+  all (the server's entity range and view distance). Under a roof a rocket bursts at the ceiling
+  (harmlessly): keep the sky above the launchers clear. The rockets are real things in the world, so
+  the switch that hides other people's trails and parties doesn't hide a Mega show.
 - **A tap on another HomeCraft block** with the Mega show in the hand (the Arcade Machine, a join
   sign, a Mini) is that block's, and the show stays in the hand.
 - Neither row is in the Arcade Crate. `/hcm give prize firework_launcher [player]` and

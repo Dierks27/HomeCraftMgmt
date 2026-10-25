@@ -898,9 +898,9 @@ public final class PluginConfig {
     }
 
     /**
-     * The Firework Launcher ({@code arcade.launcher}, 0.38.1): the block's look (a dropper pointing up unless
-     * {@code skins.firework_launcher} names a head), how many one player may have placed at once (1-10), and how far
-     * from whoever uses a Mega Firework Show its launchers may stand (8-64 blocks).
+     * The Firework Launcher ({@code arcade.launcher}, 0.38.1): the block's look (a dropper pointing up, or a
+     * dispenser, unless {@code skins.firework_launcher} names a head), how many one player may have placed at once
+     * (1-10), and how far from whoever uses a Mega Firework Show its launchers may stand (8-64 blocks).
      */
     public record Launcher(BlockDef block, int perPlayer, int range) {
         /** What the bundled file ships. */
@@ -2947,14 +2947,35 @@ public final class PluginConfig {
     /**
      * {@code arcade.launcher} (0.38.1). {@code per_player} is brought into 1-10 and {@code range} into 8-64 blocks,
      * with one WARN each when it was outside: a Mega show's rockets are only seen from within the server's entity
-     * range, so a launcher further off than that would fire for nobody.
+     * range, so a launcher further off than that would fire for nobody. {@code material} is a dropper or a dispenser
+     * ({@link #launcherMaterial}).
      */
     private Launcher readLauncher(FileConfiguration c) {
         Launcher d = Launcher.DEFAULTS;
-        BlockDef block = blockDef(c, "arcade.launcher", d.block().material(), d.block().name());
+        BlockDef read = blockDef(c, "arcade.launcher", d.block().material(), d.block().name());
+        BlockDef block = new BlockDef(launcherMaterial("arcade.launcher.material", read.material(), log::warning),
+                read.name());
         int perPlayer = clamped(c, "arcade.launcher.per_player", d.perPlayer(), 1, 10);
         int range = clamped(c, "arcade.launcher.range", d.range(), 8, 64);
         return new Launcher(block, perPlayer, range);
+    }
+
+    /** What a Firework Launcher may be made of (0.38.1): the two blocks its guards keep empty and quiet. */
+    static final Set<Material> LAUNCHER_MATERIALS = Set.of(Material.DROPPER, Material.DISPENSER);
+
+    /**
+     * {@code m}, the launcher's material at {@code path}, when it is a dropper or a dispenser; anything else is read as
+     * a DROPPER, with one WARN (review CFG-LAUNCHER-MATERIAL-1). A launcher's tile carries its tag, which a block with
+     * no tile can't, and the guards that keep it empty and silent are a dropper's and a dispenser's: made of an
+     * OBSERVER or a TARGET, a launcher took a Mega show's tap and did nothing at all, and an item such as
+     * FIREWORK_ROCKET can't be placed. A texture in {@code skins.firework_launcher} still makes it a head.
+     */
+    static Material launcherMaterial(String path, Material m, java.util.function.Consumer<String> warning) {
+        if (LAUNCHER_MATERIALS.contains(m)) {
+            return m;
+        }
+        warning.accept(path + " " + m + " isn't a DROPPER or a DISPENSER; using DROPPER.");
+        return Material.DROPPER;
     }
 
     /** An int setting brought into {@code min}-{@code max}, with one WARN when it was outside. */

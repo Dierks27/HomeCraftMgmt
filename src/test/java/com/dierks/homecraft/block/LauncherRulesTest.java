@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,6 +79,31 @@ class LauncherRulesTest {
                 "after \"Placed a Firework Launcher.\"");
         assertEquals("Firework Launcher", LauncherRules.NAME);
         assertEquals("Firework Launcher", CustomBlockGuard.name(CustomBlockType.FIREWORK_LAUNCHER));
+    }
+
+    /**
+     * Review LAUNCHER-SPAM-3: a held use repeats a tap or a place about five times a second, and a launcher opens no
+     * screen to stop it, so the same line is said once, then again every 2 s while it is held; another launcher's line
+     * comes at once, each player has their own, and a quit forgets them.
+     */
+    @Test
+    void aHeldTapOrPlaceSaysItsLineOnceEveryTwoSeconds() {
+        LauncherRules.Lines lines = new LauncherRules.Lines();
+        UUID daughter = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        assertEquals(2000, LauncherRules.Lines.GAP_MS, "as the show refusals (FireworkShows.refusalDue)");
+        assertTrue(lines.due(daughter, "launcher A", 0), "the first tap says its line");
+        assertFalse(lines.due(daughter, "launcher A", 200), "a held tap's repeats (every 4 ticks) are quiet");
+        assertFalse(lines.due(daughter, "launcher A", 1999), "a quiet one doesn't push the next back");
+        assertTrue(lines.due(daughter, "launcher A", 2000), "still held: again after 2 s");
+        assertTrue(lines.due(daughter, "launcher B", 2100), "a tap on another launcher says its own line at once");
+        assertTrue(lines.due(daughter, "launcher A", 2200), "and back on the first: the last said was another");
+        assertTrue(lines.due(owner, "launcher A", 2300), "each player has their own");
+        String full = LauncherRules.fullLine(3);
+        assertTrue(lines.due(owner, full, 2400), "a fourth place: its line and its sound");
+        assertFalse(lines.due(owner, full, 2600), "held against the ground: quiet");
+        lines.forget(daughter);
+        assertTrue(lines.due(daughter, "launcher A", 2500), "a quit forgets");
     }
 
     /** The item can't be built without a server, so its source says what it is (CustomItems.fireworkLauncher). */

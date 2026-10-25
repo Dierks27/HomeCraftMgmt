@@ -43,6 +43,7 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -69,7 +70,8 @@ import java.util.UUID;
  * ({@link LauncherRules}), only its placer or an admin picks it up, a tap says
  * what it is (a Mega Firework Show in the hand starts the show instead, in
  * {@code PrizeItemListener}), and no hopper, dropper, redstone pulse or screen
- * ever moves anything in or out of it.
+ * ever moves anything in or out of it. A held tap or fourth place says its line
+ * once every 2 s ({@link LauncherRules.Lines}).
  */
 public final class CustomBlockListener implements Listener {
 
@@ -80,6 +82,8 @@ public final class CustomBlockListener implements Listener {
     private final ProtectionService protection;
     /** The day each player's tap that arrived cancelled was last logged ({@link #cancelledTap}); main thread. */
     private final Map<UUID, LocalDate> cancelledTapLogged = new HashMap<>();
+    /** The Firework Launcher's lines last said to each player, so a held tap or place says it once; main thread. */
+    private final LauncherRules.Lines launcherLines = new LauncherRules.Lines();
 
     public CustomBlockListener(HomeCraftManagement plugin,
                                PluginConfig config,
@@ -140,8 +144,11 @@ public final class CustomBlockListener implements Listener {
                     pb -> pb.owner().equals(me), pb -> sameSpot(pb, block), this::staleLauncher);
             if (LauncherRules.placeRefused(launchers, perPlayer)) {
                 event.setCancelled(true);
-                player.sendMessage(Text.of(LauncherRules.fullLine(perPlayer)));
-                Sounds.refused(player);
+                String full = LauncherRules.fullLine(perPlayer);
+                if (launcherLines.due(me, full, System.currentTimeMillis())) { // a held place repeats
+                    player.sendMessage(Text.of(full));
+                    Sounds.refused(player);
+                }
                 return;
             }
             blocks.faceUp(block); // the item's block state already did it; before the record, so its tag is last
@@ -461,8 +468,13 @@ public final class CustomBlockListener implements Listener {
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
                         plugin, player, clicked.getLocation(), owner).open(player);
             }
-            // A launcher's tap says whose it is and what it is for; it never opens (the deny above).
+            // A launcher's tap says whose it is and what it is for; it never opens (the deny above). A held tap
+            // repeats, so the same launcher's line (and the records it reads) comes at most once every 2 s.
             case FIREWORK_LAUNCHER -> {
+                if (!launcherLines.due(player.getUniqueId(), new MegaShow.Spot(clicked.getWorld().getName(),
+                        clicked.getX(), clicked.getY(), clicked.getZ()), System.currentTimeMillis())) {
+                    return;
+                }
                 UUID owner = placed.get().owner();
                 boolean mine = owner.equals(player.getUniqueId());
                 boolean busy = plugin.megaShows() != null && plugin.megaShows().busy(clicked);
@@ -661,6 +673,12 @@ public final class CustomBlockListener implements Listener {
     private int ownedLaunchers(UUID owner) {
         return LauncherRules.counted(blocks.findByType(CustomBlockType.FIREWORK_LAUNCHER),
                 pb -> pb.owner().equals(owner), pb -> false, this::staleLauncher);
+    }
+
+    /** A player who quits takes their launcher lines with them. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        launcherLines.forget(event.getPlayer().getUniqueId());
     }
 
     // Keep custom blocks (and their data) safe from explosions rather than

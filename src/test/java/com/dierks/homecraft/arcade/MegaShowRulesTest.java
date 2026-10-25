@@ -1,5 +1,6 @@
 package com.dierks.homecraft.arcade;
 
+import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.config.PluginConfig.Icon;
 import com.dierks.homecraft.config.PluginConfig.OnlyIf;
 import com.dierks.homecraft.config.PluginConfig.Prize;
@@ -73,6 +74,37 @@ class MegaShowRulesTest {
                 "a tap on the Arcade Machine, a join sign, a Mini: that block's, and the show is kept");
     }
 
+    /**
+     * Review MEGA-RT-1 / LAUNCHER-NONTILE-2: CustomBlockListener leaves a Mega show's tap on a launcher to the show by
+     * the placed-block record, so the show knows a launcher by its tile's tag or else that record. A launcher with no
+     * tag (made of a block with no tile) starts the show; before, nobody answered the tap at all.
+     */
+    @Test
+    void aLauncherIsKnownByItsTagOrElseItsRecordAsTheBlockListenerKnowsIt() throws IOException {
+        assertTrue(MegaShow.onLauncher(true, null), "its tile's tag, with no record read");
+        assertTrue(MegaShow.onLauncher(false, CustomBlockType.FIREWORK_LAUNCHER),
+                "no tag: its record says it is one, as CustomBlockListener reads it");
+        assertFalse(MegaShow.onLauncher(false, CustomBlockType.ARCADE), "another of ours is not");
+        assertFalse(MegaShow.onLauncher(false, null), "nor a plain block");
+        assertTrue(MegaShow.usesOnTap(true, true, MegaShow.onLauncher(false, CustomBlockType.FIREWORK_LAUNCHER)),
+                "so the tap CustomBlockListener leaves to the show starts it");
+
+        String listener = source("arcade", "PrizeItemListener.java");
+        String body = method(listener, "private void megaShow(");
+        assertTrue(body.contains("boolean launcher = on != null && launcher(plugin, on);"), body);
+        String launcher = method(listener, "private static boolean launcher(");
+        int tag = launcher.indexOf("CustomBlockService.isLauncher(on.getState(false))");
+        int record = launcher.indexOf("blocks.at(on.getLocation())");
+        assertTrue(tag > 0 && record > tag, "the tag first (no database), the record only without it: " + launcher);
+        assertTrue(launcher.contains("MegaShow.onLauncher(false,"), launcher);
+        assertTrue(launcher.contains("catch (RuntimeException | LinkageError e) { return false; }"),
+                "a lookup that fails is no");
+        String blocks = source("block", "CustomBlockListener.java");
+        assertTrue(blocks.contains("Optional<PlacedBlock> placed = blocks.at(clicked.getLocation());")
+                        && blocks.contains("if (type == CustomBlockType.FIREWORK_LAUNCHER && MegaShow.isMega("),
+                "the block listener's side: the record's type");
+    }
+
     @Test
     void aRowIsAMegaShowByItsLaunchers() {
         assertTrue(MegaShow.isMega(firework("firework_mega", 60, 3)));
@@ -105,8 +137,9 @@ class MegaShowRulesTest {
         assertTrue(body.indexOf("if (refused == null) { consume(player, hand); return; }") > start,
                 "and only when it did");
         assertTrue(body.contains("refusalDue(player.getUniqueId())"), "a refusal is said at most once every 2 s");
-        assertTrue(body.indexOf("CustomBlockService.isLauncher(") < body.indexOf("ours(plugin, on)"),
-                "a launcher is known by its tag before ours is looked up");
+        int launcher = body.indexOf("launcher(plugin, on)");
+        assertTrue(launcher > 0 && launcher < body.indexOf("ours(plugin, on)"),
+                "a launcher is known (its tag, else its record) before ours is looked up");
 
         String service = method(source("arcade", "MegaShowService.java"), "public String start(");
         int refusal = service.indexOf("MegaShow.refusal(");

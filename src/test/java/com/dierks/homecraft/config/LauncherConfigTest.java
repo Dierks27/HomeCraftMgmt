@@ -66,4 +66,39 @@ class LauncherConfigTest {
                 "arcade.launcher.range 500 is outside 8-64; using 64.",
                 "arcade.launcher.range 2 is outside 8-64; using 8."), warnings, "one WARN each");
     }
+
+    /**
+     * Review CFG-LAUNCHER-MATERIAL-1: a launcher is known by its tile's tag and kept empty and quiet by a dropper's and
+     * a dispenser's guards, so {@code material} is one of those two; anything else (a block with no tile, such as an
+     * OBSERVER or a TARGET, whose launcher took a Mega show's tap and did nothing, another container, or an item that
+     * can't be placed) is read as a DROPPER, with one WARN. The shipped comment says so, and readLauncher asks it.
+     */
+    @Test
+    void theMaterialIsADropperOrADispenserAndAnythingElseIsReadAsADropper() throws Exception {
+        List<String> warnings = new ArrayList<>();
+        String path = "arcade.launcher.material";
+        assertEquals(Material.DROPPER, PluginConfig.launcherMaterial(path, Material.DROPPER, warnings::add));
+        assertEquals(Material.DISPENSER, PluginConfig.launcherMaterial(path, Material.DISPENSER, warnings::add),
+                "a dispenser is guarded the same (CustomBlockListener.dispenses)");
+        assertEquals(List.of(), warnings, "either: as it is, no WARN");
+        List<Material> others = List.of(Material.OBSERVER, Material.TARGET, Material.STONE, Material.CHEST,
+                Material.HOPPER, Material.FIREWORK_ROCKET);
+        for (Material m : others) {
+            assertEquals(Material.DROPPER, PluginConfig.launcherMaterial(path, m, warnings::add), m + ": a dropper");
+        }
+        assertEquals(others.size(), warnings.size(), "one WARN each: " + warnings);
+        assertEquals("arcade.launcher.material OBSERVER isn't a DROPPER or a DISPENSER; using DROPPER.",
+                warnings.get(0));
+        assertEquals(java.util.Set.of(Material.DROPPER, Material.DISPENSER), PluginConfig.LAUNCHER_MATERIALS);
+        assertTrue(PluginConfig.LAUNCHER_MATERIALS.contains(PluginConfig.Launcher.DEFAULTS.block().material()),
+                "the default is one of them");
+
+        String comment = String.join(" ", bundled().getComments("arcade.launcher"));
+        assertTrue(comment.contains("DROPPER or DISPENSER"), "the shipped comment names the two: " + comment);
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/java/com/dierks/homecraft/config/PluginConfig.java"), StandardCharsets.UTF_8)
+                .replaceAll("\\s+", " ");
+        assertTrue(src.contains("new BlockDef(launcherMaterial(\"arcade.launcher.material\", read.material(), "
+                + "log::warning), read.name());"), "readLauncher reads the material through it");
+    }
 }

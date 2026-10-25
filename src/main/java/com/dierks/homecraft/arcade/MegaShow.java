@@ -1,5 +1,6 @@
 package com.dierks.homecraft.arcade;
 
+import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import org.bukkit.Color;
@@ -357,6 +358,16 @@ public final class MegaShow {
      */
     public static boolean usesOnTap(boolean onBlock, boolean ours, boolean launcher) {
         return !onBlock || !ours || launcher;
+    }
+
+    /**
+     * Whether a tapped block is a Firework Launcher, for {@link #usesOnTap}: its tile's tag ({@code tagged}, asked
+     * first: no database), or else its placed-block record ({@code recorded}, null when there is none), which is what
+     * {@code CustomBlockListener} goes by when it leaves a Mega show's tap to the show (review MEGA-RT-1). One answer
+     * in both places, so a launcher whose tag is missing is never a tap that nobody answers.
+     */
+    public static boolean onLauncher(boolean tagged, CustomBlockType recorded) {
+        return tagged || recorded == CustomBlockType.FIREWORK_LAUNCHER;
     }
 
     /**

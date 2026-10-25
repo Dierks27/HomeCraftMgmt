@@ -1302,7 +1302,8 @@ arcade:
     pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
     counter: { material: LECTERN,           name: "&eToken Counter" }
   # The Firework Launcher (0.38.1): bought at the Prize Counter (firework_launcher) and set up
-  # for the Mega Firework Show (firework_mega). It looks like a dropper pointing up (a texture in
+  # for the Mega Firework Show (firework_mega). It looks like a dropper pointing up (material:
+  # DROPPER or DISPENSER, anything else is read as DROPPER with one WARN; a texture in
   # skins.firework_launcher makes it a head instead); a tap says what it is and never opens it,
   # and no hopper or redstone does anything to it. Each player may have per_player of them placed
   # at once (1-10, admins too); only whoever placed one, or an admin, can pick it up. A Mega show

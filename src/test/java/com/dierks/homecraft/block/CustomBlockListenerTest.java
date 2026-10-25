@@ -104,6 +104,12 @@ class CustomBlockListenerTest {
                 && refused.contains("LauncherRules.fullLine(perPlayer)")
                 && refused.contains("Sounds.refused(player);") && refused.contains("return;"),
                 "a fourth: cancelled (the item stays in the hand), one kind line and the refused sound");
+        // review LAUNCHER-SPAM-3: a held fourth place says its line and plays its sound once every 2 s
+        int due = refused.indexOf("if (launcherLines.due(me, full, System.currentTimeMillis())) {");
+        assertTrue(due > refused.indexOf("event.setCancelled(true);")
+                        && due < refused.indexOf("player.sendMessage(Text.of(full));")
+                        && due < refused.indexOf("Sounds.refused(player);"),
+                "cancelled every time, the line and the sound only when due: " + refused);
         assertTrue(src.contains("pb -> pb.owner().equals(me), pb -> sameSpot(pb, block), this::staleLauncher"),
                 "hers, not this spot, not a stale record");
         // a Mega show in the hand: the tap is the show's, before the economy and build checks speak
@@ -111,7 +117,26 @@ class CustomBlockListenerTest {
         int mega = src.indexOf("if (type == CustomBlockType.FIREWORK_LAUNCHER && MegaShow.isMega(");
         int sandbox = src.indexOf("plugin.sandbox().check(player, \"use \"");
         assertTrue(deny > 0 && mega > deny && sandbox > mega, "deny < the Mega show's tap < the economy check");
-        assertTrue(src.contains("case FIREWORK_LAUNCHER -> { UUID owner = placed.get().owner();"), "its own tap line");
+        int tap = src.indexOf("case FIREWORK_LAUNCHER -> {", mega);
+        assertTrue(tap > 0, "its own tap line");
+        String tapCase = src.substring(tap, src.indexOf("case SOUND_MUFFLER -> {", tap));
+        int quiet = tapCase.indexOf("if (!launcherLines.due(player.getUniqueId(), new MegaShow.Spot(");
+        assertTrue(quiet > 0 && quiet < tapCase.indexOf("UUID owner = placed.get().owner();")
+                        && quiet < tapCase.indexOf("ownedLaunchers(owner)")
+                        && quiet < tapCase.indexOf("LauncherRules.tapLine("),
+                "review LAUNCHER-SPAM-3: a held tap's repeat says nothing and reads no records: " + tapCase);
+    }
+
+    /** The launcher lines a player was last told go when they quit. */
+    @Test
+    void aQuitForgetsTheLauncherLines() throws Exception {
+        EventHandler h = CustomBlockListener.class.getMethod("onQuit", org.bukkit.event.player.PlayerQuitEvent.class)
+                .getAnnotation(EventHandler.class);
+        assertNotNull(h, "onQuit is a handler");
+        assertEquals(EventPriority.MONITOR, h.priority());
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of("src", "main", "java", "com", "dierks",
+                "homecraft", "block", "CustomBlockListener.java")).replaceAll("\\s+", " ");
+        assertTrue(src.contains("launcherLines.forget(event.getPlayer().getUniqueId());"));
     }
 
     /** The four launcher guards: each early enough, each skipping what someone already said no to. */

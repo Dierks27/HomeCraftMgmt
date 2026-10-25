@@ -5,6 +5,7 @@ import com.dierks.homecraft.block.CustomBlockService;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.games.JoinSigns;
+import com.dierks.homecraft.storage.PlacedBlock;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Keys;
@@ -204,7 +205,7 @@ public final class PrizeItemListener implements Listener {
      */
     private void megaShow(PlayerInteractEvent event, Player player, EquipmentSlot hand, Prize row) {
         Block on = event.getClickedBlock();
-        boolean launcher = on != null && CustomBlockService.isLauncher(on.getState(false));
+        boolean launcher = on != null && launcher(plugin, on);
         if (!MegaShow.usesOnTap(on != null, on != null && !launcher && ours(plugin, on), launcher)) {
             return; // the Arcade Machine's screen opened, a Mini was caught, a join sign started its game: kept
         }
@@ -218,6 +219,23 @@ public final class PrizeItemListener implements Listener {
         if (plugin.fireworkShows() == null || plugin.fireworkShows().refusalDue(player.getUniqueId())) {
             player.sendMessage(Text.of("&7" + refused));
             Sounds.refused(player);
+        }
+    }
+
+    /**
+     * Whether {@code on} is a placed Firework Launcher ({@link MegaShow#onLauncher}): its tile's tag, and only without
+     * one its placed-block record, as {@code CustomBlockListener} reads it. A lookup that fails is "no".
+     */
+    private static boolean launcher(HomeCraftManagement plugin, Block on) {
+        if (CustomBlockService.isLauncher(on.getState(false))) {
+            return true;
+        }
+        try {
+            CustomBlockService blocks = plugin.blockService();
+            return blocks != null && MegaShow.onLauncher(false,
+                    blocks.at(on.getLocation()).map(PlacedBlock::type).orElse(null));
+        } catch (RuntimeException | LinkageError e) {
+            return false;
         }
     }
 

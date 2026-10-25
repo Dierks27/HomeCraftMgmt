@@ -214,13 +214,16 @@ or not at all. For more than an evening, switch off eight rows. See
 rest back.
 
 **Back to 0.38.0 from 0.38.1:** **pick up every Firework Launcher before rolling back to 0.38.0**
-(0.38.0 doesn't know the block: a placed one would act as a retired Mini Workbench and break into
-one). Then the jar alone (0.38.0 reads revision 23 and runs nothing, with one WARN; 0.38.1 changes no
-schema). The candy keeps its gentler values (they are in the file), but 0.38.0 doesn't know a
-firework row's `seconds` or `launchers`, so it sells the Grand Firework Show as a three-second show
-for 40 tokens and the Mega Firework Show as one for 75: for more than an evening, set
-`enabled: false` on `firework_grand` and `firework_mega`. See
-[If you roll back to 0.38.0](#if-you-roll-back-to-0380). Nothing is lost.
+(0.38.0 doesn't know the block: one left standing acts as a retired Mini Workbench, which anyone who
+can build there may break into a Mini Workbench item). Then the jar alone (0.38.0 reads revision 23
+and runs nothing, with one WARN; 0.38.1 changes no schema). The candy keeps its gentler values (they
+are in the file), but 0.38.0 doesn't know a firework row's `seconds` or `launchers`, so it sells the
+Grand Firework Show as a three-second show for 40 tokens and the Mega Firework Show as one for 75:
+for more than an evening, set `enabled: false` on `firework_grand` and `firework_mega`. See
+[If you roll back to 0.38.0](#if-you-roll-back-to-0380). **Until the upgrade, don't place a
+launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
+Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
+a launcher in the bag and an unused show are as they were after the upgrade.
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
 by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
@@ -661,7 +664,8 @@ a minute long; it would be for those special events".
   is skipped from then on.
 - **The launcher** never opens, and hoppers, droppers and redstone do nothing to it. Each player may
   have 3 placed at once, admins too; a fourth is refused and stays in the hand ("You already have 3
-  Firework Launchers set up. Pick one up to move it!"). Only whoever placed it, or an admin, can pick
+  Firework Launchers set up. Pick one up to move it!"). A held tap or a held fourth place says its
+  line once, and again every 2 seconds while it is held. Only whoever placed it, or an admin, can pick
   it up ("This is <name>'s Firework Launcher. Only they can take it down."), and it comes back as a
   launcher. It takes a while to break by hand (a pickaxe is quicker), so a stray tap never knocks one
   down. Pistons, water, lava, explosions and withers leave it standing. Economy worlds only, like the
@@ -676,10 +680,11 @@ a minute long; it would be for those special events".
 - Neither row is in the Arcade Crate. `/hcm give prize firework_launcher [player]` and
   `/hcm give prize firework_mega [player]` give one (admin).
 
-Owner knobs: `arcade.launcher.material` (`DROPPER`), `name`, `per_player` (`3`, 1-10) and `range`
-(`32`, 8-64 blocks); `skins.firework_launcher` (blank: a texture makes the launcher a head, which
-Bedrock shows as a plain head); on the `firework_mega` row, `seconds` (`60`, 45-90) and `launchers`
-(`3`, 1-3). [The table below](#owner-knobs-038) has them all.
+Owner knobs: `arcade.launcher.material` (`DROPPER`, or `DISPENSER`; anything else is read as
+`DROPPER`, with one WARN), `name`, `per_player` (`3`, 1-10) and `range` (`32`, 8-64 blocks);
+`skins.firework_launcher` (blank: a texture makes the launcher a head, which Bedrock shows as a plain
+head); on the `firework_mega` row, `seconds` (`60`, 45-90) and `launchers` (`3`, 1-3).
+[The table below](#owner-knobs-038) has them all.
 
 ### Kept or rented, at a glance
 
@@ -893,7 +898,7 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `seconds` on the `party_time` row | `10` | how long a party lasts (5-30) |
 | `seconds` on a firework row (0.38.1) | `3` | how long its show lasts (3-30): `firework_grand` ships `15`. A value out of range is brought into it, with one WARN |
 | `launchers` on a firework row (0.38.1) | (none) | 1-3: a Mega Firework Show from that many of the nearest Firework Launchers; its `seconds` are then 45-90 (60 when it doesn't say). `firework_mega` ships `launchers: 3`, `seconds: 60` |
-| `arcade.launcher.material`, `arcade.launcher.name` | `DROPPER`, `"&6Firework Launcher"` | the Firework Launcher's block and name (0.38.1) |
+| `arcade.launcher.material`, `arcade.launcher.name` | `DROPPER`, `"&6Firework Launcher"` | the Firework Launcher's block and name (0.38.1): a `DROPPER` or a `DISPENSER` (anything else is read as `DROPPER`, with one WARN) |
 | `arcade.launcher.per_player` | `3` | launchers one player (admins too) may have placed at once (1-10) |
 | `arcade.launcher.range` | `32` | how far from whoever uses a Mega show its launchers may stand (8-64 blocks) |
 | `skins.firework_launcher` | `""` | a head texture makes the launcher a head instead of a dropper |
@@ -988,9 +993,10 @@ everything saved under her Bedrock id stays behind; an unlinked Java account is 
 ### If you roll back to 0.38.0
 
 **Pick up every launcher before rolling back to 0.38.0.** 0.38.0 doesn't know the Firework Launcher:
-a placed one would act as a retired Mini Workbench and break into a Mini Workbench item. Picked up,
-it waits in the bag (and a launcher placed while rolled back is only a plain dropper, so don't place
-any until the upgrade).
+a placed one would act as a retired Mini Workbench, and anyone who can build there (not only whoever
+placed it) may break it into a Mini Workbench item, which is no longer a prize. Picked up, it waits
+in the bag. **Don't place one until the upgrade:** 0.38.0 places a launcher as a plain dropper, which
+breaks into a plain dropper, so that launcher is gone for good.
 
 Then the jar alone: 0.38.0 reads `config_revision: 23`, runs nothing and says once that the config
 was written by a newer HomeCraft. While rolled back:
@@ -998,9 +1004,11 @@ was written by a newer HomeCraft. While rolled back:
 - 0.38.0 doesn't know a firework row's `seconds`, so **the Grand Firework Show row is read as a plain
   Firework Show**: it still sells for 40 tokens and plays three seconds, and any number play at once.
   One bought before or during the rollback is not spent by that: an unused one plays its 15 seconds
-  again after the upgrade (the length comes from the row when it is used);
+  again after the upgrade (the length comes from the row when it is used), but **one used while
+  rolled back is spent as a three-second show**, so keep them for after the upgrade;
 - it doesn't know `launchers` either, so **the Mega Firework Show row is a plain Firework Show too**,
-  at 75 tokens; an unused Mega show plays its minute again after the upgrade. The `firework_launcher`
+  at 75 tokens; an unused Mega show plays its minute again after the upgrade, and one used while
+  rolled back is spent the same way, as three seconds around its player. The `firework_launcher`
   row names a block 0.38.0 doesn't know, so it is skipped with one WARN and isn't sold;
 - the candy stays gentle (every 60 minutes, 30 on the last day, 3 apples): those are values in your
   file, which 0.38.0 reads as they are.

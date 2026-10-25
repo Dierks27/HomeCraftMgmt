@@ -41,7 +41,8 @@ import java.util.logging.Logger;
 
 /**
  * Builds the physical things the Prize Counter hands over: boosts, the Mini Radar and Lure, the
- * Firework Show, hats and caps, and the trophies (the Arcade Trophy, the ladder, the Trophy of the Month).
+ * Firework Shows (a Mega Firework Show glints: 0.38.1), hats and caps, and the trophies (the Arcade Trophy, the ladder,
+ * the Trophy of the Month).
  *
  * <p>Every one carries {@code hcm:token_prize} (so no money surface will take it) and
  * {@code prize_kind} (so right-clicking it does the right thing). They are built from materials
@@ -87,7 +88,9 @@ public final class PrizeItems {
                     "&7Right-click while a wild Mini is out.", null);
             case LURE -> tagged(new ItemStack(safe(p.icon().material(), Material.HEART_OF_THE_SEA)), p,
                     "&7Right-click to set it.", null);
-            case FIREWORK -> tagged(new ItemStack(Material.FIREWORK_STAR), p, "&7Right-click for a show!", null);
+            case FIREWORK -> MegaShow.isMega(p) ? glinting(tagged(new ItemStack(Material.FIREWORK_STAR), p,
+                    "&7Use it near your Firework Launchers!", null))
+                    : tagged(new ItemStack(Material.FIREWORK_STAR), p, "&7Right-click for a show!", null);
             case HAT -> p.collector() != null && p.collector().look() != null ? collectorCap(plugin, p, null)
                     : tagged(Heads.base(p.texture()), p, "&7Wear it! Right-click to put it on.", null);
             default -> null;
@@ -621,6 +624,16 @@ public final class PrizeItems {
             extra.accept(meta.getPersistentDataContainer());
         }
         item.setItemMeta(meta);
+        return item;
+    }
+
+    /** {@code item} with the enchanted glint (0.38.1: a Mega Firework Show reads as special in the bag). */
+    private static ItemStack glinting(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setEnchantmentGlintOverride(true);
+            item.setItemMeta(meta);
+        }
         return item;
     }
 

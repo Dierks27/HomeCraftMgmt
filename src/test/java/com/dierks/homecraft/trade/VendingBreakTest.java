@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The break fix (0.37.3, spec §4.15 (1)-(2), D22): only whoever placed a Vending Machine, Display Case or Pallet, or
  * an admin, may break it; everything in it goes back to whoever stocked it, always into their Mailbox, in one
  * transaction with the row deletes (never the breaker, never the ground); and a break another plugin cancels after
- * HIGH changes nothing at all.
+ * HIGH changes nothing at all. From 0.38.1 the Firework Launcher is placer-or-admin too, and holds no stock.
  */
 class VendingBreakTest {
 
@@ -47,6 +47,9 @@ class VendingBreakTest {
     private static final UUID HELPER = UUID.fromString("00000000-0000-0000-0000-00000000000b");
     private static final Set<CustomBlockType> STOCK = EnumSet.of(CustomBlockType.MINI_VENDING_MACHINE,
             CustomBlockType.DISPLAY_CASE, CustomBlockType.PALLET);
+    /** Broken only by whoever placed it or an admin: the three that hold stock, and the Firework Launcher (0.38.1). */
+    private static final Set<CustomBlockType> OWNER_ONLY = EnumSet.of(CustomBlockType.MINI_VENDING_MACHINE,
+            CustomBlockType.DISPLAY_CASE, CustomBlockType.PALLET, CustomBlockType.FIREWORK_LAUNCHER);
 
     private Connection conn;
     private Database db;
@@ -84,12 +87,15 @@ class VendingBreakTest {
     @Test
     void onlyTheOwnerOrAnAdminBreaksABlockThatHoldsStock() {
         for (CustomBlockType type : CustomBlockType.values()) {
-            boolean stock = STOCK.contains(type);
+            boolean ownerOnly = OWNER_ONLY.contains(type);
             assertFalse(CustomBlockGuard.breakRefusal(type, true, false), type + ": its owner may break it");
             assertFalse(CustomBlockGuard.breakRefusal(type, false, true), type + ": an admin may break it");
             assertFalse(CustomBlockGuard.breakRefusal(type, true, true), type + ": an owner who is an admin too");
-            assertEquals(stock, CustomBlockGuard.breakRefusal(type, false, false), type + (stock
+            assertEquals(ownerOnly, CustomBlockGuard.breakRefusal(type, false, false), type + (ownerOnly
                     ? ": anyone else is refused, empty or not" : ": every other block keeps the old rule"));
+            assertEquals(ownerOnly, CustomBlockGuard.ownerOnly(type), type + ": owner-only");
+            assertEquals(STOCK.contains(type), CustomBlockGuard.holdsStock(type),
+                    type + ": only the three hold stock (a launcher holds nothing)");
         }
         assertEquals("&cThis is Steve's Vending Machine. Only they can take it down.",
                 CustomBlockGuard.refusalLine("Steve", CustomBlockType.MINI_VENDING_MACHINE));
@@ -97,6 +103,9 @@ class VendingBreakTest {
                 CustomBlockGuard.refusalLine("Steve", CustomBlockType.DISPLAY_CASE));
         assertEquals("&cThis is Steve's Pallet. Only they can take it down.",
                 CustomBlockGuard.refusalLine("Steve", CustomBlockType.PALLET));
+        assertEquals("&cThis is Owner's Firework Launcher. Only they can take it down.",
+                CustomBlockGuard.refusalLine("Owner", CustomBlockType.FIREWORK_LAUNCHER),
+                "0.38.1: the daughter's launchers stay where she set them up");
     }
 
     @Test
@@ -217,6 +226,10 @@ class VendingBreakTest {
         List<String> mailbox = new ArrayList<>();
         assertTrue(CustomBlockGuard.finish(CustomBlockType.MAILBOX, recorder(mailbox, false)));
         assertEquals(List.of("forget", "drop"), mailbox, "a block that holds no stock returns none");
+        List<String> launcher = new ArrayList<>();
+        assertTrue(CustomBlockGuard.finish(CustomBlockType.FIREWORK_LAUNCHER, recorder(launcher, false)));
+        assertEquals(List.of("forget", "drop"), launcher,
+                "a Firework Launcher is owner-only but holds nothing: no stock is ever returned, one item drops");
     }
 
     private static CustomBlockGuard.Finish recorder(List<String> done, boolean written) {

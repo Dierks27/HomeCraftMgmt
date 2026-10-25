@@ -291,8 +291,10 @@ class FireworkShowTest {
                 + " if (longShow && clicked != null && ours(plugin, clicked)) { return; } cancel(event);";
         assertTrue(use.contains(guard), "a long show leaves a tap on one of ours alone, before anything: " + use);
         assertTrue(use.indexOf(guard) < use.indexOf("consume(player, hand)"), "so it is never used up there");
-        assertTrue(use.startsWith(" int seconds = FireworkShow.seconds(plugin.config().arcade().prize("
-                + "TokenPrizes.prizeId(item))); " + guard), "the first thing the case does");
+        assertTrue(use.startsWith(" Prize row = plugin.config().arcade().prize(TokenPrizes.prizeId(item));"
+                + " if (MegaShow.isMega(row)) { megaShow(event, player, hand, row); return; }"
+                + " int seconds = FireworkShow.seconds(row); " + guard),
+                "the first thing the case does, once a Mega show (0.38.1, MegaShowRulesTest) has gone its own way");
         assertTrue(use.contains("if (shows.start(player, seconds)) { consume(player, hand); }"),
                 "a short show (or a long one's tap on a plain block or the air) plays and is used, as before");
     }

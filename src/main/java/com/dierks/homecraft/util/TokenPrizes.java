@@ -16,7 +16,8 @@ import java.util.function.Predicate;
  * <p>Tokens buy fun; dollars buy things you keep. So nothing bought or won with tokens can be
  * turned into dollars: the house market, the Marketplace and its Pallets, Vending Machines, the
  * Auction House and Courier cargo all refuse a tagged item. Cards, packs, filament and HomeCraft
- * blocks are deliberately left untagged — they are Mini-making materials, not token prizes.
+ * blocks are deliberately left untagged — they are Mini-making materials, not token prizes — except
+ * the Firework Launcher (0.38.1), which only tokens buy, so it is tagged wherever it is made.
  */
 public final class TokenPrizes {
 

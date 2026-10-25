@@ -11,6 +11,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -80,20 +81,46 @@ public final class Fireworks {
         return Math.max(1.5, wall - 0.7);
     }
 
-    /** {@code ticksToDetonate} below 0 keeps the rocket's own flight, which {@code power} sets. */
+    /**
+     * One harmless firework of a chosen look (0.38.1, the Mega Firework Show): these colours fading to {@code fade},
+     * this shape, flickering or trailing as asked, bursting {@code ticksToDetonate} ticks after it is spawned (below 0:
+     * the rocket's own flight). The flight is set after the look, so every rocket of a volley bursts on the same tick.
+     */
+    public static void spawn(Location at, List<Color> colours, Color fade, FireworkEffect.Type type, boolean flicker,
+                             boolean trail, int ticksToDetonate) {
+        if (colours == null || colours.isEmpty() || type == null) {
+            return;
+        }
+        FireworkEffect.Builder look = FireworkEffect.builder().withColor(colours).with(type).flicker(flicker)
+                .trail(trail);
+        if (fade != null) {
+            look.withFade(fade);
+        }
+        launch(at, look.build(), 1, ticksToDetonate);
+    }
+
+    /** {@code ticksToDetonate} below 0 keeps the rocket's own flight, which {@code power} sets. A random look. */
     private static void launch(Location at, int power, int ticksToDetonate) {
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        launch(at, FireworkEffect.builder()
+                .withColor(PALETTE[r.nextInt(PALETTE.length)], PALETTE[r.nextInt(PALETTE.length)])
+                .withFade(Color.WHITE)
+                .with(FireworkEffect.Type.values()[r.nextInt(FireworkEffect.Type.values().length)])
+                .flicker(r.nextBoolean()).trail(true).build(), power, ticksToDetonate);
+    }
+
+    /**
+     * The one spawn every firework here goes through, so each is tagged {@link Keys#FIREWORK_SHOW} and can hurt
+     * nobody. The look first ({@code setFireworkMeta} works the flight out again), then the flight.
+     */
+    private static void launch(Location at, FireworkEffect effect, int power, int ticksToDetonate) {
         if (at == null || at.getWorld() == null) {
             return;
         }
-        ThreadLocalRandom r = ThreadLocalRandom.current();
         try {
             at.getWorld().spawn(at, Firework.class, fw -> {
                 FireworkMeta meta = fw.getFireworkMeta();
-                meta.addEffect(FireworkEffect.builder()
-                        .withColor(PALETTE[r.nextInt(PALETTE.length)], PALETTE[r.nextInt(PALETTE.length)])
-                        .withFade(Color.WHITE)
-                        .with(FireworkEffect.Type.values()[r.nextInt(FireworkEffect.Type.values().length)])
-                        .flicker(r.nextBoolean()).trail(true).build());
+                meta.addEffect(effect);
                 meta.setPower(power);
                 fw.setFireworkMeta(meta);
                 if (ticksToDetonate >= 0) {

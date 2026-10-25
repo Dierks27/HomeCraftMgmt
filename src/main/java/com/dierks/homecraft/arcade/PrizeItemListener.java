@@ -2,6 +2,7 @@ package com.dierks.homecraft.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.block.CustomBlockService;
+import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.games.JoinSigns;
 import com.dierks.homecraft.util.Bedrock;
@@ -14,6 +15,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.Skull;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
@@ -50,7 +52,9 @@ import java.util.UUID;
  *       ({@link FireworkShows}): the Firework Show's three seconds, the Grand Firework Show's fifteen with a finale
  *       (0.38.1). One long show at a time: another is refused and kept. A long show is never used by a tap on one of
  *       ours (the Arcade Machine, a join sign, a Mini), nor in a game or a Games world, and it ends when its player
- *       goes into one. A show stops when its player quits.</li>
+ *       goes into one. A show stops when its player quits. The <b>Mega Firework Show</b> (a row with
+ *       {@code launchers}, 0.38.1) plays a minute from the Firework Launchers nearby instead ({@link MegaShowService}),
+ *       as the player's one long show; a tap on a launcher starts it too, and with none near enough it is kept.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
  *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
@@ -137,8 +141,14 @@ public final class PrizeItemListener implements Listener {
                 }
             }
             case FIREWORK -> {
-                // The show's length is its row's now (a missing row plays the short show).
-                int seconds = FireworkShow.seconds(plugin.config().arcade().prize(TokenPrizes.prizeId(item)));
+                // The show is its row's now: a Mega show's launchers, or a show's length (a missing row plays the
+                // short show).
+                Prize row = plugin.config().arcade().prize(TokenPrizes.prizeId(item));
+                if (MegaShow.isMega(row)) {
+                    megaShow(event, player, hand, row); // first: a Mega show never plays around the player
+                    return;
+                }
+                int seconds = FireworkShow.seconds(row);
                 boolean longShow = FireworkShow.isLong(seconds);
                 Block clicked = event.getClickedBlock();
                 if (longShow && clicked != null && ours(plugin, clicked)) {
@@ -183,6 +193,32 @@ public final class PrizeItemListener implements Listener {
             default -> {
                 // a trophy is placed like any head
             }
+        }
+    }
+
+    /**
+     * A Mega Firework Show (0.38.1): from the Firework Launchers near the player ({@link MegaShowService}). A tap on
+     * another of ours is that block's (its listener ran first) and leaves the show in the hand; a tap on a launcher, a
+     * plain block or the air starts it. Every refusal (in a game, the long show still on, no launcher near enough, the
+     * launchers busy, the sky full) keeps the item, and is said at most once every 2 s, as 0.38.1's are; only a show
+     * that started uses it up.
+     */
+    private void megaShow(PlayerInteractEvent event, Player player, EquipmentSlot hand, Prize row) {
+        Block on = event.getClickedBlock();
+        boolean launcher = on != null && CustomBlockService.isLauncher(on.getState(false));
+        if (!MegaShow.usesOnTap(on != null, on != null && !launcher && ours(plugin, on), launcher)) {
+            return; // the Arcade Machine's screen opened, a Mini was caught, a join sign started its game: kept
+        }
+        cancel(event);
+        MegaShowService shows = plugin.megaShows();
+        String refused = shows == null ? MegaShow.CANT_START : shows.start(player, row);
+        if (refused == null) {
+            consume(player, hand);
+            return;
+        }
+        if (plugin.fireworkShows() == null || plugin.fireworkShows().refusalDue(player.getUniqueId())) {
+            player.sendMessage(Text.of("&7" + refused));
+            Sounds.refused(player);
         }
     }
 
@@ -454,7 +490,10 @@ public final class PrizeItemListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {
         ItemStack item = event.getItemInHand();
-        if (!TokenPrizes.is(item) || !(event.getBlockPlaced().getState() instanceof Skull skull)) {
+        BlockState placed = event.getBlockPlaced().getState();
+        CustomBlockService blocks = plugin.blockService();
+        if (!storesAsPlacedPrize(TokenPrizes.is(item), placed instanceof Skull,
+                blocks != null && blocks.itemType(item) != null) || !(placed instanceof Skull skull)) {
             return;
         }
         ItemStack one = item.clone();
@@ -467,6 +506,15 @@ public final class PrizeItemListener implements Listener {
             pdc.set(Keys.PLACED_PRIZE_ID, PersistentDataType.STRING, id);
         }
         skull.update(true, false);
+    }
+
+    /**
+     * Whether a placed block is stored as a placed prize: a token prize placed as a head, unless it is a HomeCraft
+     * block (0.38.1: a Firework Launcher, a token prize, wearing a head skin), which is the block system's, as
+     * {@code MiniHeadListener} leaves one: stored as a prize too, its break would put one in the bag and drop another.
+     */
+    static boolean storesAsPlacedPrize(boolean tokenPrize, boolean skull, boolean homecraftBlock) {
+        return tokenPrize && skull && !homecraftBlock;
     }
 
     /**

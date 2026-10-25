@@ -30,6 +30,9 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p><b>A long show stays out of the games</b> (review SHOW-GAMES-1), as Party Time does: it ends when its player goes
  * into a game or a Games world ({@link #playsHere}), so the rest of a Grand show never bursts on a course, and one isn't
  * started there (the item is kept). A short show plays as it always has.
+ *
+ * <p>A Mega Firework Show (0.38.1) is a long show too, played at its launchers by {@link MegaShowService}: it holds its
+ * player's one long show here ({@link #holdLong}) for as long as it plays.
  */
 public final class FireworkShows {
 
@@ -91,6 +94,21 @@ public final class FireworkShows {
     /** Whether {@code player}'s long show is on. */
     public boolean longShowOn(UUID player) {
         return guard.longOn(player);
+    }
+
+    /**
+     * Take {@code player}'s one long show for a show played somewhere else (the Mega Firework Show, at the launchers:
+     * {@link MegaShowService}): its number, or 0 (nothing held) when their long show is on. It is held until
+     * {@link #releaseLong} with that number, their quit or the stop, so a Grand show and a Mega show never play
+     * together for one player. Its start stamps the refusal gap as a long show's does.
+     */
+    public long holdLong(UUID player) {
+        return guard.tryStart(player, true, System.currentTimeMillis());
+    }
+
+    /** The long show {@link #holdLong} numbered {@code show} is over; any other number (an old one) frees nothing. */
+    public void releaseLong(UUID player, long show) {
+        guard.end(player, show);
     }
 
     /** Whether a long show plays where {@code player} is now: not in a game, nor in a Games world. */

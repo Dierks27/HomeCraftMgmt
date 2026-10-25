@@ -258,7 +258,8 @@ class ShopMigrationTest {
         assertTrue(log22.stream().noneMatch(l -> l.contains("32 new rows") || l.contains("Arcade Crate no longer")),
                 "no revision-22 step runs from 22, only 23's: " + log22);
         assertTrue(ArcadeConfigMigration.sameRows(crate, rows(at22, CRATE)), "the crate is as it was");
-        assertEquals(counter.size() + 1, rows(at22, PRIZES).size(), "the counter gains only the Grand Firework Show");
+        assertEquals(counter.size() + 3, rows(at22, PRIZES).size(),
+                "the counter gains only the Grand Firework Show, the Firework Launcher and the Mega Firework Show");
 
         YamlConfiguration at23 = LayoutFixtures.v0372();
         at23.set("config_revision", 23);

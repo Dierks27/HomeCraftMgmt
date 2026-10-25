@@ -20,22 +20,32 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Config revision 23 ({@link GrandShowMigration}: the Grand Firework Show and a gentler Candy Apple shower, the owner's
- * requests of 25 Oct), against a verbatim copy of 0.38.0's bundled config.yml.
+ * Config revision 23 ({@link GrandShowMigration}: the Grand Firework Show, the Firework Launcher and the Mega Firework
+ * Show, and a gentler Candy Apple shower, the owner's requests of 25 Oct), against a verbatim copy of 0.38.0's bundled
+ * config.yml.
  *
  * <p>Pinned here: the owner's 0.38.0 file ends with exactly the bundled counter (the Grand Firework Show right after the
- * Firework Show) and the new candy settings, with one INFO each and no WARN; a second start and a re-run change
- * nothing; an owner-edited candy value is kept with one WARN while the others move, the INFO saying only what moved
- * (and one more WARN when the last day would now be the quieter one); an owner-deleted Firework Show
- * still gets the Grand one, at the end; an owner's own {@code firework_grand} row is kept with a WARN and the line to
- * paste, and the shipped row already there isn't doubled; an absent list or key is left to the backfill; the frozen
- * values are what 0.37.2 and 0.38.0 shipped and what this one ships; and a 0.38.0 jar reading a revision-23 file says
- * so once and runs nothing.
+ * Firework Show, then the Firework Launcher and the Mega Firework Show) and the new candy settings, with one INFO each
+ * and no WARN; a second start and a re-run change nothing; an owner-edited candy value is kept with one WARN while the
+ * others move, the INFO saying only what moved (and one more WARN when the last day would now be the quieter one); an
+ * owner-deleted Firework Show still gets the three, at the end; an owner's own {@code firework_grand} or
+ * {@code firework_mega} row is kept with a WARN and the line to paste (the rows after it still follow it), and a
+ * shipped row already there isn't doubled; an absent list or key is left to the backfill; the frozen values are what
+ * 0.37.2 and 0.38.0 shipped and what this one ships, each paste line the bundled file's own; and a 0.38.0 jar reading a
+ * revision-23 file says so once and runs nothing.
  */
 class GrandShowMigrationTest {
 
     private static final String PRIZES = GrandShowMigration.PRIZES;
     private static final String CANDY = CandyConfig.PATH;
+    /** The three rows' INFO on a 0.38.0 file. */
+    private static final String ADDED_ALL = "Config migration: Prize Counter - added the Grand Firework Show"
+            + " (firework_grand: 15 seconds of fireworks with a big finale, 40 tokens) after the Firework Show, the"
+            + " Firework Launcher (firework_launcher: set up 3 for a Mega Firework Show, 5 tokens) after the Grand"
+            + " Firework Show and the Mega Firework Show (firework_mega: a minute of fireworks from 3 Firework"
+            + " Launchers, 75 tokens) after the Firework Launcher.";
+    /** The ids revision 23 adds, in order. */
+    private static final List<String> NEW_IDS = List.of("firework_grand", "firework_launcher", "firework_mega");
 
     private static List<String> warns(List<String> log) {
         return log.stream().filter(l -> l.startsWith(HomeCraftManagement.WARN)).toList();
@@ -85,14 +95,14 @@ class GrandShowMigrationTest {
         assertEquals(List.of(), warns(log), "nothing the owner changed: no WARN");
         YamlConfiguration bundled = LayoutFixtures.bundled();
         assertTrue(ArcadeConfigMigration.sameRows(rows(c), rows(bundled)), "the counter is the bundled one: " + ids(c));
-        assertEquals(ids(c).indexOf("firework_show") + 1, ids(c).indexOf("firework_grand"), "right after the show");
+        int show = ids(c).indexOf("firework_show");
+        assertEquals(NEW_IDS, ids(c).subList(show + 1, show + 4), "the three right after the show, in order");
         assertCandy(c, 60, 30, 3, "0.38.0");
         assertEquals(bundled.getConfigurationSection(CANDY).getValues(false),
                 c.getConfigurationSection(CANDY).getValues(false), "the whole candy section is the bundled one");
         assertEquals(23, c.getInt("config_revision"));
         assertEquals(List.of(
-                "Config migration: Prize Counter - added the Grand Firework Show (firework_grand: 15 seconds of"
-                        + " fireworks with a big finale, 40 tokens) after the Firework Show.",
+                ADDED_ALL,
                 "Config migration: arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30,"
                         + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: a shower an hour, every half hour on"
                         + " the last day, 3 candy apples each).",
@@ -111,7 +121,9 @@ class GrandShowMigrationTest {
         String once = c.saveToString();
         assertEquals(List.of(), apply(c), "the second run logs nothing");
         assertEquals(once, c.saveToString(), "and changes nothing");
-        assertEquals(1, ids(c).stream().filter("firework_grand"::equals).count(), "one Grand Firework Show");
+        for (String id : NEW_IDS) {
+            assertEquals(1, ids(c).stream().filter(id::equals).count(), "one " + id);
+        }
 
         YamlConfiguration at23 = LayoutFixtures.v0380();
         at23.set("config_revision", 23);
@@ -229,10 +241,15 @@ class GrandShowMigrationTest {
         List<String> log = apply(c);
         assertEquals(List.of(), warns(log), "no WARN");
         assertFalse(ids(c).contains("firework_show"), "the deleted row is not put back");
-        assertEquals("firework_grand", ids(c).get(ids(c).size() - 1), "the Grand one is appended");
-        assertEquals(list.size() + 1, ids(c).size());
+        assertEquals(NEW_IDS, ids(c).subList(ids(c).size() - 3, ids(c).size()),
+                "the Grand one is appended, and the launcher and the Mega show after it");
+        assertEquals(list.size() + 3, ids(c).size());
         assertTrue(ShopMigration.same(rowOf(c, "firework_grand"), GrandShowMigration.GRAND), "as shipped");
-        assertTrue(log.get(0).endsWith("40 tokens) at the end of the list."), log.get(0));
+        assertTrue(ShopMigration.same(rowOf(c, "firework_launcher"), GrandShowMigration.LAUNCHER), "as shipped");
+        assertTrue(ShopMigration.same(rowOf(c, "firework_mega"), GrandShowMigration.MEGA), "as shipped");
+        assertTrue(log.get(0).contains("40 tokens) at the end of the list, the Firework Launcher (firework_launcher:"),
+                log.get(0));
+        assertTrue(log.get(0).endsWith("75 tokens) after the Firework Launcher."), log.get(0));
         assertEquals(List.of(), apply(c), "and only once");
     }
 
@@ -256,7 +273,49 @@ class GrandShowMigrationTest {
         assertEquals(HomeCraftManagement.WARN + "  - { id: firework_grand, tab: COSMETICS, display: \"&6Grand Firework"
                 + " Show\", description: [\"A long firework show\", \"with a big finale!\"], cost_tokens: 40, icon: {"
                 + " texture: \"\", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }", w.get(1));
-        assertTrue(log.stream().noneMatch(l -> l.startsWith("Config migration: Prize Counter")), "nothing added");
+        int theirs = ids(c).indexOf("firework_grand");
+        assertEquals(List.of("firework_launcher", "firework_mega"), ids(c).subList(theirs + 1, theirs + 3),
+                "the launcher and the Mega show still follow it, their own row or not");
+        assertEquals(List.of("Config migration: Prize Counter - added the Firework Launcher (firework_launcher: set up 3"
+                        + " for a Mega Firework Show, 5 tokens) after the Grand Firework Show and the Mega Firework Show"
+                        + " (firework_mega: a minute of fireworks from 3 Firework Launchers, 75 tokens) after the"
+                        + " Firework Launcher."),
+                log.stream().filter(l -> l.startsWith("Config migration: Prize Counter")).toList(),
+                "the INFO names only what was added");
+    }
+
+    /** An owner's own {@code firework_mega} (pasted from a forum, say): kept with one WARN and the line to paste. */
+    @Test
+    void anOwnersOwnFireworkMegaIsKeptWithOneWarnAndThePasteLine() {
+        YamlConfiguration c = LayoutFixtures.v0380();
+        List<Object> list = new ArrayList<>(c.getList(PRIZES));
+        Map<String, Object> mine = new LinkedHashMap<>();
+        mine.put("id", "firework_mega");
+        mine.put("display", "&dMy Mega Show");
+        mine.put("cost_tokens", 50);
+        mine.put("type", "firework");
+        mine.put("seconds", 20);
+        list.add(mine);
+        c.set(PRIZES, list);
+        List<String> log = apply(c);
+        assertEquals(50, rowOf(c, "firework_mega").get("cost_tokens"), "their own row stays, at their price");
+        assertEquals(1, ids(c).stream().filter("firework_mega"::equals).count(), "and is not doubled");
+        assertEquals(ids(c).size() - 1, ids(c).indexOf("firework_mega"), "where they put it");
+        List<String> w = warns(log);
+        assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: kept your own arcade.prizes → firework_mega"
+                        + " row: 0.38.1 ships a row with that id. To take 0.38.1's instead, put this line in place of"
+                        + " yours:",
+                HomeCraftManagement.WARN + "  - { id: firework_mega, tab: COSMETICS, display: \"&dMega Firework Show\","
+                        + " description: [\"A whole minute of fireworks\", \"from your Firework Launchers!\"],"
+                        + " cost_tokens: 75, icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework,"
+                        + " seconds: 60, launchers: 3 }"), w, "one WARN and the shipped line");
+        int grand = ids(c).indexOf("firework_grand");
+        assertEquals("firework_launcher", ids(c).get(grand + 1), "the launcher still goes in after the Grand show");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith("Config migration: Prize Counter - added the Grand Firework"
+                + " Show") && l.contains("the Firework Launcher") && !l.contains("firework_mega")), log.toString());
+        String once = c.saveToString();
+        assertEquals(w, warns(apply(c)), "a second run adds nothing, and only says the WARN again");
+        assertEquals(once, c.saveToString());
     }
 
     @Test
@@ -268,7 +327,10 @@ class GrandShowMigrationTest {
         List<String> log = apply(c);
         assertEquals(1, ids(c).stream().filter("firework_grand"::equals).count());
         assertEquals(List.of(), warns(log), "theirs is the shipped row: no WARN");
-        assertTrue(log.stream().noneMatch(l -> l.startsWith("Config migration: Prize Counter")), log.toString());
+        assertEquals(NEW_IDS, ids(c).subList(ids(c).size() - 3, ids(c).size()),
+                "the launcher and the Mega show go in after it");
+        assertTrue(log.stream().filter(l -> l.startsWith("Config migration: Prize Counter")).allMatch(
+                l -> l.startsWith("Config migration: Prize Counter - added the Firework Launcher")), log.toString());
     }
 
     @Test
@@ -297,15 +359,31 @@ class GrandShowMigrationTest {
 
         assertNull(rowOf(LayoutFixtures.v0380(), "firework_grand"), "the row is new");
         assertTrue(ShopMigration.same(rowOf(bundled, "firework_grand"), GrandShowMigration.GRAND), "the bundled row");
+        assertEquals(NEW_IDS, GrandShowMigration.ADDED.stream().map(a -> ShopMigration.idOf(a.row())).toList(),
+                "the three, in the order they go in");
+        String after = GrandShowMigration.AFTER;
+        for (GrandShowMigration.Added a : GrandShowMigration.ADDED) {
+            String id = ShopMigration.idOf(a.row());
+            assertNull(rowOf(LayoutFixtures.v0380(), id), id + " is new");
+            assertNull(rowOf(LayoutFixtures.v0372(), id), id + " is new");
+            assertTrue(ShopMigration.same(rowOf(bundled, id), a.row()), id + ": the bundled row");
+            assertEquals(after, a.after(), id + " follows the one before it");
+            assertEquals(ids(bundled).indexOf(after) + 1, ids(bundled).indexOf(id), id + ": so the bundled file has it");
+            after = id;
+        }
         assertTrue(ShopMigration.same(rowOf(bundled, "firework_show"), rowOf(LayoutFixtures.v0380(), "firework_show")),
                 "the Firework Show itself is unchanged");
         String text = Files.readString(Path.of("src/main/resources/config.yml"), StandardCharsets.UTF_8);
-        assertTrue(text.contains("\n    " + ArcadeConfigMigration.flowRow(GrandShowMigration.GRAND) + "\n"),
-                "the paste line is the bundled file's own line: " + ArcadeConfigMigration.flowRow(GrandShowMigration.GRAND));
+        for (GrandShowMigration.Added a : GrandShowMigration.ADDED) {
+            assertTrue(text.contains("\n    " + ArcadeConfigMigration.flowRow(a.row()) + "\n"),
+                    "the paste line is the bundled file's own line: " + ArcadeConfigMigration.flowRow(a.row()));
+        }
         assertTrue(text.contains("\n  #   firework   a harmless firework show; seconds 3-30, default 3.\n"),
                 "the type comment");
         for (Map<?, ?> crate : bundled.getMapList("arcade.crates.arcade_crate.rewards")) {
-            assertFalse(String.valueOf(crate.get("prize")).contains("firework_grand"), "never in the crate");
+            for (String id : NEW_IDS) {
+                assertFalse(String.valueOf(crate.get("prize")).contains(id), id + " is never in the crate");
+            }
         }
     }
 

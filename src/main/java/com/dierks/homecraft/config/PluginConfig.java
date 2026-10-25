@@ -534,11 +534,13 @@ public final class PluginConfig {
      *   <li>COMMAND: {@code onlyIf}</li>
      *   <li>PARTY: {@code seconds} (5-30); FIREWORK: {@code seconds}, its show's length (3-30, 3 when the row doesn't
      *       say; 0.38.1)</li>
+     *   <li>FIREWORK: {@code launchers} (0.38.1, 1-3; 0 = a show around the player): a Mega Firework Show from the
+     *       nearest Firework Launchers instead, whose {@code seconds} are 45-90 (60 when the row doesn't say)</li>
      *   <li>a Keeper ({@code arcade.Keepers} only, never a config row): {@code keeper}</li>
      * </ul>
      */
     public record PrizeExtra(Material hatMaterial, int renewTokens, Material ballLook, OnlyIf onlyIf, int seconds,
-                             Keeper keeper) {
+                             Keeper keeper, int launchers) {
         /** A row with none of them: every row before 0.38, and every type that has none. */
         public static final PrizeExtra NONE = new PrizeExtra(null, 0, null, OnlyIf.ANY, 0, null);
 
@@ -546,6 +548,12 @@ public final class PluginConfig {
             if (onlyIf == null) {
                 onlyIf = OnlyIf.ANY;
             }
+        }
+
+        /** A row as 0.38.0 read it: no {@code launchers} (every row but a Mega Firework Show's). */
+        public PrizeExtra(Material hatMaterial, int renewTokens, Material ballLook, OnlyIf onlyIf, int seconds,
+                          Keeper keeper) {
+            this(hatMaterial, renewTokens, ballLook, onlyIf, seconds, keeper, 0);
         }
     }
 
@@ -579,7 +587,7 @@ public final class PluginConfig {
      *   <li>COMMAND: {@code commands} (console, {@code %player%} / {@code %uuid%}),
      *       {@code requiresPlugins}, {@code ownedIfPermission}, {@code requiresPrize}</li>
      *   <li>FILAMENT: {@code amount}, {@code color} (null = the buyer picks)</li>
-     *   <li>BLOCK: {@code blockKey}; PACK: {@code packId}</li>
+     *   <li>BLOCK: {@code blockKey} (0.38.1: {@code FIREWORK_LAUNCHER} too); PACK: {@code packId}</li>
      * </ul>
      *
      * <p>{@code collector} is set only on the plugin's own collectors ({@code arcade.Collectors}),
@@ -889,6 +897,17 @@ public final class PluginConfig {
                                int defaultQuietPercent) {
     }
 
+    /**
+     * The Firework Launcher ({@code arcade.launcher}, 0.38.1): the block's look (a dropper pointing up unless
+     * {@code skins.firework_launcher} names a head), how many one player may have placed at once (1-10), and how far
+     * from whoever uses a Mega Firework Show its launchers may stand (8-64 blocks).
+     */
+    public record Launcher(BlockDef block, int perPlayer, int range) {
+        /** What the bundled file ships. */
+        public static final Launcher DEFAULTS = new Launcher(new BlockDef(Material.DROPPER, "&6Firework Launcher"), 3,
+                32);
+    }
+
     /** The Mini trading blocks' appearance (Phase 4c). */
     public record MiniBlocks(BlockDef vending, BlockDef display, BlockDef auction) {
     }
@@ -961,6 +980,7 @@ public final class PluginConfig {
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
     private SoundMuffler soundMuffler = new SoundMuffler(true, new BlockDef(Material.WHITE_WOOL, "&fSound Muffler"), 8, 16, 25);
+    private Launcher launcher = Launcher.DEFAULTS;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     /** Extra skin slots that aren't 1:1 with a block type (pallet_used, vending_upper, mailbox.<variant>). */
     private Map<String, String> namedSkins = new LinkedHashMap<>();
@@ -1036,6 +1056,11 @@ public final class PluginConfig {
     /** The Sound Muffler block and its limits. */
     public SoundMuffler soundMuffler() {
         return soundMuffler;
+    }
+
+    /** The Firework Launcher block, how many a player may have placed, and a Mega show's range (0.38.1). */
+    public Launcher launcher() {
+        return launcher;
     }
 
     /** The Base64 head-texture value configured for a custom block, or "" if none. */
@@ -1398,6 +1423,8 @@ public final class PluginConfig {
 
         // ---- Sound Muffler ----
         this.soundMuffler = readSoundMuffler(c);
+        // ---- The Firework Launcher (0.38.1) ----
+        this.launcher = readLauncher(c);
 
         // ---- Block skins + Web Dashboard (Phase 6) ----
         this.skins = readSkins(c);
@@ -2073,6 +2100,7 @@ public final class PluginConfig {
         Material ballLook = null;
         OnlyIf onlyIf = OnlyIf.ANY;
         int seconds = 0;
+        int launchers = 0;
 
         if (row.get("renew_tokens") != null) {
             if (type == PrizeType.HAT) {
@@ -2130,7 +2158,12 @@ public final class PluginConfig {
                 ballLook = m;
             }
             case PARTY -> seconds = Math.min(30, Math.max(5, (int) number(row.get("seconds"), 10)));
-            case FIREWORK -> seconds = fireworkSeconds(id, row.get("seconds"), warning);
+            case FIREWORK -> {
+                // 0.38.1: launchers (1-3) make it a Mega Firework Show, with its own length (45-90 seconds)
+                launchers = fireworkLaunchers(id, row.get("launchers"), warning);
+                seconds = launchers > 0 ? megaSeconds(id, row.get("seconds"), warning)
+                        : fireworkSeconds(id, row.get("seconds"), warning);
+            }
             case COMMAND -> {
                 commands = stringList(row.get("commands"));
                 if (commands.isEmpty()) {
@@ -2155,7 +2188,8 @@ public final class PluginConfig {
                 com.dierks.homecraft.block.CustomBlockType bt = parseBlockType(key);
                 if (bt == null) {
                     warning.accept("Arcade prize '" + id + "' names unknown block '" + key
-                            + "' — skipped. Valid: display_case, pallet, vending, mailbox, printer, pc, arcade.");
+                            + "' — skipped. Valid: display_case, pallet, vending, mailbox, printer, pc, arcade, "
+                            + "firework_launcher.");
                     return null;
                 }
                 blockKey = bt.name();
@@ -2174,8 +2208,12 @@ public final class PluginConfig {
                 // radar, lure, trophy, filament, pity, trade_in, quest_reroll, home_slot: nothing more to read
             }
         }
+        if (row.get("launchers") != null && type != PrizeType.FIREWORK) {
+            warning.accept("Arcade prize '" + id + "' has launchers, but only a firework row fires from Firework "
+                    + "Launchers - ignored.");
+        }
         // a config row is never a Keeper (arcade.Keepers): the merge skips any that takes a keeper_ id
-        PrizeExtra extra = new PrizeExtra(hatMaterial, renewTokens, ballLook, onlyIf, seconds, null);
+        PrizeExtra extra = new PrizeExtra(hatMaterial, renewTokens, ballLook, onlyIf, seconds, null, launchers);
         return new Prize(id, tab, display, description, Math.max(0, cost), icon, type, enabled, limit,
                 amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
                 headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize,
@@ -2190,16 +2228,52 @@ public final class PluginConfig {
     static int fireworkSeconds(String id, Object raw, java.util.function.Consumer<String> warning) {
         int min = com.dierks.homecraft.arcade.FireworkShow.SHORT_SECONDS;
         int max = com.dierks.homecraft.arcade.FireworkShow.MAX_SECONDS;
+        return wholeIn(id, "seconds", raw, min, max, min, "a firework show lasts " + min + " to " + max + " seconds",
+                warning);
+    }
+
+    /**
+     * A Mega Firework Show row's {@code seconds} (0.38.1, a firework row with {@code launchers}): 60 when the row
+     * doesn't say, 45 to 90 ({@code MegaShow.MIN_SECONDS}, {@code MAX_SECONDS}): a minute is the show the owner asked
+     * for, and every other firework row keeps its own 3-30. Brought into range with one WARN, as
+     * {@link #fireworkSeconds}.
+     */
+    static int megaSeconds(String id, Object raw, java.util.function.Consumer<String> warning) {
+        int min = com.dierks.homecraft.arcade.MegaShow.MIN_SECONDS;
+        int max = com.dierks.homecraft.arcade.MegaShow.MAX_SECONDS;
+        return wholeIn(id, "seconds", raw, min, max, com.dierks.homecraft.arcade.MegaShow.DEFAULT_SECONDS,
+                "a Mega Firework Show lasts " + min + " to " + max + " seconds", warning);
+    }
+
+    /**
+     * A firework row's {@code launchers} (0.38.1): how many Firework Launchers its Mega show fires from, 0 (a show
+     * around the player, every row before 0.38.1) to {@code MegaShow.MAX_LAUNCHERS} (3). Brought into range with one
+     * WARN.
+     */
+    static int fireworkLaunchers(String id, Object raw, java.util.function.Consumer<String> warning) {
         if (raw == null) {
-            return min;
+            return 0;
+        }
+        int max = com.dierks.homecraft.arcade.MegaShow.MAX_LAUNCHERS;
+        return wholeIn(id, "launchers", raw, 0, max, 0, "a Mega Firework Show fires from 1 to " + max
+                + " Firework Launchers (0 = a show around the player)", warning);
+    }
+
+    /**
+     * A whole number in {@code min}-{@code max} from a row's {@code key}: {@code dflt} when the row doesn't say, and
+     * anything else (not a number, out of range, not whole) brought into range with one WARN saying {@code rule}.
+     */
+    private static int wholeIn(String id, String key, Object raw, int min, int max, int dflt, String rule,
+                               java.util.function.Consumer<String> warning) {
+        if (raw == null) {
+            return dflt;
         }
         double n = number(raw, Double.NaN);
-        int s = Double.isNaN(n) ? min : (int) Math.max(min, Math.min(max, n));
-        if (Double.isNaN(n) || s != n) {
-            warning.accept("Arcade prize '" + id + "' has seconds '" + raw + "' - a firework show lasts " + min + " to "
-                    + max + " seconds. Using " + s + ".");
+        int v = Double.isNaN(n) ? dflt : (int) Math.max(min, Math.min(max, n));
+        if (Double.isNaN(n) || v != n) {
+            warning.accept("Arcade prize '" + id + "' has " + key + " '" + raw + "' - " + rule + ". Using " + v + ".");
         }
-        return s;
+        return v;
     }
 
     private static PrizeTab defaultTab(PrizeType type) {
@@ -2385,6 +2459,7 @@ public final class PluginConfig {
         putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
         putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
         putSkin(map, sec, "sound_muffler", com.dierks.homecraft.block.CustomBlockType.SOUND_MUFFLER);
+        putSkin(map, sec, "firework_launcher", com.dierks.homecraft.block.CustomBlockType.FIREWORK_LAUNCHER);
 
         // Named slots: the Pallet's loaded state, the Vending Machine's top half, and
         // one skin per Mailbox colour. A legacy single-string `mailbox:` counts as wood.
@@ -2867,6 +2942,30 @@ public final class PluginConfig {
         int radius = Math.max(min, Math.min(maxRadius, c.getInt("sound_muffler.default_radius", 8)));
         int quiet = Math.max(1, Math.min(90, c.getInt("sound_muffler.default_quiet_percent", 25)));
         return new SoundMuffler(enabled, block, radius, maxRadius, quiet);
+    }
+
+    /**
+     * {@code arcade.launcher} (0.38.1). {@code per_player} is brought into 1-10 and {@code range} into 8-64 blocks,
+     * with one WARN each when it was outside: a Mega show's rockets are only seen from within the server's entity
+     * range, so a launcher further off than that would fire for nobody.
+     */
+    private Launcher readLauncher(FileConfiguration c) {
+        Launcher d = Launcher.DEFAULTS;
+        BlockDef block = blockDef(c, "arcade.launcher", d.block().material(), d.block().name());
+        int perPlayer = clamped(c, "arcade.launcher.per_player", d.perPlayer(), 1, 10);
+        int range = clamped(c, "arcade.launcher.range", d.range(), 8, 64);
+        return new Launcher(block, perPlayer, range);
+    }
+
+    /** An int setting brought into {@code min}-{@code max}, with one WARN when it was outside. */
+    private int clamped(FileConfiguration c, String path, int fallback, int min, int max) {
+        int v = c.getInt(path, fallback);
+        if (v < min || v > max) {
+            int in = Math.max(min, Math.min(max, v));
+            log.warning(path + " " + v + " is outside " + min + "-" + max + "; using " + in + ".");
+            return in;
+        }
+        return v;
     }
 
     private BlockDef blockDef(FileConfiguration c, String path, Material fallback, String defaultName) {

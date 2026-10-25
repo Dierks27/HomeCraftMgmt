@@ -6,9 +6,14 @@ import com.dierks.homecraft.block.MailboxVariant;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
+import com.dierks.homecraft.util.TokenPrizes;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockDataMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -18,7 +23,8 @@ import java.util.List;
 /**
  * Builds the tagged custom-block items (Mini Workbench, PC). Identity travels
  * on the item via a PDC marker so we can recognise it on placement; the visual
- * material, name, lore, and (for the PC) head texture come from config.
+ * material, name, lore, and (for the PC) head texture come from config. The
+ * Firework Launcher alone is a token prize too (0.38.1).
  */
 public final class CustomItems {
 
@@ -163,6 +169,35 @@ public final class CustomItems {
                 CustomBlockType.SOUND_MUFFLER, config.skin(CustomBlockType.SOUND_MUFFLER));
     }
 
+    /**
+     * A Firework Launcher, ready to place (0.38.1): set up to 3 near each other and a Mega Firework Show fires from
+     * them. Only tokens buy it (the Prize Counter's {@code firework_launcher}; no recipe), so it carries the
+     * {@code hcm:token_prize} tag here, on every one ever made (bought, from a crate, {@code /hcm give prize}, the drop
+     * when it is picked up), and never becomes money: a place and a break can't wash the tag off. A dropper (with no
+     * skin) carries its placed state, facing up, so it lands pointing at the sky whichever way its placer looks.
+     */
+    public ItemStack fireworkLauncher() {
+        PluginConfig.BlockDef def = config.launcher().block();
+        String skin = config.skin(CustomBlockType.FIREWORK_LAUNCHER);
+        ItemStack item = tagged(def.material(), def.name(), List.of("&7Place 3 near each other,",
+                "&7then use a &dMega Firework Show&7!", "&8Only you can pick it up."),
+                CustomBlockType.FIREWORK_LAUNCHER, skin);
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return item;
+        }
+        TokenPrizes.tag(meta, com.dierks.homecraft.arcade.MegaShow.LAUNCHER_PRIZE_ID);
+        if ((skin == null || skin.isBlank()) && def.material().isBlock() && meta instanceof BlockDataMeta bdm) {
+            BlockData placed = def.material().createBlockData();
+            if (placed instanceof Directional d && d.getFaces().contains(BlockFace.UP)) {
+                d.setFacing(BlockFace.UP);
+                bdm.setBlockData(d);
+            }
+        }
+        item.setItemMeta(meta);
+        return item;
+    }
+
     /** An Arcade machine block (crate/scratch/pity/counter). */
     public ItemStack arcadeMachine(String key, CustomBlockType type, String lore) {
         PluginConfig.BlockDef def = config.arcade().machines().get(key);
@@ -214,6 +249,7 @@ public final class CustomItems {
             case PITY_KIOSK -> arcadeMachine("pity", type, "&7Right-click: tokens → a guaranteed Rare+ Mini.");
             case TOKEN_COUNTER -> arcadeMachine("counter", type, "&7Right-click to check your tokens.");
             case SOUND_MUFFLER -> soundMuffler();
+            case FIREWORK_LAUNCHER -> fireworkLauncher();
         };
     }
 

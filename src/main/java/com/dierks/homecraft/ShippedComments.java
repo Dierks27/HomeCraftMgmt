@@ -25,9 +25,10 @@ import java.util.Set;
  * plot: Golf v4 does, a Mountain Run v2 can't be kept). Revision 22 (the token shop, {@link ShopMigration}) makes
  * three more stale: the Prize Counter's header (no Looks tab, no MONTH, "a hat with a blank texture is HIDDEN"), the
  * icon keys (no {@code looks} or {@code keepers}) and the collectors' (it names 0.37.1's two, and "no presents"
- * now covers looks and golf balls too). Revision 23 (the Grand Firework Show, {@link GrandShowMigration}) makes
- * 0.38.0's Prize Counter header stale once more: its firework line said "a harmless three-second firework show", and
- * a firework row has {@code seconds} now.
+ * now covers looks and golf balls too). Revision 23 (the Grand and Mega Firework Shows, {@link GrandShowMigration})
+ * makes 0.38.0's Prize Counter header stale once more: its firework line said "a harmless three-second firework show",
+ * and a firework row has {@code seconds} now, and {@code launchers} for a Mega show, whose launcher is a
+ * {@code block} row's {@code firework_launcher}.
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
  * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's or 0.38.0's), told apart by a
@@ -76,7 +77,7 @@ final class ShippedComments {
             // is HIDDEN" (0.35.0 = 0.36.0 = 0.37.2)
             new Stale("arcade.prizes", REV_SHOP, Set.of("ce1063df21e19949")),
             // the Prize Counter's header again: "firework   a harmless three-second firework show." (0.38.0), and a
-            // firework row has seconds now
+            // firework row has seconds now (and launchers, and a block row may be a firework_launcher)
             new Stale("arcade.prizes", REV_GRAND, Set.of("ef25d85f3f0a27a8")),
             // 0.37.1's two collectors named, and "no presents" without looks and golf balls (0.37.1 = 0.37.2)
             new Stale("arcade.collectors", REV_SHOP, Set.of("155cbe62c18e8000")),

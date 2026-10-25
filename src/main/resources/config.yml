@@ -1106,6 +1106,7 @@ skins:
   pity_kiosk:    ""   # pity-exchange kiosk head
   token_counter: ""   # token-counter head
   sound_muffler: ""   # blank = the plain block from sound_muffler.block (white wool)
+  firework_launcher: ""   # blank = the plain block from arcade.launcher (a dropper pointing up)
 
 # ---------------------------------------------------------------------
 #  Recipes — every craftable HomeCraft block, data-driven and reloadable.
@@ -1300,6 +1301,13 @@ arcade:
     scratch: { material: CARTOGRAPHY_TABLE, name: "&aScratch-Ticket Booth" }
     pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
     counter: { material: LECTERN,           name: "&eToken Counter" }
+  # The Firework Launcher (0.38.1): bought at the Prize Counter (firework_launcher) and set up
+  # for the Mega Firework Show (firework_mega). It looks like a dropper pointing up (a texture in
+  # skins.firework_launcher makes it a head instead); a tap says what it is and never opens it,
+  # and no hopper or redstone does anything to it. Each player may have per_player of them placed
+  # at once (1-10, admins too); only whoever placed one, or an admin, can pick it up. A Mega show
+  # fires from the nearest launchers (anyone's) within range blocks of whoever uses it (8-64).
+  launcher: { material: DROPPER, name: "&6Firework Launcher", per_player: 3, range: 32 }
   # Arcade button icons. A blank texture uses the plain material; Bedrock players always see the
   # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
   # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
@@ -1377,6 +1385,9 @@ arcade:
   #   radar      the Mini Radar: right-click while a wild Mini is out. Hidden with no wild hunt.
   #   lure       the Mini Lure: the next wild Mini that rolls for ANYONE lands near you.
   #   firework   a harmless firework show; seconds 3-30, default 3.
+  #              launchers (1-3): a Mega Firework Show from the nearest Firework Launchers
+  #              (arcade.launcher) instead, seconds 45-90 (default 60). With no launcher in
+  #              range it is refused and kept.
   #   trail      particle, days - a particle trail while you walk, for `days` (it ends at local
   #              midnight). It can be bought again, at its price, from 7 days before it ends.
   #              One trail shows at a time; /hcm looks or the Wallet picks it.
@@ -1390,7 +1401,8 @@ arcade:
   #              (shows "Owned" and blocks rebuying), requires_prize, only_if (night | rain:
   #              refused at no charge otherwise). Hidden if a plugin is missing.
   #   trophy     texture (blank = the Arcade machine's head) - a numbered, placeable trophy.
-  #   filament | block | pack    as before (filament: amount, color - omit to let them pick)
+  #   filament | block | pack    as before (filament: amount, color - omit to let them pick;
+  #              block: display_case, pallet, vending, mailbox, printer, pc, arcade or firework_launcher)
   #   pity       the Rare-or-better Card (price and weekly limit from arcade.pity)
   #   trade_in   opens Card trade-in (values in arcade.trade_in)
   #   quest_reroll  swap one of today's quests for another
@@ -1411,6 +1423,8 @@ arcade:
     # -- Cosmetics
     - { id: firework_show, tab: COSMETICS, display: "&cFirework Show", description: ["A big firework show", "all around you!"], cost_tokens: 15, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework }
     - { id: firework_grand, tab: COSMETICS, display: "&6Grand Firework Show", description: ["A long firework show", "with a big finale!"], cost_tokens: 40, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }
+    - { id: firework_launcher, tab: COSMETICS, display: "&6Firework Launcher", description: ["Set up 3 of them", "for a Mega Firework Show!"], cost_tokens: 5, icon: { texture: "", material: DROPPER }, type: block, block: firework_launcher }
+    - { id: firework_mega, tab: COSMETICS, display: "&dMega Firework Show", description: ["A whole minute of fireworks", "from your Firework Launchers!"], cost_tokens: 75, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 3 }
     - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 30 }
     - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 30 }
     - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 30 }

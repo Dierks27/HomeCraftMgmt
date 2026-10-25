@@ -12,6 +12,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.Rotatable;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -99,6 +100,32 @@ public final class CustomBlockService {
             dao.deleteAt(location);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to delete placed block: " + e.getMessage());
+        }
+    }
+
+    // ---- Firework Launchers (0.38.1) ------------------------------------------------
+
+    /**
+     * Whether a block's state is a placed Firework Launcher: a tile (a dropper, or a head when skinned) whose tag
+     * {@link #recordPlacement} wrote says so. No database lookup, so a hopper's every move can ask it.
+     */
+    public static boolean isLauncher(BlockState state) {
+        return state instanceof TileState tile && Keys.CUSTOM_BLOCK_TYPE != null
+                && CustomBlockType.FIREWORK_LAUNCHER.name().equals(
+                tile.getPersistentDataContainer().get(Keys.CUSTOM_BLOCK_TYPE, PersistentDataType.STRING));
+    }
+
+    /**
+     * Point a placed launcher straight up, if its block can face up and doesn't yet (the item's own block state
+     * already places a dropper facing up; this is the belt to those braces). The block stays the same type, so its
+     * tile stays; a head, which can't face up, is left as it is. Called before {@link #recordPlacement}, so the tag is
+     * written last.
+     */
+    public void faceUp(Block block) {
+        if (block.getBlockData() instanceof Directional d && d.getFaces().contains(BlockFace.UP)
+                && d.getFacing() != BlockFace.UP) {
+            d.setFacing(BlockFace.UP);
+            block.setBlockData(d, false);
         }
     }
 

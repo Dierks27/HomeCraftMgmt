@@ -5,7 +5,9 @@ package com.dierks.homecraft.block;
  * each is a tagged vanilla block whose identity + owner is persisted in SQLite.
  *
  * <p>Phase 1 ships two. Later phases add {@code MINI_VENDING_MACHINE} and
- * {@code DISPLAY_CASE} — the enum is the single place they are declared.
+ * {@code DISPLAY_CASE} — the enum is the single place they are declared. A type's name is
+ * what {@code placed_blocks.type} stores, so a new one is appended and none is ever renamed
+ * (0.38.1 appends the Firework Launcher).
  */
 public enum CustomBlockType {
     MINI_WORKBENCH,
@@ -21,5 +23,6 @@ public enum CustomBlockType {
     SCRATCH_BOOTH,
     PITY_KIOSK,
     TOKEN_COUNTER,
-    SOUND_MUFFLER
+    SOUND_MUFFLER,
+    FIREWORK_LAUNCHER
 }

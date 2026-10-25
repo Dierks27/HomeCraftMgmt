@@ -2,6 +2,7 @@ package com.dierks.homecraft.block;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.ArcadeTrophies;
+import com.dierks.homecraft.arcade.MegaShow;
 import com.dierks.homecraft.arcade.PlacedPrizes;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
@@ -13,11 +14,15 @@ import com.dierks.homecraft.crafting.WorkbenchHolder;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.storage.PlacedBlock;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
+import com.dierks.homecraft.util.TokenPrizes;
+import io.papermc.paper.event.block.BlockFailedDispenseEvent;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -26,6 +31,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockBurnEvent;
+import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
@@ -33,8 +39,12 @@ import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.time.LocalDate;
@@ -53,6 +63,13 @@ import java.util.UUID;
  * <p>A Vending Machine, Display Case or Pallet is broken only by whoever placed it
  * or an admin, and what it holds goes back to whoever stocked it, into their
  * Mailbox, once the break is final (0.37.3, {@link CustomBlockGuard}).
+ *
+ * <p>A Firework Launcher (0.38.1) is a dropper pointing up that never acts as one:
+ * a player may have {@code arcade.launcher.per_player} placed at once
+ * ({@link LauncherRules}), only its placer or an admin picks it up, a tap says
+ * what it is (a Mega Firework Show in the hand starts the show instead, in
+ * {@code PrizeItemListener}), and no hopper, dropper, redstone pulse or screen
+ * ever moves anything in or out of it.
  */
 public final class CustomBlockListener implements Listener {
 
@@ -113,6 +130,23 @@ public final class CustomBlockListener implements Listener {
             return;
         }
 
+        // A Firework Launcher: so many placed at once a player (admins too), counted from the records now. A fourth
+        // is refused kindly and stays in the hand.
+        int launchers = 0;
+        if (type == CustomBlockType.FIREWORK_LAUNCHER) {
+            int perPlayer = config.launcher().perPlayer();
+            UUID me = player.getUniqueId();
+            launchers = LauncherRules.counted(blocks.findByType(CustomBlockType.FIREWORK_LAUNCHER),
+                    pb -> pb.owner().equals(me), pb -> sameSpot(pb, block), this::staleLauncher);
+            if (LauncherRules.placeRefused(launchers, perPlayer)) {
+                event.setCancelled(true);
+                player.sendMessage(Text.of(LauncherRules.fullLine(perPlayer)));
+                Sounds.refused(player);
+                return;
+            }
+            blocks.faceUp(block); // the item's block state already did it; before the record, so its tag is last
+        }
+
         // A Vending Machine is two blocks tall: the head above is placed automatically,
         // so the space must be free (and buildable) or the placement is refused.
         if (type == CustomBlockType.MINI_VENDING_MACHINE) {
@@ -142,6 +176,9 @@ public final class CustomBlockListener implements Listener {
             blocks.tagDisplayVariant(block, variant == null ? DisplayCaseVariant.PLAIN : variant);
         }
         player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
+        if (type == CustomBlockType.FIREWORK_LAUNCHER) {
+            player.sendMessage(Text.of(LauncherRules.placedLine(launchers + 1, config.launcher().perPlayer())));
+        }
         if (type == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
             // Placing one opens its menu straight away (on the next tick, once the block is
             // really there): the first thing anyone wants is to pick what to hush.
@@ -351,6 +388,12 @@ public final class CustomBlockListener implements Listener {
         event.setCancelled(true);
 
         Player player = event.getPlayer();
+        if (type == CustomBlockType.FIREWORK_LAUNCHER && MegaShow.isMega(
+                plugin.config().arcade().prize(TokenPrizes.prizeId(event.getItem())))) {
+            // A Mega Firework Show in the hand: the tap is the show's (PrizeItemListener, registered after this,
+            // starts it from the launchers nearby, anyone's), so the launcher says nothing of its own.
+            return;
+        }
         if (trophy && ArcadeTrophies.tap(false, player.hasPermission("hcm.arcade.use")) == ArcadeTrophies.Tap.REFUSE) {
             player.sendMessage(Text.of("&cYou can't use the Arcade."));
             return; // as /hcm arcade: the machine itself is left as it is
@@ -417,6 +460,13 @@ public final class CustomBlockListener implements Listener {
                 boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
                         plugin, player, clicked.getLocation(), owner).open(player);
+            }
+            // A launcher's tap says whose it is and what it is for; it never opens (the deny above).
+            case FIREWORK_LAUNCHER -> {
+                UUID owner = placed.get().owner();
+                boolean mine = owner.equals(player.getUniqueId());
+                player.sendMessage(Text.of(LauncherRules.tapLine(mine, ownerName(owner), mine ? ownedLaunchers(owner) : 0,
+                        config.launcher().perPlayer(), plugin.megaShows() != null && plugin.megaShows().busy(clicked))));
             }
             // Anyone may look at what a muffler hushes; only its owner (or an admin) may change it.
             case SOUND_MUFFLER -> {
@@ -524,7 +574,84 @@ public final class CustomBlockListener implements Listener {
             case PITY_KIOSK -> "Pity Exchange";
             case TOKEN_COUNTER -> "Token Counter";
             case SOUND_MUFFLER -> "Sound Muffler";
+            case FIREWORK_LAUNCHER -> LauncherRules.NAME;
         };
+    }
+
+    // ---- the Firework Launcher (0.38.1) ----------------------------------------------------
+    //
+    // A dropper is a container. A launcher is one only in looks: each handler below reads the type or material first,
+    // so every other block costs one compare, and then the tile's own tag (CustomBlockService.isLauncher), so a
+    // hopper's tick never reaches the database.
+
+    /** No hopper or dropper ever puts anything into a launcher, or takes anything out of one. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onLauncherFeed(InventoryMoveItemEvent event) {
+        if (launcherInventory(event.getDestination()) || launcherInventory(event.getSource())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** A launcher never dispenses (it is always empty: this is the brace to that belt). */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onLauncherDispense(BlockDispenseEvent event) {
+        Block b = event.getBlock();
+        if (b.getType() == Material.DROPPER && CustomBlockService.isLauncher(b.getState(false))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** A redstone pulse on an empty launcher does nothing at all: no click, no puff of smoke. */
+    @EventHandler(priority = EventPriority.LOW)
+    public void onLauncherClick(BlockFailedDispenseEvent event) {
+        Block b = event.getBlock();
+        if (b.getType() == Material.DROPPER && CustomBlockService.isLauncher(b.getState(false))) {
+            event.shouldPlayEffect(false);
+        }
+    }
+
+    /** A launcher's slots never show (a spectator's look, or another plugin opening it). */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onLauncherOpen(InventoryOpenEvent event) {
+        if (launcherInventory(event.getInventory())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Whether an inventory is a placed launcher's: a dropper's (the type first), whose block is tagged one. */
+    private static boolean launcherInventory(Inventory inv) {
+        return inv != null && inv.getType() == InventoryType.DROPPER
+                && inv.getHolder(false) instanceof BlockState state && CustomBlockService.isLauncher(state);
+    }
+
+    /** Whether a placed-block record is the very spot being placed (its record is written again, never counted). */
+    private static boolean sameSpot(PlacedBlock pb, Block block) {
+        return pb.world().equals(block.getWorld().getName()) && pb.x() == block.getX() && pb.y() == block.getY()
+                && pb.z() == block.getZ();
+    }
+
+    /**
+     * A launcher record whose block is gone: its world and chunk are loaded and the block there is air (a WorldEdit
+     * clear leaves records behind). It is forgotten as it is found, and never counted. A block of any other material
+     * is left alone, and one that can't be looked at (its world or chunk not loaded) counts.
+     */
+    private boolean staleLauncher(PlacedBlock pb) {
+        org.bukkit.World w = plugin.getServer().getWorld(pb.world());
+        if (w == null || !w.isChunkLoaded(pb.x() >> 4, pb.z() >> 4)) {
+            return false;
+        }
+        Block b = w.getBlockAt(pb.x(), pb.y(), pb.z());
+        if (!b.getType().isAir()) {
+            return false;
+        }
+        blocks.removeAt(b.getLocation());
+        return true;
+    }
+
+    /** How many launchers {@code owner} has placed, as a place counts them (for the tap line). */
+    private int ownedLaunchers(UUID owner) {
+        return LauncherRules.counted(blocks.findByType(CustomBlockType.FIREWORK_LAUNCHER),
+                pb -> pb.owner().equals(owner), pb -> false, this::staleLauncher);
     }
 
     // Keep custom blocks (and their data) safe from explosions rather than

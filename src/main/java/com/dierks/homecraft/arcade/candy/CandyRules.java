@@ -207,7 +207,7 @@ public final class CandyRules {
 
     /**
      * The next slot to start after {@code after} inside the window, or null when there is none (the window is
-     * over). Before the window, it is the first slot of {@code from}. For "Next shower at 7:30 PM."
+     * over). Before the window, it is the first slot of {@code from}. For "Next shower at 7:10 PM."
      */
     public static LocalDateTime nextSlot(LocalDateTime after, LocalDate from, LocalDate to,
                                          int every, int offset, int lastDayEvery) {

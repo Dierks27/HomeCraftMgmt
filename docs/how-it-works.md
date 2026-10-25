@@ -24,7 +24,7 @@ Spend them in the **Arcade** (`/hcm arcade`):
 - **Prize Counter.** Pick exactly what you want, at a fixed price:
   - Boosts: speed, mining, night vision, water breathing, lucky fishing, Bouncy Boots (jump high) and Floaty Feather (float down). **Make it Day!** turns night into day in your world, and **Sunny Day** stops the rain for 10 minutes. You can't buy them when it's already day or not raining, so you never pay for nothing.
   - Hunt gear: a Mini Radar and a Mini Lure (when wild Minis are on).
-  - Cosmetics: fireworks (the **Firework Show**, and the **Grand Firework Show**: 15 seconds with a big finale. One grand show at a time: wait for it to finish before the next), trails for a month, and **Party Time!**: 10 seconds of fireworks around everyone who's playing.
+  - Cosmetics: fireworks (the **Firework Show**, and the **Grand Firework Show**: 15 seconds with a big finale. One grand show at a time: wait for it to finish before the next. A grand show is for home, not the games: it stops if you join a game, and a tap on the Arcade Machine, a game's sign or a Mini doesn't use it up), trails for a month, and **Party Time!**: 10 seconds of fireworks around everyone who's playing.
     - Halloween collectors: the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
     - Christmas collectors: the Twinkle 2026 trail (1 December to 6 January). Yours for good, and it can be a present too.
   - **Looks:** hats and caps for 90 days (the Creeper Hat, the Dragon Hat and four colourful caps), golf balls you keep, and the collector caps: the Pumpkin Cap 2026 (October) and the Santa Cap 2026 (December), yours for good.

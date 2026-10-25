@@ -25,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned here: the owner's 0.38.0 file ends with exactly the bundled counter (the Grand Firework Show right after the
  * Firework Show) and the new candy settings, with one INFO each and no WARN; a second start and a re-run change
- * nothing; an owner-edited candy value is kept with one WARN while the others move; an owner-deleted Firework Show
+ * nothing; an owner-edited candy value is kept with one WARN while the others move, the INFO saying only what moved
+ * (and one more WARN when the last day would now be the quieter one); an owner-deleted Firework Show
  * still gets the Grand one, at the end; an owner's own {@code firework_grand} row is kept with a WARN and the line to
  * paste, and the shipped row already there isn't doubled; an absent list or key is left to the backfill; the frozen
  * values are what 0.37.2 and 0.38.0 shipped and what this one ships; and a 0.38.0 jar reading a revision-23 file says
@@ -93,8 +94,8 @@ class GrandShowMigrationTest {
                 "Config migration: Prize Counter - added the Grand Firework Show (firework_grand: 15 seconds of"
                         + " fireworks with a big finale, 40 tokens) after the Firework Show.",
                 "Config migration: arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30,"
-                        + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: a shower an hour, 3 candy apples"
-                        + " each).",
+                        + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: a shower an hour, every half hour on"
+                        + " the last day, 3 candy apples each).",
                 "Config migration: config_revision 22 → 23."), log, "one INFO each, and the revision");
         List<String> warnings = new ArrayList<>();
         assertEquals(CandyConfig.Candy.DEFAULTS, CandyConfig.parse(LayoutFixtures.reread(c), warnings::add),
@@ -134,17 +135,28 @@ class GrandShowMigrationTest {
     @Test
     void anOwnerEditedCandyValueIsKeptWithOneWarnAndTheOthersMove() {
         YamlConfiguration c = LayoutFixtures.v0380();
-        c.set(CANDY + ".every_minutes", 15);
+        c.set(CANDY + ".every_minutes", 45);
         List<String> log = apply(c);
-        assertCandy(c, 15, 30, 3, "their every_minutes stays, the other two move");
-        assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: kept arcade.events.candy.every_minutes = 15"
-                + " because you have changed it (the new default is 60)."), warns(log), "one WARN naming it");
+        assertCandy(c, 45, 30, 3, "their every_minutes stays, the other two move");
+        String kept = HomeCraftManagement.WARN + "Config migration: kept arcade.events.candy.every_minutes = 45 because"
+                + " you have changed it (the new default is 60).";
+        assertEquals(List.of(kept), warns(log), "one WARN naming it");
         assertTrue(log.contains("Config migration: arcade.events.candy - last_day_every_minutes 10 → 30,"
-                + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: a shower an hour, 3 candy apples each)."),
-                "the INFO names only what moved: " + log);
+                + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: every half hour on the last day, 3 candy"
+                + " apples each)."), "the INFO names only what moved, and says only what that means: " + log);
+        assertTrue(log.stream().noneMatch(l -> l.contains("a shower an hour")), "never the hour their 45 isn't");
         String once = c.saveToString();
-        assertEquals(warns(log), apply(c), "a second run moves nothing more, and only says the WARN again");
+        assertEquals(List.of(kept), apply(c), "a second run moves nothing more, and only says the WARN again");
         assertEquals(once, c.saveToString(), "the file is as the first run left it");
+
+        YamlConfiguration apples = LayoutFixtures.v0380();
+        apples.set(CANDY + ".apples_per_shower", 12);
+        List<String> theirApples = apply(apples);
+        assertCandy(apples, 60, 30, 12, "their apples stay");
+        assertTrue(theirApples.contains("Config migration: arcade.events.candy - every_minutes 20 → 60,"
+                + " last_day_every_minutes 10 → 30 (a gentler Candy Apple shower: a shower an hour, every half hour on"
+                + " the last day)."), "no \"3 candy apples\" when theirs are 12: " + theirApples);
+        assertEquals(1, warns(theirApples).size(), theirApples.toString());
 
         YamlConfiguration all = LayoutFixtures.v0380();
         all.set(CANDY + ".every_minutes", 30);
@@ -154,6 +166,40 @@ class GrandShowMigrationTest {
         assertCandy(all, 30, 0, 12, "all three are theirs");
         assertEquals(3, warns(mine).size(), "a WARN each: " + mine);
         assertTrue(mine.stream().noneMatch(l -> l.startsWith("Config migration: arcade.events.candy")), "no INFO");
+    }
+
+    /**
+     * Review R23-CANDY-INFO: an owner's own every_minutes under 30, kept, while the last day's 10 moves to 30, would
+     * make the last day the one with fewer showers; one more WARN says so and what to set. Never when the two are equal,
+     * when every_minutes is above 30, or when the last day didn't move.
+     */
+    @Test
+    void aLastDayThatWouldNowBeQuieterThanTheOthersIsWarned() {
+        YamlConfiguration c = LayoutFixtures.v0380();
+        c.set(CANDY + ".every_minutes", 15);
+        List<String> log = apply(c);
+        assertCandy(c, 15, 30, 3, "theirs stays, the last day moves as the rule says");
+        assertEquals(List.of(
+                HomeCraftManagement.WARN + "Config migration: kept arcade.events.candy.every_minutes = 15 because you"
+                        + " have changed it (the new default is 60).",
+                HomeCraftManagement.WARN + "Config migration: arcade.events.candy.last_day_every_minutes is now 30,"
+                        + " more than your every_minutes = 15, so the last day gets fewer showers than the others: set"
+                        + " it to 15 or less (0 = as every_minutes) for more."), warns(log), "the kept one, then this");
+        assertTrue(log.contains("Config migration: arcade.events.candy - last_day_every_minutes 10 → 30,"
+                + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: every half hour on the last day, 3 candy"
+                + " apples each)."), log.toString());
+        assertEquals(1, warns(apply(c)).size(), "a re-run moves nothing, so only the kept WARN is said again");
+
+        for (int every : new int[]{30, 45, 120}) {
+            YamlConfiguration x = LayoutFixtures.v0380();
+            x.set(CANDY + ".every_minutes", every);
+            assertEquals(1, warns(apply(x)).size(), every + ": the last day is as busy or busier, only the kept WARN");
+        }
+        YamlConfiguration theirLastDay = LayoutFixtures.v0380();
+        theirLastDay.set(CANDY + ".every_minutes", 15);
+        theirLastDay.set(CANDY + ".last_day_every_minutes", 5);
+        assertEquals(2, warns(apply(theirLastDay)).size(), "both theirs: a kept WARN each, nothing about the last day");
+        assertCandy(theirLastDay, 15, 5, 3, "both theirs stay");
     }
 
     @Test

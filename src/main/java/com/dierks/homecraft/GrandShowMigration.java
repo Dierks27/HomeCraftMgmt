@@ -26,7 +26,9 @@ import static com.dierks.homecraft.HomeCraftManagement.WARN;
  * An absent list is left to the backfill, which writes the bundled one. Each candy value moves only from what
  * 0.37.1-0.38.0 shipped ({@link #CANDY}); a value already at the new default stays; anything else is the owner's and
  * stays, with one WARN naming the key and the new default ({@link HomeCraftManagement#retune}'s contract). An absent
- * key is left to the backfill, which writes the new default.
+ * key is left to the backfill, which writes the new default. The INFO line says what the values that moved now mean,
+ * and only those (review R23-CANDY-INFO); when the last day's interval moves to 30 past an owner's own shorter
+ * {@code every_minutes}, one more WARN says the last day now gets fewer showers than the others.
  *
  * <p><b>The tables are data</b>, frozen as literals ({@link #GRAND}, {@link #CANDY}) and never read from the bundled
  * file, so a later release that edits the row or the candy can't change what revision 23 did. {@code
@@ -57,15 +59,19 @@ final class GrandShowMigration {
      * @param path its full config key
      * @param old  what 0.37.1, 0.37.2, 0.37.3 and 0.38.0 shipped
      * @param now  the new default
+     * @param says what the new default means, for the INFO line when this value moved
      */
-    record Step(String path, int old, int now) {
+    record Step(String path, int old, int now, String says) {
     }
 
     /** The candy values revision 23 moves, in config order. */
     static final List<Step> CANDY = List.of(
-            new Step("arcade.events.candy.every_minutes", 20, 60),
-            new Step("arcade.events.candy.last_day_every_minutes", 10, 30),
-            new Step("arcade.events.candy.apples_per_shower", 6, 3));
+            new Step("arcade.events.candy.every_minutes", 20, 60, "a shower an hour"),
+            new Step("arcade.events.candy.last_day_every_minutes", 10, 30, "every half hour on the last day"),
+            new Step("arcade.events.candy.apples_per_shower", 6, 3, "3 candy apples each"));
+    /** The every-day interval and the last day's, by {@link #CANDY}'s paths (the last-day check). */
+    private static final Step EVERY = CANDY.get(0);
+    private static final Step LAST_DAY = CANDY.get(1);
 
     private GrandShowMigration() {
     }
@@ -117,7 +123,9 @@ final class GrandShowMigration {
 
     private static void candy(FileConfiguration c, List<String> log) {
         List<String> moved = new ArrayList<>();
+        List<String> says = new ArrayList<>();
         List<String> kept = new ArrayList<>();
+        boolean lastDayMoved = false;
         for (Step s : CANDY) {
             Object current = c.get(s.path(), null);
             if (current == null || is(current, s.now())) {
@@ -126,6 +134,8 @@ final class GrandShowMigration {
             if (is(current, s.old())) {
                 c.set(s.path(), s.now());
                 moved.add(leaf(s.path()) + " " + s.old() + " → " + s.now());
+                says.add(s.says());
+                lastDayMoved = lastDayMoved || s == LAST_DAY;
             } else {
                 kept.add(WARN + "Config migration: kept " + s.path() + " = " + current + " because you have changed it"
                         + " (the new default is " + s.now() + ").");
@@ -133,9 +143,16 @@ final class GrandShowMigration {
         }
         if (!moved.isEmpty()) {
             log.add("Config migration: arcade.events.candy - " + String.join(", ", moved) + " (a gentler Candy Apple"
-                    + " shower: a shower an hour, 3 candy apples each).");
+                    + " shower: " + String.join(", ", says) + ").");
         }
         log.addAll(kept);
+        // An owner's own every_minutes under the last day's new 30 would make the last day the quieter one.
+        if (lastDayMoved && c.get(EVERY.path(), null) instanceof Number every && every.intValue() > 0
+                && every.intValue() < LAST_DAY.now()) {
+            log.add(WARN + "Config migration: " + LAST_DAY.path() + " is now " + LAST_DAY.now() + ", more than your "
+                    + leaf(EVERY.path()) + " = " + every + ", so the last day gets fewer showers than the others: set it"
+                    + " to " + every.intValue() + " or less (0 = as " + leaf(EVERY.path()) + ") for more.");
+        }
     }
 
     /** A number with exactly the value {@code n}. */

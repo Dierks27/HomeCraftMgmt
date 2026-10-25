@@ -311,6 +311,25 @@ class CandyCommandTest {
                 "the 23:40 on the last day was the last");
     }
 
+    /**
+     * Review DOC-CANDY-EXAMPLE: the README's {@code /hcm candy} example is the player's line word for word, at a shower
+     * time the shipped schedule comes at (it said 7:30 PM, a slot of the 20-minute cadence before 0.38.1 only).
+     */
+    @Test
+    void theReadmesCandyExampleIsAShowerTheShippedScheduleComesAt() throws IOException {
+        String row = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8).lines()
+                .filter(l -> l.startsWith("| `/hcm candy` |") && l.contains("Next shower")).findFirst().orElseThrow();
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"(You've found 17 [^\"]*Next shower (at (\\d{1,2}):(\\d\\d) (AM|PM))\\.)\"").matcher(row);
+        assertTrue(m.find(), "the example: " + row);
+        int hour = Integer.parseInt(m.group(3)) % 12 + ("PM".equals(m.group(5)) ? 12 : 0);
+        LocalDateTime at = LocalDateTime.of(2026, 10, 20, hour, Integer.parseInt(m.group(4)));
+        assertEquals(at, HcmCommand.nextShower(at.minusMinutes(1), Candy.DEFAULTS, shippedHold()),
+                "a shower of the shipped schedule on an ordinary day: " + at);
+        assertEquals(m.group(1), plain(HcmCommand.candyMineLines(HcmCommand.CandyState.OPEN, null, 17, 31, false,
+                m.group(2))), "the player's line, word for word");
+    }
+
     // ---- what an admin is told --------------------------------------------------------------
 
     @Test

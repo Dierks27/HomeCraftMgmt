@@ -597,9 +597,15 @@ people's trails and parties. It is config revision 22 and database v38: see
   blocks further out and at a mix of heights, and ends a second later in a finale of nine at once,
   higher up. A show goes off around the player who uses it (Party Time is the one for everyone).
   **One long show (6 seconds or more) at a time:** using another while one plays says "Wait for your
-  show to finish!" and the item stays in the hand. Short shows never wait, however many are stacked.
-  A show stops when its player quits. The Grand one is not in the Arcade Crate (the Firework Show
-  still is).
+  show to finish!" (at most once every 2 seconds, and never for the held tap that started the show)
+  and the item stays in the hand. Short shows never wait, however many are stacked. **A long show
+  stays out of the games,** as Party Time does: it ends when its player goes into a game or a Games
+  world, so the rest of it never bursts on a course, and one used there says "Save your show for
+  after the games!" and is kept. **A tap on a HomeCraft block** with a long show in the hand (the
+  Arcade Machine, a join sign, a Mini, a placed Arcade Trophy) is that block's, as for a hat, and the
+  show stays in the hand: use it on a plain block or the air. The three-second Firework Show plays as
+  it always has in both cases. A show stops when its player quits. The Grand one is not in the
+  Arcade Crate (the Firework Show still is).
 - **Party Time** sets off two fireworks around each player in an economy world every second, except
   anyone in a game or a Games world and anyone who hides other people's trails and parties (the buyer
   always gets theirs); "✦ <name> started a party!" goes out once. While one runs, another is refused
@@ -859,14 +865,17 @@ changes only what still holds the value 0.38.0 shipped (and 0.37.1-0.37.3 before
   id you already use for a row of your own is kept, with one WARN and the line to paste);
 - the **Candy Apple shower** gets gentler: `every_minutes` 20 → 60, `last_day_every_minutes`
   10 → 30 and `apples_per_shower` 6 → 3 ([below](#the-candy-apple-shower-0371)). A value you changed
-  is yours and stays, with one WARN naming the new default;
+  is yours and stays, with one WARN naming the new default, and the INFO line says only what the
+  values that moved now mean. If your own `every_minutes` is under 30, one more WARN says the last
+  day now gets fewer showers than the others, and what to set;
 - the Prize Counter's comment is refreshed where it is still the plugin's own words (its firework
   line).
 
 The console reads "Config migration: Prize Counter - added the Grand Firework Show (firework_grand:
 15 seconds of fireworks with a big finale, 40 tokens) after the Firework Show.", "Config migration:
 arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30, apples_per_shower
-6 → 3 (...)." and "Config migration: config_revision 22 → 23." A `/hcm reload` does the same and
+6 → 3 (a gentler Candy Apple shower: a shower an hour, every half hour on the last day, 3 candy
+apples each)." and "Config migration: config_revision 22 → 23." A `/hcm reload` does the same and
 restarts the candy with the new settings. Firework Shows already in bags stay three-second shows.
 
 ### Parent notes
@@ -1467,7 +1476,7 @@ naming the new default ([Upgrading to 0.38.1](#upgrading-to-0381-revision-23)).
 
 | Command | Who | What |
 |---|---|---|
-| `/hcm candy` | `hcm.arcade.use` (everyone) | "You've found 17 candy apples. 14 more for the Trick-or-Treat Bag! Next shower at 7:30 PM." A bag that is waiting is tried again |
+| `/hcm candy` | `hcm.arcade.use` (everyone) | "You've found 17 candy apples. 14 more for the Trick-or-Treat Bag! Next shower at 7:10 PM." A bag that is waiting is tried again |
 | `/hcm candy now [player]` | admin | A shower now for everyone online, or the named player: one line each, "showered" or the reason they were skipped. Refused outside the window or while switched off |
 | `/hcm candy status` | admin | On or off; the window and its zone; the next shower (and one a restart skips); the candy out; each online player's count, candy out, idle minutes and bag; and "Pumpkin Cap on sale until 23:59 on 31 Oct (America/Chicago)" |
 | `/hcm candy clear` | admin | Removes every candy out. Nothing is counted |

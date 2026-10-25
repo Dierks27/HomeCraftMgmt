@@ -68,13 +68,13 @@ class MegaShowClaimsTest {
     void aQuitEndsTheUsersShows() {
         MegaShowService.Claims c = new MegaShowService.Claims();
         long hers = c.tryClaim(DAUGHTER, launchers(0));
-        long his = c.tryClaim(OWNER, launchers(100));
+        long owners = c.tryClaim(OWNER, launchers(100));
         assertEquals(List.of(hers), c.showsOf(DAUGHTER), "hers only");
         for (long show : c.showsOf(DAUGHTER)) {
             c.release(show); // what MegaShowService.onQuit does with each
         }
         assertFalse(c.busy(launchers(0)), "her launchers are free");
-        assertTrue(c.busy(launchers(100)) && c.on(his), "his show plays on");
+        assertTrue(c.busy(launchers(100)) && c.on(owners), "the owner's show plays on");
         assertEquals(List.of(), c.showsOf(DAUGHTER));
     }
 

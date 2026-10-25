@@ -249,9 +249,9 @@ class FireworkShowTest {
         assertEquals(0, g.tryStart(her, true, 13_000), "a refused start stamps nothing");
         assertTrue(g.refusalDue(her, 14_000));
 
-        UUID him = UUID.randomUUID();
-        assertTrue(g.tryStart(him, false, 10_000) != 0, "a short show");
-        assertTrue(g.refusalDue(him, 10_100), "stamps nothing: it is never refused, and the first refusal is said");
+        UUID other = UUID.randomUUID();
+        assertTrue(g.tryStart(other, false, 10_000) != 0, "a short show");
+        assertTrue(g.refusalDue(other, 10_100), "stamps nothing: it is never refused, and the first refusal is said");
     }
 
     @Test

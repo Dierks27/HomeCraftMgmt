@@ -42,7 +42,7 @@ class LauncherRulesTest {
 
     @Test
     void theSpotBeingPlacedAndAnEmptyRecordDoNotCount() {
-        List<Rec> records = List.of(new Rec("her", 1, false), new Rec("her", 2, false), new Rec("him", 3, false),
+        List<Rec> records = List.of(new Rec("her", 1, false), new Rec("her", 2, false), new Rec("other", 3, false),
                 new Rec("her", 4, true), new Rec("her", 5, false));
         List<Rec> forgotten = new ArrayList<>();
         int n = LauncherRules.counted(records, r -> r.owner().equals("her"), r -> r.x() == 5, r -> {
@@ -59,7 +59,7 @@ class LauncherRulesTest {
             looked.add(r);
             return false;
         });
-        assertFalse(looked.stream().anyMatch(r -> r.owner().equals("him")),
+        assertFalse(looked.stream().anyMatch(r -> r.owner().equals("other")),
                 "someone else's launcher is never looked at in the world");
         assertEquals(4, LauncherRules.counted(records, r -> r.owner().equals("her"), r -> false, r -> false),
                 "a record that can't be looked at (its chunk not loaded) counts");

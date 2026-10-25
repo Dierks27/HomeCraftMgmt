@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.FireworkShow.Burst;
 import com.dierks.homecraft.arcade.FireworkShow.Spot;
 import com.dierks.homecraft.util.Fireworks;
+import com.dierks.homecraft.util.Whereabouts;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
@@ -25,6 +26,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * stacked or not, so a pile of Firework Shows plays exactly as before. A show stops when its player quits
  * ({@link #stop(UUID)}), and every timer is cancelled when the plugin stops ({@link #stop()}). Plain memory: a restart
  * ends a show early, which costs nobody anything they could keep.
+ *
+ * <p><b>A long show stays out of the games</b> (review SHOW-GAMES-1), as Party Time does: it ends when its player goes
+ * into a game or a Games world ({@link #playsHere}), so the rest of a Grand show never bursts on a course, and one isn't
+ * started there (the item is kept). A short show plays as it always has.
  */
 public final class FireworkShows {
 
@@ -54,7 +59,8 @@ public final class FireworkShows {
      */
     public boolean start(Player player, int seconds) {
         UUID id = player.getUniqueId();
-        long show = guard.tryStart(id, FireworkShow.isLong(seconds));
+        boolean isLong = FireworkShow.isLong(seconds);
+        long show = guard.tryStart(id, isLong, System.currentTimeMillis());
         if (show == 0) {
             return false;
         }
@@ -68,8 +74,8 @@ public final class FireworkShows {
         p.task = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             long t = tick[0];
             tick[0] += FireworkShow.BURST_TICKS;
-            if (!player.isOnline()) {
-                end(show);
+            if (!player.isOnline() || (isLong && !playsHere(player))) {
+                end(show); // a quit, or a long show's player went into a game: the rest is no show for a course
                 return;
             }
             while (next[0] < bursts.size() && bursts.get(next[0]).tick() <= t) {
@@ -87,9 +93,23 @@ public final class FireworkShows {
         return guard.longOn(player);
     }
 
+    /** Whether a long show plays where {@code player} is now: not in a game, nor in a Games world. */
+    public boolean playsHere(Player player) {
+        return playsHere(Whereabouts.inGameSession(plugin, player), Whereabouts.gamesWorld(plugin, player.getWorld()));
+    }
+
+    /**
+     * {@link #playsHere(Player)} on its facts: not in a game session (on its way in or out too) and not in a Games
+     * world, as Party Time's guests ({@code PartyService.guest}): a game's course is no place for rockets. Pure.
+     */
+    static boolean playsHere(boolean inGameSession, boolean gamesWorld) {
+        return !inGameSession && !gamesWorld;
+    }
+
     /**
      * Whether a refused show should say so now: at most once every {@value Guard#REFUSAL_GAP_MS} ms a player, since
-     * Bedrock repeats a held tap's use and each repeat is refused again.
+     * Bedrock repeats a held tap's use and each repeat is refused again. A long show's start counts as the last
+     * refusal, so the repeats of the very tap that started it are quiet too.
      */
     public boolean refusalDue(UUID player) {
         return guard.refusalDue(player, System.currentTimeMillis());
@@ -155,14 +175,19 @@ public final class FireworkShows {
         private final Map<UUID, Long> longShows = new HashMap<>();
         private final Map<UUID, Long> refusedAt = new HashMap<>();
 
-        /** Start one: its number, or 0 (nothing started) when it is long and the player's long show is on. */
-        long tryStart(UUID player, boolean isLong) {
+        /**
+         * Start one at {@code now} (ms): its number, or 0 (nothing started) when it is long and the player's long show
+         * is on. A long start is stamped as the player's last refusal (review SHOW-REFUSE-3): a held use repeats at
+         * once, and its first repeat, refused, would otherwise say "Wait for your show to finish!" as the show begins.
+         */
+        long tryStart(UUID player, boolean isLong, long now) {
             if (isLong && longShows.containsKey(player)) {
                 return 0;
             }
             long show = ++last;
             if (isLong) {
                 longShows.put(player, show);
+                refusedAt.put(player, now);
             }
             return show;
         }
@@ -177,7 +202,10 @@ public final class FireworkShows {
             longShows.remove(player, show);
         }
 
-        /** Whether a refusal at {@code now} (ms) is said: the first, and then once {@link #REFUSAL_GAP_MS} have passed. */
+        /**
+         * Whether a refusal at {@code now} (ms) is said: the first, and then once {@link #REFUSAL_GAP_MS} have passed
+         * since the last one said or the player's last long show began.
+         */
         boolean refusalDue(UUID player, long now) {
             Long at = refusedAt.get(player);
             if (at != null && now - at < REFUSAL_GAP_MS) {

@@ -12,6 +12,10 @@ import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * always was (6 bursts, 10 ticks apart, of 2 within 3 blocks); a longer one bursts every 10 ticks for its whole
  * length, 3 a burst, further out and at a mix of heights, with a finale of 9 higher up a second after its last burst;
  * the length comes from the item's row at use time (3 when it's gone); and a player has one long show at a time,
- * while short ones are never refused.
+ * while short ones are never refused. And the review's three (0.38.1): a long show stays out of the games, a long
+ * show's tap on one of ours is that block's, and the held tap that starts a long show isn't refused aloud.
  */
 class FireworkShowTest {
 
@@ -176,16 +181,16 @@ class FireworkShowTest {
     void aPlayerHasOneLongShowAtATime() {
         FireworkShows.Guard g = new FireworkShows.Guard();
         UUID her = UUID.randomUUID();
-        long first = g.tryStart(her, true);
+        long first = g.tryStart(her, true, 0);
         assertTrue(first != 0, "the first long show starts");
         assertTrue(g.longOn(her));
-        assertEquals(0, g.tryStart(her, true), "a second long one while it plays is refused (the item is kept)");
-        assertEquals(0, g.tryStart(her, true), "and again");
-        long other = g.tryStart(UUID.randomUUID(), true);
+        assertEquals(0, g.tryStart(her, true, 0), "a second long one while it plays is refused (the item is kept)");
+        assertEquals(0, g.tryStart(her, true, 0), "and again");
+        long other = g.tryStart(UUID.randomUUID(), true, 0);
         assertTrue(other != 0, "someone else's long show is their own");
         g.end(her, first);
         assertFalse(g.longOn(her), "its own end frees her");
-        long next = g.tryStart(her, true);
+        long next = g.tryStart(her, true, 0);
         assertTrue(next != 0 && next != first, "then the next one starts, with its own number");
         g.end(her, first);
         assertTrue(g.longOn(her), "a late end from the old show changes nothing");
@@ -199,19 +204,19 @@ class FireworkShowTest {
         UUID her = UUID.randomUUID();
         List<Long> shows = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
-            shows.add(g.tryStart(her, false));
+            shows.add(g.tryStart(her, false, 0));
         }
         assertTrue(shows.stream().allMatch(n -> n != 0), "a pile of Firework Shows all play: " + shows);
         assertEquals(20, shows.stream().distinct().count(), "each its own show");
         assertFalse(g.longOn(her), "and none holds the long slot");
-        long grand = g.tryStart(her, true);
+        long grand = g.tryStart(her, true, 0);
         assertTrue(grand != 0, "a long one starts beside them");
-        assertTrue(g.tryStart(her, false) != 0, "and a short one still plays while it does");
+        assertTrue(g.tryStart(her, false, 0) != 0, "and a short one still plays while it does");
         for (long n : shows) {
             g.end(her, n);
         }
         assertTrue(g.longOn(her), "a short show's end frees nothing");
-        assertEquals(0, g.tryStart(her, true));
+        assertEquals(0, g.tryStart(her, true, 0));
     }
 
     @Test
@@ -224,9 +229,96 @@ class FireworkShowTest {
         assertFalse(g.refusalDue(her, 11_999));
         assertTrue(g.refusalDue(her, 12_000), "two seconds on, it is said again");
         assertTrue(g.refusalDue(UUID.randomUUID(), 12_100), "each player's own");
-        g.tryStart(her, true);
+        g.tryStart(her, true, 12_050);
         g.forget(her);
         assertFalse(g.longOn(her), "a quit forgets her long show");
-        assertTrue(g.refusalDue(her, 12_100), "and her last refusal");
+        assertTrue(g.refusalDue(her, 12_100), "and her last refusal (and her long show's start)");
+    }
+    @Test
+    void aLongShowsStartQuietensTheHeldTapThatStartedIt() {
+        // review SHOW-REFUSE-3: Java repeats a held use every 4 ticks and Bedrock a held tap's, so the first repeat
+        // comes a moment after the start, while the show is on
+        FireworkShows.Guard g = new FireworkShows.Guard();
+        UUID her = UUID.randomUUID();
+        assertTrue(g.tryStart(her, true, 10_000) != 0, "the Grand show starts");
+        assertEquals(0, g.tryStart(her, true, 10_200), "the held tap's first repeat is refused (the item is kept)");
+        assertFalse(g.refusalDue(her, 10_200), "and isn't said: the show has only just begun");
+        assertFalse(g.refusalDue(her, 11_999), "nor are the repeats after it");
+        assertTrue(g.refusalDue(her, 12_000), "two seconds after the start, a refusal is said");
+        assertFalse(g.refusalDue(her, 12_200), "and then once every two seconds, as before");
+        assertEquals(0, g.tryStart(her, true, 13_000), "a refused start stamps nothing");
+        assertTrue(g.refusalDue(her, 14_000));
+
+        UUID him = UUID.randomUUID();
+        assertTrue(g.tryStart(him, false, 10_000) != 0, "a short show");
+        assertTrue(g.refusalDue(him, 10_100), "stamps nothing: it is never refused, and the first refusal is said");
+    }
+
+    @Test
+    void aLongShowStaysOutOfTheGames() throws IOException {
+        // review SHOW-GAMES-1: as Party Time's guests (PartyService.guest), a game's course is no place for rockets
+        assertTrue(FireworkShows.playsHere(false, false), "home: it plays");
+        assertFalse(FireworkShows.playsHere(true, false), "in a game (on its way in or out too)");
+        assertFalse(FireworkShows.playsHere(false, true), "in a Games world (the Clubhouse, a course)");
+        assertFalse(FireworkShows.playsHere(true, true));
+        assertEquals("Save your show for after the games!", PrizeItemListener.SHOW_NOT_HERE);
+
+        String shows = source("FireworkShows.java");
+        assertTrue(shows.contains("boolean isLong = FireworkShow.isLong(seconds); long show = guard.tryStart(id, isLong,"
+                + " System.currentTimeMillis());"), "the start knows a long show");
+        assertTrue(shows.contains("if (!player.isOnline() || (isLong && !playsHere(player))) { end(show); return; }"
+                + " while (next[0] < bursts.size()"), "each step, before it bursts: a long show whose player went into"
+                + " a game or a Games world ends there, and a short show plays as ever");
+        assertTrue(shows.contains("return playsHere(Whereabouts.inGameSession(plugin, player),"
+                + " Whereabouts.gamesWorld(plugin, player.getWorld()));"), "the facts are Whereabouts'");
+
+        String use = fireworkCase();
+        int here = use.indexOf("if (longShow && !shows.playsHere(player)) {");
+        assertTrue(here >= 0, "a long show in a game or a Games world is refused: " + use);
+        assertTrue(here < use.indexOf("shows.start(player, seconds)"), "before it starts");
+        assertTrue(use.substring(here, use.indexOf("} else if (shows.start(player, seconds))"))
+                .contains("SHOW_NOT_HERE"), "with its own line");
+        assertFalse(use.substring(here, use.indexOf("} else if (shows.start(player, seconds))"))
+                .contains("consume("), "and the item kept");
+    }
+
+    @Test
+    void aLongShowsTapOnOneOfOursIsThatBlocks() throws IOException {
+        // review SHOW-OURS-2: CustomBlockListener, JoinSigns and MiniHeadListener run first (the Arcade Machine's
+        // screen, a join sign's game, a Mini caught); the tap is theirs, as for a hat (PrizeItemListener.ours)
+        String use = fireworkCase();
+        String guard = "boolean longShow = FireworkShow.isLong(seconds); Block clicked = event.getClickedBlock();"
+                + " if (longShow && clicked != null && ours(plugin, clicked)) { return; } cancel(event);";
+        assertTrue(use.contains(guard), "a long show leaves a tap on one of ours alone, before anything: " + use);
+        assertTrue(use.indexOf(guard) < use.indexOf("consume(player, hand)"), "so it is never used up there");
+        assertTrue(use.startsWith(" int seconds = FireworkShow.seconds(plugin.config().arcade().prize("
+                + "TokenPrizes.prizeId(item))); " + guard), "the first thing the case does");
+        assertTrue(use.contains("if (shows.start(player, seconds)) { consume(player, hand); }"),
+                "a short show (or a long one's tap on a plain block or the air) plays and is used, as before");
+    }
+
+    /** The FIREWORK case of {@code PrizeItemListener.onUse}, comments gone and whitespace one space. */
+    private static String fireworkCase() throws IOException {
+        String src = source("PrizeItemListener.java");
+        String head = "case FIREWORK -> {";
+        int from = src.indexOf(head);
+        assertTrue(from >= 0, "fixture: " + head);
+        int at = from + head.length();
+        int depth = 1;
+        for (int i = at; i < src.length(); i++) {
+            char c = src.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}' && --depth == 0) {
+                return src.substring(at, i);
+            }
+        }
+        throw new AssertionError("fixture: the case's end");
+    }
+
+    /** An arcade source file, its line comments gone and its whitespace one space (as {@code RentalWiringTest}). */
+    private static String source(String file) throws IOException {
+        return Files.readString(Path.of("src/main/java/com/dierks/homecraft/arcade", file), StandardCharsets.UTF_8)
+                .replaceAll("//[^\\n]*", "").replaceAll("\\s+", " ");
     }
 }

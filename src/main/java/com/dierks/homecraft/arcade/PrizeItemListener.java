@@ -48,7 +48,9 @@ import java.util.UUID;
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Shows</b>: right-click for a show that cannot hurt anyone, as long as its row's {@code seconds}
  *       ({@link FireworkShows}): the Firework Show's three seconds, the Grand Firework Show's fifteen with a finale
- *       (0.38.1). One long show at a time: another is refused and kept. A show stops when its player quits.</li>
+ *       (0.38.1). One long show at a time: another is refused and kept. A long show is never used by a tap on one of
+ *       ours (the Arcade Machine, a join sign, a Mini), nor in a game or a Games world, and it ends when its player
+ *       goes into one. A show stops when its player quits.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
  *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
@@ -66,6 +68,8 @@ public final class PrizeItemListener implements Listener {
 
     /** A long firework show used while the player's long show is still on (0.38.1): refused, the item kept. */
     static final String SHOW_ON = "Wait for your show to finish!";
+    /** A long firework show used in a game or a Games world (0.38.1): refused, the item kept. */
+    static final String SHOW_NOT_HERE = "Save your show for after the games!";
 
     private final HomeCraftManagement plugin;
 
@@ -133,15 +137,28 @@ public final class PrizeItemListener implements Listener {
                 }
             }
             case FIREWORK -> {
+                // The show's length is its row's now (a missing row plays the short show).
+                int seconds = FireworkShow.seconds(plugin.config().arcade().prize(TokenPrizes.prizeId(item)));
+                boolean longShow = FireworkShow.isLong(seconds);
+                Block clicked = event.getClickedBlock();
+                if (longShow && clicked != null && ours(plugin, clicked)) {
+                    // review SHOW-OURS-2: the tap is that block's (the Arcade Machine's screen opens, a Mini is
+                    // caught, a join sign starts its game), as for a hat; the long show stays in the hand
+                    return;
+                }
                 cancel(event);
-                // The show's length is its row's now (a missing row plays the short show); a long one while the
-                // player's long show is still on is refused, and the item stays in the hand.
                 FireworkShows shows = plugin.fireworkShows();
                 if (shows == null) {
                     return;
                 }
-                int seconds = FireworkShow.seconds(plugin.config().arcade().prize(TokenPrizes.prizeId(item)));
-                if (shows.start(player, seconds)) {
+                // A long one in a game or a Games world, or while the player's long show is still on, is refused,
+                // and the item stays in the hand.
+                if (longShow && !shows.playsHere(player)) {
+                    if (shows.refusalDue(player.getUniqueId())) {
+                        player.sendMessage(Text.of("&7" + SHOW_NOT_HERE));
+                        Sounds.refused(player);
+                    }
+                } else if (shows.start(player, seconds)) {
                     consume(player, hand);
                 } else if (shows.refusalDue(player.getUniqueId())) {
                     player.sendMessage(Text.of("&7" + SHOW_ON));

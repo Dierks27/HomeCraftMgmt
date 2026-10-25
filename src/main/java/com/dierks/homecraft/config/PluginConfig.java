@@ -2959,10 +2959,14 @@ public final class PluginConfig {
 
     /** An int setting brought into {@code min}-{@code max}, with one WARN when it was outside. */
     private int clamped(FileConfiguration c, String path, int fallback, int min, int max) {
-        int v = c.getInt(path, fallback);
+        return clamped(path, c.getInt(path, fallback), min, max, log::warning);
+    }
+
+    /** {@code v}, the value at {@code path}, brought into {@code min}-{@code max}, with one WARN when it was outside. */
+    static int clamped(String path, int v, int min, int max, java.util.function.Consumer<String> warning) {
         if (v < min || v > max) {
             int in = Math.max(min, Math.min(max, v));
-            log.warning(path + " " + v + " is outside " + min + "-" + max + "; using " + in + ".");
+            warning.accept(path + " " + v + " is outside " + min + "-" + max + "; using " + in + ".");
             return in;
         }
         return v;

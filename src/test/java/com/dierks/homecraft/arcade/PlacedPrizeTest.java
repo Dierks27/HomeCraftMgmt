@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A placed prize head, a hat or a trophy (0.37.3, spec §4.15 (4), D17, Q7): only whoever placed it, or an admin, may
  * break it, and the prize goes into the breaker's bag, or their Mailbox when the bag is full, never the ground. A
- * head placed before 0.37.3 remembers no placer and breaks for anyone, as it always did.
+ * head placed before 0.37.3 remembers no placer and breaks for anyone, as it always did. A HomeCraft block placed as a
+ * head is never a placed prize, even when it is a token prize (0.38.1: a skinned Firework Launcher).
  */
 class PlacedPrizeTest {
 
@@ -94,6 +95,26 @@ class PlacedPrizeTest {
         assertEquals(List.of(), failing.bag);
         assertEquals(List.of(), failing.mailbox);
         assertEquals(List.of(), failing.ground);
+    }
+
+    /**
+     * Plan risk R3 (0.38.1): a Firework Launcher is a token prize, and with {@code skins.firework_launcher} set it is
+     * placed as a head. Stored as a placed prize too, its break would put one launcher in the bag (the placed-prize
+     * hand-over) and drop another (the block's own drop). A HomeCraft block is the block system's, as
+     * {@code MiniHeadListener} leaves it; every other prize head is remembered as before.
+     */
+    @Test
+    void aHomeCraftBlockItemIsNeverStoredAsAPlacedPrize() throws Exception {
+        assertTrue(PrizeItemListener.storesAsPlacedPrize(true, true, false), "a hat or a trophy placed as a head");
+        assertFalse(PrizeItemListener.storesAsPlacedPrize(true, true, true), "a skinned Firework Launcher: never");
+        assertFalse(PrizeItemListener.storesAsPlacedPrize(true, false, false), "a prize that isn't a head");
+        assertFalse(PrizeItemListener.storesAsPlacedPrize(false, true, false), "a head that isn't a prize (a Mini)");
+        assertFalse(PrizeItemListener.storesAsPlacedPrize(false, true, true), "a PC: the block system's");
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/java/com/dierks/homecraft/arcade/PrizeItemListener.java")).replaceAll("\\s+", " ");
+        assertTrue(src.contains("if (!storesAsPlacedPrize(TokenPrizes.is(item), placed instanceof Skull, blocks != null"
+                + " && blocks.itemType(item) != null) || !(placed instanceof Skull skull)) { return; }"),
+                "onPlace asks it before anything is written to the skull");
     }
 
     @Test

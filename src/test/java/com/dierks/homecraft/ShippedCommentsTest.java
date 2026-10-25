@@ -99,7 +99,15 @@ class ShippedCommentsTest {
         }
         String prizes = String.join("\n", after.getComments("arcade.prizes"));
         assertTrue(prizes.contains("firework   a harmless firework show; seconds 3-30, default 3."), prizes);
+        assertTrue(prizes.contains("launchers (1-3): a Mega Firework Show from the nearest Firework Launchers"),
+                "and the Mega show's launchers (0.38.1)");
+        assertTrue(prizes.contains("block: display_case, pallet, vending, mailbox, printer, pc, arcade or"
+                + " firework_launcher)"), "and the launcher's block");
         assertFalse(prizes.contains("three-second"), "and not 0.38.0's line");
+        assertEquals(bundled.getComments("arcade.launcher"), after.getComments("arcade.launcher"),
+                "the new arcade.launcher comes with its comment");
+        assertEquals(bundled.getInlineComments("skins.firework_launcher"),
+                after.getInlineComments("skins.firework_launcher"), "and skins.firework_launcher with its own");
     }
 
     @Test

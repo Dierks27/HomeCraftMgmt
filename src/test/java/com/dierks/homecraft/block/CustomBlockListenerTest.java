@@ -1,5 +1,11 @@
 package com.dierks.homecraft.block;
 
+import io.papermc.paper.event.block.BlockFailedDispenseEvent;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -7,13 +13,16 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which of our blocks still open on a tap that arrived already cancelled (vanilla spawn protection or a
  * protection plugin's "use" rule, both of which spare ops): the Arcade family, and nothing else; never for a
  * player in a world game, whose session's guard says no to every tap and screen (review ARC-1); and the one
- * console line such a tap gets names no cause it can't know.
+ * console line such a tap gets names no cause it can't know. And the Firework Launcher's place and guards (0.38.1):
+ * the cap is counted after the town check and before the record, and no hopper, dispense, redstone pulse or screen
+ * ever acts on a launcher.
  */
 class CustomBlockListenerTest {
 
@@ -72,6 +81,58 @@ class CustomBlockListenerTest {
                 && sandbox > perm, "trophy -> ARCADE -> the cancelled-tap rule -> ours -> the permission -> economy");
         assertTrue(src.contains("ArcadeTrophies.tap(event.getPlayer().isSneaking(), true) == ArcadeTrophies.Tap.PASS) "
                 + "{ return; }"), "a sneak returns before the tap is cancelled");
+    }
+
+    /**
+     * The launcher's cap in {@code onPlace} (a listener can't run without a server): after the economy and town checks
+     * (a place refused there never counts), before the record is written (a refused fourth writes nothing), and the
+     * facing before the record, so its tag is written last.
+     */
+    @Test
+    void theLauncherCapIsCountedAfterTheTownCheckAndBeforeTheRecord() throws Exception {
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of("src", "main", "java", "com", "dierks",
+                "homecraft", "block", "CustomBlockListener.java")).replaceAll("\\s+", " ");
+        int place = src.indexOf("public void onPlace(BlockPlaceEvent event) {");
+        int town = src.indexOf("player.sendMessage(Text.of(\"&cYou can't build here.\"));", place);
+        int cap = src.indexOf("if (LauncherRules.placeRefused(launchers, perPlayer)) {", place);
+        int face = src.indexOf("blocks.faceUp(block);", place);
+        int record = src.indexOf("blocks.recordPlacement(block, type, player.getUniqueId());", place);
+        assertTrue(place > 0 && town > place && cap > town && face > cap && record > face,
+                "town check < launcher cap < facing up < the record");
+        String refused = src.substring(cap, face);
+        assertTrue(refused.contains("event.setCancelled(true);") && refused.contains("LauncherRules.fullLine(perPlayer)")
+                && refused.contains("Sounds.refused(player);") && refused.contains("return;"),
+                "a fourth: cancelled (the item stays in the hand), one kind line and the refused sound");
+        assertTrue(src.contains("pb -> pb.owner().equals(me), pb -> sameSpot(pb, block), this::staleLauncher"),
+                "hers, not this spot, not a stale record");
+        // a Mega show in the hand: the tap is the show's, before the economy and build checks speak
+        int deny = src.indexOf("event.setUseInteractedBlock(Event.Result.DENY);");
+        int mega = src.indexOf("if (type == CustomBlockType.FIREWORK_LAUNCHER && MegaShow.isMega(");
+        int sandbox = src.indexOf("plugin.sandbox().check(player, \"use \"");
+        assertTrue(deny > 0 && mega > deny && sandbox > mega, "deny < the Mega show's tap < the economy check");
+        assertTrue(src.contains("case FIREWORK_LAUNCHER -> { UUID owner = placed.get().owner();"), "its own tap line");
+    }
+
+    /** The four launcher guards: each early enough, each skipping what someone already said no to. */
+    @Test
+    void theLauncherGuardsRunEarly() throws Exception {
+        Object[][] guards = {{"onLauncherFeed", InventoryMoveItemEvent.class, EventPriority.LOW, true},
+                {"onLauncherDispense", BlockDispenseEvent.class, EventPriority.LOW, true},
+                {"onLauncherClick", BlockFailedDispenseEvent.class, EventPriority.LOW, false},
+                {"onLauncherOpen", InventoryOpenEvent.class, EventPriority.HIGH, true}};
+        for (Object[] g : guards) {
+            EventHandler h = CustomBlockListener.class.getMethod((String) g[0], (Class<?>) g[1])
+                    .getAnnotation(EventHandler.class);
+            assertNotNull(h, g[0] + " is a handler");
+            assertEquals(g[2], h.priority(), (String) g[0]);
+            assertEquals(g[3], h.ignoreCancelled(), g[0] + " (a failed dispense can't be cancelled)");
+        }
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of("src", "main", "java", "com", "dierks",
+                "homecraft", "block", "CustomBlockListener.java")).replaceAll("\\s+", " ");
+        assertTrue(src.contains("return inv != null && inv.getType() == InventoryType.DROPPER && inv.getHolder(false)"
+                + " instanceof BlockState state && CustomBlockService.isLauncher(state);"),
+                "a hopper's move costs a type compare, then the tile's own tag: never the database");
+        assertTrue(src.contains("event.shouldPlayEffect(false);"), "a redstone pulse makes no click or smoke");
     }
 
     @Test

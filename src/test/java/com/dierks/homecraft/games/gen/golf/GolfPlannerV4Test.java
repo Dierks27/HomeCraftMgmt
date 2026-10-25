@@ -23,8 +23,10 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -54,7 +56,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * strokes a course more than with all five, where on Adventure Golf's courses it doesn't); the kid
  * is within par + 2 (Tiny Golf: par + 1) and never wet;
  * Tiny Golf is dry, short (path at most 22) and par 2-3; planning is well inside the budget and the
- * time (p50 about 4 s, p99 under 20 s, on one planner thread); a stored layout re-derives to the
+ * time (p50 under 4 s, p99 under 20 s, on one planner thread of a machine as quick as the one they were
+ * measured on, and in proportion on a slower one); a stored layout re-derives to the
  * same hash; goldens are pinned; re-rolling one hole changes no other hole's blocks; a cancelled job
  * stops. A 2,000-seed soak runs under {@code -Phcm.slow}.
  */
@@ -64,9 +67,21 @@ class GolfPlannerV4Test {
     private static final long SECRET = 0x5EC12E7L;
     private static final ThreadMXBean CPU = ManagementFactory.getThreadMXBean();
 
-    /** One planned course and the CPU time it took (one planner thread). */
-    private record Run(Slots.Def slot, int n, Plan plan, long millis) {
+    /**
+     * One planned course, the CPU time it took (one planner thread), and the CPU time the {@link #yardstick()}
+     * took on the same thread just before it.
+     */
+    private record Run(Slots.Def slot, int n, Plan plan, long millis, long yardstickMicros) {
     }
+
+    /**
+     * The yardstick's mean (the middle 96% of its timings), in microseconds of CPU, beside this class's own
+     * planning on the machine the {@code FreshBench} times were measured on (29.0-31.2 ms there, where Golf of
+     * the Week's p50 is 1.9-2.6 s).
+     */
+    private static final long YARDSTICK_REF_MICROS = 29_500;
+    /** What the yardstick adds up to; it does exactly the same work every time. */
+    private static final long YARDSTICK_SUM = 4 * 177_572_020L;
 
     private static final List<Run> RUNS = new ArrayList<>();
 
@@ -83,10 +98,13 @@ class GolfPlannerV4Test {
     }
 
     private static Run run(Slots.Def slot, int n) {
+        long y0 = CPU.getCurrentThreadCpuTime();
+        long sum = yardstick();
         long t0 = CPU.getCurrentThreadCpuTime();
+        assertEquals(YARDSTICK_SUM, sum, "the yardstick does the same work every time");
         try {
             Plan plan = new GolfPlanner().plan(input(slot, n));
-            return new Run(slot, n, plan, (CPU.getCurrentThreadCpuTime() - t0) / 1_000_000);
+            return new Run(slot, n, plan, (CPU.getCurrentThreadCpuTime() - t0) / 1_000_000, (t0 - y0) / 1_000);
         } catch (GenFailed e) {
             throw new AssertionError(slot.id() + " seed " + n + " failed: " + e.getMessage(), e);
         }
@@ -95,8 +113,57 @@ class GolfPlannerV4Test {
     /** Plan every course once, in parallel (each plan is single-threaded and pure). */
     @BeforeAll
     static void planAll() {
+        for (int i = 0; i < 10; i++) {
+            yardstick(); // compiled before any timing of it counts
+        }
         RUNS.addAll(IntStream.range(0, SEEDS).parallel().mapToObj(n -> run(Slots.DAILY_GOLF, n)).toList());
         RUNS.addAll(IntStream.range(0, SEEDS).parallel().mapToObj(n -> run(Slots.TINY_GOLF, n)).toList());
+    }
+
+    /**
+     * A fixed piece of the bookkeeping beside the planner's putts: a breadth-first walk over a 192 x 192 grid
+     * with about a fifth of it walled off, the cells it reaches kept in a hash of packed {@code long} keys, as
+     * {@link ExpertSearch#search} keeps the spots it has seen (packed as {@link Palette#blockKey} packs them),
+     * walked four times so one timing spans a busy machine's time slices. It isn't the ball's physics, which is
+     * most of a plan's CPU; how long it takes says how quickly this thread is running at that moment, beside
+     * the other planner threads.
+     */
+    private static long yardstick() {
+        int size = 192;
+        int[][] steps = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        long sum = 0;
+        for (int round = 0; round < 4; round++) {
+            boolean[] wall = new boolean[size * size];
+            long x = 0x9E3779B97F4A7C15L;
+            for (int i = size; i < wall.length; i++) { // the first row stays open, so the walk always gets going
+                x = x * 6364136223846793005L + 1442695040888963407L;
+                wall[i] = (x >>> 59) < 6;
+            }
+            Map<Long, Integer> dist = new HashMap<>();
+            ArrayDeque<Long> queue = new ArrayDeque<>();
+            dist.put(0L, 0);
+            queue.add(0L);
+            long walked = 0;
+            while (!queue.isEmpty()) {
+                long at = queue.poll();
+                int d = dist.get(at);
+                walked += d;
+                int ax = (int) (at >>> 38);
+                int az = (int) (at >>> 12) & 0x3FFFFFF;
+                for (int[] s : steps) {
+                    int bx = ax + s[0];
+                    int bz = az + s[1];
+                    if (bx >= 0 && bz >= 0 && bx < size && bz < size && !wall[bz * size + bx]) {
+                        long key = ((long) bx << 38) | ((long) bz << 12);
+                        if (dist.putIfAbsent(key, d + 1) == null) {
+                            queue.add(key);
+                        }
+                    }
+                }
+            }
+            sum += walked * 31 + dist.size();
+        }
+        return sum;
     }
 
     private static List<Run> runs(Slots.Def slot) {
@@ -785,25 +852,44 @@ class GolfPlannerV4Test {
         }
     }
 
-    /** The {@code FreshBench} numbers (§6.2, §6.3): work, CPU time and blocks per course, p50/p99. */
+    /**
+     * The {@code FreshBench} numbers (§6.2, §6.3): work, CPU time and blocks per course, p50/p99. The work is
+     * the same on every machine. The CPU times hold to the spec's on a machine as quick as the one they were
+     * measured on, or a quicker one; on a slower one (a busy CI runner) they are scaled by how much slower the
+     * {@link #yardstick()} ran beside that slot's plans (the mean of the middle 96% of its timings), so a slow
+     * runner doesn't hide a planner that got slower.
+     */
     @Test
     void freshBenchPlanningIsWellInsideItsBudgetAndTime() {
         for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
             long[] work = runs(slot).stream().mapToLong(r -> r.plan().work()).sorted().toArray();
             long[] ms = runs(slot).stream().mapToLong(Run::millis).sorted().toArray();
             long[] ops = runs(slot).stream().mapToLong(r -> r.plan().ops().size()).sorted().toArray();
+            long[] yard = runs(slot).stream().mapToLong(Run::yardstickMicros).sorted().toArray();
             long p99Work = work[(int) (work.length * 0.99)];
             long p50Ms = ms[ms.length / 2];
             long p99Ms = ms[(int) (ms.length * 0.99)];
             long p99Ops = ops[(int) (ops.length * 0.99)];
+            int trim = yard.length / 50;
+            long yardMean = Math.round(Arrays.stream(yard, trim, yard.length - trim).average().orElseThrow());
+            double ratio = (double) yardMean / YARDSTICK_REF_MICROS;
+            double slower = Math.max(1.0, Math.round(100 * ratio) / 100.0);
+            long p50Cap = Math.round(4_000 * slower);
+            long p99Cap = Math.round(20_000 * slower);
+            String yardstick = String.format(Locale.ROOT, "; the yardstick took %d us, %.2fx the %d us where the"
+                    + " times were measured", yardMean, ratio, YARDSTICK_REF_MICROS);
             System.out.println("FreshBench golf v4 " + slot.id() + ": work p50 " + work[work.length / 2] + " p99 " + p99Work
                     + " max " + work[work.length - 1] + " putts (budget " + GolfPlanner.COURSE_BUDGET + "); CPU p50 "
                     + p50Ms + " ms, p99 " + p99Ms + " ms, max " + ms[ms.length - 1] + " ms (planning and its own full"
-                    + " check); blocks p50 " + ops[ops.length / 2] + " p99 " + p99Ops + " max " + ops[ops.length - 1]);
+                    + " check); blocks p50 " + ops[ops.length / 2] + " p99 " + p99Ops + " max " + ops[ops.length - 1]
+                    + "; yardstick mean " + yardMean + " us, p50 " + yard[yard.length / 2] + " us ("
+                    + YARDSTICK_REF_MICROS + " us where the times were measured)");
             assertTrue(p99Work <= GolfPlanner.COURSE_BUDGET / 10, slot.id() + ": p99 work " + p99Work
                     + " is a tenth of the course budget at most");
-            assertTrue(p50Ms < 4_000, slot.id() + ": p50 " + p50Ms + " ms of CPU, under the spec's 4 s");
-            assertTrue(p99Ms < 20_000, slot.id() + ": p99 " + p99Ms + " ms of CPU, under 20 s");
+            assertTrue(p50Ms < p50Cap, slot.id() + ": p50 " + p50Ms + " ms of CPU, under the spec's 4 s"
+                    + (slower > 1.0 ? ", scaled to " + p50Cap + " ms" : "") + yardstick);
+            assertTrue(p99Ms < p99Cap, slot.id() + ": p99 " + p99Ms + " ms of CPU, under 20 s"
+                    + (slower > 1.0 ? ", scaled to " + p99Cap + " ms" : "") + yardstick);
             assertTrue(p99Ops <= 30_000, slot.id() + ": p99 blocks " + p99Ops + ", scenery included, well within the"
                     + " check's cap of " + GolfValidator.MAX_OPS);
         }

@@ -83,8 +83,9 @@ class GivePrizeCommandTest {
     @Test
     void anItemNeedsRoomInTheBag() {
         for (PrizeType t : new PrizeType[] {PrizeType.BOOST, PrizeType.RADAR, PrizeType.LURE, PrizeType.FIREWORK,
-                PrizeType.HAT, PrizeType.TROPHY, PrizeType.FILAMENT, PrizeType.BLOCK, PrizeType.PACK}) {
-            assertTrue(HcmCommand.givesAnItem(t), t + " is an item");
+                PrizeType.HAT, PrizeType.TROPHY, PrizeType.FILAMENT, PrizeType.BLOCK, PrizeType.PACK,
+                PrizeType.REMOTE}) {
+            assertTrue(HcmCommand.givesAnItem(t), t + " is an item"); // the Firework Remote too (0.38.2)
         }
         for (PrizeType t : new PrizeType[] {PrizeType.TRAIL, PrizeType.COMMAND, PrizeType.HOME_SLOT}) {
             assertFalse(HcmCommand.givesAnItem(t), t + " is not an item");

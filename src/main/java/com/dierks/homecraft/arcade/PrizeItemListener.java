@@ -54,7 +54,11 @@ import java.util.UUID;
  *       ours (the Arcade Machine, a join sign, a Mini), nor in a game or a Games world, and it ends when its player
  *       goes into one. A show stops when its player quits. The <b>Mega Firework Show</b> (a row with
  *       {@code launchers}, 0.38.1) plays a minute from the Firework Launchers nearby instead ({@link MegaShowService}),
- *       as the player's one long show; a tap on a launcher starts it too, and with none near enough it is kept.</li>
+ *       as the player's one long show; a tap on a launcher starts it too, and with none near enough it is kept.
+ *       From 0.38.2 it fires from the launchers its player linked with a Firework Remote, when they have.</li>
+ *   <li><b>The Firework Remote</b> (0.38.2): a tap on a Firework Launcher links it to the player's show set, or
+ *       unlinks it ({@link RemoteService}); a tap on the air or a plain block opens My Show. Never used up, and it
+ *       never fires anything by itself. A tap on another of ours is that block's.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
  *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
@@ -175,6 +179,7 @@ public final class PrizeItemListener implements Listener {
                     Sounds.refused(player);
                 }
             }
+            case REMOTE -> remote(event, player);
             case HAT -> {
                 Block clicked = event.getClickedBlock();
                 boolean bedrock = Bedrock.is(player);
@@ -219,6 +224,31 @@ public final class PrizeItemListener implements Listener {
         if (plugin.fireworkShows() == null || plugin.fireworkShows().refusalDue(player.getUniqueId())) {
             player.sendMessage(Text.of("&7" + refused));
             Sounds.refused(player);
+        }
+    }
+
+    /**
+     * The Firework Remote (0.38.2): a tap on a launcher links or unlinks it; on the air or a plain block, My Show. A
+     * launcher is known first (its tag, else its record: review MEGA-RT-1), so it is never taken for another of ours;
+     * a tap on another of ours (the Arcade Machine's screen, a join sign, a Mini) is that block's, and the Remote does
+     * nothing; so is a tap on a block that does something when tapped (a door, a chest), so a child holding the Remote
+     * still opens doors. Never used up; nothing in a game.
+     */
+    private void remote(PlayerInteractEvent event, Player player) {
+        Block on = event.getClickedBlock();
+        boolean launcher = on != null && launcher(plugin, on);
+        if (on != null && !launcher && (on.getType().isInteractable() || ours(plugin, on))) {
+            return; // that block's own tap
+        }
+        cancel(event); // a recovery compass does nothing anyway
+        RemoteService remotes = plugin.remotes();
+        if (remotes == null || com.dierks.homecraft.util.Whereabouts.inGameSession(plugin, player)) {
+            return;
+        }
+        if (launcher) {
+            remotes.tap(player, on);
+        } else {
+            remotes.openMyShow(player);
         }
     }
 

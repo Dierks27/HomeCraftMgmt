@@ -683,7 +683,7 @@ public final class PrizeService {
         String label = p.display();
         long trophyNumber = 0;
         switch (p.type()) {
-            case BOOST, RADAR, LURE, FIREWORK, HAT -> {
+            case BOOST, RADAR, LURE, FIREWORK, HAT, REMOTE -> {
                 if (p.type() == PrizeType.HAT && (p.rental() || p.keeper())) {
                     // a rented hat or a Keeper is a key from the wardrobe (LookService), never a loose hat
                     return Outcome.fail(NOTHING_MADE);
@@ -787,7 +787,10 @@ public final class PrizeService {
                 label = trailLabel(p, days);
                 item = icon(p);
             }
-            default -> giveOrDrop(player, item);
+            default -> {
+                giveOrDrop(player, item);
+                remoteHandedOver(player, p);
+            }
         }
         return Outcome.won(item.clone(), label);
     }
@@ -898,7 +901,10 @@ public final class PrizeService {
                 }
                 announce(player, "&6✦ &e" + player.getName() + " &6got the " + trophyName + "!");
             }
-            default -> giveOrDrop(player, item); // a counted boost, as before
+            default -> {
+                giveOrDrop(player, item); // a counted boost, as before
+                remoteHandedOver(player, p);
+            }
         }
         return Outcome.won(shown.clone(), said);
     }
@@ -1817,6 +1823,17 @@ public final class PrizeService {
     public static ItemStack icon(Prize p) {
         return com.dierks.homecraft.gui.Menus.icon(p.icon().material() != null ? p.icon().material() : Material.PAPER,
                 p.display());
+    }
+
+    /**
+     * A Firework Remote just handed over shows its holder's set at once (review REMOTE-LORE-4): an item put in the bag
+     * fires no held-slot event, so one landing in the selected slot kept its counter look, without its "(N linked)"
+     * and its launchers' lines, until the player switched away and back.
+     */
+    private void remoteHandedOver(Player player, Prize p) {
+        if (p.type() == PrizeType.REMOTE && plugin.remotes() != null) {
+            plugin.remotes().refreshRemotes(player);
+        }
     }
 
     private static void giveOrDrop(Player player, ItemStack item) {

@@ -11,9 +11,9 @@ import java.util.function.Predicate;
  * set up"): how many a player may have placed at once, and what a placement and a tap say. Pure, so the counting and
  * every line are tested without a server; {@link CustomBlockListener} asks them.
  *
- * <p><b>Placed at once</b> is {@code arcade.launcher.per_player} (3), admins too. The count is read from the
- * placed-block records at the moment of the place, never kept anywhere else: a launcher picked up is one fewer at
- * once. A record on the very spot being placed (the record is written again on the same spot) is never counted, nor a
+ * <p><b>Placed at once</b> is {@code arcade.launcher.per_player} (15 from 0.38.2; 3 in 0.38.1), admins too. The count
+ * is read from the placed-block records at the moment of the place, never kept anywhere else: a launcher picked up is
+ * one fewer at once. A record on the very spot being placed (the record is written again on the same spot) is never counted, nor a
  * stale one, whose block is gone (air, in a loaded chunk: a WorldEdit clear leaves records behind); a launcher whose
  * world or chunk isn't loaded can't be looked at, so it counts.
  *
@@ -67,18 +67,27 @@ public final class LauncherRules {
      * yours are set up, and what it is for; {@code busy} adds that a show is using it right now.
      */
     public static String tapLine(boolean mine, String owner, int placed, int perPlayer, boolean busy) {
+        return tapLine(mine, owner, placed, perPlayer, busy, 0);
+    }
+
+    /**
+     * {@link #tapLine(boolean, String, int, int, boolean)}, and (0.38.2) its number in the tapper's Firework Remote set
+     * when it is in it ({@code linkedAs}, 0 when not): "Linked as #2 in your show."
+     */
+    public static String tapLine(boolean mine, String owner, int placed, int perPlayer, boolean busy, int linkedAs) {
         String head = mine ? "&6Your " + NAME + " &7(" + placed + " of " + perPlayer + " set up)."
                 : "&6" + owner + "'s " + NAME + "&7.";
-        return head + " Use a &dMega Firework Show &7near it!" + (busy ? " &dIt's in a show right now!" : "");
+        return head + " Use a &dMega Firework Show &7near it!" + (busy ? " &dIt's in a show right now!" : "")
+                + (linkedAs > 0 ? " &bLinked as #" + linkedAs + " in your show." : "");
     }
 
     /**
      * When a launcher's own line is said (review LAUNCHER-SPAM-3). A held use button repeats a tap or a place about
      * five times a second (Java every 4 ticks, and a held Bedrock tap too), and a launcher's tap opens no screen that
-     * would stop it, so the same line (a tap on the same launcher, or a fourth place) is said at most once every
-     * {@value #GAP_MS} ms a player, and its sound and the records a tap line reads only with it, as the show refusals
-     * are ({@code FireworkShows.refusalDue}). Another line (a tap on another launcher) is said at once. Plain state, so
-     * a test drives it; main thread.
+     * would stop it, so the same line (a tap on the same launcher, or a place over the limit) is said at most once
+     * every {@value #GAP_MS} ms a player, and its sound and the records a tap line reads only with it, as the show
+     * refusals are ({@code FireworkShows.refusalDue}). Another line (a tap on another launcher) is said at once. Plain
+     * state, so a test drives it; main thread.
      */
     public static final class Lines {
         /** The least time between two of the same line to one player. */

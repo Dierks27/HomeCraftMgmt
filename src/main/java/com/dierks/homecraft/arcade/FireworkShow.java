@@ -3,6 +3,8 @@ package com.dierks.homecraft.arcade;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 
+import org.bukkit.FireworkEffect;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.random.RandomGenerator;
@@ -18,6 +20,9 @@ import java.util.random.RandomGenerator;
  * burst, a few blocks further out, alternately low and at the short show's height, so more of it bursts where a
  * player looking ahead can see it. A second after its last burst comes the finale: {@value #FINALE_FIREWORKS} at
  * once, evenly round the player, higher up.
+ *
+ * <p>In a holiday window (0.38.2, {@link HolidayShows}) a long show takes that holiday's colours, fades and shape
+ * ({@link #look}); a short show never does, and outside a window every burst keeps its random look.
  */
 public final class FireworkShow {
 
@@ -73,6 +78,33 @@ public final class FireworkShow {
     /** Whether a show of {@code seconds} is a long one ({@value #LONG_SECONDS} seconds or more). */
     public static boolean isLong(int seconds) {
         return seconds(seconds) >= LONG_SECONDS;
+    }
+
+    /**
+     * Whether a firework row's show takes a holiday's look in its window (0.38.2): a Mega show of any tier, or a long
+     * show (the Grand Firework Show). Never the 3-second Firework Show, nor any other kind of row.
+     */
+    public static boolean themed(Prize row) {
+        return row != null && row.type() == PrizeType.FIREWORK && (MegaShow.isMega(row) || isLong(seconds(row)));
+    }
+
+    /**
+     * Firework {@code index} of burst number {@code burst}'s look in a holiday window ({@code theme}, 0.38.2), or null
+     * for its random look: no theme, or a short show's burst (the 3-second show is never themed). A long burst's:
+     * two of the theme's colours, its fade, the theme's shape on about one in four ({@link HolidayShows#signature})
+     * and a ball otherwise, with a trail. The finale's: two colours from its own place round the circle, the theme's
+     * shape on every other one and big balls between, flickering with a trail.
+     */
+    public static MegaShow.Look look(HolidayShows.Theme theme, Kind kind, int burst, int index) {
+        if (theme == null || kind == Kind.SHORT) {
+            return null;
+        }
+        if (kind == Kind.FINALE) {
+            return new MegaShow.Look(HolidayShows.two(theme, index, 0), HolidayShows.fade(theme, index, 0),
+                    index % 2 == 0 ? theme.shape() : FireworkEffect.Type.BALL_LARGE, true, true);
+        }
+        return new MegaShow.Look(HolidayShows.two(theme, index, burst), HolidayShows.fade(theme, index, burst),
+                HolidayShows.signature(index, burst) ? theme.shape() : FireworkEffect.Type.BALL, false, true);
     }
 
     /**

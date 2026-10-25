@@ -17,8 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What config.yml ships for the Firework Launcher (0.38.1, {@code arcade.launcher} and
- * {@code skins.firework_launcher}): a dropper, 3 placed a player, a Mega show's range of 32 blocks, a blank skin, and
- * the code's defaults the same. Every key reaches an existing server through the leaf backfill, with its comment.
+ * {@code skins.firework_launcher}): a dropper, 15 placed a player (0.38.2: 3 in 0.38.1; read 1-30), a Mega show's range
+ * of 32 blocks, a blank skin, and the code's defaults the same. Every key reaches an existing server through the leaf
+ * backfill, with its comment.
  */
 class LauncherConfigTest {
 
@@ -34,37 +35,46 @@ class LauncherConfigTest {
     }
 
     @Test
-    void theShippedLauncherIsADropperThreeAPlayerWithinThirtyTwoBlocks() throws Exception {
+    void theShippedLauncherIsADropperFifteenAPlayerWithinThirtyTwoBlocks() throws Exception {
         YamlConfiguration c = bundled();
         PluginConfig.Launcher d = PluginConfig.Launcher.DEFAULTS;
         assertEquals("DROPPER", c.getString("arcade.launcher.material"), "a dropper, as the owner asked");
         assertEquals(Material.DROPPER, d.block().material(), "and the code's default is the same");
         assertEquals("&6Firework Launcher", c.getString("arcade.launcher.name"));
         assertEquals(d.block().name(), c.getString("arcade.launcher.name"));
-        assertEquals(3, c.getInt("arcade.launcher.per_player"), "three set up at once, admins too");
+        assertEquals(15, c.getInt("arcade.launcher.per_player"),
+                "fifteen set up at once, admins too (0.38.2: enough for the Ultimate show's 10)");
         assertEquals(d.perPlayer(), c.getInt("arcade.launcher.per_player"));
         assertEquals(32, c.getInt("arcade.launcher.range"));
         assertEquals(d.range(), c.getInt("arcade.launcher.range"));
         assertTrue(c.isSet("skins.firework_launcher"), "the skin slot ships");
         assertEquals("", c.getString("skins.firework_launcher"), "blank: the plain dropper, which Bedrock shows as is");
-        assertTrue(String.join("\n", c.getComments("arcade.launcher")).contains("Mega Firework Show"),
-                "with the comment the backfill carries over");
+        String comment = String.join("\n", c.getComments("arcade.launcher"));
+        assertTrue(comment.contains("Mega, Super, Ultra and Ultimate Firework Shows") && comment.contains("(1-30,")
+                && comment.contains("Firework Remote"), "with the comment the backfill carries over: " + comment);
         assertTrue(c.getInlineComments("skins.firework_launcher").get(0).contains("arcade.launcher"));
     }
 
     @Test
-    void perPlayerAndRangeAreBroughtIntoRangeWithOneWarn() {
+    void perPlayerAndRangeAreBroughtIntoRangeWithOneWarn() throws Exception {
         List<String> warnings = new ArrayList<>();
-        assertEquals(3, PluginConfig.clamped("arcade.launcher.per_player", 3, 1, 10, warnings::add));
+        assertEquals(15, PluginConfig.clamped("arcade.launcher.per_player", 15, 1, 30, warnings::add));
+        assertEquals(30, PluginConfig.clamped("arcade.launcher.per_player", 30, 1, 30, warnings::add));
         assertEquals(List.of(), warnings, "in range: as it is, no WARN");
-        assertEquals(1, PluginConfig.clamped("arcade.launcher.per_player", 0, 1, 10, warnings::add));
-        assertEquals(10, PluginConfig.clamped("arcade.launcher.per_player", 50, 1, 10, warnings::add));
+        assertEquals(1, PluginConfig.clamped("arcade.launcher.per_player", 0, 1, 30, warnings::add));
+        assertEquals(30, PluginConfig.clamped("arcade.launcher.per_player", 50, 1, 30, warnings::add));
         assertEquals(64, PluginConfig.clamped("arcade.launcher.range", 500, 8, 64, warnings::add));
         assertEquals(8, PluginConfig.clamped("arcade.launcher.range", 2, 8, 64, warnings::add));
-        assertEquals(List.of("arcade.launcher.per_player 0 is outside 1-10; using 1.",
-                "arcade.launcher.per_player 50 is outside 1-10; using 10.",
+        assertEquals(List.of("arcade.launcher.per_player 0 is outside 1-30; using 1.",
+                "arcade.launcher.per_player 50 is outside 1-30; using 30.",
                 "arcade.launcher.range 500 is outside 8-64; using 64.",
                 "arcade.launcher.range 2 is outside 8-64; using 8."), warnings, "one WARN each");
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/java/com/dierks/homecraft/config/PluginConfig.java"), StandardCharsets.UTF_8)
+                .replaceAll("\\s+", " ");
+        assertTrue(src.contains("clamped(c, \"arcade.launcher.per_player\", d.perPlayer(), 1, 30);"),
+                "readLauncher reads per_player 1-30 (0.38.2; 1-10 before)");
+        assertEquals(15, PluginConfig.Launcher.DEFAULTS.perPlayer());
     }
 
     /**

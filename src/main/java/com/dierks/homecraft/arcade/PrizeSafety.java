@@ -15,7 +15,7 @@ import java.util.function.Predicate;
  *       bundle holding anything else drops like any other item, or protecting it would make a
  *       keep-inventory, fireproof bag for whatever was put in it.</li>
  *   <li><b>Safe on the ground</b> (never despawns, never burns, no mob takes it): the same, except
- *       candy itself, which is meant to go.</li>
+ *       candy itself, which is meant to go, and a Show Map (0.38.2), which is made again for free.</li>
  *   <li><b>Owner-bound when dropped:</b> a collector (the Trick-or-Treat Bag included). With one of
  *       each for good, a lost one could never be bought again, so only the one who dropped it can
  *       pick it back up, and no hopper takes it. Other prizes are handed over by dropping them, so they
@@ -48,6 +48,16 @@ public final class PrizeSafety {
     /** Safe on the ground: kept on death, and not candy (shower candy is meant to go). */
     static boolean keepOnGround(boolean prize, boolean candy, List<Boolean> contentsAreCandy) {
         return keepOnDeath(prize, contentsAreCandy) && !candy;
+    }
+
+    /**
+     * True for a prize id that is a plain item on the ground (review REMOTE-MAP-2): a Show Map
+     * ({@link ShowMap#PRIZE_ID}) is worth nothing and My Show makes it again, so a dropped one despawns,
+     * burns and is picked up like any map, and pressing "Get my Show Map" again and again never leaves a
+     * pile of them on the ground for good. It is still kept when its holder dies.
+     */
+    static boolean plainOnGround(String prizeId) {
+        return ShowMap.PRIZE_ID.equals(prizeId);
     }
 
     /** True for a prize id whose drop only the one who dropped it may pick up: a collector, or the bag. */

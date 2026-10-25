@@ -137,9 +137,10 @@ public final class PrizeSafetyListener implements Listener {
         return prize(item) && PrizeSafety.keepOnDeath(true, contents(item));
     }
 
-    /** {@link PrizeSafety#keepOnGround} for a real item. */
+    /** {@link PrizeSafety#keepOnGround} for a real item; never a Show Map ({@link PrizeSafety#plainOnGround}). */
     static boolean keepOnGround(ItemStack item) {
-        return prize(item) && PrizeSafety.keepOnGround(true, candy(item), contents(item));
+        return prize(item) && !PrizeSafety.plainOnGround(prizeId(item))
+                && PrizeSafety.keepOnGround(true, candy(item), contents(item));
     }
 
     /** Never despawns, can't be hurt, and no mob picks it up (a zombie would wear a dropped cap). */

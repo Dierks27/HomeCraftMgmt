@@ -89,10 +89,13 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 23 = the Grand Firework Show (a 15-second row after the Firework Show), the Firework Launcher and the Mega
      * Firework Show (a minute from 3 launchers) after it, and a gentler Candy Apple shower (every 60 minutes, 30 on the
      * last day, 3 candy apples each), wherever the owner hasn't changed them ({@link GrandShowMigration}).
-     * Each of 20, 21, 22 and 23 also refreshes the comments it makes stale, where they are still the plugin's own
+     * 24 = the Firework Remote and the bigger Mega shows: the Super (4 launchers), Ultra (5) and Ultimate (10)
+     * Firework Shows and the Firework Remote after the Mega Firework Show, and 15 Firework Launchers placed a player
+     * instead of 3, wherever the owner hasn't changed them ({@link FireworkRemoteMigration}).
+     * Each of 20, 21, 22, 23 and 24 also refreshes the comments it makes stale, where they are still the plugin's own
      * words ({@link ShippedComments}).
      */
-    static final int CONFIG_REVISION = 23;
+    static final int CONFIG_REVISION = 24;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -200,6 +203,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.PartyService party;
     private com.dierks.homecraft.arcade.FireworkShows fireworkShows;
     private com.dierks.homecraft.arcade.MegaShowService megaShows;
+    private com.dierks.homecraft.arcade.RemoteService remotes;
     private com.dierks.homecraft.arcade.looks.LookService looks;
     private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
@@ -376,6 +380,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.fireworkShows = new com.dierks.homecraft.arcade.FireworkShows(this); // one long show a player at a time
         // The Mega Firework Show (0.38.1): a minute from the Firework Launchers nearby, one show a launcher at a time.
         this.megaShows = new com.dierks.homecraft.arcade.MegaShowService(this);
+        // The Firework Remote (0.38.2): each player's linked launchers, their holograms, My Show and the Show Map.
+        this.remotes = new com.dierks.homecraft.arcade.RemoteService(this);
         // The wardrobe (0.38): rented hats, caps and trails, their bound keys, My Looks and the heads-up.
         this.looks = new com.dierks.homecraft.arcade.looks.LookService(
                 this, new com.dierks.homecraft.storage.LookDao(database));
@@ -489,6 +495,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         trails.loadOnline(); // a reload: the hide-others switch of everyone already on, as their join would read it
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
         getServer().getPluginManager().registerEvents(megaShows, this); // a quit ends that player's Mega shows
+        getServer().getPluginManager().registerEvents(remotes, this); // the Remote's lore, holograms and map
         // The wardrobe: rows read at join and swept after it; a bound key stays with its owner (§3.7).
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.LookListener(looks), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.BoundItemGuard(this), this);
@@ -536,6 +543,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.candy.start(); // the Candy Apple shower's 5-tick task, only inside its window
         this.arcade.start();
         this.radar.start(); // the Mini Radar's two-second ping
+        this.remotes.start(); // the holograms' pass, the sets of everyone on, and every Show Map's renderer
         this.tradeService.start(); // prune the trade log, a WARN per trade that didn't finish, the trade clock
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
         this.courier.start(); // sweep abandoned delivery runs
@@ -667,6 +675,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (megaShows != null) {
             megaShows.stop(); // every Mega show's timer and its launchers, before the database closes
+        }
+        if (remotes != null) {
+            remotes.stop(); // the holograms come down while the worlds are up, before the database closes
         }
         if (candy != null) {
             candy.stop(); // removes every live candy and boss bar, while the worlds are still up
@@ -1295,6 +1306,13 @@ public final class HomeCraftManagement extends JavaPlugin {
             // each. See GrandShowMigration.
             GrandShowMigration.apply(c, log);
             ShippedComments.refresh(c, GrandShowMigration.REVISION);
+        }
+        if (from < 24) {
+            // The Super, Ultra and Ultimate Firework Shows and the Firework Remote after the Mega Firework Show, and
+            // 15 launchers a player, wherever the owner hasn't changed them; the owner's own stay, with a WARN each.
+            // See FireworkRemoteMigration.
+            FireworkRemoteMigration.apply(c, log);
+            ShippedComments.refresh(c, FireworkRemoteMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2533,6 +2551,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The Mega Firework Shows playing now, at their Firework Launchers (0.38.1). */
     public com.dierks.homecraft.arcade.MegaShowService megaShows() {
         return megaShows;
+    }
+
+    /** The Firework Remote: each player's linked launchers (0.38.2). */
+    public com.dierks.homecraft.arcade.RemoteService remotes() {
+        return remotes;
     }
 
     /** The wardrobe: rented looks, their keys, My Looks and the heads-up notices. */

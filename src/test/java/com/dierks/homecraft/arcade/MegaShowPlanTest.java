@@ -250,7 +250,8 @@ class MegaShowPlanTest {
         assertEquals(45, MegaShow.seconds(15), "nor the Grand show's 15");
         assertEquals(60, MegaShow.seconds(60));
         assertEquals(90, MegaShow.seconds(1000));
-        assertEquals(3, MegaShow.MAX_LAUNCHERS);
+        assertEquals(10, MegaShow.MAX_LAUNCHERS, "0.38.2: the Ultimate show's ten");
+        assertEquals(3, MegaShow.MIN_LANES, "and a plan has at least 0.38.1's three");
         assertEquals(30, FireworkShow.MAX_SECONDS, "every other firework row keeps 0.38.1's 3-30");
     }
 

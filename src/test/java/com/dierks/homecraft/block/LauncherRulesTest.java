@@ -81,6 +81,23 @@ class LauncherRulesTest {
         assertEquals("Firework Launcher", CustomBlockGuard.name(CustomBlockType.FIREWORK_LAUNCHER));
     }
 
+    /** 0.38.2: a tap without the Remote names the launcher's number in the tapper's set; 15 a player now. */
+    @Test
+    void aLinkedLaunchersTapSaysItsNumberAndFifteenAreSetUp() {
+        assertEquals("&6Your Firework Launcher &7(4 of 15 set up). Use a &dMega Firework Show &7near it! &bLinked as #2"
+                + " in your show.", LauncherRules.tapLine(true, "Owner", 4, 15, false, 2), "hers, linked as #2");
+        assertEquals("&6Owner's Firework Launcher&7. Use a &dMega Firework Show &7near it! &dIt's in a show right now!"
+                + " &bLinked as #10 in your show.", LauncherRules.tapLine(false, "Owner", 0, 15, true, 10),
+                "someone else's, in her set and in a show");
+        assertEquals(LauncherRules.tapLine(true, "Owner", 2, 15, false), LauncherRules.tapLine(true, "Owner", 2, 15,
+                false, 0), "not linked: 0.38.1's line");
+        assertEquals("&7You already have 15 Firework Launchers set up. Pick one up to move it!",
+                LauncherRules.fullLine(15), "the sixteenth");
+        assertEquals("&7Keep the sky above it clear! &8(15 of 15 set up)", LauncherRules.placedLine(15, 15));
+        assertTrue(LauncherRules.placeRefused(15, 15));
+        assertFalse(LauncherRules.placeRefused(14, 15));
+    }
+
     /**
      * Review LAUNCHER-SPAM-3: a held use repeats a tap or a place about five times a second, and a launcher opens no
      * screen to stop it, so the same line is said once, then again every 2 s while it is held; another launcher's line

@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 23
+config_revision: 24
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1302,13 +1302,33 @@ arcade:
     pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
     counter: { material: LECTERN,           name: "&eToken Counter" }
   # The Firework Launcher (0.38.1): bought at the Prize Counter (firework_launcher) and set up
-  # for the Mega Firework Show (firework_mega). It looks like a dropper pointing up (material:
-  # DROPPER or DISPENSER, anything else is read as DROPPER with one WARN; a texture in
-  # skins.firework_launcher makes it a head instead); a tap says what it is and never opens it,
-  # and no hopper or redstone does anything to it. Each player may have per_player of them placed
-  # at once (1-10, admins too); only whoever placed one, or an admin, can pick it up. A Mega show
-  # fires from the nearest launchers (anyone's) within range blocks of whoever uses it (8-64).
-  launcher: { material: DROPPER, name: "&6Firework Launcher", per_player: 3, range: 32 }
+  # for the Mega, Super, Ultra and Ultimate Firework Shows (3, 4, 5 and 10 launchers). It looks like
+  # a dropper pointing up (material: DROPPER or DISPENSER, anything else is read as DROPPER with
+  # one WARN; a texture in skins.firework_launcher makes it a head instead); a tap says what it is
+  # and never opens it, and no hopper or redstone does anything to it. Each player may have
+  # per_player of them placed at once (1-30, admins too); only whoever placed one, or an admin, can
+  # pick it up. A show fires from the launchers its user linked with a Firework Remote
+  # (firework_remote), in the order they were tapped, wherever they are; with none linked, from the
+  # nearest launchers (anyone's) within range blocks of whoever uses it (8-64).
+  launcher: { material: DROPPER, name: "&6Firework Launcher", per_player: 15, range: 32 }
+  # Holiday firework shows (0.38.2): during each window (local dates in clock.time_zone, every year),
+  # every long firework show (the Grand, Mega, Super, Ultra and Ultimate shows; never the 3-second
+  # Firework Show or Party Time) takes that holiday's colours and fades, mixes in its shape, ends in
+  # its colours, and its server-wide line names it ("✦ <name> started a Halloween Mega Firework
+  # Show!"). from/to: "MM-DD" (keep the quotes); a window may run over New Year. colours and fades:
+  # dye names (ORANGE, PURPLE, LIME, RED, WHITE ...) or "#RRGGBB" (keep the quotes: a bare # starts
+  # a comment). shape: BALL, BALL_LARGE, STAR, BURST or CREEPER. When two windows overlap, the first
+  # one listed wins. A window that can't be read is skipped with one WARN. enabled: false = every show
+  # as it always is.
+  holiday_shows:
+    enabled: true
+    windows:
+      - { id: halloween, name: "Halloween", from: "10-24", to: "10-31", colours: [ORANGE, PURPLE, LIME], fades: [YELLOW, WHITE], shape: CREEPER }
+      - { id: christmas, name: "Christmas", from: "12-18", to: "12-26", colours: [RED, "#1FAF3F", WHITE, "#FFD700"], fades: [WHITE], shape: STAR }
+      - { id: new_year, name: "New Year", from: "12-31", to: "01-01", colours: ["#FFD700", "#C0C0C0", WHITE, "#00FFFF"], fades: [WHITE], shape: BALL_LARGE }
+      - { id: valentines, name: "Valentine's", from: "02-10", to: "02-14", colours: [PINK, RED, WHITE], fades: ["#FFC0CB"], shape: BALL }
+      - { id: st_patricks, name: "St Patrick's", from: "03-14", to: "03-17", colours: [LIME, "#1FAF3F", "#FFD700"], fades: ["#CCFFCC"], shape: STAR }
+      - { id: independence_day, name: "Independence Day", from: "07-01", to: "07-05", colours: [RED, WHITE, BLUE], fades: [WHITE], shape: BURST }
   # Arcade button icons. A blank texture uses the plain material; Bedrock players always see the
   # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
   # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
@@ -1386,9 +1406,10 @@ arcade:
   #   radar      the Mini Radar: right-click while a wild Mini is out. Hidden with no wild hunt.
   #   lure       the Mini Lure: the next wild Mini that rolls for ANYONE lands near you.
   #   firework   a harmless firework show; seconds 3-30, default 3.
-  #              launchers (1-3): a Mega Firework Show from the nearest Firework Launchers
-  #              (arcade.launcher) instead, seconds 45-90 (default 60). With no launcher in
-  #              range it is refused and kept.
+  #              launchers (1-10): a Mega Firework Show from Firework Launchers (arcade.launcher)
+  #              instead, seconds 45-90 (default 60): the ones its user linked with a Firework
+  #              Remote, else the nearest in range. With none it can use it is refused and kept.
+  #   remote     the Firework Remote: tap launchers to link them for your shows (kept for good).
   #   trail      particle, days - a particle trail while you walk, for `days` (it ends at local
   #              midnight). It can be bought again, at its price, from 7 days before it ends.
   #              One trail shows at a time; /hcm looks or the Wallet picks it.
@@ -1426,6 +1447,10 @@ arcade:
     - { id: firework_grand, tab: COSMETICS, display: "&6Grand Firework Show", description: ["A long firework show", "with a big finale!"], cost_tokens: 40, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }
     - { id: firework_launcher, tab: COSMETICS, display: "&6Firework Launcher", description: ["Set up 3 of them", "for a Mega Firework Show!"], cost_tokens: 5, icon: { texture: "", material: DROPPER }, type: block, block: firework_launcher }
     - { id: firework_mega, tab: COSMETICS, display: "&dMega Firework Show", description: ["A whole minute of fireworks", "from your Firework Launchers!"], cost_tokens: 75, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 3 }
+    - { id: firework_super, tab: COSMETICS, display: "&bSuper Firework Show", description: ["A whole minute of fireworks", "from 4 Firework Launchers!"], cost_tokens: 100, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 4 }
+    - { id: firework_ultra, tab: COSMETICS, display: "&6Ultra Firework Show", description: ["A whole minute of fireworks", "from 5 Firework Launchers!"], cost_tokens: 125, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 5 }
+    - { id: firework_ultimate, tab: COSMETICS, display: "&dUltimate Firework Show", description: ["A minute and a half of fireworks", "from 10 Firework Launchers!"], cost_tokens: 200, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 90, launchers: 10 }
+    - { id: firework_remote, tab: COSMETICS, display: "&eFirework Remote", description: ["Tap your Firework Launchers", "to pick them for your show!"], cost_tokens: 10, icon: { texture: "", material: RECOVERY_COMPASS }, type: remote }
     - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 30 }
     - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 30 }
     - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 30 }

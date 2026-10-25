@@ -149,8 +149,9 @@ class MegaShowRulesTest {
         assertTrue(service.indexOf("shows.releaseLong(id, held);", claim) > claim,
                 "a claim that fails gives the long show back");
         assertTrue(service.indexOf("runTaskTimer(") > claim, "the timer only once both are held");
-        assertTrue(service.contains("plugin.prizes().announce(player, MegaShow.announceLine(player.getName()))"),
-                "one server-wide line, at most one of hers a minute");
+        assertTrue(service.contains("plugin.prizes().announce(player, MegaShow.announceLine(player.getName(), name,"
+                + " theme))"), "one server-wide line, at most one of hers a minute (0.38.2: the tier's name and the"
+                + " holiday's)");
     }
 
     @Test
@@ -163,9 +164,18 @@ class MegaShowRulesTest {
                 "isChunkLoaded is asked before the chunk or the block");
         assertTrue(near.indexOf("Chunk.LoadLevel.ENTITY_TICKING") < near.indexOf("getBlockAt("),
                 "and only a ticking chunk's launcher counts (a rocket elsewhere would hang frozen)");
-        assertTrue(near.contains("if (b.getType().isAir()) { blocks.removeAt(b.getLocation()); continue; }"),
-                "a stale record (air) is forgotten");
-        String ticking = method(src, "private static boolean ticking(");
+        assertTrue(near.contains("if (b.getType().isAir()) { blocks.removeAt(b.getLocation()); if (plugin.remotes()"
+                + " != null) { plugin.remotes().launcherGone(new Spot(pb.world(), pb.x(), pb.y(), pb.z()), pb.owner());"
+                + " } continue; }"), "a stale record (air) is forgotten, and leaves every Remote set (0.38.2)");
+        String linked = method(src, "private MegaShow.Pick pickLinked(");
+        int tick = linked.indexOf("s -> ticking(w, s)");
+        assertTrue(tick > 0 && tick < linked.indexOf("getBlockAt("),
+                "a linked launcher's chunk is asked (loaded first, then ticking) before its block: " + linked);
+        assertFalse(linked.contains("getChunkAt("), "and never loaded for it");
+        assertTrue(linked.contains("blocks.removeAt(b.getLocation()); return false;"), "a stale one is forgotten");
+        assertTrue(linked.contains("plugin.remotes().launcherGone(gone, recorded.get(gone));"),
+                "and every gone one leaves the sets");
+        String ticking = method(src, "public static boolean ticking(");
         assertTrue(ticking.indexOf("isChunkLoaded(") < ticking.indexOf("getChunkAt("), ticking);
         String fire = method(src, "private static void fire(");
         assertTrue(fire.indexOf("!ticking(w, s)") < fire.indexOf("getBlockAt("), "each rocket asks the same first");

@@ -1354,7 +1354,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
      */
     static boolean givesAnItem(com.dierks.homecraft.config.PluginConfig.PrizeType type) {
         return switch (type) {
-            case BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY, FILAMENT, BLOCK, PACK -> true;
+            case BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY, FILAMENT, BLOCK, PACK, REMOTE -> true;
             default -> false;
         };
     }

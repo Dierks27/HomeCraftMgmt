@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.1-firework-shows`
+- **Version:** `0.38.2-firework-remote`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -85,7 +85,10 @@ Tokens are **earned by playing and never become dollars**.
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck, Bouncy Boots,
   Floaty Feather), Make it Day and Sunny Day, the Mini Radar and Lure, the Firework Show, the Grand
   Firework Show (0.38.1: 15 seconds with a big finale), the Mega Firework Show (0.38.1: a minute
-  from three Firework Launchers you set up) and Party Time, particle trails for a month,
+  from three Firework Launchers you set up), the Super, Ultra and Ultimate Firework Shows (0.38.2: 4, 5
+  and 10 launchers) with the Firework Remote that picks which launchers fire, holiday colours on the
+  long shows (0.38.2: Halloween, Christmas, New Year and more), and Party Time, particle trails for a
+  month,
   hats and caps for 90 days and golf balls to keep on the **Looks** tab, perks (extra homes and
   `/hat` via LuckPerms and EssentialsX), the numbered Arcade Trophy (place it and tap it to open the
   Arcade), a trophy ladder and a Trophy of the Month;
@@ -224,6 +227,18 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.1 from 0.38.2:** the jar alone (0.38.1 reads revision 24 and runs nothing, with one
+WARN; 0.38.2 changes no schema). While rolled back, 0.38.1 reads the Super, Ultra and Ultimate rows'
+`launchers` (4, 5 and 10) as 3, with one WARN each, so they sell as Mega shows from the 3 nearest
+launchers at 100, 125 and 200 tokens: for more than an evening, set `enabled: false` on
+`firework_super`, `firework_ultra` and `firework_ultimate`. The `firework_remote` row has a type 0.38.1
+doesn't know, so it is skipped with one WARN; a Remote in a bag does nothing until the upgrade (it
+stays a kept prize that can't be sold). Show Maps show terrain only, `per_player: 15` is read as 10
+(one WARN: nobody loses a launcher, but one with 10 or more placed can't place more, and their tap
+line reads e.g. "12 of 10 set up"), and the holiday colours are off. Linked sets stay in the
+database and are back after the upgrade. See
+[If you roll back to 0.38.1](#if-you-roll-back-to-0381).
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
 by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
@@ -572,8 +587,10 @@ people's trails and parties. It is config revision 22 and database v38: see
 | Cosmetics | the **Snow, Star, Clover, Glow** and **Magic** trails, next to the Heart, Music and Sparkle trails | 100 | **30 days** (the old three were 7) |
 | Cosmetics | **Party Time!** | 300, 1 a day | 10 seconds of harmless fireworks around everyone playing; one party at a time on the server |
 | Cosmetics | the **Grand Firework Show** (0.38.1), next to the Firework Show (15, three seconds as ever) | 40 | 15 seconds of harmless fireworks with a big finale, when used; one at a time |
-| Cosmetics | the **Firework Launcher** (0.38.1), a block you place: set up 3 near each other | 5 | for good (3 placed a player at once) |
+| Cosmetics | the **Firework Launcher** (0.38.1), a block you place: set up 3 near each other | 5 | for good (15 placed a player at once from 0.38.2; 3 in 0.38.1) |
 | Cosmetics | the **Mega Firework Show** (0.38.1), fired from your Firework Launchers | 75 | a whole minute of harmless fireworks from 1-3 launchers, when used; one at a time |
+| Cosmetics | the **Super**, **Ultra** and **Ultimate Firework Shows** (0.38.2), from 4, 5 and 10 launchers | 100 / 125 / 200 | a minute (the Ultimate a minute and a half), when used; one at a time |
+| Cosmetics | the **Firework Remote** (0.38.2): tap launchers to pick them for your shows | 10 | for good (never used up) |
 | Looks (new) | the **Creeper Hat** and the **Dragon Hat** (the game's own heads) | 120 / 150 | 90 days |
 | Looks | the **Pink, Purple, Lime** and **Sky Caps** (dyed leather, no armour, never wear out) | 60 | 90 days |
 | Looks | the six animal hats (Bunny, Panda, Fox, Penguin, Frog, Cake), moved from Cosmetics | 120 | 90 days; hidden until you paste a texture |
@@ -638,7 +655,7 @@ a minute long; it would be for those special events".
    good).
 2. Place them a few blocks apart, in a row in front of where you'll watch, with open sky above:
    each is a dropper pointing up. A tap on one says whose it is and how many you have set up ("Your
-   Firework Launcher (2 of 3 set up). Use a Mega Firework Show near it!").
+   Firework Launcher (2 of 15 set up). Use a Mega Firework Show near it!").
 3. Stand within 32 blocks of them, facing them, and use a **Mega Firework Show** (75 tokens): tap a
    launcher, the ground or the air. "✦ Mega Firework Show! Look at the launchers!", and one line for
    the whole server ("✦ <name> started a Mega Firework Show!", at most once a minute a player).
@@ -663,9 +680,10 @@ a minute long; it would be for those special events".
   the server, or if the server stops, and then there is no refund. A launcher picked up during a show
   is skipped from then on.
 - **The launcher** never opens, and hoppers, droppers and redstone do nothing to it. Each player may
-  have 3 placed at once, admins too; a fourth is refused and stays in the hand ("You already have 3
-  Firework Launchers set up. Pick one up to move it!"). A held tap or a held fourth place says its
-  line once, and again every 2 seconds while it is held. Only whoever placed it, or an admin, can pick
+  have 15 placed at once (0.38.2; 3 in 0.38.1), admins too; a sixteenth is refused and stays in the
+  hand ("You already have 15 Firework Launchers set up. Pick one up to move it!"). A held tap, or a
+  held place over the limit, says its line once, and again every 2 seconds while it is held. Only
+  whoever placed it, or an admin, can pick
   it up ("This is <name>'s Firework Launcher. Only they can take it down."), and it comes back as a
   launcher. It takes a while to break by hand (a pickaxe is quicker), so a stray tap never knocks one
   down. Pistons, water, lava, explosions and withers leave it standing. Economy worlds only, like the
@@ -681,17 +699,138 @@ a minute long; it would be for those special events".
   `/hcm give prize firework_mega [player]` give one (admin).
 
 Owner knobs: `arcade.launcher.material` (`DROPPER`, or `DISPENSER`; anything else is read as
-`DROPPER`, with one WARN), `name`, `per_player` (`3`, 1-10) and `range` (`32`, 8-64 blocks);
-`skins.firework_launcher` (blank: a texture makes the launcher a head, which Bedrock shows as a plain
-head); on the `firework_mega` row, `seconds` (`60`, 45-90) and `launchers` (`3`, 1-3).
-[The table below](#owner-knobs-038) has them all.
+`DROPPER`, with one WARN), `name`, `per_player` (`15`, 1-30; 0.38.1's `3`, 1-10) and `range` (`32`,
+8-64 blocks); `skins.firework_launcher` (blank: a texture makes the launcher a head, which Bedrock
+shows as a plain head); on the `firework_mega` row, `seconds` (`60`, 45-90) and `launchers` (`3`,
+1-10 from 0.38.2). [The table below](#owner-knobs-038) has them all.
+
+### The Firework Remote and the bigger shows (0.38.2)
+
+The owner's "Let's make it so we can chain together up to 5 launchers!", "Or really as many launchers
+as you feel like you could do!", and "a launcher tool that we can assign the launchers that we want to
+use in the show. That way I can build launchers around the city, leave them there, and when I buy the
+5 launcher show or the 4 launcher show or the 3 launcher show I can then simply tag/click on the
+launchers I want to use". Then "a way to tag it so I can see what launcher is what on a map or in
+real life", and "Is there any way we can see a map that would show them as well?".
+
+**The four Mega shows**
+
+| Row | Show | Launchers | Tokens | Length |
+|---|---|---|---|---|
+| `firework_mega` | Mega Firework Show (0.38.1) | 3 | 75 | a minute: 81 rockets |
+| `firework_super` | Super Firework Show | 4 | 100 | a minute: 108 rockets |
+| `firework_ultra` | Ultra Firework Show | 5 | 125 | a minute: 135 rockets |
+| `firework_ultimate` | Ultimate Firework Show, for special events | 10 | 200 | a minute and a half: 396 rockets |
+
+Every launcher of a show fires 27 rockets a minute in its own colours (ten colour sets, warm on the
+left to cool on the right). The walks and chases sweep across every launcher, the pairs fire the
+left, middle and right thirds, the volleys and the finale every launcher at once, ending in gold. The
+Ultimate's extra half minute is an encore of waves, mirrored pairs and ripples, so it keeps the
+minute's pace (about 4.4 rockets a second). Never more than 10 rockets go up in a tick before the
+finale, nor 20 in it. With fewer launchers than the show has, it fires the same show from those. The
+Mega show is 0.38.1's to the rocket. 100 tokens or more asks "are you sure?" first.
+
+**Linking launchers with the Firework Remote** (10 tokens, Cosmetics; yours for good, never used up)
+
+1. Hold the Remote and **tap a Firework Launcher**: "✔ Linked as #1! (1 linked)". Tap the next one:
+   #2, and so on, up to 10. The order you tap them is the order they fire: #1 is the first lane. The
+   Remote works in either hand: in the off hand, keep the main hand free of other prizes (a Show Map
+   or a block is fine).
+2. **Tap a linked one again** to take it off: "Took #2 off your show. The ones after it moved up."
+   An 11th says "Your show has 10 launchers already. Tap one of them to take it off first!". A held
+   tap counts once.
+3. **Use a show anywhere**: a Mega show fires from #1-#3, a Super from #1-#4, an Ultra from #1-#5 and
+   an Ultimate from all 10, in that order, wherever they are.
+
+- **Anyone's launchers** can be linked, as the shows already use anyone's. The Remote never fires
+  anything by itself. A launcher that breaks leaves every set at once, and the later ones move up.
+- **My Show:** tap the air or a plain block with the Remote (**on Bedrock, tap the ground**: a tap at
+  the sky may send nothing). It lists your #1-#10, each as that number's coloured wool with the number
+  on the stack, named with everything about it, so Bedrock shows it all without a long press: where it
+  is from you, its x/y/z and whose it is ("#3 · north-east, 45 blocks · x 120 y 70 z -340 · yours",
+  "#4 · not loaded (300 blocks north) · x .. · <name>'s", "#5 · in world_nether · x .."). "Not loaded"
+  means a show can't fire from it right now (nobody is near enough for its area to run, the same test
+  the show uses), so a tile that says which way and how far is one a show would fire from. Tapping a
+  tile does nothing, so a stray tap never unlinks one.
+  It has **Get my Show Map**, **Clear all** (after "are you sure?") and Close. During a holiday window
+  it says "Halloween colours tonight!". A tap on a door, a chest or another HomeCraft block is that
+  block's, as with any prize.
+- **Holograms:** while you hold the Remote (either hand), each linked launcher within about 96 blocks
+  that a show could fire from now has its number floating over it ("#3", and the owner's name under it
+  if it isn't yours). Only you see yours, and they go when you put the Remote away. On Bedrock they
+  show as name tags.
+- **The Remote's name and lore** say how many are linked and list each one: "#3 · north-east, 45
+  blocks · x 120 y 70 z -340" (or "#4 · in world_nether"), from where you stand when you switch to
+  it, pick it up, buy it or change worlds (wherever it is in your bag). Bedrock shows the lore on a
+  long press; the name ("Firework Remote (3 linked)") always.
+- **A tap on a launcher without the Remote** says its number in your show: "Linked as #2 in your
+  show."
+- **The Show Map** (My Show, Get my Show Map): a real map, centred on you, 512 blocks across (each
+  pixel 4 blocks: a city). It fills in as you walk with it, like any map. Your show's launchers are
+  flags in their numbers' colours captioned "#1".."#10" (one off the map sits on its edge, still
+  numbered); your other launchers are white X's; nobody else's are drawn, except the ones in your set.
+  Only the map's own world is marked. **On Bedrock the captions don't show** (Geyser drops them): the
+  flags are small squares in the numbers' colours and the X's black crosses, the same colours as the
+  holograms and the My Show tiles. You have one Show Map: getting it again near the same spot gives
+  the same map back (a new one is made 128 blocks away or more, or in another world), and it takes
+  your other copies away: in your bag, on your cursor, in your ender chest, and the last one you
+  dropped. A dropped Show Map is a plain map on the ground: it disappears after 5 minutes like any
+  dropped item (get it again from My Show, for free), so it never piles up. One put in a chest or a
+  frame stays there, like any map. It is a prize: kept when you die, never sold, and a cartography
+  table makes no copies. It redraws whenever your set changes, even while you were away (a launcher
+  broken then), and once when you join. (A smaller town reads better at 256 blocks: say if you'd like
+  it.)
+
+**How a linked show is used**
+
+- It fires from the first launchers of your set that can fire, as many as the show has. One in
+  another world, gone, or not loaded is skipped, and one line says so: "Skipped 2 of your linked
+  launchers: 1 gone and 1 not loaded (nobody is near it)." With fewer than the show has, it fires the
+  same show from those.
+- **None can fire:** "None of your linked launchers can fire right now (3 not loaded (nobody is near
+  them)). Go near them, or change them with your Firework Remote!", and the show is kept.
+- **Far apart is fine, but loaded and seen are not the same.** There is no range limit for a linked
+  set: a launcher fires while its area is loaded, which is within about 160 blocks of some player
+  (the server's simulation distance; anyone's, not only yours). But a rocket is only drawn for a
+  player within about 30-40 blocks of it. So launchers all over the city fire if people are near
+  each, but you see the ones near you: **link the launchers near where you'll watch**, and use the
+  Remote to switch sets between spots.
+- Everything else is 0.38.1's: one long show at a time, nothing in a game or a Games world, a launcher
+  in one show at a time (one of yours busy refuses the whole show, and the item is kept), at most four
+  Mega shows on the server, and one server-wide line ("✦ <name> started an Ultimate Firework Show!").
+- **No set** (nothing linked, or after Clear all): exactly as 0.38.1, the nearest launchers within 32
+  blocks, left to right as you face them.
+
+**Holiday shows** (the owner's "we can make this part of the holiday stuff too so we can make special
+holiday firework shows"): during a holiday window, every long show (the Grand, Mega, Super, Ultra and
+Ultimate shows; never the three-second Firework Show or Party Time) takes that holiday's colours, mixes
+in its shape on about one rocket in four, ends in its colours, and its server-wide line names it
+("✦ <name> started a Halloween Mega Firework Show!"). The Prize Counter's tiles say "Halloween colours
+tonight!".
+
+| Window (local dates, every year) | Colours | Shape |
+|---|---|---|
+| Halloween, 24-31 Oct | orange, purple, lime | creeper faces |
+| Christmas, 18-26 Dec | red, green, white, gold | stars |
+| New Year, 31 Dec - 1 Jan | gold, silver, white, aqua | big balls |
+| Valentine's, 10-14 Feb | pink, red, white | balls |
+| St Patrick's, 14-17 Mar | greens and gold | stars |
+| Independence Day, 1-5 Jul | red, white, blue | bursts |
+
+A show takes the look of the day it starts (in `clock.time_zone`) and keeps it to its end. They are
+`arcade.holiday_shows` in config.yml: change the dates or colours (dye names or `"#RRGGBB"`, in
+quotes), add your own, or `enabled: false`. The first window listed wins when two overlap; one that
+can't be read is skipped with one WARN. Halloween is on from the first start of 0.38.2.
+
+- `/hcm give prize firework_super|firework_ultra|firework_ultimate|firework_remote [player]` gives one
+  (admin). None of the new rows is in the Arcade Crate.
 
 ### Kept or rented, at a glance
 
 | Runs out (rented) | Kept for good |
 |---|---|
-| Hats and caps from the Looks tab: 90 days (Creeper, Dragon, the four caps, and the animal hats once switched on) | Collectors (caps and trails), Keepers (the Crown, the hats, the trails), trophies, golf balls, `/hat`, +1 Home, hats bought before 0.38 |
-| Trails from the Cosmetics tab: 30 days; a crate's trail: 1 day | Boosts, fireworks and other items are used up, not rented |
+| Hats and caps from the Looks tab: 90 days (Creeper, Dragon, the four caps, and the animal hats once switched on) | Collectors (caps and trails), Keepers (the Crown, the hats, the trails), trophies, golf balls, `/hat`, +1 Home, hats bought before 0.38, Firework Launchers, the Firework Remote |
+| Trails from the Cosmetics tab: 30 days; a crate's trail: 1 day | Boosts and firework shows are used up when they're used, not rented |
 
 ### Rented looks
 
@@ -884,7 +1023,7 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `/hcm looks end <player> <id> [days]` | admin | end it now; with `[days]` (a decimal, `5` or `0.5`) move its end to now + days, to try the heads-up |
 | `/hcm looks preview <id>` | admin | the look on a stand in front of you for 30 seconds (a trail around it for 10); claims nothing |
 | `/hcm account move <from> <to> [confirm]` | admin | move every economy record of one account to another ([below](#her-own-java-account-later)) |
-| `/hcm give prize <id> [player]` | admin | as before, and now Keepers too (not a golf ball: it is an unlock, so Give a present gives one) |
+| `/hcm give prize <id> [player]` | admin | as before, and now Keepers too (not a golf ball: it is an unlock, so Give a present gives one); from 0.38.2 also `firework_super`, `firework_ultra`, `firework_ultimate` and `firework_remote` |
 
 ### Owner knobs (0.38)
 
@@ -897,10 +1036,11 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `days` on a hat row | `90` | how long it lasts (1-365) |
 | `seconds` on the `party_time` row | `10` | how long a party lasts (5-30) |
 | `seconds` on a firework row (0.38.1) | `3` | how long its show lasts (3-30): `firework_grand` ships `15`. A value out of range is brought into it, with one WARN |
-| `launchers` on a firework row (0.38.1) | (none) | 1-3: a Mega Firework Show from that many of the nearest Firework Launchers; its `seconds` are then 45-90 (60 when it doesn't say). `firework_mega` ships `launchers: 3`, `seconds: 60` |
+| `launchers` on a firework row (0.38.1) | (none) | 1-10 (1-3 before 0.38.2): a Mega Firework Show from that many Firework Launchers (the ones its user linked with a Firework Remote, else the nearest); its `seconds` are then 45-90 (60 when it doesn't say). `firework_mega` ships `launchers: 3`, `firework_super` `4`, `firework_ultra` `5` and `firework_ultimate` `10` (`seconds: 90`) |
 | `arcade.launcher.material`, `arcade.launcher.name` | `DROPPER`, `"&6Firework Launcher"` | the Firework Launcher's block and name (0.38.1): a `DROPPER` or a `DISPENSER` (anything else is read as `DROPPER`, with one WARN) |
-| `arcade.launcher.per_player` | `3` | launchers one player (admins too) may have placed at once (1-10) |
-| `arcade.launcher.range` | `32` | how far from whoever uses a Mega show its launchers may stand (8-64 blocks) |
+| `arcade.launcher.per_player` | `15` (0.38.2; `3` before) | launchers one player (admins too) may have placed at once (1-30; 1-10 before) |
+| `arcade.launcher.range` | `32` | how far from whoever uses a Mega show with nothing linked its launchers may stand (8-64 blocks) |
+| `arcade.holiday_shows` | six windows, `enabled: true` | the holiday shows (0.38.2): each window's `id`, `name`, `from`/`to` (`"MM-DD"`), `colours`, `fades` and `shape` ([above](#the-firework-remote-and-the-bigger-shows-0382)) |
 | `skins.firework_launcher` | `""` | a head texture makes the launcher a head instead of a dropper |
 | `games.everyday_cap` | `0` (off) | all arcade goals (each game's daily challenge) together, a day; `15` stops a grinder out-earning everyone ([below](#the-token-shops-economy-038)) |
 | `trade.*` | | [the trade window](#the-trade-window-038) |
@@ -961,6 +1101,30 @@ arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30,
 apples each)." and "Config migration: config_revision 22 → 23." A `/hcm reload` does the same and
 restarts the candy with the new settings. Firework Shows already in bags stay three-second shows.
 
+### Upgrading to 0.38.2 (revision 24)
+
+The first start runs config revision 24 (`FireworkRemoteMigration`); there is no database change (a
+player's linked launchers and Show Map are two rows each in `game_prefs`). Revision 23 is not run
+again. It changes only what still holds the value 0.38.1 shipped:
+
+- the **Super**, **Ultra** and **Ultimate Firework Shows** (`firework_super`, `firework_ultra`,
+  `firework_ultimate`) and the **Firework Remote** (`firework_remote`) go in right after
+  `firework_mega`, each once, only while no row has its id (a `firework_mega` you deleted puts them at
+  the end of the list; your own row with one of those ids is kept, with one WARN and the line to
+  paste);
+- `arcade.launcher.per_player` 3 → 15 (a value you changed is yours and stays, with one WARN naming
+  the new default);
+- the Prize Counter's comment and `arcade.launcher`'s are refreshed where they are still the plugin's
+  own words;
+- the new `arcade.holiday_shows` section is written in by the backfill, with its comment.
+
+The console reads "Config migration: Prize Counter - added the Super Firework Show (firework_super: a
+minute of fireworks from 4 Firework Launchers, 100 tokens) after the Mega Firework Show, ... and the
+Firework Remote (firework_remote: tap launchers to pick them for your shows, 10 tokens) after the
+Ultimate Firework Show.", "Config migration: arcade.launcher - per_player 3 → 15 (each player may
+have 15 Firework Launchers placed at once, enough for the Ultimate show's 10)." and "Config
+migration: config_revision 23 → 24."
+
 ### Parent notes
 
 - `/hcm looks list <her name>`: what she has and when each one ends.
@@ -989,6 +1153,30 @@ everything saved under her Bedrock id stays behind; an unlinked Java account is 
    and the new Java window on the same PC), she trades them across in the trade window. Her rented hats
    and Keepers can't be traded and don't need to be: the move carries the rights, and Wear it makes new
    keys. A collector cap trades back to the account that holds its claim.
+
+### If you roll back to 0.38.1
+
+The jar alone: 0.38.1 reads `config_revision: 24`, runs nothing and says once that the config was
+written by a newer HomeCraft (0.38.2 changes no schema). While rolled back:
+
+- 0.38.1 reads a firework row's `launchers` as 1-3, so **the Super, Ultra and Ultimate rows are
+  Mega Firework Shows** from the 3 nearest launchers (one WARN each), still at 100, 125 and 200
+  tokens. An unused one plays its own show again after the upgrade (the show comes from the row when
+  it is used), but **one used while rolled back is spent as a Mega show**;
+- `type: remote` is unknown, so **the `firework_remote` row is skipped** with one WARN and isn't sold.
+  A Remote already in a bag does nothing (it is a recovery compass, still a kept prize that can't be
+  sold) and works again after the upgrade;
+- a Show Map is a plain map (its terrain, no flags);
+- `per_player: 15` is read as 10, with one WARN: nobody's launchers go, but a player with 10 or more
+  placed can't place more until the upgrade (0.38.1 refuses at 10), and one with more than 10 sees their
+  tap and place lines read e.g. "(12 of 10 set up)";
+- the holiday section is ignored: every show has its own colours;
+- linked sets stay in `game_prefs`, untouched, and are back after the upgrade. Launchers are 0.38.1's
+  own block: nothing to pick up.
+
+**For a rollback longer than an evening,** set `enabled: false` on the `firework_super`,
+`firework_ultra` and `firework_ultimate` rows (and back to `true` after the upgrade). Upgrading again
+doesn't run revision 24 again (the file says 24).
 
 ### If you roll back to 0.38.0
 
@@ -1411,7 +1599,8 @@ Cosmetics and Looks tabs: see [Give a present (0.38)](#give-a-present-038). The 
   drops with its container, into a grave if you have one, and is not protected on the ground. Carry
   collectors loose.
 - **On the ground** a dropped prize (not one inside a dropped container) never despawns, burns or
-  blows up, and no mob picks it up. **The void can't be saved.**
+  blows up, and no mob picks it up. **The void can't be saved.** The one exception is a Show Map
+  (0.38.2): it is free to get again from My Show, so a dropped one is a plain map and despawns.
 - **A dropped collector** can be picked up again only by the player who dropped it, and no hopper
   takes it. Other prizes can still be handed over by dropping them, as before.
 - **Taking a worn collector off** by right-clicking with another hat needs room in the bag, or it

@@ -86,10 +86,13 @@ public final class HomeCraftManagement extends JavaPlugin {
      * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the engine empties their old areas.
      * 22 = the token shop: trails a month, hats and caps on the Looks tab for 90 days, 32 new rows, the Arcade
      * Trophy's rising price, crates without hats ({@link ShopMigration}).
-     * Each of 20, 21 and 22 also refreshes the comments it makes stale, where they are still the plugin's own
+     * 23 = the Grand Firework Show (a 15-second row after the Firework Show) and a gentler Candy Apple shower (every
+     * 60 minutes, 30 on the last day, 3 candy apples each), wherever the owner hasn't changed them
+     * ({@link GrandShowMigration}).
+     * Each of 20, 21, 22 and 23 also refreshes the comments it makes stale, where they are still the plugin's own
      * words ({@link ShippedComments}).
      */
-    static final int CONFIG_REVISION = 22;
+    static final int CONFIG_REVISION = 23;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -195,6 +198,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.homes.HomeService homes;
     private com.dierks.homecraft.arcade.TrailService trails;
     private com.dierks.homecraft.arcade.PartyService party;
+    private com.dierks.homecraft.arcade.FireworkShows fireworkShows;
     private com.dierks.homecraft.arcade.looks.LookService looks;
     private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
@@ -368,6 +372,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.trails = new com.dierks.homecraft.arcade.TrailService(this, prizeDao);
         this.party = new com.dierks.homecraft.arcade.PartyService(this); // Party Time: one at a time
         party.hidesOthers(trails::hidesOthers); // no fireworks around a player who hides others' trails and parties
+        this.fireworkShows = new com.dierks.homecraft.arcade.FireworkShows(this); // one long show a player at a time
         // The wardrobe (0.38): rented hats, caps and trails, their bound keys, My Looks and the heads-up.
         this.looks = new com.dierks.homecraft.arcade.looks.LookService(
                 this, new com.dierks.homecraft.storage.LookDao(database));
@@ -652,6 +657,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (party != null) {
             party.stop(); // no firework round after the plugin has gone
+        }
+        if (fireworkShows != null) {
+            fireworkShows.stop(); // every show's timer, so no burst goes off after the plugin has gone
         }
         if (candy != null) {
             candy.stop(); // removes every live candy and boss bar, while the worlds are still up
@@ -1273,6 +1281,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             // the owner's own stay, with a WARN each and the line to paste. See ShopMigration.
             ShopMigration.apply(c, log);
             ShippedComments.refresh(c, ShopMigration.REVISION);
+        }
+        if (from < 23) {
+            // The Grand Firework Show after the Firework Show, and the gentler candy, wherever the owner hasn't changed
+            // them; the owner's own stay, with a WARN each. See GrandShowMigration.
+            GrandShowMigration.apply(c, log);
+            ShippedComments.refresh(c, GrandShowMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2272,7 +2286,15 @@ public final class HomeCraftManagement extends JavaPlugin {
      * lowered.
      */
     static String newerConfigWarning(int revision) {
-        if (revision <= CONFIG_REVISION) {
+        return newerConfigWarning(revision, CONFIG_REVISION);
+    }
+
+    /**
+     * {@link #newerConfigWarning(int)} for a build whose gate is {@code built}: what an older jar (0.38.0's is 22)
+     * says of this file, for the rollback test.
+     */
+    static String newerConfigWarning(int revision, int built) {
+        if (revision <= built) {
             return null;
         }
         return "This config was written by a newer HomeCraft (revision " + revision
@@ -2493,6 +2515,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Party Time: one party at a time on the server. */
     public com.dierks.homecraft.arcade.PartyService party() {
         return party;
+    }
+
+    /** The Firework Shows playing now: one long show a player at a time. */
+    public com.dierks.homecraft.arcade.FireworkShows fireworkShows() {
+        return fireworkShows;
     }
 
     /** The wardrobe: rented looks, their keys, My Looks and the heads-up notices. */

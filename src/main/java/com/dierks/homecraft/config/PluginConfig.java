@@ -532,7 +532,8 @@ public final class PluginConfig {
      *       price)</li>
      *   <li>BALL: {@code ballLook} (the block the ball is drawn as)</li>
      *   <li>COMMAND: {@code onlyIf}</li>
-     *   <li>PARTY: {@code seconds}</li>
+     *   <li>PARTY: {@code seconds} (5-30); FIREWORK: {@code seconds}, its show's length (3-30, 3 when the row doesn't
+     *       say; 0.38.1)</li>
      *   <li>a Keeper ({@code arcade.Keepers} only, never a config row): {@code keeper}</li>
      * </ul>
      */
@@ -2129,6 +2130,7 @@ public final class PluginConfig {
                 ballLook = m;
             }
             case PARTY -> seconds = Math.min(30, Math.max(5, (int) number(row.get("seconds"), 10)));
+            case FIREWORK -> seconds = fireworkSeconds(id, row.get("seconds"), warning);
             case COMMAND -> {
                 commands = stringList(row.get("commands"));
                 if (commands.isEmpty()) {
@@ -2169,8 +2171,7 @@ public final class PluginConfig {
                 amount = 1;
             }
             default -> {
-                // radar, lure, firework, trophy, filament, pity, trade_in, quest_reroll, home_slot:
-                // nothing more to read
+                // radar, lure, trophy, filament, pity, trade_in, quest_reroll, home_slot: nothing more to read
             }
         }
         // a config row is never a Keeper (arcade.Keepers): the merge skips any that takes a keeper_ id
@@ -2179,6 +2180,26 @@ public final class PluginConfig {
                 amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
                 headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize,
                 List.copyOf(costs), null, extra);
+    }
+
+    /**
+     * A firework row's {@code seconds} (0.38.1): how long its show lasts, 3 (the Firework Show's) when the row doesn't
+     * say, at most 30 ({@code FireworkShow.SHORT_SECONDS}, {@code MAX_SECONDS}). Anything that isn't a whole number of
+     * seconds in that range is brought into it, with one WARN.
+     */
+    static int fireworkSeconds(String id, Object raw, java.util.function.Consumer<String> warning) {
+        int min = com.dierks.homecraft.arcade.FireworkShow.SHORT_SECONDS;
+        int max = com.dierks.homecraft.arcade.FireworkShow.MAX_SECONDS;
+        if (raw == null) {
+            return min;
+        }
+        double n = number(raw, Double.NaN);
+        int s = Double.isNaN(n) ? min : (int) Math.max(min, Math.min(max, n));
+        if (Double.isNaN(n) || s != n) {
+            warning.accept("Arcade prize '" + id + "' has seconds '" + raw + "' - a firework show lasts " + min + " to "
+                    + max + " seconds. Using " + s + ".");
+        }
+        return s;
     }
 
     private static PrizeTab defaultTab(PrizeType type) {

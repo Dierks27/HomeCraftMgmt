@@ -26,6 +26,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -35,7 +36,6 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * What Prize Counter items do in the world.
@@ -46,7 +46,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>Mini Radar</b>: right-click to lock onto the live hunt ({@link RadarService}).</li>
  *   <li><b>Mini Lure</b>: right-click to set it — the next wild Mini that rolls for anyone lands
  *       near you instead. One set at a time.</li>
- *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
+ *   <li><b>Firework Shows</b>: right-click for a show that cannot hurt anyone, as long as its row's {@code seconds}
+ *       ({@link FireworkShows}): the Firework Show's three seconds, the Grand Firework Show's fifteen with a finale
+ *       (0.38.1). One long show at a time: another is refused and kept. A show stops when its player quits.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
  *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
@@ -61,6 +63,9 @@ public final class PrizeItemListener implements Listener {
 
     /** The Mailbox source of a placed prize that didn't fit its breaker's bag (0.37.3). */
     static final String MAILBOX_SOURCE = "PRIZE";
+
+    /** A long firework show used while the player's long show is still on (0.38.1): refused, the item kept. */
+    static final String SHOW_ON = "Wait for your show to finish!";
 
     private final HomeCraftManagement plugin;
 
@@ -129,8 +134,19 @@ public final class PrizeItemListener implements Listener {
             }
             case FIREWORK -> {
                 cancel(event);
-                consume(player, hand);
-                show(player);
+                // The show's length is its row's now (a missing row plays the short show); a long one while the
+                // player's long show is still on is refused, and the item stays in the hand.
+                FireworkShows shows = plugin.fireworkShows();
+                if (shows == null) {
+                    return;
+                }
+                int seconds = FireworkShow.seconds(plugin.config().arcade().prize(TokenPrizes.prizeId(item)));
+                if (shows.start(player, seconds)) {
+                    consume(player, hand);
+                } else {
+                    player.sendMessage(Text.of("&7" + SHOW_ON));
+                    Sounds.refused(player);
+                }
             }
             case HAT -> {
                 Block clicked = event.getClickedBlock();
@@ -276,22 +292,6 @@ public final class PrizeItemListener implements Listener {
         return true;
     }
 
-    /** A three-second volley of fireworks around the player, tagged so they cannot hurt anyone. */
-    private void show(Player player) {
-        for (int burst = 0; burst < 6; burst++) {
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                if (!player.isOnline()) {
-                    return;
-                }
-                for (int i = 0; i < 2; i++) {
-                    ThreadLocalRandom r = ThreadLocalRandom.current();
-                    com.dierks.homecraft.util.Fireworks.spawn(
-                            player.getLocation().add(r.nextDouble(-3, 3), 0.5, r.nextDouble(-3, 3)));
-                }
-            }, burst * 10L);
-        }
-    }
-
     /**
      * Put a hat on. What was on the head: a bound key is deleted, never moved (it is in My Looks); anything else
      * goes into the bag, and with no room the wear is refused and the head left as it was. Nothing goes on the
@@ -364,6 +364,14 @@ public final class PrizeItemListener implements Listener {
         if (event.getDamager() instanceof Firework fw
                 && fw.getPersistentDataContainer().has(Keys.FIREWORK_SHOW, PersistentDataType.BYTE)) {
             event.setCancelled(true);
+        }
+    }
+
+    /** A player who quits takes their firework shows with them: the timers stop now (0.38.1). */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        if (plugin.fireworkShows() != null) {
+            plugin.fireworkShows().stop(event.getPlayer().getUniqueId());
         }
     }
 

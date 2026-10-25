@@ -28,7 +28,15 @@ public final class Fireworks {
 
     /** One random, colourful, harmless firework at {@code at}. */
     public static void spawn(Location at) {
-        spawn(at, -1);
+        launch(at, 1, -1);
+    }
+
+    /**
+     * {@link #spawn(Location)} at flight power {@code power} (0-3; 1 is {@link #spawn(Location)}'s): 0 bursts about 5
+     * blocks up, 1 about 15, 2 about 28, 3 about 45 (0.38.1, the long firework shows' mix of heights).
+     */
+    public static void spawn(Location at, int power) {
+        launch(at, Math.max(0, Math.min(3, power)), -1);
     }
 
     /** How far in front of the eyes {@link #burstInView} bursts, in the open. */
@@ -57,7 +65,7 @@ public final class Fireworks {
         } catch (RuntimeException ignored) {
             // no ray, the open-field distance
         }
-        spawn(eye.clone().add(flat.multiply(burstDistance(wall))), 4);
+        launch(eye.clone().add(flat.multiply(burstDistance(wall))), 1, 4);
     }
 
     /**
@@ -72,8 +80,8 @@ public final class Fireworks {
         return Math.max(1.5, wall - 0.7);
     }
 
-    /** {@code ticksToDetonate} below 0 keeps the rocket's own flight. */
-    private static void spawn(Location at, int ticksToDetonate) {
+    /** {@code ticksToDetonate} below 0 keeps the rocket's own flight, which {@code power} sets. */
+    private static void launch(Location at, int power, int ticksToDetonate) {
         if (at == null || at.getWorld() == null) {
             return;
         }
@@ -86,7 +94,7 @@ public final class Fireworks {
                         .withFade(Color.WHITE)
                         .with(FireworkEffect.Type.values()[r.nextInt(FireworkEffect.Type.values().length)])
                         .flicker(r.nextBoolean()).trail(true).build());
-                meta.setPower(1);
+                meta.setPower(power);
                 fw.setFireworkMeta(meta);
                 if (ticksToDetonate >= 0) {
                     fw.setTicksToDetonate(ticksToDetonate);

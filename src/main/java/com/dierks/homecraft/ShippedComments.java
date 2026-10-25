@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The comments in the owner's config.yml that config revisions 20, 21 and 22 make stale, refreshed from the
+ * The comments in the owner's config.yml that config revisions 20, 21, 22 and 23 make stale, refreshed from the
  * bundled file (the v4 audit, ECON02; SHOP-V2-SPEC §7.6).
  *
  * <p><b>Why.</b> A revision moves values, and the backfill only comments keys it adds, so a comment on a key
@@ -25,13 +25,16 @@ import java.util.Set;
  * plot: Golf v4 does, a Mountain Run v2 can't be kept). Revision 22 (the token shop, {@link ShopMigration}) makes
  * three more stale: the Prize Counter's header (no Looks tab, no MONTH, "a hat with a blank texture is HIDDEN"), the
  * icon keys (no {@code looks} or {@code keepers}) and the collectors' (it names 0.37.1's two, and "no presents"
- * now covers looks and golf balls too).
+ * now covers looks and golf balls too). Revision 23 (the Grand Firework Show, {@link GrandShowMigration}) makes
+ * 0.38.0's Prize Counter header stale once more: its firework line said "a harmless three-second firework show", and
+ * a firework row has {@code seconds} now.
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
- * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's or 0.37.2's), told apart by a
+ * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's or 0.38.0's), told apart by a
  * fingerprint of its text ({@link #fingerprint}), its inline comment included. A comment the owner wrote or edited,
- * even by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's, 0.36.0's
- * and 0.37.2's config.yml.
+ * even by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's, 0.36.0's,
+ * 0.37.2's and 0.38.0's config.yml. A key is on the list once for each revision that makes it stale: the Prize
+ * Counter's header is revision 22's (0.35.0-0.37.2's text) and revision 23's (0.38.0's).
  *
  * <p>Pure on a {@link FileConfiguration}; quiet (the values' own lines say what moved); a server without the
  * comment API keeps its comments.
@@ -43,7 +46,8 @@ final class ShippedComments {
      *
      * @param key      the key it sits on
      * @param revision the config revision whose change makes it stale (it is refreshed in that step)
-     * @param shipped  the {@link #fingerprint}s of what 0.35.0, 0.36.0 and 0.37.2 shipped on it
+     * @param shipped  the {@link #fingerprint}s of what the versions before that revision shipped on it (0.35.0,
+     *                 0.36.0 and 0.37.2 for revisions 20-22; 0.38.0 for 23)
      */
     record Stale(String key, int revision, Set<String> shipped) {
 
@@ -58,9 +62,12 @@ final class ShippedComments {
     /** {@code ShopMigration.REVISION}: the token shop. */
     private static final int REV_SHOP = ShopMigration.REVISION;
 
+    /** {@code GrandShowMigration.REVISION}: the Grand Firework Show and the gentler candy. */
+    private static final int REV_GRAND = GrandShowMigration.REVISION;
+
     /**
-     * Every comment revisions 20, 21 and 22 make stale, in file order (frozen: 0.35.0's, 0.36.0's and 0.37.2's
-     * texts).
+     * Every comment revisions 20, 21, 22 and 23 make stale, in file order (frozen: 0.35.0's, 0.36.0's, 0.37.2's and
+     * 0.38.0's texts).
      */
     static final List<Stale> STALE = List.of(
             // the icon keys without looks and keepers (0.35.0 = 0.36.0 = 0.37.2)
@@ -68,6 +75,9 @@ final class ShippedComments {
             // the Prize Counter's header: no LOOKS tab, no MONTH, ball, party or only_if, "a hat with a blank texture
             // is HIDDEN" (0.35.0 = 0.36.0 = 0.37.2)
             new Stale("arcade.prizes", REV_SHOP, Set.of("ce1063df21e19949")),
+            // the Prize Counter's header again: "firework   a harmless three-second firework show." (0.38.0), and a
+            // firework row has seconds now
+            new Stale("arcade.prizes", REV_GRAND, Set.of("ef25d85f3f0a27a8")),
             // 0.37.1's two collectors named, and "no presents" without looks and golf balls (0.37.1 = 0.37.2)
             new Stale("arcade.collectors", REV_SHOP, Set.of("155cbe62c18e8000")),
             // "skill games pay small, capped rewards" (0.35 = 0.36): the token balance pays about a token a minute

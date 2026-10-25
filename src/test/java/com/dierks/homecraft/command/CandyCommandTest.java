@@ -46,6 +46,12 @@ class CandyCommandTest {
     private static final Set<String> PLAYER = Set.of("hcm.arcade.use");
     private static final Set<String> ADMIN = Set.of("hcm.admin", "hcm.arcade.use");
     private static final String DENIED = "You don't have permission.";
+    /**
+     * The cadence 0.37.1-0.38.0 shipped (every 20 minutes from :10, every 10 on the last day, 6 apples): the slot and
+     * restart-hold cases below are about that cadence; 0.38.1's gentler one is {@link Candy#DEFAULTS}.
+     */
+    private static final Candy TWENTY = new Candy(true, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), 20, 10,
+            10, 6, 4, 5, 10, 31, false);
 
     /** A console-like sender (not a player) with exactly these permissions; what it is told lands in {@code told}. */
     private static CommandSender sender(Set<String> perms, List<String> told) {
@@ -270,7 +276,7 @@ class CandyCommandTest {
 
     @Test
     void theNextShowerSkipsASlotARestartHolds() {
-        Candy c = Candy.DEFAULTS;
+        Candy c = TWENTY;
         assertEquals(LocalDateTime.of(2026, 10, 20, 15, 50),
                 HcmCommand.nextShower(LocalDateTime.of(2026, 10, 20, 15, 31), c, shippedHold()),
                 ":10/:30/:50 are never held");
@@ -285,11 +291,31 @@ class CandyCommandTest {
                 HcmCommand.nextShower(LocalDateTime.of(2026, 9, 25, 12, 0), c, shippedHold()), "before the window");
     }
 
+    /** 0.38.1's gentler shower: an hour apart at :10, half an hour on the last day, and no restart ever holds one. */
+    @Test
+    void theGentlerShowerComesHourlyAndNoShippedRestartHoldsIt() {
+        Candy c = Candy.DEFAULTS;
+        assertEquals(LocalDateTime.of(2026, 10, 25, 16, 10),
+                HcmCommand.nextShower(LocalDateTime.of(2026, 10, 25, 15, 11), c, shippedHold()), "an hour apart, at :10");
+        assertEquals(LocalDateTime.of(2026, 10, 25, 4, 10),
+                HcmCommand.nextShower(LocalDateTime.of(2026, 10, 25, 3, 50), c, shippedHold()),
+                "the 04:00 restart holds nothing");
+        assertEquals(LocalDateTime.of(2026, 10, 31, 15, 40),
+                HcmCommand.nextShower(LocalDateTime.of(2026, 10, 31, 15, 11), c, shippedHold()), "the last day: :10, :40");
+        assertEquals(LocalDateTime.of(2026, 10, 31, 16, 10),
+                HcmCommand.nextShower(LocalDateTime.of(2026, 10, 31, 15, 41), c, shippedHold()),
+                "nor the 16:00 one on the last day");
+        assertEquals(LocalDateTime.of(2026, 10, 31, 0, 10),
+                HcmCommand.nextShower(LocalDateTime.of(2026, 10, 30, 23, 11), c, shippedHold()), "into the last day");
+        assertNull(HcmCommand.nextShower(LocalDateTime.of(2026, 10, 31, 23, 41), c, shippedHold()),
+                "the 23:40 on the last day was the last");
+    }
+
     // ---- what an admin is told --------------------------------------------------------------
 
     @Test
     void theStatusNamesARestartSkipAndTheShowerAfterIt() {
-        Candy c = Candy.DEFAULTS;
+        Candy c = TWENTY;
         LocalDateTime now = LocalDateTime.of(2026, 10, 31, 15, 55);
         assertEquals("Next shower at 4:00 PM (skipped: a restart is due) then at 4:10 PM",
                 Text.plain("&7Next shower " + HcmCommand.candyNextText(HcmCommand.CandyState.OPEN, now, c,
@@ -305,7 +331,10 @@ class CandyCommandTest {
     @Test
     void theStatusShowsTheWindowInItsZone() {
         assertEquals("Window: 1 Oct - 31 Oct 2026 (America/Chicago). Every 20 min from 00:10, every 10 min on 31 Oct "
-                + "from 00:00.", Text.plain(HcmCommand.candyWindowText(Candy.DEFAULTS, CHICAGO)));
+                + "from 00:00.", Text.plain(HcmCommand.candyWindowText(TWENTY, CHICAGO)));
+        assertEquals("Window: 1 Oct - 31 Oct 2026 (America/Chicago). Every 60 min from 00:10, every 30 min on 31 Oct "
+                + "from 00:10.", Text.plain(HcmCommand.candyWindowText(Candy.DEFAULTS, CHICAGO)),
+                "0.38.1's gentler shower");
         Candy plain = new Candy(true, LocalDate.of(2026, 12, 20), LocalDate.of(2027, 1, 6), 30, 5, 0, 6, 4, 5, 10, 31,
                 false);
         assertEquals("Window: 20 Dec 2026 - 6 Jan 2027 (UTC). Every 30 min from 00:05.",

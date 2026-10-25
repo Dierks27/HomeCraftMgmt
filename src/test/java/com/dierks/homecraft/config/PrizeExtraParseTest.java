@@ -164,6 +164,33 @@ class PrizeExtraParseTest {
         assertEquals(30, readClean("{ id: p, cost_tokens: 300, type: party, seconds: 600 }").extra().seconds());
     }
 
+    /** 0.38.1: a firework row's show lasts its {@code seconds}, 3 (the Firework Show's) unless it says, 3-30. */
+    @Test
+    void aFireworkRowsSeconds() throws Exception {
+        Prize grand = readClean("{ id: firework_grand, tab: COSMETICS, display: \"&6Grand Firework Show\", "
+                + "description: [\"A long firework show\", \"with a big finale!\"], cost_tokens: 40, "
+                + "icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }");
+        assertEquals(PrizeType.FIREWORK, grand.type());
+        assertEquals(15, grand.extra().seconds());
+        assertEquals(3, readClean("{ id: f, cost_tokens: 15, type: firework }").extra().seconds(), "3 by default");
+        assertEquals(3, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: 3 }").extra().seconds());
+        assertEquals(30, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: 30 }").extra().seconds());
+        assertEquals(12, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: \"12\" }").extra().seconds(),
+                "a quoted number reads too");
+        assertEquals(3, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 1 }", "3 to 30 seconds. Using 3.")
+                .extra().seconds(), "at least 3, with one WARN");
+        assertEquals(30, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 300 }",
+                "3 to 30 seconds. Using 30.").extra().seconds(), "at most 30, with one WARN");
+        assertEquals(3, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: long }", "seconds 'long'")
+                .extra().seconds(), "not a number: 3, with one WARN");
+        assertEquals(4, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 4.5 }", "Using 4.")
+                .extra().seconds(), "whole seconds");
+        assertNotNull(readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: -2 }", "Using 3."),
+                "a bad length never costs the row");
+        assertEquals(0, readClean("{ id: b, cost_tokens: 8, type: boost, effect: speed, seconds: 15 }").extra()
+                .seconds(), "only a firework or party row reads seconds");
+    }
+
     @Test
     void aCommandRowsOnlyIf() throws Exception {
         Prize day = readClean("{ id: make_it_day, tab: BOOSTS, display: \"&eMake it Day!\", cost_tokens: 20, "
@@ -285,7 +312,8 @@ class PrizeExtraParseTest {
             assertEquals(0, p.extra().renewTokens(), p.id());
             assertNull(p.extra().ballLook(), p.id());
             assertEquals(OnlyIf.ANY, p.extra().onlyIf(), p.id());
-            assertEquals(0, p.extra().seconds(), p.id());
+            assertEquals(p.type() == PrizeType.FIREWORK ? 3 : 0, p.extra().seconds(),
+                    p.id() + ": a firework row's show is 3 seconds when it doesn't say (0.38.1), as it always was");
             assertNull(p.extra().keeper(), p.id());
             assertTrue(p.tab() != PrizeTab.LOOKS && p.tab() != PrizeTab.KEEPERS,
                     p.id() + ": every 0.37 row keeps its tab (revision 22 moves the hats)");
@@ -331,6 +359,17 @@ class PrizeExtraParseTest {
         }
         assertEquals(10, byId.values().stream().filter(p -> p.type() == PrizeType.BALL).count());
         assertEquals(10, byId.get("party_time").extra().seconds());
+        assertEquals(3, byId.get("firework_show").extra().seconds(), "the Firework Show is the short show");
+        Prize grand = byId.get("firework_grand");
+        assertEquals(PrizeType.FIREWORK, grand.type());
+        assertEquals(15, grand.extra().seconds(), "the Grand Firework Show: 15 seconds");
+        assertEquals(40, grand.costTokens());
+        assertEquals(PrizeTab.COSMETICS, grand.tab());
+        assertNull(grand.limit(), "no limit");
+        assertEquals(Material.FIREWORK_ROCKET, grand.icon().material());
+        assertEquals(List.of("A long firework show", "with a big finale!"), grand.description());
+        List<String> order = new ArrayList<>(byId.keySet());
+        assertEquals(order.indexOf("firework_show") + 1, order.indexOf("firework_grand"), "right after the Firework Show");
         assertEquals(PrizeType.PARTY, byId.get("party_time").type());
         assertEquals(OnlyIf.NIGHT, byId.get("make_it_day").extra().onlyIf());
         assertEquals(OnlyIf.RAIN, byId.get("sunny_day").extra().onlyIf());

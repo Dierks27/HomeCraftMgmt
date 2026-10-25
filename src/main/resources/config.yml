@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 22
+config_revision: 23
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1376,7 +1376,7 @@ arcade:
   #              (0 = level I), minutes. An item; right-click to use; stacks up to 3x its time.
   #   radar      the Mini Radar: right-click while a wild Mini is out. Hidden with no wild hunt.
   #   lure       the Mini Lure: the next wild Mini that rolls for ANYONE lands near you.
-  #   firework   a harmless three-second firework show.
+  #   firework   a harmless firework show; seconds 3-30, default 3.
   #   trail      particle, days - a particle trail while you walk, for `days` (it ends at local
   #              midnight). It can be bought again, at its price, from 7 days before it ends.
   #              One trail shows at a time; /hcm looks or the Wallet picks it.
@@ -1410,6 +1410,7 @@ arcade:
     - { id: mini_lure, tab: HUNT, display: "&dMini Lure", description: ["The next wild Mini", "appears near you."], cost_tokens: 40, icon: { texture: "", material: HEART_OF_THE_SEA }, type: lure }
     # -- Cosmetics
     - { id: firework_show, tab: COSMETICS, display: "&cFirework Show", description: ["A big firework show", "all around you!"], cost_tokens: 15, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework }
+    - { id: firework_grand, tab: COSMETICS, display: "&6Grand Firework Show", description: ["A long firework show", "with a big finale!"], cost_tokens: 40, icon: { texture: "", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }
     - { id: trail_hearts, tab: COSMETICS, display: "&cHeart Trail", description: ["Hearts follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: RED_DYE }, type: trail, particle: HEART, days: 30 }
     - { id: trail_notes, tab: COSMETICS, display: "&aMusic Trail", description: ["Music notes follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: NOTE_BLOCK }, type: trail, particle: NOTE, days: 30 }
     - { id: trail_sparkles, tab: COSMETICS, display: "&eSparkle Trail", description: ["Sparkles follow you", "for a month."], cost_tokens: 100, icon: { texture: "", material: AMETHYST_SHARD }, type: trail, particle: FIREWORK, days: 30 }
@@ -1653,12 +1654,12 @@ arcade:
       from: "2026-10-01"
       to: "2026-10-31"
       # A shower every this many minutes, counted from local midnight plus offset_minutes (10-120).
-      every_minutes: 20
+      every_minutes: 60
       offset_minutes: 10
       # On the last day (`to`), a shower this often instead (0 = as every_minutes).
-      last_day_every_minutes: 10
+      last_day_every_minutes: 30
       # Candy apples per player per shower (1-12), and the chance each is a Golden Candy Apple.
-      apples_per_shower: 6
+      apples_per_shower: 3
       golden_percent: 4
       # Tokens for each Golden Candy Apple picked up, and the most a player gets from candy in a local day.
       golden_tokens: 5

@@ -101,17 +101,20 @@ class ShopMigrationTest {
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
         assertEquals(List.of(), warns(log), "nothing the owner changed: no WARN");
         assertCounterAndCrateAreBundled(c, "0.37.2");
-        assertEquals(23, c.getInt("config_revision"), "and on through revision 23 (GrandShowMigrationTest)");
+        assertEquals(24, c.getInt("config_revision"),
+                "and on through revisions 23 and 24 (GrandShowMigrationTest, FireworkRemoteMigrationTest)");
         List<String> counter = log.stream().filter(l -> l.startsWith("Config migration: Prize Counter - ")).toList();
-        assertEquals(2, counter.size(), "one INFO for the counter, and revision 23's Grand Firework Show: " + log);
+        assertEquals(3, counter.size(), "one INFO for the counter, revision 23's Grand Firework Show and revision"
+                + " 24's bigger shows: " + log);
         assertTrue(counter.get(0).contains("32 new rows") && counter.get(0).contains("10 rows updated"), counter.get(0));
         assertTrue(counter.get(1).contains("added the Grand Firework Show"), counter.get(1));
+        assertTrue(counter.get(2).contains("added the Super Firework Show"), counter.get(2));
         assertEquals(1, log.stream().filter(l -> l.contains("Arcade Crate no longer holds hats")).count(),
                 "and one for the crate: " + log);
         assertEquals(1, log.stream().filter(l -> l.startsWith("Config migration: arcade.events.candy - ")).count(),
                 "and revision 23's one for the candy: " + log);
-        assertEquals(5, log.size(), "and nothing else but the revision: " + log);
-        assertEquals("Config migration: config_revision 21 → 23.", log.get(4));
+        assertEquals(6, log.size(), "and nothing else but the revision: " + log);
+        assertEquals("Config migration: config_revision 21 → 24.", log.get(5));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -258,14 +261,15 @@ class ShopMigrationTest {
         assertTrue(log22.stream().noneMatch(l -> l.contains("32 new rows") || l.contains("Arcade Crate no longer")),
                 "no revision-22 step runs from 22, only 23's: " + log22);
         assertTrue(ArcadeConfigMigration.sameRows(crate, rows(at22, CRATE)), "the crate is as it was");
-        assertEquals(counter.size() + 3, rows(at22, PRIZES).size(),
-                "the counter gains only the Grand Firework Show, the Firework Launcher and the Mega Firework Show");
+        assertEquals(counter.size() + 7, rows(at22, PRIZES).size(), "the counter gains only the Grand Firework Show,"
+                + " the Firework Launcher and the Mega Firework Show (23), and the Super, Ultra and Ultimate shows and the"
+                + " Firework Remote (24)");
 
-        YamlConfiguration at23 = LayoutFixtures.v0372();
-        at23.set("config_revision", 23);
-        String before = at23.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at23, "world"), "no step runs from 23");
-        assertEquals(before, at23.saveToString());
+        YamlConfiguration at24 = LayoutFixtures.v0372();
+        at24.set("config_revision", 24);
+        String before = at24.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at24, "world"), "no step runs from 24");
+        assertEquals(before, at24.saveToString());
 
         YamlConfiguration c = LayoutFixtures.v0372();
         apply(c);

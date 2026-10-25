@@ -88,15 +88,36 @@ public final class Fireworks {
      */
     public static void spawn(Location at, List<Color> colours, Color fade, FireworkEffect.Type type, boolean flicker,
                              boolean trail, int ticksToDetonate) {
+        FireworkEffect look = effect(colours, fade, type, flicker, trail);
+        if (look != null) {
+            launch(at, look, 1, ticksToDetonate);
+        }
+    }
+
+    /**
+     * One harmless firework of a chosen look at flight power {@code power} (0-3, as {@link #spawn(Location, int)}), its
+     * rocket's own flight (0.38.2, a Grand Firework Show in a holiday's colours).
+     */
+    public static void spawn(Location at, int power, List<Color> colours, Color fade, FireworkEffect.Type type,
+                             boolean flicker, boolean trail) {
+        FireworkEffect look = effect(colours, fade, type, flicker, trail);
+        if (look != null) {
+            launch(at, look, Math.max(0, Math.min(3, power)), -1);
+        }
+    }
+
+    /** A look as a firework effect, or null when it has no colours or no shape. */
+    private static FireworkEffect effect(List<Color> colours, Color fade, FireworkEffect.Type type, boolean flicker,
+                                         boolean trail) {
         if (colours == null || colours.isEmpty() || type == null) {
-            return;
+            return null;
         }
         FireworkEffect.Builder look = FireworkEffect.builder().withColor(colours).with(type).flicker(flicker)
                 .trail(trail);
         if (fade != null) {
             look.withFade(fade);
         }
-        launch(at, look.build(), 1, ticksToDetonate);
+        return look.build();
     }
 
     /** {@code ticksToDetonate} below 0 keeps the rocket's own flight, which {@code power} sets. A random look. */

@@ -79,6 +79,8 @@ public final class PrizeCounterMenu extends Menu {
     private final Runnable back;
     private final PrizeTab tab;
     private final int page;
+    /** The holiday's theme tonight, read once a build (0.38.2): a long firework show's tile says so. */
+    private com.dierks.homecraft.arcade.HolidayShows.Theme theme;
 
     public PrizeCounterMenu(HomeCraftManagement plugin, Player player, Runnable back) {
         this(plugin, player, back, PrizeTab.BOOSTS, 0);
@@ -102,6 +104,7 @@ public final class PrizeCounterMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         int tokens = plugin.tokens().balance(player.getUniqueId());
+        theme = com.dierks.homecraft.arcade.FireworkShows.themeToday(plugin);
         set(0, Menus.icon(Material.SUNFLOWER, "&eYou have &6" + tokens + " tokens",
                 "&7Everything here has a fixed price.",
                 "&7No luck needed — you see what you get."), null);
@@ -321,6 +324,9 @@ public final class PrizeCounterMenu extends Menu {
         List<String> lore = new ArrayList<>();
         for (String line : p.description()) {
             lore.add("&7" + line);
+        }
+        if (theme != null && com.dierks.homecraft.arcade.FireworkShow.themed(p)) {
+            lore.add("&6" + theme.name() + " colours tonight!"); // a holiday window: its long shows are themed
         }
         if (p.collector() != null) {
             lore.addAll(collectorLines(p.collector()));

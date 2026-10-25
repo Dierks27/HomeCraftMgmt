@@ -432,7 +432,9 @@ public final class PluginConfig {
         /** A golf ball colour, kept for good: an unlock, not an item ({@link PrizeExtra#ballLook}). */
         BALL,
         /** Party Time: harmless fireworks around everyone playing, for {@link PrizeExtra#seconds}. */
-        PARTY
+        PARTY,
+        /** The Firework Remote (0.38.2): links Firework Launchers for the player's shows; kept, never used up. */
+        REMOTE
     }
 
     /** How often a limit resets: per local day, per local week, per local calendar month, or never. */
@@ -534,8 +536,9 @@ public final class PluginConfig {
      *   <li>COMMAND: {@code onlyIf}</li>
      *   <li>PARTY: {@code seconds} (5-30); FIREWORK: {@code seconds}, its show's length (3-30, 3 when the row doesn't
      *       say; 0.38.1)</li>
-     *   <li>FIREWORK: {@code launchers} (0.38.1, 1-3; 0 = a show around the player): a Mega Firework Show from the
-     *       nearest Firework Launchers instead, whose {@code seconds} are 45-90 (60 when the row doesn't say)</li>
+     *   <li>FIREWORK: {@code launchers} (0.38.1, 1-10 from 0.38.2; 0 = a show around the player): a Mega Firework
+     *       Show from Firework Launchers instead (the ones its user linked with a Firework Remote, else the nearest),
+     *       whose {@code seconds} are 45-90 (60 when the row doesn't say)</li>
      *   <li>a Keeper ({@code arcade.Keepers} only, never a config row): {@code keeper}</li>
      * </ul>
      */
@@ -900,11 +903,12 @@ public final class PluginConfig {
     /**
      * The Firework Launcher ({@code arcade.launcher}, 0.38.1): the block's look (a dropper pointing up, or a
      * dispenser, unless {@code skins.firework_launcher} names a head), how many one player may have placed at once
-     * (1-10), and how far from whoever uses a Mega Firework Show its launchers may stand (8-64 blocks).
+     * (1-30; 15 from 0.38.2, enough for the Ultimate show's 10), and how far from whoever uses a Mega Firework Show
+     * with no launchers linked its launchers may stand (8-64 blocks).
      */
     public record Launcher(BlockDef block, int perPlayer, int range) {
         /** What the bundled file ships. */
-        public static final Launcher DEFAULTS = new Launcher(new BlockDef(Material.DROPPER, "&6Firework Launcher"), 3,
+        public static final Launcher DEFAULTS = new Launcher(new BlockDef(Material.DROPPER, "&6Firework Launcher"), 15,
                 32);
     }
 
@@ -981,6 +985,7 @@ public final class PluginConfig {
     private Marketplace marketplace;
     private SoundMuffler soundMuffler = new SoundMuffler(true, new BlockDef(Material.WHITE_WOOL, "&fSound Muffler"), 8, 16, 25);
     private Launcher launcher = Launcher.DEFAULTS;
+    private com.dierks.homecraft.arcade.HolidayShows holidayShows = com.dierks.homecraft.arcade.HolidayShows.SHIPPED;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     /** Extra skin slots that aren't 1:1 with a block type (pallet_used, vending_upper, mailbox.<variant>). */
     private Map<String, String> namedSkins = new LinkedHashMap<>();
@@ -1061,6 +1066,11 @@ public final class PluginConfig {
     /** The Firework Launcher block, how many a player may have placed, and a Mega show's range (0.38.1). */
     public Launcher launcher() {
         return launcher;
+    }
+
+    /** The holiday firework shows' windows ({@code arcade.holiday_shows}, 0.38.2). */
+    public com.dierks.homecraft.arcade.HolidayShows holidayShows() {
+        return holidayShows;
     }
 
     /** The Base64 head-texture value configured for a custom block, or "" if none. */
@@ -1425,6 +1435,9 @@ public final class PluginConfig {
         this.soundMuffler = readSoundMuffler(c);
         // ---- The Firework Launcher (0.38.1) ----
         this.launcher = readLauncher(c);
+        // ---- Holiday firework shows (0.38.2): absent (a start whose backfill didn't run) = the shipped windows ----
+        this.holidayShows = com.dierks.homecraft.arcade.HolidayShows.read(c.contains("arcade.holiday_shows"),
+                c.get("arcade.holiday_shows.enabled"), c.get("arcade.holiday_shows.windows"), log::warning);
 
         // ---- Block skins + Web Dashboard (Phase 6) ----
         this.skins = readSkins(c);
@@ -2005,7 +2018,7 @@ public final class PluginConfig {
         } catch (IllegalArgumentException e) {
             warning.accept("Arcade prize '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use boost, "
                     + "radar, lure, firework, trail, hat, ball, party, command, trophy, filament, block, pack, pity, "
-                    + "trade_in, quest_reroll or home_slot.");
+                    + "trade_in, quest_reroll, home_slot or remote.");
             return null;
         }
         String display = str(row.get("display"), id);
@@ -2159,7 +2172,7 @@ public final class PluginConfig {
             }
             case PARTY -> seconds = Math.min(30, Math.max(5, (int) number(row.get("seconds"), 10)));
             case FIREWORK -> {
-                // 0.38.1: launchers (1-3) make it a Mega Firework Show, with its own length (45-90 seconds)
+                // 0.38.1: launchers (1-10 from 0.38.2) make it a Mega Firework Show, with its own length (45-90 s)
                 launchers = fireworkLaunchers(id, row.get("launchers"), warning);
                 seconds = launchers > 0 ? megaSeconds(id, row.get("seconds"), warning)
                         : fireworkSeconds(id, row.get("seconds"), warning);
@@ -2205,7 +2218,7 @@ public final class PluginConfig {
                 amount = 1;
             }
             default -> {
-                // radar, lure, trophy, filament, pity, trade_in, quest_reroll, home_slot: nothing more to read
+                // radar, lure, trophy, filament, pity, trade_in, quest_reroll, home_slot, remote: nothing more
             }
         }
         if (row.get("launchers") != null && type != PrizeType.FIREWORK) {
@@ -2247,8 +2260,8 @@ public final class PluginConfig {
 
     /**
      * A firework row's {@code launchers} (0.38.1): how many Firework Launchers its Mega show fires from, 0 (a show
-     * around the player, every row before 0.38.1) to {@code MegaShow.MAX_LAUNCHERS} (3). Brought into range with one
-     * WARN.
+     * around the player, every row before 0.38.1) to {@code MegaShow.MAX_LAUNCHERS} (10 from 0.38.2: the Ultimate
+     * Firework Show's). Brought into range with one WARN.
      */
     static int fireworkLaunchers(String id, Object raw, java.util.function.Consumer<String> warning) {
         if (raw == null) {
@@ -2280,7 +2293,7 @@ public final class PluginConfig {
         return switch (type) {
             case BOOST, QUEST_REROLL -> PrizeTab.BOOSTS;
             case RADAR, LURE -> PrizeTab.HUNT;
-            case FIREWORK, TRAIL, PARTY -> PrizeTab.COSMETICS;
+            case FIREWORK, TRAIL, PARTY, REMOTE -> PrizeTab.COSMETICS;
             case HAT, BALL -> PrizeTab.LOOKS;
             case COMMAND, HOME_SLOT -> PrizeTab.PERKS;
             case TROPHY -> PrizeTab.TROPHIES;
@@ -2308,6 +2321,7 @@ public final class PluginConfig {
             case PACK -> Material.PAPER;
             case PITY -> Material.NETHER_STAR;
             case TRADE_IN -> Material.HOPPER;
+            case REMOTE -> Material.RECOVERY_COMPASS;
         };
     }
 
@@ -2945,17 +2959,17 @@ public final class PluginConfig {
     }
 
     /**
-     * {@code arcade.launcher} (0.38.1). {@code per_player} is brought into 1-10 and {@code range} into 8-64 blocks,
-     * with one WARN each when it was outside: a Mega show's rockets are only seen from within the server's entity
-     * range, so a launcher further off than that would fire for nobody. {@code material} is a dropper or a dispenser
-     * ({@link #launcherMaterial}).
+     * {@code arcade.launcher} (0.38.1). {@code per_player} is brought into 1-30 (1-10 before 0.38.2) and {@code range}
+     * into 8-64 blocks, with one WARN each when it was outside: a Mega show's rockets are only seen from within the
+     * server's entity range, so a launcher further off than that would fire for nobody. {@code material} is a dropper
+     * or a dispenser ({@link #launcherMaterial}).
      */
     private Launcher readLauncher(FileConfiguration c) {
         Launcher d = Launcher.DEFAULTS;
         BlockDef read = blockDef(c, "arcade.launcher", d.block().material(), d.block().name());
         BlockDef block = new BlockDef(launcherMaterial("arcade.launcher.material", read.material(), log::warning),
                 read.name());
-        int perPlayer = clamped(c, "arcade.launcher.per_player", d.perPlayer(), 1, 10);
+        int perPlayer = clamped(c, "arcade.launcher.per_player", d.perPlayer(), 1, 30);
         int range = clamped(c, "arcade.launcher.range", d.range(), 8, 64);
         return new Launcher(block, perPlayer, range);
     }

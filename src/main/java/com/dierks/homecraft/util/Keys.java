@@ -105,6 +105,13 @@ public final class Keys {
     /** On a Firework Show rocket: marks it harmless. */
     public static NamespacedKey FIREWORK_SHOW;
     /**
+     * On a Firework Remote's hologram over a linked launcher (0.38.2, a text display only its viewer sees): that
+     * viewer's UUID (String). Never saved with the chunk; one found that isn't live is removed.
+     */
+    public static NamespacedKey REMOTE_MARKER;
+    /** On a Show Map item (0.38.2): its owner's UUID (String), so a player has one, and a new one replaces it. */
+    public static NamespacedKey SHOW_MAP;
+    /**
      * {@code hcm:bound_to} — on a key that works only for one player (0.38: a rented hat or cap, a Keeper): their
      * UUID (String). The right is in the database; the item is only a key to it, and it stays with its owner
      * ({@code PrizeService.bound}). In the shared {@code hcm} namespace, like {@link #TOKEN_PRIZE}.
@@ -222,6 +229,8 @@ public final class Keys {
         TROPHY_PLACER = new NamespacedKey(plugin, "trophy_placer");
         PLACED_PRIZE_ID = new NamespacedKey(plugin, "placed_prize_id");
         FIREWORK_SHOW = new NamespacedKey(plugin, "firework_show");
+        REMOTE_MARKER = new NamespacedKey(plugin, "remote_marker");
+        SHOW_MAP = new NamespacedKey(plugin, "show_map");
         BOUND_TO = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:bound_to"));
         LOOK_END = new NamespacedKey(plugin, "look_end");
         LOOK_PREVIEW = new NamespacedKey(plugin, "look_preview");

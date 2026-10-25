@@ -281,6 +281,31 @@ public final class PrizeDao {
         }
     }
 
+    /**
+     * Every player's value of one preference (0.38.2: the Firework Remote's sets, when a launcher breaks, and the Show
+     * Maps' ids at start), by player. A row whose player isn't a UUID is skipped. A read, no schema change: the table
+     * is a handful of rows a player.
+     */
+    public java.util.Map<UUID, String> prefsNamed(String key) throws SQLException {
+        java.util.Map<UUID, String> out = new java.util.LinkedHashMap<>();
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT player, value FROM game_prefs WHERE pref = ?")) {
+                ps.setString(1, key);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        try {
+                            out.put(UUID.fromString(rs.getString(1)), rs.getString(2));
+                        } catch (IllegalArgumentException | NullPointerException e) {
+                            // not a player's row
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     // ---- arcade_state --------------------------------------------------------------
 
     /** A stored number, or {@code fallback} when it has never been written. */

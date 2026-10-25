@@ -75,6 +75,25 @@ class PrizeSafetyTest {
     }
 
     /**
+     * Review REMOTE-MAP-2: a dropped Show Map is a plain map on the ground (it despawns, it burns), so pressing "Get my
+     * Show Map" and dropping it again and again never leaves a pile for good. Every other prize stays safe, and the
+     * listener asks it before it protects anything.
+     */
+    @Test
+    void aDroppedShowMapDespawnsLikeAnyMap() throws Exception {
+        assertTrue(PrizeSafety.plainOnGround(ShowMap.PRIZE_ID), "the Show Map");
+        assertTrue(PrizeSafety.plainOnGround("firework_show_map"));
+        assertFalse(PrizeSafety.plainOnGround("firework_remote"), "the Remote is kept safe");
+        assertFalse(PrizeSafety.plainOnGround("cap_pumpkin_2026"));
+        assertFalse(PrizeSafety.plainOnGround(null), "not a prize at all");
+        String src = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/java/com/dierks/homecraft/arcade/PrizeSafetyListener.java")).replaceAll("\\s+", " ");
+        assertTrue(src.contains("static boolean keepOnGround(ItemStack item) { return prize(item) &&"
+                + " !PrizeSafety.plainOnGround(prizeId(item)) && PrizeSafety.keepOnGround(true, candy(item),"
+                + " contents(item)); }"), "the spawn, despawn and damage guards all ask it");
+    }
+
+    /**
      * E21: the owner set on a drop is checked only when a player walks over it, so a hopper (or a hopper
      * minecart) under a dropped collector would take it, and anyone could open the chest. HW1-ECON-2.
      */

@@ -70,8 +70,12 @@ import java.util.UUID;
  * ({@link LauncherRules}), only its placer or an admin picks it up, a tap says
  * what it is (a Mega Firework Show in the hand starts the show instead, in
  * {@code PrizeItemListener}), and no hopper, dropper, redstone pulse or screen
- * ever moves anything in or out of it. A held tap or fourth place says its line
- * once every 2 s ({@link LauncherRules.Lines}).
+ * ever moves anything in or out of it. A held tap, or a held place over the limit,
+ * says its line once every 2 s ({@link LauncherRules.Lines}). From 0.38.2 a Firework Remote
+ * in the hand links or unlinks the launcher instead ({@code PrizeItemListener}, {@code RemoteService}),
+ * also from the off hand with nothing of ours in the main hand (here: a Java tap on a dropper never
+ * sends the off hand's), a tap without one says its number in the tapper's set, and a launcher that
+ * is placed, broken or found gone tells the Remote (its owner's Show Map, and every set it was in).
  */
 public final class CustomBlockListener implements Listener {
 
@@ -134,8 +138,8 @@ public final class CustomBlockListener implements Listener {
             return;
         }
 
-        // A Firework Launcher: so many placed at once a player (admins too), counted from the records now. A fourth
-        // is refused kindly and stays in the hand.
+        // A Firework Launcher: so many placed at once a player (admins too), counted from the records now. One over
+        // the limit (a sixteenth with the shipped 15) is refused kindly and stays in the hand.
         int launchers = 0;
         if (type == CustomBlockType.FIREWORK_LAUNCHER) {
             int perPlayer = config.launcher().perPlayer();
@@ -171,6 +175,9 @@ public final class CustomBlockListener implements Listener {
         }
 
         blocks.recordPlacement(block, type, player.getUniqueId());
+        if (type == CustomBlockType.FIREWORK_LAUNCHER && plugin.remotes() != null) {
+            plugin.remotes().launcherPlaced(spotOf(block.getLocation()), player.getUniqueId()); // their Show Map
+        }
         if (type == CustomBlockType.MINI_VENDING_MACHINE && plugin.shops() != null) {
             plugin.shops().register(block.getLocation()); // the upper half is a floating display
         }
@@ -283,6 +290,9 @@ public final class CustomBlockListener implements Listener {
             @Override
             public void forget() {
                 blocks.removeAt(loc);
+                if (record.type() == CustomBlockType.FIREWORK_LAUNCHER && plugin.remotes() != null) {
+                    plugin.remotes().launcherGone(spotOf(loc), record.owner()); // off every show it was in
+                }
                 if (record.type() == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
                     plugin.soundMufflers().removed(loc);
                 }
@@ -401,6 +411,23 @@ public final class CustomBlockListener implements Listener {
             // starts it from the launchers nearby, anyone's), so the launcher says nothing of its own.
             return;
         }
+        if (type == CustomBlockType.FIREWORK_LAUNCHER
+                && com.dierks.homecraft.arcade.PrizeItems.kindOf(event.getItem())
+                == PluginConfig.PrizeType.REMOTE) {
+            // A Firework Remote in the hand: the tap links or unlinks this launcher (PrizeItemListener, registered
+            // after this), so the launcher says nothing of its own and nothing opens (the deny above).
+            return;
+        }
+        if (type == CustomBlockType.FIREWORK_LAUNCHER && plugin.remotes() != null
+                && com.dierks.homecraft.arcade.RemoteRules.offHandTap(
+                com.dierks.homecraft.arcade.PrizeItems.kindOf(event.getItem()),
+                com.dierks.homecraft.arcade.PrizeItems.kindOf(player.getInventory().getItemInOffHand()))) {
+            // review REMOTE-TAP-3: the Remote in the off hand, nothing of ours in the main hand. A Java tap on a
+            // dropper is used up by the main hand (the client predicts it opening), so the off hand's use is never
+            // sent: this tap is the Remote's. A sneaking tap's off-hand use that follows counts as the same tap.
+            plugin.remotes().tapFromOffHand(player, clicked);
+            return;
+        }
         if (trophy && ArcadeTrophies.tap(false, player.hasPermission("hcm.arcade.use")) == ArcadeTrophies.Tap.REFUSE) {
             player.sendMessage(Text.of("&cYou can't use the Arcade."));
             return; // as /hcm arcade: the machine itself is left as it is
@@ -478,8 +505,10 @@ public final class CustomBlockListener implements Listener {
                 UUID owner = placed.get().owner();
                 boolean mine = owner.equals(player.getUniqueId());
                 boolean busy = plugin.megaShows() != null && plugin.megaShows().busy(clicked);
+                int linkedAs = plugin.remotes() == null ? 0
+                        : plugin.remotes().linkedAs(player.getUniqueId(), spotOf(clicked.getLocation()));
                 player.sendMessage(Text.of(LauncherRules.tapLine(mine, ownerName(owner),
-                        mine ? ownedLaunchers(owner) : 0, config.launcher().perPlayer(), busy)));
+                        mine ? ownedLaunchers(owner) : 0, config.launcher().perPlayer(), busy, linkedAs)));
             }
             // Anyone may look at what a muffler hushes; only its owner (or an admin) may change it.
             case SOUND_MUFFLER -> {
@@ -645,6 +674,11 @@ public final class CustomBlockListener implements Listener {
                 && inv.getHolder(false) instanceof BlockState state && CustomBlockService.isLauncher(state);
     }
 
+    /** A launcher's spot, as the Mega shows and the Remote name it. */
+    private static MegaShow.Spot spotOf(Location loc) {
+        return new MegaShow.Spot(loc.getWorld().getName(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+    }
+
     /** Whether a placed-block record is the very spot being placed (its record is written again, never counted). */
     private static boolean sameSpot(PlacedBlock pb, Block block) {
         return pb.world().equals(block.getWorld().getName()) && pb.x() == block.getX() && pb.y() == block.getY()
@@ -653,8 +687,9 @@ public final class CustomBlockListener implements Listener {
 
     /**
      * A launcher record whose block is gone: its world and chunk are loaded and the block there is air (a WorldEdit
-     * clear leaves records behind). It is forgotten as it is found, and never counted. A block of any other material
-     * is left alone, and one that can't be looked at (its world or chunk not loaded) counts.
+     * clear leaves records behind). It is forgotten as it is found, and never counted, and it leaves every Remote set
+     * (0.38.2). A block of any other material is left alone, and one that can't be looked at (its world or chunk not
+     * loaded) counts.
      */
     private boolean staleLauncher(PlacedBlock pb) {
         org.bukkit.World w = plugin.getServer().getWorld(pb.world());
@@ -666,6 +701,10 @@ public final class CustomBlockListener implements Listener {
             return false;
         }
         blocks.removeAt(b.getLocation());
+        if (plugin.remotes() != null) {
+            // review REMOTE-MAP-1: off every set it was in, and off its owner's Show Map, as a final break is
+            plugin.remotes().launcherGone(spotOf(b.getLocation()), pb.owner());
+        }
         return true;
     }
 

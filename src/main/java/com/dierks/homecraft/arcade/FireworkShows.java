@@ -33,6 +33,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p>A Mega Firework Show (0.38.1) is a long show too, played at its launchers by {@link MegaShowService}: it holds its
  * player's one long show here ({@link #holdLong}) for as long as it plays.
+ *
+ * <p>In a holiday window (0.38.2) a long show takes that holiday's look, read once when it starts
+ * ({@link #themeToday}); a short show is never themed.
  */
 public final class FireworkShows {
 
@@ -69,6 +72,8 @@ public final class FireworkShows {
         }
         List<Burst> bursts = FireworkShow.schedule(seconds);
         long last = bursts.get(bursts.size() - 1).tick();
+        // A holiday's look, decided as it starts: the show keeps it to the end. Never for a short show.
+        HolidayShows.Theme theme = isLong ? themeToday(plugin) : null;
         long[] tick = {0};
         int[] next = {0};
         Playing p = new Playing(id);
@@ -82,7 +87,8 @@ public final class FireworkShows {
                 return;
             }
             while (next[0] < bursts.size() && bursts.get(next[0]).tick() <= t) {
-                burst(player, bursts.get(next[0]++));
+                int n = next[0]++;
+                burst(player, bursts.get(n), n, theme);
             }
             if (t >= last) {
                 end(show); // its own show only, never a later one
@@ -170,13 +176,36 @@ public final class FireworkShows {
         guard.end(p.player, show);
     }
 
-    /** One burst around where the player is now. */
-    private static void burst(Player player, Burst b) {
+    /**
+     * Burst number {@code index} around where the player is now: each firework in the holiday's look when there is one
+     * ({@link FireworkShow#look}), else its random one, as always.
+     */
+    private static void burst(Player player, Burst b, int index, HolidayShows.Theme theme) {
         Location at = player.getLocation();
         ThreadLocalRandom r = ThreadLocalRandom.current();
         for (int i = 0; i < b.fireworks(); i++) {
             Spot s = FireworkShow.spot(b.kind(), i, b.fireworks(), r);
-            Fireworks.spawn(at.clone().add(s.dx(), s.dy(), s.dz()), s.power());
+            Location where = at.clone().add(s.dx(), s.dy(), s.dz());
+            MegaShow.Look look = FireworkShow.look(theme, b.kind(), index, i);
+            if (look == null) {
+                Fireworks.spawn(where, s.power());
+            } else {
+                Fireworks.spawn(where, s.power(), look.colours(), look.fade(), look.type(), look.flicker(),
+                        look.trail());
+            }
+        }
+    }
+
+    /**
+     * The holiday's theme today ({@code arcade.holiday_shows} on the local date in {@code clock.time_zone}), or null:
+     * no window today, or nothing to ask (a test's plugin, or the config not read yet). Asked when a long show starts.
+     */
+    public static HolidayShows.Theme themeToday(HomeCraftManagement plugin) {
+        try {
+            return plugin == null || plugin.config() == null ? null
+                    : plugin.config().holidayShows().themeOn(plugin.clock().today());
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 

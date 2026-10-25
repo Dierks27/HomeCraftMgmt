@@ -21,10 +21,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The config files and readings the Games layout tests share: 0.35.0's, 0.36.0's, 0.37.2's and 0.38.0's bundled
- * config.yml (verbatim copies, {@code src/test/resources/config-0.35.0.yml}, {@code config-0.36.0.yml},
- * {@code config-0.37.2.yml} and {@code config-0.38.0.yml}), this version's, and every Games place's box as the plugin
- * reads it from a file.
+ * The config files and readings the Games layout tests share: 0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's and 0.38.1's
+ * bundled config.yml (verbatim copies, {@code src/test/resources/config-0.35.0.yml}, {@code config-0.36.0.yml},
+ * {@code config-0.37.2.yml}, {@code config-0.38.0.yml} and {@code config-0.38.1.yml}), this version's, and every Games
+ * place's box as the plugin reads it from a file.
  */
 public final class LayoutFixtures {
 
@@ -61,6 +61,15 @@ public final class LayoutFixtures {
      */
     public static YamlConfiguration v0380() {
         return load("/config-0.38.0.yml");
+    }
+
+    /**
+     * 0.38.1's bundled config.yml, exactly as a 0.38.1 install has it on disk (a verbatim copy of 36539d2's,
+     * {@code src/test/resources/config-0.38.1.yml}, revision 23): the file the Firework Remote's revision 24 meets on
+     * the owner's server.
+     */
+    public static YamlConfiguration v0381() {
+        return load("/config-0.38.1.yml");
     }
 
     /** This version's bundled config.yml: a fresh install's file. */

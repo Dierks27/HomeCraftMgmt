@@ -29,15 +29,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
- * The Mega Firework Shows playing now (0.38.1): each one a timer that plays its {@link MegaShow#plan} from up to three
- * Firework Launchers with harmless fireworks ({@link Fireworks}, tagged so they hurt nobody).
+ * The Mega Firework Shows playing now (0.38.1; the Super, Ultra and Ultimate tiers from 0.38.2): each one a timer that
+ * plays its {@link MegaShow#plan} from up to {@value MegaShow#MAX_LAUNCHERS} Firework Launchers with harmless fireworks
+ * ({@link Fireworks}, tagged so they hurt nobody).
  *
- * <p><b>Where.</b> A show fires from the nearest launchers (anyone's) within {@code arcade.launcher.range} of whoever
- * uses it, as many as its row's {@code launchers}, found once at the start from the placed-block records (one indexed
- * read) and only in chunks that are loaded and ticking: a chunk is never loaded for a show. With one or two near
- * enough it fires from those; with none it is refused and kept.
+ * <p><b>Where.</b> A user with a Firework Remote set ({@link RemoteService}) fires from its first launchers that can
+ * fire, as many as the row's {@code launchers}, in link order (#1 is the first lane), wherever they are: one in another
+ * world, gone, or whose chunk isn't loaded and ticking is skipped, and one line says how many and why; none that can
+ * is refused and kept. Without a set, a show fires from the nearest launchers (anyone's) within
+ * {@code arcade.launcher.range} of whoever uses it, ordered left to right, as 0.38.1 did. Either way they are found
+ * once at the start from the placed-block records (one indexed read) and only in chunks that are loaded and ticking: a
+ * chunk is never loaded for a show. With fewer than the row asks for it fires from those ({@link MegaShow#forLaunchers}).
  *
  * <p><b>For its minute.</b> Walking away, teleporting or dying doesn't cut it short: it plays at its launchers. It ends
  * early only when none of its launchers' chunks is still ticking (the area unloaded, or its world did), when its user
@@ -87,8 +92,14 @@ public final class MegaShowService implements Listener {
         UUID id = player.getUniqueId();
         boolean here = shows.playsHere(player);
         boolean longOn = shows.longShowOn(id);
-        List<Spot> found = here && !longOn ? near(player, row.extra().launchers()) : List.of();
-        String refused = MegaShow.refusal(here, longOn, found.size(), claims.busy(found), claims.running());
+        int want = row.extra().launchers();
+        List<Spot> linked = plugin.remotes() == null ? List.of() : plugin.remotes().linked(id);
+        MegaShow.Pick pick = !here || longOn ? MegaShow.Pick.NONE
+                : linked.isEmpty() ? MegaShow.Pick.of(near(player, want)) // 0.38.1: the nearest within range
+                : pickLinked(player, linked, want); // the first that can fire, in link order
+        List<Spot> found = pick.spots();
+        String none = linked.isEmpty() ? MegaShow.NO_LAUNCHER : MegaShow.noneLinkedLine(pick);
+        String refused = MegaShow.refusal(here, longOn, found.size(), none, claims.busy(found), claims.running());
         if (refused != null) {
             return refused;
         }
@@ -102,8 +113,14 @@ public final class MegaShowService implements Listener {
             shows.releaseLong(id, held);
             return MegaShow.BUSY;
         }
-        List<Spot> ordered = MegaShow.leftToRight(found, player.getX(), player.getZ(), player.getYaw());
-        List<Shot> shots = MegaShow.forLaunchers(MegaShow.plan(MegaShow.seconds(row)), ordered.size());
+        // A linked set fires in its own order (#1 is the first lane); the nearest ones left to right as the user sees them.
+        List<Spot> ordered = linked.isEmpty() ? MegaShow.leftToRight(found, player.getX(), player.getZ(),
+                player.getYaw()) : found;
+        int lanes = MegaShow.lanes(row);
+        List<Shot> shots = MegaShow.forLaunchers(MegaShow.plan(lanes, MegaShow.seconds(row)), lanes, ordered.size());
+        // A holiday's look, decided as it starts: the show keeps it to the end.
+        HolidayShows.Theme theme = FireworkShows.themeToday(plugin);
+        String name = Text.plain(row.display());
         int end = MegaShow.endTick(shots);
         String world = player.getWorld().getName();
         // Each launcher's block as it is now: one broken or changed later is skipped.
@@ -125,17 +142,56 @@ public final class MegaShowService implements Listener {
                 return;
             }
             while (next[0] < shots.size() && shots.get(next[0]).tick() <= t) {
-                fire(w, ordered, looks, shots.get(next[0]++));
+                fire(w, ordered, looks, shots.get(next[0]++), lanes, theme);
             }
             if (t >= end) {
                 end(show); // its own show only, never a later one
             }
         }, 0L, 1L);
-        player.sendMessage(Text.of(MegaShow.startLine(ordered.size())));
+        player.sendMessage(Text.of(MegaShow.startLine(name, theme, ordered.size())));
+        String skipped = MegaShow.skippedLine(pick);
+        if (skipped != null) {
+            player.sendMessage(Text.of(skipped));
+        }
         if (plugin.prizes() != null) {
-            plugin.prizes().announce(player, MegaShow.announceLine(player.getName()));
+            plugin.prizes().announce(player, MegaShow.announceLine(player.getName(), name, theme));
         }
         return null;
+    }
+
+    /**
+     * The launchers a linked set's show fires from ({@link MegaShow#pickLinked}): one records read for "recorded", and
+     * for each in the user's world its chunk asked first (never loaded), then its block. A record whose block is air
+     * there is stale and forgotten, and every gone one leaves the sets ({@link RemoteService#launcherGone}).
+     */
+    private MegaShow.Pick pickLinked(Player player, List<Spot> linked, int want) {
+        CustomBlockService blocks = plugin.blockService();
+        if (blocks == null) {
+            return MegaShow.Pick.NONE;
+        }
+        World w = player.getWorld();
+        Map<Spot, UUID> recorded = new HashMap<>();
+        for (PlacedBlock pb : blocks.findByType(CustomBlockType.FIREWORK_LAUNCHER)) {
+            recorded.put(new Spot(pb.world(), pb.x(), pb.y(), pb.z()), pb.owner());
+        }
+        // No records at all is a read that failed (findByType is empty on a database error), never every launcher
+        // gone: each is then known by its block alone, so a set is never unlinked for a database hiccup.
+        Predicate<Spot> isRecorded = recorded.isEmpty() ? s -> true : recorded::containsKey;
+        MegaShow.Pick pick = MegaShow.pickLinked(linked, w.getName(), isRecorded, s -> ticking(w, s),
+                s -> {
+                    Block b = w.getBlockAt(s.x(), s.y(), s.z());
+                    if (b.getType().isAir()) {
+                        blocks.removeAt(b.getLocation());
+                        return false;
+                    }
+                    return true;
+                }, want);
+        if (plugin.remotes() != null) {
+            for (Spot gone : pick.gone()) {
+                plugin.remotes().launcherGone(gone, recorded.get(gone));
+            }
+        }
+        return pick;
     }
 
     /** Whether the launcher at {@code block} is in a show right now (its tap says so). */
@@ -176,9 +232,9 @@ public final class MegaShowService implements Listener {
     }
 
     /**
-     * The launchers a show of {@code launchers} fires from: every recorded launcher in the player's world whose chunk
-     * is loaded and ticking (asked in that order, so no chunk is ever loaded), nearest first within range. A record
-     * whose block is air there is stale (a WorldEdit clear) and is forgotten.
+     * The launchers a show of {@code launchers} fires from with no linked set: every recorded launcher in the player's
+     * world whose chunk is loaded and ticking (asked in that order, so no chunk is ever loaded), nearest first within
+     * range. A record whose block is air there is stale (a WorldEdit clear) and is forgotten (and leaves every set).
      */
     private List<Spot> near(Player player, int launchers) {
         CustomBlockService blocks = plugin.blockService();
@@ -198,6 +254,9 @@ public final class MegaShowService implements Listener {
             Block b = w.getBlockAt(pb.x(), pb.y(), pb.z());
             if (b.getType().isAir()) {
                 blocks.removeAt(b.getLocation());
+                if (plugin.remotes() != null) {
+                    plugin.remotes().launcherGone(new Spot(pb.world(), pb.x(), pb.y(), pb.z()), pb.owner());
+                }
                 continue;
             }
             out.add(new Spot(pb.world(), pb.x(), pb.y(), pb.z()));
@@ -216,19 +275,28 @@ public final class MegaShowService implements Listener {
         return false;
     }
 
-    /** A launcher's chunk is loaded (asked first: never load it) and entity-ticking. */
-    private static boolean ticking(World w, Spot s) {
+    /**
+     * A launcher's chunk is loaded (asked first: never load it) and entity-ticking: whether it can fire now. The one
+     * test for it, so My Show's tiles and the holograms say what a show will do (review LINK-LOADED-1: a chunk at the
+     * edge of the view distance is loaded but not ticking, and was "here" on My Show while the show skipped it as not
+     * loaded).
+     */
+    public static boolean ticking(World w, Spot s) {
         return w.isChunkLoaded(s.x() >> 4, s.z() >> 4)
                 && w.getChunkAt(s.x() >> 4, s.z() >> 4).getLoadLevel() == Chunk.LoadLevel.ENTITY_TICKING;
     }
 
-    /** One rocket from its launcher's top: skipped while its chunk isn't ticking, or when the launcher is gone. */
-    private static void fire(World w, List<Spot> ordered, Material[] looks, Shot shot) {
+    /**
+     * One rocket from its launcher's top, in its lane's look in a plan of {@code lanes} (the holiday's in a window):
+     * skipped while its chunk isn't ticking, or when the launcher is gone.
+     */
+    private static void fire(World w, List<Spot> ordered, Material[] looks, Shot shot, int lanes,
+                             HolidayShows.Theme theme) {
         Spot s = ordered.get(shot.launcher());
         if (!ticking(w, s) || w.getBlockAt(s.x(), s.y(), s.z()).getType() != looks[shot.launcher()]) {
             return;
         }
-        Look look = MegaShow.look(shot);
+        Look look = MegaShow.look(shot, lanes, theme);
         Fireworks.spawn(new Location(w, s.x() + 0.5, s.y() + 1.1, s.z() + 0.5), look.colours(), look.fade(),
                 look.type(), look.flicker(), look.trail(), shot.height().ticks());
     }

@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The present's burst in view (HALLOWEEN-SPEC D8; review BK-2): 4 blocks ahead in the open, and on this side
  * of a nearer wall, so a child indoors or in a tunnel still sees it instead of a rocket going off inside the
- * wall or behind it. And every firework, the Mega show's chosen looks too (0.38.1), is the harmless kind.
+ * wall or behind it. And every firework, the Mega show's chosen looks too (0.38.1) and the Grand show's holiday looks
+ * (0.38.2), is the harmless kind.
  */
 class FireworksTest {
 
@@ -23,7 +24,8 @@ class FireworksTest {
     }
 
     /**
-     * Every spawn here, the random ones and the Mega Firework Show's chosen looks (0.38.1), goes through the one
+     * Every spawn here, the random ones, the Mega Firework Show's chosen looks (0.38.1) and a holiday's look at a
+     * flight power (0.38.2, the Grand show in a window), goes through the one
      * {@code world.spawn} that tags {@code FIREWORK_SHOW}, whose damage the prize listener cancels: a show never hurts
      * the child it is for, or her pet.
      */
@@ -38,7 +40,11 @@ class FireworksTest {
                 + " int ticksToDetonate) {"), "the one spawn");
         assertEquals(2, count(src, "private static void launch("), "the random look's, and the one spawn");
         assertTrue(src.contains("launch(at, FireworkEffect.builder()"), "the random look goes through the one spawn");
-        assertTrue(src.contains("launch(at, look.build(), 1, ticksToDetonate);"), "and so does the Mega show's");
+        assertTrue(src.contains("launch(at, look, 1, ticksToDetonate);"), "and so does the Mega show's");
+        assertTrue(src.contains("launch(at, look, Math.max(0, Math.min(3, power)), -1);"),
+                "and a holiday look at a power (0.38.2)");
+        assertTrue(src.contains("public static void spawn(Location at, int power, List<Color> colours, Color fade,"),
+                "its spawn");
         assertEquals(0, count(src, "world.spawn(") + count(src, "getWorld().spawnEntity("), "no other spawn");
         String chosen = src.substring(src.indexOf("public static void spawn(Location at, List<Color> colours"));
         assertTrue(chosen.indexOf("fw.setFireworkMeta(meta);") < chosen.indexOf("fw.setTicksToDetonate("),

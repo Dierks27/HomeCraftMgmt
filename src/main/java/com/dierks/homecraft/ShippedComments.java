@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The comments in the owner's config.yml that config revisions 20, 21, 22 and 23 make stale, refreshed from the
+ * The comments in the owner's config.yml that config revisions 20, 21, 22, 23 and 24 make stale, refreshed from the
  * bundled file (the v4 audit, ECON02; SHOP-V2-SPEC §7.6).
  *
  * <p><b>Why.</b> A revision moves values, and the backfill only comments keys it adds, so a comment on a key
@@ -28,14 +28,19 @@ import java.util.Set;
  * now covers looks and golf balls too). Revision 23 (the Grand and Mega Firework Shows, {@link GrandShowMigration})
  * makes 0.38.0's Prize Counter header stale once more: its firework line said "a harmless three-second firework show",
  * and a firework row has {@code seconds} now, and {@code launchers} for a Mega show, whose launcher is a
- * {@code block} row's {@code firework_launcher}.
+ * {@code block} row's {@code firework_launcher}. Revision 24 (the Firework Remote and the bigger shows,
+ * {@link FireworkRemoteMigration}) makes two of 0.38.1's stale: the Prize Counter's header (its firework line said
+ * "launchers (1-3)", and it has no {@code remote}) and {@code arcade.launcher}'s (it said "(1-10, admins too)" and
+ * named only the Mega show). The owner's file holds exactly 0.38.1's texts there: revision 23 refreshed the header to
+ * 0.38.1's, and the backfill gave the new {@code arcade.launcher} 0.38.1's comment.
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
- * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's or 0.38.0's), told apart by a
- * fingerprint of its text ({@link #fingerprint}), its inline comment included. A comment the owner wrote or edited,
- * even by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's, 0.36.0's,
- * 0.37.2's and 0.38.0's config.yml. A key is on the list once for each revision that makes it stale: the Prize
- * Counter's header is revision 22's (0.35.0-0.37.2's text) and revision 23's (0.38.0's).
+ * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's or 0.38.1's), told
+ * apart by a fingerprint of its text ({@link #fingerprint}), its inline comment included. A comment the owner wrote or
+ * edited, even by one character, is never touched. {@code ShippedCommentsTest} pins every fingerprint to 0.35.0's,
+ * 0.36.0's, 0.37.2's, 0.38.0's and 0.38.1's config.yml. A key is on the list once for each revision that makes it
+ * stale: the Prize Counter's header is revision 22's (0.35.0-0.37.2's text), revision 23's (0.38.0's) and revision
+ * 24's (0.38.1's).
  *
  * <p>Pure on a {@link FileConfiguration}; quiet (the values' own lines say what moved); a server without the
  * comment API keeps its comments.
@@ -48,7 +53,7 @@ final class ShippedComments {
      * @param key      the key it sits on
      * @param revision the config revision whose change makes it stale (it is refreshed in that step)
      * @param shipped  the {@link #fingerprint}s of what the versions before that revision shipped on it (0.35.0,
-     *                 0.36.0 and 0.37.2 for revisions 20-22; 0.38.0 for 23)
+     *                 0.36.0 and 0.37.2 for revisions 20-22; 0.38.0 for 23; 0.38.1 for 24)
      */
     record Stale(String key, int revision, Set<String> shipped) {
 
@@ -66,11 +71,16 @@ final class ShippedComments {
     /** {@code GrandShowMigration.REVISION}: the Grand Firework Show and the gentler candy. */
     private static final int REV_GRAND = GrandShowMigration.REVISION;
 
+    /** {@code FireworkRemoteMigration.REVISION}: the Firework Remote and the bigger Mega shows. */
+    private static final int REV_REMOTE = FireworkRemoteMigration.REVISION;
+
     /**
-     * Every comment revisions 20, 21, 22 and 23 make stale, in file order (frozen: 0.35.0's, 0.36.0's, 0.37.2's and
-     * 0.38.0's texts).
+     * Every comment revisions 20, 21, 22, 23 and 24 make stale, in file order (frozen: 0.35.0's, 0.36.0's, 0.37.2's,
+     * 0.38.0's and 0.38.1's texts).
      */
     static final List<Stale> STALE = List.of(
+            // the launcher's: "(1-10, admins too)" and only the Mega show (0.38.1); 15 a player and the Remote now
+            new Stale("arcade.launcher", REV_REMOTE, Set.of("4b66f235d1bfb564")),
             // the icon keys without looks and keepers (0.35.0 = 0.36.0 = 0.37.2)
             new Stale("arcade.icons", REV_SHOP, Set.of("c2c17c8139179f82")),
             // the Prize Counter's header: no LOOKS tab, no MONTH, ball, party or only_if, "a hat with a blank texture
@@ -79,6 +89,9 @@ final class ShippedComments {
             // the Prize Counter's header again: "firework   a harmless three-second firework show." (0.38.0), and a
             // firework row has seconds now (and launchers, and a block row may be a firework_launcher)
             new Stale("arcade.prizes", REV_GRAND, Set.of("ef25d85f3f0a27a8")),
+            // the Prize Counter's header once more: "launchers (1-3): a Mega Firework Show from the nearest" and no
+            // remote (0.38.1); launchers 1-10, linked with the Firework Remote, and the remote type now
+            new Stale("arcade.prizes", REV_REMOTE, Set.of("7a00e71ad596b7f3")),
             // 0.37.1's two collectors named, and "no presents" without looks and golf balls (0.37.1 = 0.37.2)
             new Stale("arcade.collectors", REV_SHOP, Set.of("155cbe62c18e8000")),
             // "skill games pay small, capped rewards" (0.35 = 0.36): the token balance pays about a token a minute

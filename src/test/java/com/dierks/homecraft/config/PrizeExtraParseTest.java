@@ -197,7 +197,27 @@ class PrizeExtraParseTest {
      * Firework Show and the Grand show are as they were.
      */
     @Test
+    void aRemoteRowIsTheFireworkRemote() throws Exception {
+        Prize remote = readClean("{ id: firework_remote, tab: COSMETICS, display: \"&eFirework Remote\", "
+                + "description: [\"Tap your Firework Launchers\", \"to pick them for your show!\"], cost_tokens: 10, "
+                + "icon: { texture: \"\", material: RECOVERY_COMPASS }, type: remote }");
+        assertEquals(PrizeType.REMOTE, remote.type(), "0.38.2's type");
+        assertEquals(PrizeTab.COSMETICS, remote.tab());
+        assertEquals(Material.RECOVERY_COMPASS, remote.icon().material());
+        assertEquals(PrizeTab.COSMETICS, readClean("{ id: r, cost_tokens: 10, type: remote }").tab(),
+                "on the Cosmetics tab by default");
+        assertEquals(Material.RECOVERY_COMPASS, readClean("{ id: r, cost_tokens: 10, type: remote }").icon()
+                .material(), "a recovery compass by default (Bedrock has it)");
+        assertEquals(0, readWarned("{ id: r, cost_tokens: 10, type: remote, launchers: 3 }",
+                "only a firework row fires from Firework Launchers").extra().launchers(), "launchers on it: ignored");
+    }
+
+    @Test
     void aMegaRowsLaunchersAndSeconds() throws Exception {
+        Prize ultimate = readClean("{ id: firework_ultimate, tab: COSMETICS, display: \"&dUltimate Firework Show\", "
+                + "cost_tokens: 200, type: firework, seconds: 90, launchers: 10 }");
+        assertEquals(10, ultimate.extra().launchers(), "the Ultimate's ten (0.38.2)");
+        assertEquals(90, ultimate.extra().seconds());
         Prize mega = readClean("{ id: firework_mega, tab: COSMETICS, display: \"&dMega Firework Show\", "
                 + "description: [\"A whole minute of fireworks\", \"from your Firework Launchers!\"], cost_tokens: 75, "
                 + "icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 3 }");
@@ -217,8 +237,10 @@ class PrizeExtraParseTest {
         assertEquals(60, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 3, seconds: long }",
                 "Using 60.").extra().seconds(), "not a number: 60");
         // the launchers
-        assertEquals(3, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 7 }", "1 to 3 Firework "
-                + "Launchers").extra().launchers(), "at most 3, with one WARN");
+        assertEquals(7, readClean("{ id: m, cost_tokens: 75, type: firework, launchers: 7 }").extra().launchers(),
+                "0.38.2: up to 10");
+        assertEquals(10, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 11 }", "1 to 10 Firework "
+                + "Launchers").extra().launchers(), "at most 10, with one WARN");
         Prize none = readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: -1, seconds: 20 }",
                 "Using 0.");
         assertEquals(0, none.extra().launchers(), "below 1: a show around the player");
@@ -460,8 +482,32 @@ class PrizeExtraParseTest {
         assertEquals(List.of("firework_grand", "firework_launcher", "firework_mega"),
                 order.subList(order.indexOf("firework_grand"), order.indexOf("firework_grand") + 3),
                 "the launcher and the Mega show right after the Grand show");
-        assertEquals(1, byId.values().stream().filter(p -> p.extra().launchers() > 0).count(),
-                "only the Mega show fires from launchers");
+        assertEquals(List.of("firework_mega", "firework_super", "firework_ultra", "firework_ultimate"),
+                byId.values().stream().filter(p -> p.extra().launchers() > 0).map(Prize::id).toList(),
+                "the four Mega tiers fire from launchers (0.38.2), and only they");
+        int[][] tiers = {{4, 100, 60}, {5, 125, 60}, {10, 200, 90}};
+        String[] ids = {"firework_super", "firework_ultra", "firework_ultimate"};
+        for (int i = 0; i < ids.length; i++) {
+            Prize t = byId.get(ids[i]);
+            assertEquals(PrizeType.FIREWORK, t.type(), ids[i]);
+            assertEquals(tiers[i][0], t.extra().launchers(), ids[i] + ": its launchers");
+            assertEquals(tiers[i][1], t.costTokens(), ids[i] + ": its price");
+            assertEquals(tiers[i][2], t.extra().seconds(), ids[i] + ": its length");
+            assertEquals(PrizeTab.COSMETICS, t.tab(), ids[i]);
+            assertNull(t.limit(), ids[i] + ": no limit");
+            assertTrue(t.costTokens() >= 100, ids[i] + ": the confirm screen asks first");
+        }
+        assertEquals(List.of("firework_mega", "firework_super", "firework_ultra", "firework_ultimate",
+                        "firework_remote"),
+                order.subList(order.indexOf("firework_mega"), order.indexOf("firework_mega") + 5),
+                "the three tiers and the Remote right after the Mega show (0.38.2)");
+        Prize remote = byId.get("firework_remote");
+        assertEquals(PrizeType.REMOTE, remote.type());
+        assertEquals(PrizeTab.COSMETICS, remote.tab());
+        assertEquals(Material.RECOVERY_COMPASS, remote.icon().material());
+        assertEquals(10, remote.costTokens());
+        assertNull(remote.limit(), "a lost one can be bought again");
+        assertEquals(0, remote.extra().launchers());
         assertEquals(PrizeType.PARTY, byId.get("party_time").type());
         assertEquals(OnlyIf.NIGHT, byId.get("make_it_day").extra().onlyIf());
         assertEquals(OnlyIf.RAIN, byId.get("sunny_day").extra().onlyIf());

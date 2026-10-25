@@ -103,8 +103,8 @@ class CustomBlockListenerTest {
         assertTrue(refused.contains("event.setCancelled(true);")
                 && refused.contains("LauncherRules.fullLine(perPlayer)")
                 && refused.contains("Sounds.refused(player);") && refused.contains("return;"),
-                "a fourth: cancelled (the item stays in the hand), one kind line and the refused sound");
-        // review LAUNCHER-SPAM-3: a held fourth place says its line and plays its sound once every 2 s
+                "one over the limit: cancelled (the item stays in the hand), one kind line and the refused sound");
+        // review LAUNCHER-SPAM-3: a held place over the limit says its line and plays its sound once every 2 s
         int due = refused.indexOf("if (launcherLines.due(me, full, System.currentTimeMillis())) {");
         assertTrue(due > refused.indexOf("event.setCancelled(true);")
                         && due < refused.indexOf("player.sendMessage(Text.of(full));")

@@ -17,7 +17,8 @@ import java.util.function.Predicate;
  * turned into dollars: the house market, the Marketplace and its Pallets, Vending Machines, the
  * Auction House and Courier cargo all refuse a tagged item. Cards, packs, filament and HomeCraft
  * blocks are deliberately left untagged — they are Mini-making materials, not token prizes — except
- * the Firework Launcher (0.38.1), which only tokens buy, so it is tagged wherever it is made.
+ * the Firework Launcher (0.38.1), which only tokens buy, so it is tagged wherever it is made. The Firework Remote and
+ * the Show Map it gives (0.38.2) are tagged too: a map of a player's launchers is no more for sale than the Remote.
  */
 public final class TokenPrizes {
 

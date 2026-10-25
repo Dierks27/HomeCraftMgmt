@@ -34,7 +34,7 @@ public final class MegaShow {
 
     /** The Firework Launcher's prize id: the Prize Counter row it is sold as, and the tag on every launcher item. */
     public static final String LAUNCHER_PRIZE_ID = "firework_launcher";
-    /** A Mega show row's length: {@value #DEFAULT_SECONDS} seconds unless it says, {@value #MIN_SECONDS}-{@value #MAX_SECONDS}. */
+    /** A Mega show row's length: 60 seconds unless it says, 45 to 90. */
     public static final int MIN_SECONDS = 45;
     public static final int MAX_SECONDS = 90;
     public static final int DEFAULT_SECONDS = 60;

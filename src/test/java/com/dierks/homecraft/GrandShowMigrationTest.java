@@ -276,10 +276,10 @@ class GrandShowMigrationTest {
         int theirs = ids(c).indexOf("firework_grand");
         assertEquals(List.of("firework_launcher", "firework_mega"), ids(c).subList(theirs + 1, theirs + 3),
                 "the launcher and the Mega show still follow it, their own row or not");
-        assertEquals(List.of("Config migration: Prize Counter - added the Firework Launcher (firework_launcher: set up 3"
-                        + " for a Mega Firework Show, 5 tokens) after the Grand Firework Show and the Mega Firework Show"
-                        + " (firework_mega: a minute of fireworks from 3 Firework Launchers, 75 tokens) after the"
-                        + " Firework Launcher."),
+        assertEquals(List.of("Config migration: Prize Counter - added the Firework Launcher (firework_launcher:"
+                        + " set up 3 for a Mega Firework Show, 5 tokens) after the Grand Firework Show and the Mega"
+                        + " Firework Show (firework_mega: a minute of fireworks from 3 Firework Launchers, 75 tokens)"
+                        + " after the Firework Launcher."),
                 log.stream().filter(l -> l.startsWith("Config migration: Prize Counter")).toList(),
                 "the INFO names only what was added");
     }
@@ -302,9 +302,9 @@ class GrandShowMigrationTest {
         assertEquals(1, ids(c).stream().filter("firework_mega"::equals).count(), "and is not doubled");
         assertEquals(ids(c).size() - 1, ids(c).indexOf("firework_mega"), "where they put it");
         List<String> w = warns(log);
-        assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: kept your own arcade.prizes → firework_mega"
-                        + " row: 0.38.1 ships a row with that id. To take 0.38.1's instead, put this line in place of"
-                        + " yours:",
+        assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: kept your own arcade.prizes →"
+                        + " firework_mega row: 0.38.1 ships a row with that id. To take 0.38.1's instead, put this line"
+                        + " in place of yours:",
                 HomeCraftManagement.WARN + "  - { id: firework_mega, tab: COSMETICS, display: \"&dMega Firework Show\","
                         + " description: [\"A whole minute of fireworks\", \"from your Firework Launchers!\"],"
                         + " cost_tokens: 75, icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework,"
@@ -368,7 +368,7 @@ class GrandShowMigrationTest {
             assertNull(rowOf(LayoutFixtures.v0372(), id), id + " is new");
             assertTrue(ShopMigration.same(rowOf(bundled, id), a.row()), id + ": the bundled row");
             assertEquals(after, a.after(), id + " follows the one before it");
-            assertEquals(ids(bundled).indexOf(after) + 1, ids(bundled).indexOf(id), id + ": so the bundled file has it");
+            assertEquals(ids(bundled).indexOf(after) + 1, ids(bundled).indexOf(id), id + ": the bundled file's order");
             after = id;
         }
         assertTrue(ShopMigration.same(rowOf(bundled, "firework_show"), rowOf(LayoutFixtures.v0380(), "firework_show")),

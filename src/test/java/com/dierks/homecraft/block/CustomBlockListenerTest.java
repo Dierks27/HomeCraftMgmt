@@ -100,7 +100,8 @@ class CustomBlockListenerTest {
         assertTrue(place > 0 && town > place && cap > town && face > cap && record > face,
                 "town check < launcher cap < facing up < the record");
         String refused = src.substring(cap, face);
-        assertTrue(refused.contains("event.setCancelled(true);") && refused.contains("LauncherRules.fullLine(perPlayer)")
+        assertTrue(refused.contains("event.setCancelled(true);")
+                && refused.contains("LauncherRules.fullLine(perPlayer)")
                 && refused.contains("Sounds.refused(player);") && refused.contains("return;"),
                 "a fourth: cancelled (the item stays in the hand), one kind line and the refused sound");
         assertTrue(src.contains("pb -> pb.owner().equals(me), pb -> sameSpot(pb, block), this::staleLauncher"),
@@ -129,9 +130,12 @@ class CustomBlockListenerTest {
         }
         String src = java.nio.file.Files.readString(java.nio.file.Path.of("src", "main", "java", "com", "dierks",
                 "homecraft", "block", "CustomBlockListener.java")).replaceAll("\\s+", " ");
-        assertTrue(src.contains("return inv != null && inv.getType() == InventoryType.DROPPER && inv.getHolder(false)"
-                + " instanceof BlockState state && CustomBlockService.isLauncher(state);"),
+        assertTrue(src.contains("return inv != null && (inv.getType() == InventoryType.DROPPER || inv.getType() =="
+                + " InventoryType.DISPENSER) && inv.getHolder(false) instanceof BlockState state"
+                + " && CustomBlockService.isLauncher(state);"),
                 "a hopper's move costs a type compare, then the tile's own tag: never the database");
+        assertTrue(src.contains("return m == Material.DROPPER || m == Material.DISPENSER;"),
+                "a dispenser launcher (arcade.launcher.material) is guarded the same");
         assertTrue(src.contains("event.shouldPlayEffect(false);"), "a redstone pulse makes no click or smoke");
     }
 

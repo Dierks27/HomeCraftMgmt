@@ -465,8 +465,9 @@ public final class CustomBlockListener implements Listener {
             case FIREWORK_LAUNCHER -> {
                 UUID owner = placed.get().owner();
                 boolean mine = owner.equals(player.getUniqueId());
-                player.sendMessage(Text.of(LauncherRules.tapLine(mine, ownerName(owner), mine ? ownedLaunchers(owner) : 0,
-                        config.launcher().perPlayer(), plugin.megaShows() != null && plugin.megaShows().busy(clicked))));
+                boolean busy = plugin.megaShows() != null && plugin.megaShows().busy(clicked);
+                player.sendMessage(Text.of(LauncherRules.tapLine(mine, ownerName(owner),
+                        mine ? ownedLaunchers(owner) : 0, config.launcher().perPlayer(), busy)));
             }
             // Anyone may look at what a muffler hushes; only its owner (or an admin) may change it.
             case SOUND_MUFFLER -> {
@@ -596,7 +597,7 @@ public final class CustomBlockListener implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onLauncherDispense(BlockDispenseEvent event) {
         Block b = event.getBlock();
-        if (b.getType() == Material.DROPPER && CustomBlockService.isLauncher(b.getState(false))) {
+        if (dispenses(b.getType()) && CustomBlockService.isLauncher(b.getState(false))) {
             event.setCancelled(true);
         }
     }
@@ -605,9 +606,14 @@ public final class CustomBlockListener implements Listener {
     @EventHandler(priority = EventPriority.LOW)
     public void onLauncherClick(BlockFailedDispenseEvent event) {
         Block b = event.getBlock();
-        if (b.getType() == Material.DROPPER && CustomBlockService.isLauncher(b.getState(false))) {
+        if (dispenses(b.getType()) && CustomBlockService.isLauncher(b.getState(false))) {
             event.shouldPlayEffect(false);
         }
+    }
+
+    /** A dropper, or a dispenser (an owner's {@code arcade.launcher.material} may be either). */
+    private static boolean dispenses(Material m) {
+        return m == Material.DROPPER || m == Material.DISPENSER;
     }
 
     /** A launcher's slots never show (a spectator's look, or another plugin opening it). */
@@ -618,9 +624,12 @@ public final class CustomBlockListener implements Listener {
         }
     }
 
-    /** Whether an inventory is a placed launcher's: a dropper's (the type first), whose block is tagged one. */
+    /**
+     * Whether an inventory is a placed launcher's: a dropper's or a dispenser's (the type first), whose block is
+     * tagged one.
+     */
     private static boolean launcherInventory(Inventory inv) {
-        return inv != null && inv.getType() == InventoryType.DROPPER
+        return inv != null && (inv.getType() == InventoryType.DROPPER || inv.getType() == InventoryType.DISPENSER)
                 && inv.getHolder(false) instanceof BlockState state && CustomBlockService.isLauncher(state);
     }
 

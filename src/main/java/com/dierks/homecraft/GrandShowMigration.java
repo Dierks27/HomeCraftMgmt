@@ -22,10 +22,10 @@ import static com.dierks.homecraft.HomeCraftManagement.WARN;
  * after it. "You can tune back the candy apples. I have about 60 of them at this point and we got the bag": a shower
  * every 60 minutes instead of 20 (every 30 instead of 10 on the last day), with 3 candy apples instead of 6.
  *
- * <p><b>The rule</b> is every revision's ({@link EconomyMigration}, {@link ShopMigration}). Each new row ({@link #ADDED},
- * in order) is added once, only while no row has its id: right after the row it follows, or at the end of the list
- * when there is none (the owner deleted {@code firework_show}; the counter groups rows by tab, so where a row sits
- * never matters). An id the owner already uses for a row of their own keeps their row, with one
+ * <p><b>The rule</b> is every revision's ({@link EconomyMigration}, {@link ShopMigration}). Each new row
+ * ({@link #ADDED}, in order) is added once, only while no row has its id: right after the row it follows, or at the end
+ * of the list when there is none (the owner deleted {@code firework_show}; the counter groups rows by tab, so where a
+ * row sits never matters). An id the owner already uses for a row of their own keeps their row, with one
  * {@link HomeCraftManagement#WARN} and the shipped row as a line to paste, and the rows after it still follow it. One
  * INFO line names what was added and where.
  * An absent list is left to the backfill, which writes the bundled one. Each candy value moves only from what

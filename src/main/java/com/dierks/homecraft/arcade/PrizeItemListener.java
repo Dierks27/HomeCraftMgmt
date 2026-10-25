@@ -15,7 +15,6 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
 import org.bukkit.block.Skull;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
@@ -490,11 +489,12 @@ public final class PrizeItemListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {
         ItemStack item = event.getItemInHand();
-        BlockState placed = event.getBlockPlaced().getState();
-        CustomBlockService blocks = plugin.blockService();
-        if (!storesAsPlacedPrize(TokenPrizes.is(item), placed instanceof Skull,
-                blocks != null && blocks.itemType(item) != null) || !(placed instanceof Skull skull)) {
+        if (!TokenPrizes.is(item) || !(event.getBlockPlaced().getState() instanceof Skull skull)) {
             return;
+        }
+        CustomBlockService blocks = plugin.blockService();
+        if (!storesAsPlacedPrize(true, true, blocks != null && blocks.itemType(item) != null)) {
+            return; // a HomeCraft block (a skinned Firework Launcher) is the block system's, as MiniHeadListener says
         }
         ItemStack one = item.clone();
         one.setAmount(1);

@@ -2962,7 +2962,7 @@ public final class PluginConfig {
         return clamped(path, c.getInt(path, fallback), min, max, log::warning);
     }
 
-    /** {@code v}, the value at {@code path}, brought into {@code min}-{@code max}, with one WARN when it was outside. */
+    /** {@code v}, the value at {@code path}, brought into {@code min}-{@code max}: one WARN when it was outside. */
     static int clamped(String path, int v, int min, int max, java.util.function.Consumer<String> warning) {
         if (v < min || v > max) {
             int in = Math.max(min, Math.min(max, v));

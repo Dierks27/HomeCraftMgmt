@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code type: trophy} row as the Arcade Trophy, so a ladder trophy bought while rolled back is an "Arcade Trophy #N"
  * for good. Every bundled trophy row but the Arcade Trophy's own is on the "set enabled: false" list for a longer
  * rollback, with the two {@code only_if} rows, and the quirk is named. The way back to 0.38.0 (0.38.1) switches off
- * the Grand Firework Show, which 0.38.0 would sell as a three-second show.
+ * the Grand and Mega Firework Shows, which 0.38.0 would sell as three-second shows, and says to pick up every Firework
+ * Launcher first.
  */
 class RollbackNotesTest {
 
@@ -77,5 +78,27 @@ class RollbackNotesTest {
         int list = section.indexOf("**For a rollback longer than an evening,**");
         assertTrue(list >= 0, "the switch-off line");
         assertTrue(section.substring(list).contains("`firework_grand`"), "with the row on it");
+    }
+
+    /**
+     * The Firework Launcher (0.38.1): 0.38.0 reads a placed launcher's record as a retired Mini Workbench (an unknown
+     * type, {@code PlacedBlockDao}), so the note says to pick every one up first, both where the releases are listed
+     * and in its own section; and the Mega Firework Show, a three-second show at 75 tokens there, is switched off too.
+     */
+    @Test
+    void everyLauncherIsPickedUpAndTheMegaShowSwitchedOffForARollbackTo0380() throws Exception {
+        String readme = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8);
+        int at = readme.indexOf("### If you roll back to 0.38.0");
+        String section = readme.substring(at, readme.indexOf("\n### ", at + 1));
+        assertTrue(section.contains("**Pick up every launcher before rolling back to 0.38.0.**"), section);
+        assertTrue(section.contains("retired Mini Workbench"), "the reason is named");
+        int list = section.indexOf("**For a rollback longer than an evening,**");
+        assertTrue(section.substring(list).contains("`firework_mega`"), "the Mega show is on the switch-off line");
+        assertTrue(section.contains("skipped with one WARN"), "and the launcher row isn't sold there");
+        int releases = readme.indexOf("**Back to 0.38.0 from 0.38.1:**");
+        assertTrue(releases >= 0);
+        String note = readme.substring(releases, readme.indexOf("\n\n", releases));
+        assertTrue(note.contains("pick up every Firework Launcher before rolling back to 0.38.0"), note);
+        assertTrue(note.contains("`firework_mega`"), note);
     }
 }

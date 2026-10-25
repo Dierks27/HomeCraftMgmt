@@ -11,11 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Which launchers are in which Mega Firework Show ({@link MegaShowService.Claims}, 0.38.1): a launcher in a show refuses
- * another show that would use it (never skipping to farther free ones: that is the caller's {@code nearest}, which
- * never leaves one out), a show ends only its own claims (red-team ECON-2's shape, as Party Time), a quit ends the
- * user's shows, a stop ends them all, and at most four play at once. And the one long show a player: a Mega show holds
- * it, so a Grand show is refused while it plays, and the other way round.
+ * Which launchers are in which Mega Firework Show ({@link MegaShowService.Claims}, 0.38.1): a launcher in a show
+ * refuses another show that would use it (never skipping to farther free ones: the caller's {@code nearest} never
+ * leaves one out), a show ends only its own claims (red-team ECON-2's shape, as Party Time), a quit ends the user's
+ * shows, a stop ends them all, and at most four play at once. And the one long show a player: a Mega show holds it, so
+ * a Grand show is refused while it plays, and the other way round.
  */
 class MegaShowClaimsTest {
 

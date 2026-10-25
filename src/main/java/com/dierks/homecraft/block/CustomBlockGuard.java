@@ -75,8 +75,8 @@ public final class CustomBlockGuard {
 
     /**
      * Run a final break: the stock first (only a block that holds any; a Firework Launcher holds nothing), and only
-     * once it is safely written does the block go and drop its item. Nothing here runs for a break another plugin cancelled after HIGH, because the
-     * listener that calls it is MONITOR with {@code ignoreCancelled}.
+     * once it is safely written does the block go and drop its item. Nothing here runs for a break another plugin
+     * cancelled after HIGH, because the listener that calls it is MONITOR with {@code ignoreCancelled}.
      *
      * @return false when the stock couldn't be written: nothing was forgotten or dropped
      */

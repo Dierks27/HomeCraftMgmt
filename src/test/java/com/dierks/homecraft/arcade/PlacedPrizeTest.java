@@ -112,9 +112,13 @@ class PlacedPrizeTest {
         assertFalse(PrizeItemListener.storesAsPlacedPrize(false, true, true), "a PC: the block system's");
         String src = java.nio.file.Files.readString(java.nio.file.Path.of(
                 "src/main/java/com/dierks/homecraft/arcade/PrizeItemListener.java")).replaceAll("\\s+", " ");
-        assertTrue(src.contains("if (!storesAsPlacedPrize(TokenPrizes.is(item), placed instanceof Skull, blocks != null"
-                + " && blocks.itemType(item) != null) || !(placed instanceof Skull skull)) { return; }"),
-                "onPlace asks it before anything is written to the skull");
+        int fast = src.indexOf("if (!TokenPrizes.is(item) || !(event.getBlockPlaced().getState() instanceof Skull"
+                + " skull)) { return; }");
+        int ask = src.indexOf("if (!storesAsPlacedPrize(true, true, blocks != null && blocks.itemType(item) != null))"
+                + " { return;");
+        assertTrue(fast > 0 && ask > fast, "onPlace asks it once the place is a prize head (every other place costs"
+                + " one tag read, as before)");
+        assertTrue(ask < src.indexOf("pdc.set(Keys.PRIZE_ITEM", ask), "and before anything is written to the skull");
     }
 
     @Test

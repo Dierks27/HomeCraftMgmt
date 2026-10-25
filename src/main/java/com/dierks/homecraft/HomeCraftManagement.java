@@ -374,7 +374,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.party = new com.dierks.homecraft.arcade.PartyService(this); // Party Time: one at a time
         party.hidesOthers(trails::hidesOthers); // no fireworks around a player who hides others' trails and parties
         this.fireworkShows = new com.dierks.homecraft.arcade.FireworkShows(this); // one long show a player at a time
-        // The Mega Firework Show (0.38.1): a minute from the Firework Launchers nearby, a launcher in one show at a time.
+        // The Mega Firework Show (0.38.1): a minute from the Firework Launchers nearby, one show a launcher at a time.
         this.megaShows = new com.dierks.homecraft.arcade.MegaShowService(this);
         // The wardrobe (0.38): rented hats, caps and trails, their bound keys, My Looks and the heads-up.
         this.looks = new com.dierks.homecraft.arcade.looks.LookService(

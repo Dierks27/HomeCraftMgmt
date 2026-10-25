@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.1-grand-show`
+- **Version:** `0.38.1-firework-shows`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -84,7 +84,8 @@ Tokens are **earned by playing and never become dollars**.
     off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck, Bouncy Boots,
   Floaty Feather), Make it Day and Sunny Day, the Mini Radar and Lure, the Firework Show, the Grand
-  Firework Show (0.38.1: 15 seconds with a big finale) and Party Time, particle trails for a month,
+  Firework Show (0.38.1: 15 seconds with a big finale), the Mega Firework Show (0.38.1: a minute
+  from three Firework Launchers you set up) and Party Time, particle trails for a month,
   hats and caps for 90 days and golf balls to keep on the **Looks** tab, perks (extra homes and
   `/hat` via LuckPerms and EssentialsX), the numbered Arcade Trophy (place it and tap it to open the
   Arcade), a trophy ladder and a Trophy of the Month;
@@ -212,10 +213,13 @@ or not at all. For more than an evening, switch off eight rows. See
 [If you roll back to 0.37.3](#if-you-roll-back-to-0373). Nothing else is lost, and the upgrade puts the
 rest back.
 
-**Back to 0.38.0 from 0.38.1:** the jar alone (0.38.0 reads revision 23 and runs nothing, with one
-WARN; 0.38.1 changes no schema). The candy keeps its gentler values (they are in the file), but 0.38.0
-doesn't know a firework row's `seconds`, so it sells the Grand Firework Show as a three-second show
-for 40 tokens: for more than an evening, set `enabled: false` on `firework_grand`. See
+**Back to 0.38.0 from 0.38.1:** **pick up every Firework Launcher before rolling back to 0.38.0**
+(0.38.0 doesn't know the block: a placed one would act as a retired Mini Workbench and break into
+one). Then the jar alone (0.38.0 reads revision 23 and runs nothing, with one WARN; 0.38.1 changes no
+schema). The candy keeps its gentler values (they are in the file), but 0.38.0 doesn't know a
+firework row's `seconds` or `launchers`, so it sells the Grand Firework Show as a three-second show
+for 40 tokens and the Mega Firework Show as one for 75: for more than an evening, set
+`enabled: false` on `firework_grand` and `firework_mega`. See
 [If you roll back to 0.38.0](#if-you-roll-back-to-0380). Nothing is lost.
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
@@ -565,6 +569,8 @@ people's trails and parties. It is config revision 22 and database v38: see
 | Cosmetics | the **Snow, Star, Clover, Glow** and **Magic** trails, next to the Heart, Music and Sparkle trails | 100 | **30 days** (the old three were 7) |
 | Cosmetics | **Party Time!** | 300, 1 a day | 10 seconds of harmless fireworks around everyone playing; one party at a time on the server |
 | Cosmetics | the **Grand Firework Show** (0.38.1), next to the Firework Show (15, three seconds as ever) | 40 | 15 seconds of harmless fireworks with a big finale, when used; one at a time |
+| Cosmetics | the **Firework Launcher** (0.38.1), a block you place: set up 3 near each other | 5 | for good (3 placed a player at once) |
+| Cosmetics | the **Mega Firework Show** (0.38.1), fired from your Firework Launchers | 75 | a whole minute of harmless fireworks from 1-3 launchers, when used; one at a time |
 | Looks (new) | the **Creeper Hat** and the **Dragon Hat** (the game's own heads) | 120 / 150 | 90 days |
 | Looks | the **Pink, Purple, Lime** and **Sky Caps** (dyed leather, no armour, never wear out) | 60 | 90 days |
 | Looks | the six animal hats (Bunny, Panda, Fox, Penguin, Frog, Cake), moved from Cosmetics | 120 | 90 days; hidden until you paste a texture |
@@ -605,7 +611,8 @@ people's trails and parties. It is config revision 22 and database v38: see
   Arcade Machine, a join sign, a Mini, a placed Arcade Trophy) is that block's, as for a hat, and the
   show stays in the hand: use it on a plain block or the air. The three-second Firework Show plays as
   it always has in both cases. A show stops when its player quits. The Grand one is not in the
-  Arcade Crate (the Firework Show still is).
+  Arcade Crate (the Firework Show still is). The **Mega Firework Show** is a long show too, played
+  from Firework Launchers instead of around the player: [below](#firework-launchers-and-the-mega-firework-show-0381).
 - **Party Time** sets off two fireworks around each player in an economy world every second, except
   anyone in a game or a Games world and anyone who hides other people's trails and parties (the buyer
   always gets theirs); "✦ <name> started a party!" goes out once. While one runs, another is refused
@@ -615,6 +622,62 @@ people's trails and parties. It is config revision 22 and database v38: see
   anyone can craft the look; what the tokens buy is that it can't be lost and comes back free. A
   creeper head also makes creepers notice you later (a game rule). The worn Keepers carry a small
   sparkle of their own (a **mark**) that nobody can craft.
+
+### Firework Launchers and the Mega Firework Show (0.38.1)
+
+The owner's "one more level at like 75 that is even bigger: 3 droppers that I have to set up, a full
+blown show with 3 firing locations", then "maybe we do less at a time and spread out the show to like
+a minute long; it would be for those special events".
+
+**How to set up your launchers**
+
+1. Buy three **Firework Launchers** on the Prize Counter's Cosmetics tab (5 tokens each, yours for
+   good).
+2. Place them a few blocks apart, in a row in front of where you'll watch, with open sky above:
+   each is a dropper pointing up. A tap on one says whose it is and how many you have set up ("Your
+   Firework Launcher (2 of 3 set up). Use a Mega Firework Show near it!").
+3. Stand within 32 blocks of them, facing them, and use a **Mega Firework Show** (75 tokens): tap a
+   launcher, the ground or the air. "✦ Mega Firework Show! Look at the launchers!", and one line for
+   the whole server ("✦ <name> started a Mega Firework Show!", at most once a minute a player).
+
+- **The show** lasts one minute and then it's over: 81 rockets, a little more than one a second and
+  never more than three at once until the finale. Single sparks walk from left to right, slow chases
+  run across and back, then pairs, a few volleys from all three, a climb whose gaps get shorter, a
+  breath, and a triple finale that steps up in height and ends in gold from every launcher. Each
+  launcher has its own colours: the left one red, orange and yellow, the middle one lime, aqua and
+  teal, the right one pink, purple and blue (left and right as you faced them when it started).
+- **One or two launchers** near enough: it fires the same show from those. **None:** "Set up a
+  Firework Launcher nearby first!", and the show stays in your hand.
+- **Anyone's launchers** work: the nearest ones within range, whoever placed them. If one of those is
+  in a show already: "Those launchers are in a show right now. Try again when it ends!", and it is
+  kept (it never skips to farther ones). At most four Mega shows play on the server at once ("The sky
+  is full of shows! Try again in a minute.").
+- **It is your one long show:** while it plays a Grand show waits ("Wait for your show to finish!"),
+  and a Mega show waits for a Grand one. It is refused in a game or a Games world ("Save your show for
+  after the games!"). Every refusal keeps the item.
+- **Walking away doesn't cut it short**, nor does teleporting or dying: it plays at the launchers. It
+  ends early only if the launchers' area unloads (nobody near enough to keep it loaded), if you leave
+  the server, or if the server stops, and then there is no refund. A launcher picked up during a show
+  is skipped from then on.
+- **The launcher** never opens, and hoppers, droppers and redstone do nothing to it. Each player may
+  have 3 placed at once, admins too; a fourth is refused and stays in the hand ("You already have 3
+  Firework Launchers set up. Pick one up to move it!"). Only whoever placed it, or an admin, can pick
+  it up ("This is <name>'s Firework Launcher. Only they can take it down."), and it comes back as a
+  launcher. It takes a while to break by hand (a pickaxe is quicker), so a stray tap never knocks one
+  down. Pistons, water, lava, explosions and withers leave it standing. Economy worlds only, like the
+  other HomeCraft blocks. It is a prize: kept when you die, safe on the ground, never sold for money,
+  traded only item for item.
+- **To see it,** watch from within about 30-40 blocks: the server only draws rockets that close. Under
+  a roof a rocket bursts at the ceiling (harmlessly): keep the sky above the launchers clear.
+- **A tap on another HomeCraft block** with the Mega show in the hand (the Arcade Machine, a join
+  sign, a Mini) is that block's, and the show stays in the hand.
+- Neither row is in the Arcade Crate. `/hcm give prize firework_launcher [player]` and
+  `/hcm give prize firework_mega [player]` give one (admin).
+
+Owner knobs: `arcade.launcher.material` (`DROPPER`), `name`, `per_player` (`3`, 1-10) and `range`
+(`32`, 8-64 blocks); `skins.firework_launcher` (blank: a texture makes the launcher a head, which
+Bedrock shows as a plain head); on the `firework_mega` row, `seconds` (`60`, 45-90) and `launchers`
+(`3`, 1-3). [The table below](#owner-knobs-038) has them all.
 
 ### Kept or rented, at a glance
 
@@ -827,6 +890,11 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `days` on a hat row | `90` | how long it lasts (1-365) |
 | `seconds` on the `party_time` row | `10` | how long a party lasts (5-30) |
 | `seconds` on a firework row (0.38.1) | `3` | how long its show lasts (3-30): `firework_grand` ships `15`. A value out of range is brought into it, with one WARN |
+| `launchers` on a firework row (0.38.1) | (none) | 1-3: a Mega Firework Show from that many of the nearest Firework Launchers; its `seconds` are then 45-90 (60 when it doesn't say). `firework_mega` ships `launchers: 3`, `seconds: 60` |
+| `arcade.launcher.material`, `arcade.launcher.name` | `DROPPER`, `"&6Firework Launcher"` | the Firework Launcher's block and name (0.38.1) |
+| `arcade.launcher.per_player` | `3` | launchers one player (admins too) may have placed at once (1-10) |
+| `arcade.launcher.range` | `32` | how far from whoever uses a Mega show its launchers may stand (8-64 blocks) |
+| `skins.firework_launcher` | `""` | a head texture makes the launcher a head instead of a dropper |
 | `games.everyday_cap` | `0` (off) | all arcade goals (each game's daily challenge) together, a day; `15` stops a grinder out-earning everyone ([below](#the-token-shops-economy-038)) |
 | `trade.*` | | [the trade window](#the-trade-window-038) |
 
@@ -863,16 +931,24 @@ changes only what still holds the value 0.38.0 shipped (and 0.37.1-0.37.3 before
 - the **Grand Firework Show** (`firework_grand`) goes in right after `firework_show`, once, and only
   while no row has that id (a `firework_show` you deleted puts it at the end of the list instead; an
   id you already use for a row of your own is kept, with one WARN and the line to paste);
+- the **Firework Launcher** (`firework_launcher`) and the **Mega Firework Show** (`firework_mega`) go
+  in right after it, the same way (each once, only while no row has its id; your own row with one of
+  those ids is kept, with one WARN and the line to paste);
 - the **Candy Apple shower** gets gentler: `every_minutes` 20 → 60, `last_day_every_minutes`
   10 → 30 and `apples_per_shower` 6 → 3 ([below](#the-candy-apple-shower-0371)). A value you changed
   is yours and stays, with one WARN naming the new default, and the INFO line says only what the
   values that moved now mean. If your own `every_minutes` is under 30, one more WARN says the last
   day now gets fewer showers than the others, and what to set;
 - the Prize Counter's comment is refreshed where it is still the plugin's own words (its firework
-  line).
+  line, and the launcher's);
+- the new keys `arcade.launcher` and `skins.firework_launcher` are written in by the backfill, with
+  their comments.
 
 The console reads "Config migration: Prize Counter - added the Grand Firework Show (firework_grand:
-15 seconds of fireworks with a big finale, 40 tokens) after the Firework Show.", "Config migration:
+15 seconds of fireworks with a big finale, 40 tokens) after the Firework Show, the Firework Launcher
+(firework_launcher: set up 3 for a Mega Firework Show, 5 tokens) after the Grand Firework Show and the
+Mega Firework Show (firework_mega: a minute of fireworks from 3 Firework Launchers, 75 tokens) after
+the Firework Launcher.", "Config migration:
 arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30, apples_per_shower
 6 → 3 (a gentler Candy Apple shower: a shower an hour, every half hour on the last day, 3 candy
 apples each)." and "Config migration: config_revision 22 → 23." A `/hcm reload` does the same and
@@ -909,18 +985,27 @@ everything saved under her Bedrock id stays behind; an unlinked Java account is 
 
 ### If you roll back to 0.38.0
 
-The jar alone: 0.38.0 reads `config_revision: 23`, runs nothing and says once that the config was
-written by a newer HomeCraft. While rolled back:
+**Pick up every launcher before rolling back to 0.38.0.** 0.38.0 doesn't know the Firework Launcher:
+a placed one would act as a retired Mini Workbench and break into a Mini Workbench item. Picked up,
+it waits in the bag (and a launcher placed while rolled back is only a plain dropper, so don't place
+any until the upgrade).
+
+Then the jar alone: 0.38.0 reads `config_revision: 23`, runs nothing and says once that the config
+was written by a newer HomeCraft. While rolled back:
 
 - 0.38.0 doesn't know a firework row's `seconds`, so **the Grand Firework Show row is read as a plain
   Firework Show**: it still sells for 40 tokens and plays three seconds, and any number play at once.
   One bought before or during the rollback is not spent by that: an unused one plays its 15 seconds
   again after the upgrade (the length comes from the row when it is used);
+- it doesn't know `launchers` either, so **the Mega Firework Show row is a plain Firework Show too**,
+  at 75 tokens; an unused Mega show plays its minute again after the upgrade. The `firework_launcher`
+  row names a block 0.38.0 doesn't know, so it is skipped with one WARN and isn't sold;
 - the candy stays gentle (every 60 minutes, 30 on the last day, 3 apples): those are values in your
   file, which 0.38.0 reads as they are.
 
-**For a rollback longer than an evening,** set `enabled: false` on the `firework_grand` row (and back
-to `true` after the upgrade). Upgrading again doesn't run revision 23 again (the file says 23).
+**For a rollback longer than an evening,** set `enabled: false` on the `firework_grand` and
+`firework_mega` rows (and back to `true` after the upgrade). Upgrading again doesn't run revision 23
+again (the file says 23).
 
 ### If you roll back to 0.37.3
 

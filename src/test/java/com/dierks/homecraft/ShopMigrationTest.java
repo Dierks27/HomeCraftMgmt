@@ -101,14 +101,17 @@ class ShopMigrationTest {
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
         assertEquals(List.of(), warns(log), "nothing the owner changed: no WARN");
         assertCounterAndCrateAreBundled(c, "0.37.2");
-        assertEquals(22, c.getInt("config_revision"));
+        assertEquals(23, c.getInt("config_revision"), "and on through revision 23 (GrandShowMigrationTest)");
         List<String> counter = log.stream().filter(l -> l.startsWith("Config migration: Prize Counter - ")).toList();
-        assertEquals(1, counter.size(), "one INFO for the counter: " + log);
+        assertEquals(2, counter.size(), "one INFO for the counter, and revision 23's Grand Firework Show: " + log);
         assertTrue(counter.get(0).contains("32 new rows") && counter.get(0).contains("10 rows updated"), counter.get(0));
+        assertTrue(counter.get(1).contains("added the Grand Firework Show"), counter.get(1));
         assertEquals(1, log.stream().filter(l -> l.contains("Arcade Crate no longer holds hats")).count(),
                 "and one for the crate: " + log);
-        assertEquals(3, log.size(), "and nothing else but the revision: " + log);
-        assertEquals("Config migration: config_revision 21 → 22.", log.get(2));
+        assertEquals(1, log.stream().filter(l -> l.startsWith("Config migration: arcade.events.candy - ")).count(),
+                "and revision 23's one for the candy: " + log);
+        assertEquals(5, log.size(), "and nothing else but the revision: " + log);
+        assertEquals("Config migration: config_revision 21 → 23.", log.get(4));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -243,15 +246,26 @@ class ShopMigrationTest {
                 + " hat_frog, hat_cake], weight: 3 }", w.get(1));
     }
 
-    // ---- 8: idempotent, and nothing past 22 ------------------------------------------------------------
+    // ---- 8: idempotent, and nothing of 22's past 22 ----------------------------------------------------
 
     @Test
-    void aRevision22FileRunsNothingAndASecondApplyChangesNothing() {
+    void aRevision22FileRunsNothingOf22sAndASecondApplyChangesNothing() {
         YamlConfiguration at22 = LayoutFixtures.v0372();
         at22.set("config_revision", 22);
-        String before = at22.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at22, "world"), "no step runs from 22");
-        assertEquals(before, at22.saveToString());
+        List<Map<String, Object>> counter = rows(at22, PRIZES);
+        List<Map<String, Object>> crate = rows(at22, CRATE);
+        List<String> log22 = HomeCraftManagement.migrateConfig(at22, "world");
+        assertTrue(log22.stream().noneMatch(l -> l.contains("32 new rows") || l.contains("Arcade Crate no longer")),
+                "no revision-22 step runs from 22, only 23's: " + log22);
+        assertTrue(ArcadeConfigMigration.sameRows(crate, rows(at22, CRATE)), "the crate is as it was");
+        assertEquals(counter.size() + 3, rows(at22, PRIZES).size(),
+                "the counter gains only the Grand Firework Show, the Firework Launcher and the Mega Firework Show");
+
+        YamlConfiguration at23 = LayoutFixtures.v0372();
+        at23.set("config_revision", 23);
+        String before = at23.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at23, "world"), "no step runs from 23");
+        assertEquals(before, at23.saveToString());
 
         YamlConfiguration c = LayoutFixtures.v0372();
         apply(c);

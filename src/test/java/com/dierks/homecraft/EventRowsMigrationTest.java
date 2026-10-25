@@ -113,10 +113,11 @@ class EventRowsMigrationTest {
                 "revision 17 adds exactly what the final-round build's did (an owner may have run it)");
         assertEquals(REVISION_18, ArcadeConfigMigration.EVENT_ACHIEVEMENTS,
                 "ONE revision 18 adds the whole events batch: the Dropper's, Race Night's and Falling Floors'");
-        assertEquals(22, HomeCraftManagement.CONFIG_REVISION,
-                "the newest is 22 now (19 the Games layout, LayoutGuardTest; 20 the token balance, "
+        assertEquals(23, HomeCraftManagement.CONFIG_REVISION,
+                "the newest is 23 now (19 the Games layout, LayoutGuardTest; 20 the token balance, "
                         + "EconomyMigrationTest; 21 the v4 areas, GamesAreaMigrationTest; 22 the token shop, "
-                        + "ShopMigrationTest): none adds an achievement row");
+                        + "ShopMigrationTest; 23 the Grand Firework Show and the candy, GrandShowMigrationTest): none "
+                        + "adds an achievement row");
     }
 
     @Test

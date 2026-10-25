@@ -2,8 +2,10 @@ package com.dierks.homecraft.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.block.CustomBlockService;
+import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.games.JoinSigns;
+import com.dierks.homecraft.storage.PlacedBlock;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Keys;
@@ -26,6 +28,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -35,7 +38,6 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * What Prize Counter items do in the world.
@@ -46,7 +48,13 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>Mini Radar</b>: right-click to lock onto the live hunt ({@link RadarService}).</li>
  *   <li><b>Mini Lure</b>: right-click to set it — the next wild Mini that rolls for anyone lands
  *       near you instead. One set at a time.</li>
- *   <li><b>Firework Show</b>: right-click for a three-second volley that cannot hurt anyone.</li>
+ *   <li><b>Firework Shows</b>: right-click for a show that cannot hurt anyone, as long as its row's {@code seconds}
+ *       ({@link FireworkShows}): the Firework Show's three seconds, the Grand Firework Show's fifteen with a finale
+ *       (0.38.1). One long show at a time: another is refused and kept. A long show is never used by a tap on one of
+ *       ours (the Arcade Machine, a join sign, a Mini), nor in a game or a Games world, and it ends when its player
+ *       goes into one. A show stops when its player quits. The <b>Mega Firework Show</b> (a row with
+ *       {@code launchers}, 0.38.1) plays a minute from the Firework Launchers nearby instead ({@link MegaShowService}),
+ *       as the player's one long show; a tap on a launcher starts it too, and with none near enough it is kept.</li>
  *   <li><b>Hats</b>: right-click the air to put one on (on Bedrock, a tap on a plain block too, never on
  *       one of ours, such as the Arcade Machine or a Mini). A rented hat or cap, a key bound to its owner (0.38),
  *       is never placed, so a tap on a plain block wears it on both editions. What was on the head goes into the
@@ -61,6 +69,11 @@ public final class PrizeItemListener implements Listener {
 
     /** The Mailbox source of a placed prize that didn't fit its breaker's bag (0.37.3). */
     static final String MAILBOX_SOURCE = "PRIZE";
+
+    /** A long firework show used while the player's long show is still on (0.38.1): refused, the item kept. */
+    static final String SHOW_ON = "Wait for your show to finish!";
+    /** A long firework show used in a game or a Games world (0.38.1): refused, the item kept. */
+    static final String SHOW_NOT_HERE = "Save your show for after the games!";
 
     private final HomeCraftManagement plugin;
 
@@ -128,9 +141,39 @@ public final class PrizeItemListener implements Listener {
                 }
             }
             case FIREWORK -> {
+                // The show is its row's now: a Mega show's launchers, or a show's length (a missing row plays the
+                // short show).
+                Prize row = plugin.config().arcade().prize(TokenPrizes.prizeId(item));
+                if (MegaShow.isMega(row)) {
+                    megaShow(event, player, hand, row); // first: a Mega show never plays around the player
+                    return;
+                }
+                int seconds = FireworkShow.seconds(row);
+                boolean longShow = FireworkShow.isLong(seconds);
+                Block clicked = event.getClickedBlock();
+                if (longShow && clicked != null && ours(plugin, clicked)) {
+                    // review SHOW-OURS-2: the tap is that block's (the Arcade Machine's screen opens, a Mini is
+                    // caught, a join sign starts its game), as for a hat; the long show stays in the hand
+                    return;
+                }
                 cancel(event);
-                consume(player, hand);
-                show(player);
+                FireworkShows shows = plugin.fireworkShows();
+                if (shows == null) {
+                    return;
+                }
+                // A long one in a game or a Games world, or while the player's long show is still on, is refused,
+                // and the item stays in the hand.
+                if (longShow && !shows.playsHere(player)) {
+                    if (shows.refusalDue(player.getUniqueId())) {
+                        player.sendMessage(Text.of("&7" + SHOW_NOT_HERE));
+                        Sounds.refused(player);
+                    }
+                } else if (shows.start(player, seconds)) {
+                    consume(player, hand);
+                } else if (shows.refusalDue(player.getUniqueId())) {
+                    player.sendMessage(Text.of("&7" + SHOW_ON));
+                    Sounds.refused(player);
+                }
             }
             case HAT -> {
                 Block clicked = event.getClickedBlock();
@@ -150,6 +193,49 @@ public final class PrizeItemListener implements Listener {
             default -> {
                 // a trophy is placed like any head
             }
+        }
+    }
+
+    /**
+     * A Mega Firework Show (0.38.1): from the Firework Launchers near the player ({@link MegaShowService}). A tap on
+     * another of ours is that block's (its listener ran first) and leaves the show in the hand; a tap on a launcher, a
+     * plain block or the air starts it. Every refusal (in a game, the long show still on, no launcher near enough, the
+     * launchers busy, the sky full) keeps the item, and is said at most once every 2 s, as 0.38.1's are; only a show
+     * that started uses it up.
+     */
+    private void megaShow(PlayerInteractEvent event, Player player, EquipmentSlot hand, Prize row) {
+        Block on = event.getClickedBlock();
+        boolean launcher = on != null && launcher(plugin, on);
+        if (!MegaShow.usesOnTap(on != null, on != null && !launcher && ours(plugin, on), launcher)) {
+            return; // the Arcade Machine's screen opened, a Mini was caught, a join sign started its game: kept
+        }
+        cancel(event);
+        MegaShowService shows = plugin.megaShows();
+        String refused = shows == null ? MegaShow.CANT_START : shows.start(player, row);
+        if (refused == null) {
+            consume(player, hand);
+            return;
+        }
+        if (plugin.fireworkShows() == null || plugin.fireworkShows().refusalDue(player.getUniqueId())) {
+            player.sendMessage(Text.of("&7" + refused));
+            Sounds.refused(player);
+        }
+    }
+
+    /**
+     * Whether {@code on} is a placed Firework Launcher ({@link MegaShow#onLauncher}): its tile's tag, and only without
+     * one its placed-block record, as {@code CustomBlockListener} reads it. A lookup that fails is "no".
+     */
+    private static boolean launcher(HomeCraftManagement plugin, Block on) {
+        if (CustomBlockService.isLauncher(on.getState(false))) {
+            return true;
+        }
+        try {
+            CustomBlockService blocks = plugin.blockService();
+            return blocks != null && MegaShow.onLauncher(false,
+                    blocks.at(on.getLocation()).map(PlacedBlock::type).orElse(null));
+        } catch (RuntimeException | LinkageError e) {
+            return false;
         }
     }
 
@@ -276,22 +362,6 @@ public final class PrizeItemListener implements Listener {
         return true;
     }
 
-    /** A three-second volley of fireworks around the player, tagged so they cannot hurt anyone. */
-    private void show(Player player) {
-        for (int burst = 0; burst < 6; burst++) {
-            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                if (!player.isOnline()) {
-                    return;
-                }
-                for (int i = 0; i < 2; i++) {
-                    ThreadLocalRandom r = ThreadLocalRandom.current();
-                    com.dierks.homecraft.util.Fireworks.spawn(
-                            player.getLocation().add(r.nextDouble(-3, 3), 0.5, r.nextDouble(-3, 3)));
-                }
-            }, burst * 10L);
-        }
-    }
-
     /**
      * Put a hat on. What was on the head: a bound key is deleted, never moved (it is in My Looks); anything else
      * goes into the bag, and with no room the wear is refused and the head left as it was. Nothing goes on the
@@ -367,6 +437,14 @@ public final class PrizeItemListener implements Listener {
         }
     }
 
+    /** A player who quits takes their firework shows with them: the timers stop now (0.38.1). */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        if (plugin.fireworkShows() != null) {
+            plugin.fireworkShows().stop(event.getPlayer().getUniqueId());
+        }
+    }
+
     // ---- prizes are not ingredients ----------------------------------------------------
     //
     // A recipe matches on the item type alone, so a Mini Lure (a heart of the sea) and eight
@@ -432,6 +510,10 @@ public final class PrizeItemListener implements Listener {
         if (!TokenPrizes.is(item) || !(event.getBlockPlaced().getState() instanceof Skull skull)) {
             return;
         }
+        CustomBlockService blocks = plugin.blockService();
+        if (!storesAsPlacedPrize(true, true, blocks != null && blocks.itemType(item) != null)) {
+            return; // a HomeCraft block (a skinned Firework Launcher) is the block system's, as MiniHeadListener says
+        }
         ItemStack one = item.clone();
         one.setAmount(1);
         var pdc = skull.getPersistentDataContainer();
@@ -442,6 +524,15 @@ public final class PrizeItemListener implements Listener {
             pdc.set(Keys.PLACED_PRIZE_ID, PersistentDataType.STRING, id);
         }
         skull.update(true, false);
+    }
+
+    /**
+     * Whether a placed block is stored as a placed prize: a token prize placed as a head, unless it is a HomeCraft
+     * block (0.38.1: a Firework Launcher, a token prize, wearing a head skin), which is the block system's, as
+     * {@code MiniHeadListener} leaves one: stored as a prize too, its break would put one in the bag and drop another.
+     */
+    static boolean storesAsPlacedPrize(boolean tokenPrize, boolean skull, boolean homecraftBlock) {
+        return tokenPrize && skull && !homecraftBlock;
     }
 
     /**

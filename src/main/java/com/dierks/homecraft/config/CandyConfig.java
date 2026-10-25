@@ -62,8 +62,11 @@ public final class CandyConfig {
                         int lastDayEveryMinutes, int applesPerShower, int goldenPercent, int goldenTokens,
                         int dailyTokenCap, int goal, boolean adminsSeeAll) {
 
-        /** The shipped settings. */
-        public static final Candy DEFAULTS = new Candy(true, DEFAULT_FROM, DEFAULT_TO, 20, 10, 10, 6, 4, 5, 10, 31,
+        /**
+         * The shipped settings. 0.38.1 (config revision 23) made the shower gentler: a shower an hour, every half hour
+         * on the last day, 3 candy apples each (0.37.1-0.38.0: every 20 minutes, every 10 on the last day, 6 each).
+         */
+        public static final Candy DEFAULTS = new Candy(true, DEFAULT_FROM, DEFAULT_TO, 60, 10, 30, 3, 4, 5, 10, 31,
                 false);
         /** Until config.yml has been read: the shipped settings, switched off. */
         public static final Candy OFF = DEFAULTS.withEnabled(false);

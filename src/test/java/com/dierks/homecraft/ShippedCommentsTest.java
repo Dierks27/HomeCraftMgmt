@@ -16,9 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The comments config revisions 20, 21 and 22 make stale in the owner's file ({@link ShippedComments}, the v4
- * audit ECON02/ECON05, SHOP-V2-SPEC §7.6), against verbatim copies of 0.35.0's, 0.36.0's and 0.37.2's bundled
- * config.yml.
+ * The comments config revisions 20, 21, 22 and 23 make stale in the owner's file ({@link ShippedComments}, the v4
+ * audit ECON02/ECON05, SHOP-V2-SPEC §7.6), against verbatim copies of 0.35.0's, 0.36.0's, 0.37.2's and 0.38.0's
+ * bundled config.yml.
  *
  * <p>Pinned here: the owner's 0.36 file, migrated and backfilled, ends with exactly the bundled file's comments
  * on every key, so it no longer says "x 1760-8191 ... Keep the sky there free", "a Mountain Run about 50 KB",
@@ -26,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * keep area says Golf v4 fits a plot and a Mountain Run v2 can't be kept; a 0.35 file's are refreshed too; a
  * comment the owner edited by one character is kept, word for word; each revision refreshes only its own;
  * the owner's 0.37.2 file ends with the token shop's three comments (the Prize Counter's header, the icon keys
- * and the collectors'); and every fingerprint is what 0.35.0, 0.36.0 or 0.37.2 shipped on that key.
+ * and the collectors'); the owner's 0.38.0 file ends with revision 23's (the header's firework line); and every
+ * fingerprint is what the versions before its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2 for 20-22,
+ * 0.38.0 for 23).
  */
 class ShippedCommentsTest {
 
@@ -82,6 +84,30 @@ class ShippedCommentsTest {
         String collectors = String.join("\n", after.getComments("arcade.collectors"));
         assertFalse(collectors.contains("0.37.1"), "the collectors' comment names no version: " + collectors);
         assertTrue(collectors.contains("no presents at all (looks, golf balls"), collectors);
+    }
+
+    @Test
+    void theOwners0380FileEndsWithExactlyTheBundledCommentsAndTheNewFireworkLine() {
+        YamlConfiguration before = LayoutFixtures.v0380();
+        assertTrue(String.join("\n", before.getComments("arcade.prizes"))
+                .contains("firework   a harmless three-second firework show."), "fixture: 0.38.0's firework line");
+        YamlConfiguration after = migrated(before);
+        YamlConfiguration bundled = LayoutFixtures.bundled();
+        for (String key : bundled.getKeys(true)) {
+            assertEquals(bundled.getComments(key), after.getComments(key), key + "'s comment is this version's");
+            assertEquals(bundled.getInlineComments(key), after.getInlineComments(key), key + "'s inline comment too");
+        }
+        String prizes = String.join("\n", after.getComments("arcade.prizes"));
+        assertTrue(prizes.contains("firework   a harmless firework show; seconds 3-30, default 3."), prizes);
+        assertTrue(prizes.contains("launchers (1-3): a Mega Firework Show from the nearest Firework Launchers"),
+                "and the Mega show's launchers (0.38.1)");
+        assertTrue(prizes.contains("block: display_case, pallet, vending, mailbox, printer, pc, arcade or"
+                + " firework_launcher)"), "and the launcher's block");
+        assertFalse(prizes.contains("three-second"), "and not 0.38.0's line");
+        assertEquals(bundled.getComments("arcade.launcher"), after.getComments("arcade.launcher"),
+                "the new arcade.launcher comes with its comment");
+        assertEquals(bundled.getInlineComments("skins.firework_launcher"),
+                after.getInlineComments("skins.firework_launcher"), "and skins.firework_launcher with its own");
     }
 
     @Test
@@ -141,6 +167,16 @@ class ShippedCommentsTest {
         assertEquals(List.of("arcade.icons", "arcade.prizes", "arcade.collectors"),
                 ShippedComments.refresh(LayoutFixtures.v0372(), ShopMigration.REVISION), "and all three on 0.37.2's");
         assertEquals(List.of("games"), ShippedComments.refresh(c, EconomyMigration.REVISION), "20: the header");
+        assertEquals(List.of("arcade.prizes"), ShippedComments.refresh(LayoutFixtures.v0380(),
+                GrandShowMigration.REVISION), "23 on 0.38.0's file: the counter's header");
+        assertEquals(List.of(), ShippedComments.refresh(LayoutFixtures.v0372(), GrandShowMigration.REVISION),
+                "and nothing on 0.37.2's, whose header is 22's to refresh");
+        YamlConfiguration at22 = LayoutFixtures.v0380();
+        List<String> counter = new ArrayList<>(at22.getComments("arcade.prizes"));
+        counter.add("my rows are at the bottom");
+        at22.setComments("arcade.prizes", counter);
+        HomeCraftManagement.migrateConfig(at22, "world");
+        assertEquals(counter, at22.getComments("arcade.prizes"), "23 keeps a header the owner edited");
         assertEquals(List.of("games.fresh", "games.fresh.world", "games.fresh.slots", "games.fresh.archive",
                 "games.fresh.keep.area", "games.race_night", "games.race_night.races",
                 "games.race_night.max_race_minutes"),
@@ -149,24 +185,28 @@ class ShippedCommentsTest {
     }
 
     @Test
-    void everyFingerprintIsWhat035Or036Or0372ShippedAndNoneIsThisVersions() throws Exception {
+    void everyFingerprintIsWhatTheVersionsBeforeItsRevisionShippedAndNoneIsThisVersions() throws Exception {
         YamlConfiguration v035 = LayoutFixtures.v035();
         YamlConfiguration v036 = LayoutFixtures.v036();
         YamlConfiguration v0372 = LayoutFixtures.v0372();
+        YamlConfiguration v0380 = LayoutFixtures.v0380();
         YamlConfiguration bundled = LayoutFixtures.bundled();
         Set<String> keys = new HashSet<>();
         for (ShippedComments.Stale s : ShippedComments.STALE) {
-            assertTrue(keys.add(s.key()), s.key() + " once");
+            assertTrue(keys.add(s.key() + "@" + s.revision()), s.key() + " once a revision");
+            // 20-22 meet a 0.35.0, 0.36.0 or 0.37.2 file; 23 meets 0.38.0's (22 refreshed the older texts first)
+            List<YamlConfiguration> before = s.revision() <= ShopMigration.REVISION ? List.of(v035, v036, v0372)
+                    : List.of(v0380);
             Set<String> shipped = new HashSet<>();
-            for (YamlConfiguration old : List.of(v035, v036, v0372)) {
+            for (YamlConfiguration old : before) {
                 if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))) {
                     shipped.add(fingerprint(old, s.key()));
                 }
             }
-            assertEquals(shipped, s.shipped(),
-                    s.key() + ": exactly the stale texts 0.35.0, 0.36.0 and 0.37.2 shipped (where it had the key)");
+            assertEquals(shipped, s.shipped(), s.key() + " (revision " + s.revision() + "): exactly the stale texts"
+                    + " the versions before it shipped (where they had the key)");
             assertFalse(s.shipped().contains(fingerprint(bundled, s.key())), s.key() + ": never this version's");
-            for (YamlConfiguration old : List.of(v036, v0372)) {
+            for (YamlConfiguration old : List.of(v036, v0372, v0380)) {
                 YamlConfiguration saved = new YamlConfiguration();
                 saved.loadFromString(old.saveToString());
                 assertEquals(fingerprint(old, s.key()), fingerprint(saved, s.key()),

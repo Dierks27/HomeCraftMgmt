@@ -164,6 +164,104 @@ class PrizeExtraParseTest {
         assertEquals(30, readClean("{ id: p, cost_tokens: 300, type: party, seconds: 600 }").extra().seconds());
     }
 
+    /** 0.38.1: a firework row's show lasts its {@code seconds}, 3 (the Firework Show's) unless it says, 3-30. */
+    @Test
+    void aFireworkRowsSeconds() throws Exception {
+        Prize grand = readClean("{ id: firework_grand, tab: COSMETICS, display: \"&6Grand Firework Show\", "
+                + "description: [\"A long firework show\", \"with a big finale!\"], cost_tokens: 40, "
+                + "icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework, seconds: 15 }");
+        assertEquals(PrizeType.FIREWORK, grand.type());
+        assertEquals(15, grand.extra().seconds());
+        assertEquals(3, readClean("{ id: f, cost_tokens: 15, type: firework }").extra().seconds(), "3 by default");
+        assertEquals(3, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: 3 }").extra().seconds());
+        assertEquals(30, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: 30 }").extra().seconds());
+        assertEquals(12, readClean("{ id: f, cost_tokens: 15, type: firework, seconds: \"12\" }").extra().seconds(),
+                "a quoted number reads too");
+        assertEquals(3, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 1 }", "3 to 30 seconds. Using 3.")
+                .extra().seconds(), "at least 3, with one WARN");
+        assertEquals(30, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 300 }",
+                "3 to 30 seconds. Using 30.").extra().seconds(), "at most 30, with one WARN");
+        assertEquals(3, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: long }", "seconds 'long'")
+                .extra().seconds(), "not a number: 3, with one WARN");
+        assertEquals(4, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 4.5 }", "Using 4.")
+                .extra().seconds(), "whole seconds");
+        assertNotNull(readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: -2 }", "Using 3."),
+                "a bad length never costs the row");
+        assertEquals(0, readClean("{ id: b, cost_tokens: 8, type: boost, effect: speed, seconds: 15 }").extra()
+                .seconds(), "only a firework or party row reads seconds");
+    }
+
+    /**
+     * 0.38.1, the Mega Firework Show: a firework row's {@code launchers} (1-3) make it a show from the nearest Firework
+     * Launchers, with its own length (45-90 seconds, 60 unless it says); a row without keeps 0.38.1's 3-30, so the
+     * Firework Show and the Grand show are as they were.
+     */
+    @Test
+    void aMegaRowsLaunchersAndSeconds() throws Exception {
+        Prize mega = readClean("{ id: firework_mega, tab: COSMETICS, display: \"&dMega Firework Show\", "
+                + "description: [\"A whole minute of fireworks\", \"from your Firework Launchers!\"], cost_tokens: 75, "
+                + "icon: { texture: \"\", material: FIREWORK_ROCKET }, type: firework, seconds: 60, launchers: 3 }");
+        assertEquals(PrizeType.FIREWORK, mega.type());
+        assertEquals(3, mega.extra().launchers());
+        assertEquals(60, mega.extra().seconds());
+        assertEquals(60, readClean("{ id: m, cost_tokens: 75, type: firework, launchers: 3 }").extra().seconds(),
+                "60 by default");
+        assertEquals(45, readClean("{ id: m, cost_tokens: 75, type: firework, launchers: 2, seconds: 45 }").extra()
+                .seconds());
+        assertEquals(90, readClean("{ id: m, cost_tokens: 75, type: firework, launchers: 1, seconds: 90 }").extra()
+                .seconds());
+        assertEquals(45, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 3, seconds: 15 }",
+                "45 to 90 seconds. Using 45.").extra().seconds(), "its own bound: at least 45, with one WARN");
+        assertEquals(90, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 3, seconds: 600 }",
+                "45 to 90 seconds. Using 90.").extra().seconds(), "at most 90");
+        assertEquals(60, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 3, seconds: long }",
+                "Using 60.").extra().seconds(), "not a number: 60");
+        // the launchers
+        assertEquals(3, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: 7 }", "1 to 3 Firework "
+                + "Launchers").extra().launchers(), "at most 3, with one WARN");
+        Prize none = readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: -1, seconds: 20 }",
+                "Using 0.");
+        assertEquals(0, none.extra().launchers(), "below 1: a show around the player");
+        assertEquals(20, none.extra().seconds(), "with 0.38.1's 3-30");
+        assertEquals(0, readClean("{ id: m, cost_tokens: 75, type: firework, launchers: 0, seconds: 20 }").extra()
+                .launchers(), "0 says so plainly");
+        assertEquals(0, readWarned("{ id: m, cost_tokens: 75, type: firework, launchers: lots }", "launchers 'lots'")
+                .extra().launchers());
+        // every other firework row keeps 0.38.1's 3-30 (the Firework Show's 3 and the Grand show's 15)
+        assertEquals(15, readClean("{ id: firework_grand, cost_tokens: 40, type: firework, seconds: 15 }").extra()
+                .seconds());
+        assertEquals(0, readClean("{ id: firework_grand, cost_tokens: 40, type: firework, seconds: 15 }").extra()
+                .launchers());
+        assertEquals(30, readWarned("{ id: f, cost_tokens: 15, type: firework, seconds: 60 }", "3 to 30 seconds")
+                .extra().seconds(), "60 seconds is a Mega length only");
+        // launchers on another type: one WARN, ignored
+        Prize boost = readWarned("{ id: b, cost_tokens: 8, type: boost, effect: speed, launchers: 3 }",
+                "only a firework row fires from Firework Launchers");
+        assertEquals(0, boost.extra().launchers(), "ignored");
+        // the 0.38.0 constructor is no launchers
+        assertEquals(new PrizeExtra(null, 0, null, OnlyIf.ANY, 3, null, 0), new PrizeExtra(null, 0, null, OnlyIf.ANY,
+                3, null), "the six-argument PrizeExtra has no launchers");
+        assertEquals(0, PrizeExtra.NONE.launchers());
+    }
+
+    /** 0.38.1: the Firework Launcher is a block row, delivered as one launcher. */
+    @Test
+    void theLauncherIsABlockRow() throws Exception {
+        Prize launcher = readClean("{ id: firework_launcher, tab: COSMETICS, display: \"&6Firework Launcher\", "
+                + "description: [\"Set up 3 of them\", \"for a Mega Firework Show!\"], cost_tokens: 5, "
+                + "icon: { texture: \"\", material: DROPPER }, type: block, block: firework_launcher }");
+        assertEquals(PrizeType.BLOCK, launcher.type());
+        assertEquals("FIREWORK_LAUNCHER", launcher.blockKey());
+        assertEquals(1, launcher.amount());
+        assertEquals(PrizeTab.COSMETICS, launcher.tab(), "with the shows, not the Minis tab");
+        assertNull(launcher.limit(), "no limit: buying more than 3 is fine, they wait in the bag");
+        Prize bad = read("{ id: x, cost_tokens: 5, type: block, block: rocket_pad }", new ArrayList<>());
+        assertNull(bad, "an unknown block is skipped");
+        List<String> warnings = new ArrayList<>();
+        read("{ id: x, cost_tokens: 5, type: block, block: rocket_pad }", warnings);
+        assertTrue(warnings.get(0).contains("firework_launcher"), "and the WARN names the launcher: " + warnings);
+    }
+
     @Test
     void aCommandRowsOnlyIf() throws Exception {
         Prize day = readClean("{ id: make_it_day, tab: BOOSTS, display: \"&eMake it Day!\", cost_tokens: 20, "
@@ -285,7 +383,8 @@ class PrizeExtraParseTest {
             assertEquals(0, p.extra().renewTokens(), p.id());
             assertNull(p.extra().ballLook(), p.id());
             assertEquals(OnlyIf.ANY, p.extra().onlyIf(), p.id());
-            assertEquals(0, p.extra().seconds(), p.id());
+            assertEquals(p.type() == PrizeType.FIREWORK ? 3 : 0, p.extra().seconds(),
+                    p.id() + ": a firework row's show is 3 seconds when it doesn't say (0.38.1), as it always was");
             assertNull(p.extra().keeper(), p.id());
             assertTrue(p.tab() != PrizeTab.LOOKS && p.tab() != PrizeTab.KEEPERS,
                     p.id() + ": every 0.37 row keeps its tab (revision 22 moves the hats)");
@@ -331,6 +430,38 @@ class PrizeExtraParseTest {
         }
         assertEquals(10, byId.values().stream().filter(p -> p.type() == PrizeType.BALL).count());
         assertEquals(10, byId.get("party_time").extra().seconds());
+        assertEquals(3, byId.get("firework_show").extra().seconds(), "the Firework Show is the short show");
+        Prize grand = byId.get("firework_grand");
+        assertEquals(PrizeType.FIREWORK, grand.type());
+        assertEquals(15, grand.extra().seconds(), "the Grand Firework Show: 15 seconds");
+        assertEquals(40, grand.costTokens());
+        assertEquals(PrizeTab.COSMETICS, grand.tab());
+        assertNull(grand.limit(), "no limit");
+        assertEquals(Material.FIREWORK_ROCKET, grand.icon().material());
+        assertEquals(List.of("A long firework show", "with a big finale!"), grand.description());
+        List<String> order = new ArrayList<>(byId.keySet());
+        assertEquals(order.indexOf("firework_show") + 1, order.indexOf("firework_grand"), "right after the Firework Show");
+        assertEquals(0, grand.extra().launchers(), "the Grand show plays around her");
+        Prize launcher = byId.get("firework_launcher");
+        assertEquals(PrizeType.BLOCK, launcher.type());
+        assertEquals("FIREWORK_LAUNCHER", launcher.blockKey());
+        assertEquals(5, launcher.costTokens(), "5 tokens, kept for good");
+        assertEquals(PrizeTab.COSMETICS, launcher.tab());
+        assertNull(launcher.limit());
+        assertEquals(Material.DROPPER, launcher.icon().material());
+        Prize mega = byId.get("firework_mega");
+        assertEquals(PrizeType.FIREWORK, mega.type());
+        assertEquals(75, mega.costTokens(), "the owner's \"one more level at like 75\"");
+        assertEquals(60, mega.extra().seconds(), "a minute");
+        assertEquals(3, mega.extra().launchers(), "three firing locations");
+        assertEquals(PrizeTab.COSMETICS, mega.tab());
+        assertNull(mega.limit(), "no limit");
+        assertTrue(mega.costTokens() < 100, "under the confirm screen's 100");
+        assertEquals(List.of("firework_grand", "firework_launcher", "firework_mega"),
+                order.subList(order.indexOf("firework_grand"), order.indexOf("firework_grand") + 3),
+                "the launcher and the Mega show right after the Grand show");
+        assertEquals(1, byId.values().stream().filter(p -> p.extra().launchers() > 0).count(),
+                "only the Mega show fires from launchers");
         assertEquals(PrizeType.PARTY, byId.get("party_time").type());
         assertEquals(OnlyIf.NIGHT, byId.get("make_it_day").extra().onlyIf());
         assertEquals(OnlyIf.RAIN, byId.get("sunny_day").extra().onlyIf());

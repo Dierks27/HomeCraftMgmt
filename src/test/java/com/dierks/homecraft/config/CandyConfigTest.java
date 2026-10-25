@@ -66,10 +66,10 @@ class CandyConfigTest {
         assertTrue(candy.enabled());
         assertEquals(LocalDate.of(2026, 10, 1), candy.from());
         assertEquals(LocalDate.of(2026, 10, 31), candy.to());
-        assertEquals(20, candy.everyMinutes());
+        assertEquals(60, candy.everyMinutes(), "a shower an hour (0.38.1; 20 before)");
         assertEquals(10, candy.offsetMinutes());
-        assertEquals(10, candy.lastDayEveryMinutes());
-        assertEquals(6, candy.applesPerShower());
+        assertEquals(30, candy.lastDayEveryMinutes(), "every half hour on the last day (10 before)");
+        assertEquals(3, candy.applesPerShower(), "3 candy apples a shower (6 before)");
         assertEquals(4, candy.goldenPercent());
         assertEquals(5, candy.goldenTokens());
         assertEquals(10, candy.dailyTokenCap());

@@ -7,9 +7,9 @@ import java.util.function.Predicate;
 
 /**
  * The rules that keep a placed HomeCraft block where it stands and what is in it with its owner (0.37.3, spec
- * §4.15, D22): who may break a Vending Machine, Display Case or Pallet, the order a final break works in, and which
- * piston moves, flows, explosion blocks, mob changes (a wither) and burns are refused. Pure, so every rule is tested
- * without a server;
+ * §4.15, D22): who may break a Vending Machine, Display Case or Pallet (and, from 0.38.1, a Firework Launcher), the
+ * order a final break works in, and which piston moves, flows, explosion blocks, mob changes (a wither) and burns are
+ * refused. Pure, so every rule is tested without a server;
  * {@link CustomBlockListener} asks them, with "ours" meaning a placed HomeCraft block, the upper head of a Vending
  * Machine, or a placed prize head (a hat or a trophy).
  */
@@ -25,12 +25,20 @@ public final class CustomBlockGuard {
     }
 
     /**
-     * Whether breaking a placed block of {@code type} is refused: a Vending Machine, Display Case or Pallet only by
-     * the player who placed it ({@code isOwner}) or an admin, empty or not. Every other block keeps the old rule:
-     * anyone with build rights. Decided at HIGH, before the town check.
+     * Broken only by whoever placed it or an admin: the three that hold stock, and the Firework Launcher (0.38.1),
+     * which a child sets up for her Mega Firework Show and nobody else should take down.
+     */
+    public static boolean ownerOnly(CustomBlockType type) {
+        return holdsStock(type) || type == CustomBlockType.FIREWORK_LAUNCHER;
+    }
+
+    /**
+     * Whether breaking a placed block of {@code type} is refused: a Vending Machine, Display Case, Pallet or Firework
+     * Launcher only by the player who placed it ({@code isOwner}) or an admin, empty or not ({@link #ownerOnly}).
+     * Every other block keeps the old rule: anyone with build rights. Decided at HIGH, before the town check.
      */
     public static boolean breakRefusal(CustomBlockType type, boolean isOwner, boolean admin) {
-        return holdsStock(type) && !isOwner && !admin;
+        return ownerOnly(type) && !isOwner && !admin;
     }
 
     /** What someone else is told when they try to break one. */
@@ -44,6 +52,7 @@ public final class CustomBlockGuard {
             case MINI_VENDING_MACHINE -> "Vending Machine";
             case DISPLAY_CASE -> "Display Case";
             case PALLET -> "Pallet";
+            case FIREWORK_LAUNCHER -> "Firework Launcher";
             default -> type.name().toLowerCase(Locale.ROOT).replace('_', ' ');
         };
     }
@@ -65,9 +74,9 @@ public final class CustomBlockGuard {
     }
 
     /**
-     * Run a final break: the stock first (only a block that holds any), and only once it is safely written does the
-     * block go and drop its item. Nothing here runs for a break another plugin cancelled after HIGH, because the
-     * listener that calls it is MONITOR with {@code ignoreCancelled}.
+     * Run a final break: the stock first (only a block that holds any; a Firework Launcher holds nothing), and only
+     * once it is safely written does the block go and drop its item. Nothing here runs for a break another plugin
+     * cancelled after HIGH, because the listener that calls it is MONITOR with {@code ignoreCancelled}.
      *
      * @return false when the stock couldn't be written: nothing was forgotten or dropped
      */

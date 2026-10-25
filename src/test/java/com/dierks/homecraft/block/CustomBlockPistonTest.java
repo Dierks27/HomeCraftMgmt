@@ -44,7 +44,8 @@ class CustomBlockPistonTest {
             new Pos(3, 64, 0), "a placed PC",
             new Pos(5, 65, 0), "a Vending Machine's upper head",
             new Pos(8, 64, 0), "a placed trophy",
-            new Pos(9, 64, 0), "a placed Display Case");
+            new Pos(9, 64, 0), "a placed Display Case",
+            new Pos(12, 64, 0), "a placed Firework Launcher");
     private static final Predicate<Pos> OURS = WORLD::containsKey;
 
     /** What a piston at {@link #PISTON} pushing east touches, moving {@code moved} blocks from {@code from}. */
@@ -114,6 +115,28 @@ class CustomBlockPistonTest {
         assertFalse(CustomBlockGuard.changeRefused(new Pos(8, 66, 0), OURS),
                 "the block above the trophy goes, as any other block does");
         assertFalse(CustomBlockGuard.changeRefused(null, OURS));
+    }
+
+    /**
+     * A placed Firework Launcher (0.38.1) is one of ours like every placed HomeCraft block (it has a placed-block
+     * record): never pushed or pulled, washed away, blown up, chewed by a wither or burnt.
+     */
+    @Test
+    void aPlacedFireworkLauncherIsNeverPushedWashedBlownUpChewedOrBurnt() {
+        Pos launcher = new Pos(12, 64, 0);
+        assertTrue(CustomBlockGuard.pistonRefused(
+                CustomBlockGuard.pistonTouches(List.of(launcher, new Pos(13, 64, 0)), new Pos(14, 64, 0)), OURS),
+                "pushed: refused");
+        assertFalse(CustomBlockGuard.pistonRefused(
+                CustomBlockGuard.pistonTouches(List.of(new Pos(13, 64, 0)), new Pos(14, 64, 0)), OURS),
+                "a push beside it goes ahead");
+        assertTrue(CustomBlockGuard.pistonRefused(CustomBlockGuard.pistonTouches(List.of(launcher), null), OURS),
+                "pulled: refused");
+        assertTrue(CustomBlockGuard.flowRefused(launcher, OURS), "never washed away");
+        List<Pos> blast = new ArrayList<>(List.of(new Pos(11, 64, 0), launcher, new Pos(12, 65, 0)));
+        assertEquals(1, CustomBlockGuard.spare(blast, OURS), "an explosion leaves it standing");
+        assertEquals(List.of(new Pos(11, 64, 0), new Pos(12, 65, 0)), blast, "and takes the rest");
+        assertTrue(CustomBlockGuard.changeRefused(launcher, OURS), "never chewed through or burnt");
     }
 
     @Test

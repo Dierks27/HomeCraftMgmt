@@ -215,7 +215,18 @@ class FireworkShowTest {
     }
 
     @Test
-    void theRefusalIsShortAndKind() {
+    void theRefusalIsShortAndKindAndSaidOnceEveryTwoSeconds() {
         assertEquals("Wait for your show to finish!", PrizeItemListener.SHOW_ON);
+        FireworkShows.Guard g = new FireworkShows.Guard();
+        UUID her = UUID.randomUUID();
+        assertTrue(g.refusalDue(her, 10_000), "the first refusal is said");
+        assertFalse(g.refusalDue(her, 10_200), "a held Bedrock tap's repeats aren't");
+        assertFalse(g.refusalDue(her, 11_999));
+        assertTrue(g.refusalDue(her, 12_000), "two seconds on, it is said again");
+        assertTrue(g.refusalDue(UUID.randomUUID(), 12_100), "each player's own");
+        g.tryStart(her, true);
+        g.forget(her);
+        assertFalse(g.longOn(her), "a quit forgets her long show");
+        assertTrue(g.refusalDue(her, 12_100), "and her last refusal");
     }
 }

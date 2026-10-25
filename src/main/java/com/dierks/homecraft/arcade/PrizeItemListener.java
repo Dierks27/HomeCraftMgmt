@@ -143,7 +143,7 @@ public final class PrizeItemListener implements Listener {
                 int seconds = FireworkShow.seconds(plugin.config().arcade().prize(TokenPrizes.prizeId(item)));
                 if (shows.start(player, seconds)) {
                     consume(player, hand);
-                } else {
+                } else if (shows.refusalDue(player.getUniqueId())) {
                     player.sendMessage(Text.of("&7" + SHOW_ON));
                     Sounds.refused(player);
                 }

@@ -87,6 +87,14 @@ public final class FireworkShows {
         return guard.longOn(player);
     }
 
+    /**
+     * Whether a refused show should say so now: at most once every {@value Guard#REFUSAL_GAP_MS} ms a player, since
+     * Bedrock repeats a held tap's use and each repeat is refused again.
+     */
+    public boolean refusalDue(UUID player) {
+        return guard.refusalDue(player, System.currentTimeMillis());
+    }
+
     /** {@code player} quit: their shows stop now. */
     public void stop(UUID player) {
         List<Long> theirs = new ArrayList<>();
@@ -98,6 +106,7 @@ public final class FireworkShows {
         for (long show : theirs) {
             end(show);
         }
+        guard.forget(player);
     }
 
     /** Every show stops now: the plugin is stopping. */
@@ -139,8 +148,12 @@ public final class FireworkShows {
      * (or the player's quit) does; a short show never holds anything.
      */
     static final class Guard {
+        /** The least time between two refusal lines to one player. */
+        static final long REFUSAL_GAP_MS = 2000;
+
         private long last;
         private final Map<UUID, Long> longShows = new HashMap<>();
+        private final Map<UUID, Long> refusedAt = new HashMap<>();
 
         /** Start one: its number, or 0 (nothing started) when it is long and the player's long show is on. */
         long tryStart(UUID player, boolean isLong) {
@@ -164,9 +177,26 @@ public final class FireworkShows {
             longShows.remove(player, show);
         }
 
+        /** Whether a refusal at {@code now} (ms) is said: the first, and then once {@link #REFUSAL_GAP_MS} have passed. */
+        boolean refusalDue(UUID player, long now) {
+            Long at = refusedAt.get(player);
+            if (at != null && now - at < REFUSAL_GAP_MS) {
+                return false;
+            }
+            refusedAt.put(player, now);
+            return true;
+        }
+
+        /** The player quit: nothing of theirs is kept. */
+        void forget(UUID player) {
+            longShows.remove(player);
+            refusedAt.remove(player);
+        }
+
         /** Whatever is on is over (the plugin is stopping). */
         void endAll() {
             longShows.clear();
+            refusedAt.clear();
         }
     }
 }

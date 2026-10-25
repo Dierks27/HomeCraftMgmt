@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.0-shop-and-trade`
+- **Version:** `0.38.1-grand-show`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -83,10 +83,11 @@ Tokens are **earned by playing and never become dollars**.
     trials and mini golf in a Games world. A Take a break screen sets your own limits. They ship
     off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck, Bouncy Boots,
-  Floaty Feather), Make it Day and Sunny Day, the Mini Radar and Lure, a Firework Show and Party
-  Time, particle trails for a month, hats and caps for 90 days and golf balls to keep on the
-  **Looks** tab, perks (extra homes and `/hat` via LuckPerms and EssentialsX), the numbered Arcade
-  Trophy (place it and tap it to open the Arcade), a trophy ladder and a Trophy of the Month;
+  Floaty Feather), Make it Day and Sunny Day, the Mini Radar and Lure, the Firework Show, the Grand
+  Firework Show (0.38.1: 15 seconds with a big finale) and Party Time, particle trails for a month,
+  hats and caps for 90 days and golf balls to keep on the **Looks** tab, perks (extra homes and
+  `/hat` via LuckPerms and EssentialsX), the numbered Arcade Trophy (place it and tap it to open the
+  Arcade), a trophy ladder and a Trophy of the Month;
   holiday collectors you keep for good and can give to someone online (Halloween: the Pumpkin Cap
   2026 and the Autumn Leaves 2026 trail; Christmas: the Santa Cap 2026 and the Twinkle 2026 trail);
   and the **Keepers** (0.38): the Legend Crown, three keeper trails and two keeper hats, yours for
@@ -210,6 +211,12 @@ for good**, rented hats and Keepers are ordinary prize items, and the Looks tab'
 or not at all. For more than an evening, switch off eight rows. See
 [If you roll back to 0.37.3](#if-you-roll-back-to-0373). Nothing else is lost, and the upgrade puts the
 rest back.
+
+**Back to 0.38.0 from 0.38.1:** the jar alone (0.38.0 reads revision 23 and runs nothing, with one
+WARN; 0.38.1 changes no schema). The candy keeps its gentler values (they are in the file), but 0.38.0
+doesn't know a firework row's `seconds`, so it sells the Grand Firework Show as a three-second show
+for 40 tokens: for more than an evening, set `enabled: false` on `firework_grand`. See
+[If you roll back to 0.38.0](#if-you-roll-back-to-0380). Nothing is lost.
 
 **A jar older than its files says so (from 0.37.3).** If the config.yml or the database was written
 by a newer HomeCraft (you rolled the jar back), the start logs one WARN for each, for example "This
@@ -557,6 +564,7 @@ people's trails and parties. It is config revision 22 and database v38: see
 | Hunt Gear | the Mini Radar and the Mini Lure | 25 / 40 | hidden (and out of crates) while the server has no wild hunt |
 | Cosmetics | the **Snow, Star, Clover, Glow** and **Magic** trails, next to the Heart, Music and Sparkle trails | 100 | **30 days** (the old three were 7) |
 | Cosmetics | **Party Time!** | 300, 1 a day | 10 seconds of harmless fireworks around everyone playing; one party at a time on the server |
+| Cosmetics | the **Grand Firework Show** (0.38.1), next to the Firework Show (15, three seconds as ever) | 40 | 15 seconds of harmless fireworks with a big finale, when used; one at a time |
 | Looks (new) | the **Creeper Hat** and the **Dragon Hat** (the game's own heads) | 120 / 150 | 90 days |
 | Looks | the **Pink, Purple, Lime** and **Sky Caps** (dyed leather, no armour, never wear out) | 60 | 90 days |
 | Looks | the six animal hats (Bunny, Panda, Fox, Penguin, Frog, Cake), moved from Cosmetics | 120 | 90 days; hidden until you paste a texture |
@@ -582,6 +590,16 @@ people's trails and parties. It is config revision 22 and database v38: see
   world's clock (night is 12523 to 23477, the hours the sky is dark in clear weather), so a
   thunderstorm at noon is still day, and in the Nether or the End Make it Day is refused at no charge
   ("There's no day or night here!").
+- **The firework shows (0.38.1).** A firework row's `seconds` (3-30, 3 when it doesn't say) is how
+  long its show lasts, read from the row when the item is used, so an owner who changes it changes
+  the shows already in bags too. The **Firework Show** is the same three seconds as ever (six bursts
+  of two). The **Grand Firework Show** bursts twice a second for 15 seconds, three at a time, a few
+  blocks further out and at a mix of heights, and ends a second later in a finale of nine at once,
+  higher up. A show goes off around the player who uses it (Party Time is the one for everyone).
+  **One long show (6 seconds or more) at a time:** using another while one plays says "Wait for your
+  show to finish!" and the item stays in the hand. Short shows never wait, however many are stacked.
+  A show stops when its player quits. The Grand one is not in the Arcade Crate (the Firework Show
+  still is).
 - **Party Time** sets off two fireworks around each player in an economy world every second, except
   anyone in a game or a Games world and anyone who hides other people's trails and parties (the buyer
   always gets theirs); "✦ <name> started a party!" goes out once. While one runs, another is refused
@@ -802,6 +820,7 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `renew_tokens` on a hat row | (none) | a lower price to buy that hat again; trails never read it |
 | `days` on a hat row | `90` | how long it lasts (1-365) |
 | `seconds` on the `party_time` row | `10` | how long a party lasts (5-30) |
+| `seconds` on a firework row (0.38.1) | `3` | how long its show lasts (3-30): `firework_grand` ships `15`. A value out of range is brought into it, with one WARN |
 | `games.everyday_cap` | `0` (off) | all arcade goals (each game's daily challenge) together, a day; `15` stops a grinder out-earning everyone ([below](#the-token-shops-economy-038)) |
 | `trade.*` | | [the trade window](#the-trade-window-038) |
 
@@ -829,6 +848,26 @@ A row you changed is kept, with one WARN and the new row as a line to paste. The
 are unchanged.", "Config migration: the Arcade Crate no longer holds hats ...", the database migrations
 v37 and v38, and "Hats bought before 0.38: none". Trails already bought keep their end; buying again
 adds 30 days.
+
+### Upgrading to 0.38.1 (revision 23)
+
+The first start runs config revision 23 (`GrandShowMigration`); there is no database change. It
+changes only what still holds the value 0.38.0 shipped (and 0.37.1-0.37.3 before it, for the candy):
+
+- the **Grand Firework Show** (`firework_grand`) goes in right after `firework_show`, once, and only
+  while no row has that id (a `firework_show` you deleted puts it at the end of the list instead; an
+  id you already use for a row of your own is kept, with one WARN and the line to paste);
+- the **Candy Apple shower** gets gentler: `every_minutes` 20 → 60, `last_day_every_minutes`
+  10 → 30 and `apples_per_shower` 6 → 3 ([below](#the-candy-apple-shower-0371)). A value you changed
+  is yours and stays, with one WARN naming the new default;
+- the Prize Counter's comment is refreshed where it is still the plugin's own words (its firework
+  line).
+
+The console reads "Config migration: Prize Counter - added the Grand Firework Show (firework_grand:
+15 seconds of fireworks with a big finale, 40 tokens) after the Firework Show.", "Config migration:
+arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30, apples_per_shower
+6 → 3 (...)." and "Config migration: config_revision 22 → 23." A `/hcm reload` does the same and
+restarts the candy with the new settings. Firework Shows already in bags stay three-second shows.
 
 ### Parent notes
 
@@ -858,6 +897,21 @@ everything saved under her Bedrock id stays behind; an unlinked Java account is 
    and the new Java window on the same PC), she trades them across in the trade window. Her rented hats
    and Keepers can't be traded and don't need to be: the move carries the rights, and Wear it makes new
    keys. A collector cap trades back to the account that holds its claim.
+
+### If you roll back to 0.38.0
+
+The jar alone: 0.38.0 reads `config_revision: 23`, runs nothing and says once that the config was
+written by a newer HomeCraft. While rolled back:
+
+- 0.38.0 doesn't know a firework row's `seconds`, so **the Grand Firework Show row is read as a plain
+  Firework Show**: it still sells for 40 tokens and plays three seconds, and any number play at once.
+  One bought before or during the rollback is not spent by that: an unused one plays its 15 seconds
+  again after the upgrade (the length comes from the row when it is used);
+- the candy stays gentle (every 60 minutes, 30 on the last day, 3 apples): those are values in your
+  file, which 0.38.0 reads as they are.
+
+**For a rollback longer than an evening,** set `enabled: false` on the `firework_grand` row (and back
+to `true` after the upgrade). Upgrading again doesn't run revision 23 again (the file says 23).
 
 ### If you roll back to 0.37.3
 
@@ -1307,17 +1361,17 @@ with a "Trick or treat!". Each player's candy is their own: only they see it, an
 pick it up. Finding 31 earns the **Trick-or-Treat Bag 2026**, and the shower switches itself off
 after 31 October with nothing to edit.
 
-- **When.** Every 20 minutes, at :10, :30 and :50 local time (`clock.time_zone`), for everyone at
-  the same moment. On 31 October every 10 minutes, at :00, :10, :20 and so on. A shower that would
-  start inside the Games' restart hold (from 5 minutes before a restart to the end of its minute) is
-  skipped, because candy isn't saved and the restart would wipe it: on the shipped 04:00 and 16:00
-  that is only the 04:00 and 16:00 showers on 31 October. A start or a `/hcm reload` partway
-  through a slot waits for the next one.
+- **When.** Every hour, at ten past (`clock.time_zone`), for everyone at the same moment. On
+  31 October every half hour, at :10 and :40. (Until 0.38.1: every 20 minutes, every 10 on the last
+  day, six apples; see the knobs below.) A shower that would start inside the Games' restart hold
+  (from 5 minutes before a restart to the end of its minute) is skipped, because candy isn't saved
+  and the restart would wipe it: on the shipped 04:00 and 16:00 none is, since no shower starts on
+  the hour. A start or a `/hcm reload` partway through a slot waits for the next one.
 - **A welcome shower.** On a player's first join of each local day they get a shower of their own
-  30 seconds later (if the checks below pass then), so nobody waits up to 20 minutes for the
-  first one. A restart can give one more.
+  30 seconds later (if the checks below pass then), so nobody waits up to an hour for the first
+  one. A restart can give one more.
 - **The show, for that player alone:** "Trick or treat!" on screen, a chime and a high, quiet
-  giggle, the candy bar for 3 seconds, and six candy apples falling one every half second, 2-4
+  giggle, the candy bar for 3 seconds, and three candy apples falling one every half second, 2-4
   blocks away, mostly in front of them. Witch sparkles follow each one down, it lands with a
   "plop" you can hear from where it is and a puff of green sparkles, and a green sparkle marks it
   every second until it is picked up. Under a roof or a tree the candy pops up from the floor 2-3
@@ -1381,7 +1435,7 @@ after 31 October with nothing to edit.
   can be claimed after that, on a join or with `/hcm candy`. Next year, set `from` and `to` to the
   new dates: the year in the count, the names and the bag comes from `from`, so 2027 starts from 0
   with a "2027" bag.
-- On join, while the shower runs, each player reads "✦ Candy apples fall every 20 minutes until
+- On join, while the shower runs, each player reads "✦ Candy apples fall every 60 minutes until
   31 Oct! You've found 17 of 31."
 
 #### Owner knobs (`arcade.events.candy`)
@@ -1390,10 +1444,10 @@ after 31 October with nothing to edit.
 |---|---|---|
 | `enabled` | `true` | The shower's switch (after `/hcm reload`). Counts and bags stay. `arcade.enabled: false` stops it too |
 | `from`, `to` | `"2026-10-01"`, `"2026-10-31"` | The window: local dates (`clock.time_zone`), both days included. Keep the quotes (a bare date is read too). A date that can't be read, or `from` after `to`, turns the shower off with one WARN. A window over 62 days or across a year still runs, with a WARN |
-| `every_minutes` | `20` | A shower this often (10-120), counted from local midnight plus `offset_minutes` |
+| `every_minutes` | `60` (0.38.1; `20` before) | A shower this often (10-120), counted from local midnight plus `offset_minutes` |
 | `offset_minutes` | `10` | The day's first shower, in minutes after midnight (0 to `every_minutes` - 1) |
-| `last_day_every_minutes` | `10` | On the last day (`to`), a shower this often instead (10-120; `0` = as `every_minutes`) |
-| `apples_per_shower` | `6` | Candy apples per player per shower (1-12) |
+| `last_day_every_minutes` | `30` (0.38.1; `10` before) | On the last day (`to`), a shower this often instead (10-120; `0` = as `every_minutes`) |
+| `apples_per_shower` | `3` (0.38.1; `6` before) | Candy apples per player per shower (1-12) |
 | `golden_percent` | `4` | The chance in 100 that an apple is a Golden Candy Apple (0-100) |
 | `golden_tokens` | `5` | Tokens for each Golden Candy Apple picked up (0-20) |
 | `daily_token_cap` | `10` | The most tokens a player gets from candy in a local day (0-50) |
@@ -1403,6 +1457,11 @@ after 31 October with nothing to edit.
 Every key is new: the first start of 0.37.1 writes them, with their comment, into your
 config.yml, after `collectors:`. A number out of its range is brought into it, with one WARN.
 `config_revision` stays 21, and `/hcm config reset arcade.events.candy` puts the section back.
+
+**Gentler from 0.38.1** (the owner's "you can tune back the candy apples"): config revision 23 moves
+`every_minutes` 20 → 60, `last_day_every_minutes` 10 → 30 and `apples_per_shower` 6 → 3 wherever
+they still hold what 0.37.1-0.38.0 shipped. An owner who changed one keeps theirs, with one WARN
+naming the new default ([Upgrading to 0.38.1](#upgrading-to-0381-revision-23)).
 
 #### Commands
 

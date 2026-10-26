@@ -21,10 +21,15 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -54,9 +59,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * strokes a course more than with all five, where on Adventure Golf's courses it doesn't); the kid
  * is within par + 2 (Tiny Golf: par + 1) and never wet;
  * Tiny Golf is dry, short (path at most 22) and par 2-3; planning is well inside the budget and the
- * time (p50 about 4 s, p99 under 20 s, on one planner thread); a stored layout re-derives to the
- * same hash; goldens are pinned; re-rolling one hole changes no other hole's blocks; a cancelled job
- * stops. A 2,000-seed soak runs under {@code -Phcm.slow}.
+ * time (p50 under 4 s on one planner thread with nothing else planning, p99 under 20 s with every course
+ * planned in parallel, on a machine as quick as the one they were measured on, and in proportion on a
+ * slower one); a stored layout re-derives to the same hash; goldens are pinned; re-rolling one hole
+ * changes no other hole's blocks; a cancelled job stops. A 2,000-seed soak runs under {@code -Phcm.slow}.
  */
 class GolfPlannerV4Test {
 
@@ -68,7 +74,32 @@ class GolfPlannerV4Test {
     private record Run(Slots.Def slot, int n, Plan plan, long millis) {
     }
 
+    /**
+     * One course planned again with nothing else planning, its CPU time, and the CPU time each yardstick
+     * ({@link #walk()}, {@link #roll()}) took on the same thread just before it.
+     */
+    private record Alone(Slots.Def slot, long millis, long walkMicros, long rollMicros) {
+    }
+
+    /**
+     * How many of each slot's courses are planned again one at a time for the p50. In parallel, two planner
+     * threads may share one core (a 4-vCPU GitHub runner is 2 cores of two threads each), and then each one's
+     * CPU time is longer than it would be alone.
+     */
+    private static final int ALONE_SEEDS = 15;
+    /**
+     * Each yardstick's mean (all but its quickest and slowest timing), in microseconds of CPU, beside the
+     * courses planned one at a time, on the machine the {@code FreshBench} times were measured on (the walk
+     * 28.0-35.3 ms there, the roll 30.5-34.8 ms).
+     */
+    private static final long WALK_REF_MICROS = 29_000;
+    private static final long ROLL_REF_MICROS = 32_000;
+    /** What each yardstick adds up to; each does exactly the same work every time. */
+    private static final long WALK_SUM = 4 * 177_572_020L;
+    private static final long ROLL_SUM = -1_993_121_983_815_145_486L;
+
     private static final List<Run> RUNS = new ArrayList<>();
+    private static final List<Alone> ALONE_RUNS = new ArrayList<>();
 
     private static long seed(Slots.Def slot, int n) {
         return GenSeed.seed(SECRET, 20725 + n, slot.id(), 0);
@@ -92,15 +123,194 @@ class GolfPlannerV4Test {
         }
     }
 
-    /** Plan every course once, in parallel (each plan is single-threaded and pure). */
+    /**
+     * Plan every course once, in parallel (each plan is single-threaded and pure), then the first
+     * {@link #ALONE_SEEDS} of each slot again one at a time, each just after the two yardsticks.
+     */
     @BeforeAll
     static void planAll() {
         RUNS.addAll(IntStream.range(0, SEEDS).parallel().mapToObj(n -> run(Slots.DAILY_GOLF, n)).toList());
         RUNS.addAll(IntStream.range(0, SEEDS).parallel().mapToObj(n -> run(Slots.TINY_GOLF, n)).toList());
+        for (int i = 0; i < 10; i++) {
+            walk(); // compiled before any timing of them counts
+            roll();
+        }
+        for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
+            for (int n = 0; n < ALONE_SEEDS; n++) {
+                long t0 = CPU.getCurrentThreadCpuTime();
+                long walked = walk();
+                long t1 = CPU.getCurrentThreadCpuTime();
+                long rolled = roll();
+                long t2 = CPU.getCurrentThreadCpuTime();
+                assertEquals(WALK_SUM, walked, "the walk does the same work every time");
+                assertEquals(ROLL_SUM, rolled, "the roll does the same work every time");
+                ALONE_RUNS.add(new Alone(slot, run(slot, n).millis(), (t1 - t0) / 1_000, (t2 - t1) / 1_000));
+            }
+        }
+    }
+
+    /**
+     * One yardstick, a fixed piece of the bookkeeping beside the planner's putts: a breadth-first walk over a
+     * 192 x 192 grid with about a fifth of it walled off, the cells it reaches kept in a hash of packed
+     * {@code long} keys, as {@link ExpertSearch#search} keeps the spots it has seen (packed as
+     * {@link Palette#blockKey} packs them), walked four times so one timing spans a busy machine's time slices.
+     */
+    private static long walk() {
+        int size = 192;
+        int[][] steps = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        long sum = 0;
+        for (int round = 0; round < 4; round++) {
+            boolean[] wall = new boolean[size * size];
+            long x = 0x9E3779B97F4A7C15L;
+            for (int i = size; i < wall.length; i++) { // the first row stays open, so the walk always gets going
+                x = x * 6364136223846793005L + 1442695040888963407L;
+                wall[i] = (x >>> 59) < 6;
+            }
+            Map<Long, Integer> dist = new HashMap<>();
+            ArrayDeque<Long> queue = new ArrayDeque<>();
+            dist.put(0L, 0);
+            queue.add(0L);
+            long walked = 0;
+            while (!queue.isEmpty()) {
+                long at = queue.poll();
+                int d = dist.get(at);
+                walked += d;
+                int ax = (int) (at >>> 38);
+                int az = (int) (at >>> 12) & 0x3FFFFFF;
+                for (int[] s : steps) {
+                    int bx = ax + s[0];
+                    int bz = az + s[1];
+                    if (bx >= 0 && bz >= 0 && bx < size && bz < size && !wall[bz * size + bx]) {
+                        long key = ((long) bx << 38) | ((long) bz << 12);
+                        if (dist.putIfAbsent(key, d + 1) == null) {
+                            queue.add(key);
+                        }
+                    }
+                }
+            }
+            sum += walked * 31 + dist.size();
+        }
+        return sum;
+    }
+
+    /**
+     * The other yardstick, a fixed piece of the ball's kind of work: 4,500 balls rolled over a grid of block ids
+     * the size of Golf of the Week's box (128 x 16 x 224), in sub-steps of at most a quarter block that read
+     * the block under the ball, climb a step and lose speed for it, bounce off a wall, fall, and slow by their
+     * block's grip each tick, with the floors, square roots and hypotenuses a putt takes. It is shaped like
+     * {@code BallPhysics} but isn't it, so a slower physics still fails.
+     */
+    private static long roll() {
+        int sx = 128;
+        int sy = 16;
+        int sz = 224;
+        byte[] cells = new byte[sx * sy * sz];
+        double[] tops = {-1, 1, 0.5, 1.5, 0.125, 1, 0.5, 1};
+        double[] grip = {0.9, 0.96, 0.98, 0.9, 0.99, 0.95, 0.97, 0.985};
+        long x = 0x2545F4914F6CDD1DL;
+        for (int cx = 0; cx < sx; cx++) {
+            for (int cz = 0; cz < sz; cz++) {
+                x = x * 6364136223846793005L + 1442695040888963407L;
+                int ground = 3 + (int) (x >>> 62);
+                for (int cy = 0; cy <= ground; cy++) {
+                    cells[(cy * sz + cz) * sx + cx] = (byte) (cy < ground ? 1 : 1 + (int) ((x >>> 40) & 0xFF) % 7);
+                }
+                if (((x >>> 20) & 63) == 0) {
+                    cells[((ground + 1) * sz + cz) * sx + cx] = 3; // a fence post now and then
+                }
+            }
+        }
+        long sum = 0;
+        for (int ball = 0; ball < 4_500; ball++) {
+            double bx = 4.5 + ball * 37 % 119;
+            double by = 8;
+            double bz = 4.5 + ball * 11 % 23;
+            double vx = (ball % 9 - 4) * 0.06;
+            double vy = 0;
+            double vz = 0.6 + ball % 5 * 0.08;
+            for (int tick = 0; tick < 300; tick++) {
+                double speed = StrictMath.hypot(vx, vz);
+                if (speed < 0.005) {
+                    break;
+                }
+                int n = (int) Math.max(1, Math.ceil(speed / 0.25));
+                int id = 0;
+                for (int i = 0; i < n; i++) {
+                    double nx = bx + vx / n;
+                    double nz = bz + vz / n;
+                    if (nx < 0.5 || nx >= sx - 0.5) {
+                        vx = -vx * 0.6;
+                        nx = bx;
+                    }
+                    if (nz < 0.5 || nz >= sz - 0.5) {
+                        vz = -vz * 0.6;
+                        nz = bz;
+                    }
+                    int cx = (int) Math.floor(nx);
+                    int cz = (int) Math.floor(nz);
+                    int cy = Math.min(sy - 1, (int) Math.floor(by + 0.5));
+                    while (cy > 0 && cells[(cy * sz + cz) * sx + cx] == 0) {
+                        cy--;
+                    }
+                    id = cells[(cy * sz + cz) * sx + cx];
+                    double top = cy + tops[id];
+                    double rise = top - by;
+                    double s = StrictMath.hypot(vx, vz);
+                    if (rise > 0.5 + 1e-9 || (rise > 1e-9 && s * s <= 2 * 0.08 * rise)) { // a wall: bounce
+                        if (Math.abs(nx - bx) > Math.abs(nz - bz)) {
+                            vx = -vx * 0.6;
+                        } else {
+                            vz = -vz * 0.6;
+                        }
+                        continue;
+                    }
+                    if (rise > 1e-9) { // a step: climb it, slower
+                        double kept = Math.sqrt(s * s - 2 * 0.08 * rise) / s;
+                        vx *= kept;
+                        vz *= kept;
+                        by = top;
+                    }
+                    bx = nx;
+                    bz = nz;
+                    if (by > top + 1e-9) { // in the air: fall
+                        vy = (vy - 0.08 / n) * 0.98;
+                        by = Math.max(top, by + vy / n);
+                    } else {
+                        vy = 0;
+                        by = top;
+                    }
+                }
+                double f = vy == 0 ? grip[id] : 0.99;
+                vx *= f;
+                vz *= f;
+                sum += (long) Math.floor(by * 16);
+            }
+            sum = sum * 31 + (long) Math.floor(bx * 64) * 7 + (long) Math.floor(bz * 64);
+        }
+        return sum;
     }
 
     private static List<Run> runs(Slots.Def slot) {
         return RUNS.stream().filter(r -> r.slot() == slot).toList();
+    }
+
+    private static List<Alone> aloneRuns(Slots.Def slot) {
+        return ALONE_RUNS.stream().filter(a -> a.slot() == slot).toList();
+    }
+
+    /** The machine, for a failed time: its processor count and what /proc/cpuinfo says its cores are. */
+    private static String machine() {
+        String cpu = "no /proc/cpuinfo";
+        try {
+            List<String> lines = Files.readAllLines(Path.of("/proc/cpuinfo"));
+            cpu = String.join(", ", Arrays.stream(new String[]{"model name", "cpu cores", "siblings"})
+                    .map(key -> lines.stream().filter(l -> l.startsWith(key)).findFirst()
+                            .map(l -> key + " " + l.substring(l.indexOf(':') + 1).trim()).orElse(key + " unknown"))
+                    .toList());
+        } catch (IOException | RuntimeException e) {
+            // not Linux, or not readable: the processor count is still worth having
+        }
+        return Runtime.getRuntime().availableProcessors() + " processors (" + cpu + ")";
     }
 
     private static PlannedGolf golf(Plan p) {
@@ -785,25 +995,53 @@ class GolfPlannerV4Test {
         }
     }
 
-    /** The {@code FreshBench} numbers (§6.2, §6.3): work, CPU time and blocks per course, p50/p99. */
+    /**
+     * The {@code FreshBench} numbers (§6.2, §6.3): work, CPU time and blocks per course, p50/p99. The work is
+     * the same on every machine. The p50 is of the courses planned one at a time, the spec's one planner thread;
+     * the p99 is of every course, planned in parallel. The CPU times hold to the spec's on a machine as quick as
+     * the one they were measured on, or a quicker one; on a slower one (a busy CI runner) they are scaled by
+     * how much slower the slower of the two yardsticks ran beside the courses planned one at a time, so a slow
+     * runner doesn't hide a planner that got slower.
+     */
     @Test
     void freshBenchPlanningIsWellInsideItsBudgetAndTime() {
+        String machine = machine();
         for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
             long[] work = runs(slot).stream().mapToLong(r -> r.plan().work()).sorted().toArray();
             long[] ms = runs(slot).stream().mapToLong(Run::millis).sorted().toArray();
             long[] ops = runs(slot).stream().mapToLong(r -> r.plan().ops().size()).sorted().toArray();
+            long[] same = runs(slot).stream().filter(r -> r.n() < ALONE_SEEDS).mapToLong(Run::millis).sorted()
+                    .toArray();
+            long[] alone = aloneRuns(slot).stream().mapToLong(Alone::millis).sorted().toArray();
+            long[] walks = aloneRuns(slot).stream().mapToLong(Alone::walkMicros).sorted().toArray();
+            long[] rolls = aloneRuns(slot).stream().mapToLong(Alone::rollMicros).sorted().toArray();
             long p99Work = work[(int) (work.length * 0.99)];
-            long p50Ms = ms[ms.length / 2];
+            long p50Ms = alone[alone.length / 2];
             long p99Ms = ms[(int) (ms.length * 0.99)];
             long p99Ops = ops[(int) (ops.length * 0.99)];
+            long walk = Math.round(Arrays.stream(walks, 1, walks.length - 1).average().orElseThrow());
+            long roll = Math.round(Arrays.stream(rolls, 1, rolls.length - 1).average().orElseThrow());
+            double walkRatio = (double) walk / WALK_REF_MICROS;
+            double rollRatio = (double) roll / ROLL_REF_MICROS;
+            double slower = Math.max(1.0, Math.max(Math.round(100 * walkRatio), Math.round(100 * rollRatio)) / 100.0);
+            long p50Cap = Math.round(4_000 * slower);
+            long p99Cap = Math.round(20_000 * slower);
+            String parallel = " (" + same[same.length / 2] + " ms in parallel for the same " + ALONE_SEEDS
+                    + ", " + ms[ms.length / 2] + " ms for all " + ms.length + ")";
+            String yardsticks = String.format(Locale.ROOT, "; the walk took %d us, %.2fx the %d us where the times"
+                    + " were measured, the roll %d us, %.2fx the %d us; %s", walk, walkRatio, WALK_REF_MICROS, roll,
+                    rollRatio, ROLL_REF_MICROS, machine);
             System.out.println("FreshBench golf v4 " + slot.id() + ": work p50 " + work[work.length / 2] + " p99 " + p99Work
                     + " max " + work[work.length - 1] + " putts (budget " + GolfPlanner.COURSE_BUDGET + "); CPU p50 "
-                    + p50Ms + " ms, p99 " + p99Ms + " ms, max " + ms[ms.length - 1] + " ms (planning and its own full"
-                    + " check); blocks p50 " + ops[ops.length / 2] + " p99 " + p99Ops + " max " + ops[ops.length - 1]);
+                    + p50Ms + " ms one at a time" + parallel + ", p99 " + p99Ms + " ms, max " + ms[ms.length - 1]
+                    + " ms in parallel (planning and its own full check); blocks p50 " + ops[ops.length / 2] + " p99 "
+                    + p99Ops + " max " + ops[ops.length - 1] + yardsticks);
             assertTrue(p99Work <= GolfPlanner.COURSE_BUDGET / 10, slot.id() + ": p99 work " + p99Work
                     + " is a tenth of the course budget at most");
-            assertTrue(p50Ms < 4_000, slot.id() + ": p50 " + p50Ms + " ms of CPU, under the spec's 4 s");
-            assertTrue(p99Ms < 20_000, slot.id() + ": p99 " + p99Ms + " ms of CPU, under 20 s");
+            assertTrue(p50Ms < p50Cap, slot.id() + ": p50 " + p50Ms + " ms of CPU one at a time" + parallel
+                    + ", under the spec's 4 s" + (slower > 1.0 ? ", scaled to " + p50Cap + " ms" : "") + yardsticks);
+            assertTrue(p99Ms < p99Cap, slot.id() + ": p99 " + p99Ms + " ms of CPU in parallel, under 20 s"
+                    + (slower > 1.0 ? ", scaled to " + p99Cap + " ms" : "") + yardsticks);
             assertTrue(p99Ops <= 30_000, slot.id() + ": p99 blocks " + p99Ops + ", scenery included, well within the"
                     + " check's cap of " + GolfValidator.MAX_OPS);
         }

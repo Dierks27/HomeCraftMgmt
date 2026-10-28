@@ -36,6 +36,10 @@ class ClubhouseSettingsTest {
         assertTrue(d.enabled(), "ships on: it builds itself in an empty box");
         assertEquals(30, d.maxMinutes(), "30 minutes");
         assertTrue(d.partyAfter() && d.raceNightAfter() && d.golfAfter(), "back here after everything");
+        assertTrue(d.soloFirst() && d.soloAfter() && d.boards(), "0.38.3: through it, back to it, and its boards");
+        assertEquals(5, d.firstSeconds(), "on to the course after 5 seconds");
+        assertEquals(new ClubhouseSettings(true, ClubhouseSettings.ORIGIN, 30, true, true, true), d,
+                "0.38.2's six settings read 0.38.3's as shipped");
         assertEquals(32, d.box().sizeX(), "32 wide");
         assertEquals(16, d.box().sizeY(), "16 high");
         List<String> warns = new ArrayList<>();
@@ -83,6 +87,26 @@ class ClubhouseSettingsTest {
         assertEquals(List.of(5376, 160, 4448), s.origin(), "x and z on the 16-block grid");
         assertEquals(2, s.maxMinutes(), "at least 2 minutes (a warning comes a minute before)");
         assertEquals(2, warns.size(), warns.toString());
+    }
+
+    @Test
+    void theSoloSwitchesAndTheWaitAreReadOverTheShippedValues() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("solo_first", false);
+        m.put("solo_after", false);
+        m.put("first_seconds", 12);
+        m.put("boards", false);
+        List<String> warns = new ArrayList<>();
+        ClubhouseSettings s = read(m, warns);
+        assertFalse(s.soloFirst() || s.soloAfter() || s.boards(), "each switch reads off");
+        assertEquals(12, s.firstSeconds(), "12 seconds");
+        assertEquals(List.of(), warns, "without a WARN");
+        assertEquals(1, read(Map.of("first_seconds", 0), new ArrayList<>()).firstSeconds(), "at least 1 second");
+        assertEquals(30, read(Map.of("first_seconds", 300), new ArrayList<>()).firstSeconds(), "at most 30");
+        List<String> junk = new ArrayList<>();
+        ClubhouseSettings j = read(Map.of("solo_first", "maybe"), junk);
+        assertTrue(j.soloFirst(), "a junk switch here is its shipped value: the Clubhouse stays open");
+        assertFalse(junk.contains("INVALID"), junk.toString());
     }
 
     @Test

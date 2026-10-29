@@ -19,6 +19,10 @@ import java.util.Set;
  * benches round them, a lantern on each. The south half is open floor: sixteen arrival spots, three
  * or more blocks apart, each facing the podium.
  *
+ * <p><b>The jukebox corner</b> (0.38.4): a small pink glass stage in the south-west corner with a jukebox on it
+ * and a glass block on top ({@link JukeboxCorner}). The trophy case ({@link TrophyWall}) is a row of item frames,
+ * entities, not blocks: nothing of it is in the plan.
+ *
  * <p><b>Why glass.</b> Nothing a mob could spawn on is ever open to the air, inside or on the roof:
  * every top face a mob could stand on is glass, a bench (bottom stairs) or a lantern, and the rest
  * (the walls, the gold pedestal, the sea lanterns) is covered. The room is lit day and night. No
@@ -29,8 +33,11 @@ import java.util.Set;
  */
 public final class ClubhousePlanner {
 
-    /** The planner's version: part of the plan, so a change of the room is a change of plan. */
-    public static final int ALGO = 1;
+    /**
+     * The planner's version: part of the plan, so a change of the room is a change of plan. 2 (0.38.4): the
+     * jukebox corner.
+     */
+    public static final int ALGO = 2;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -49,6 +56,21 @@ public final class ClubhousePlanner {
     static final int PANEL_X1 = 21;
     static final int PANEL_Y0 = 7;
     static final int PANEL_Y1 = 11;
+    /** The jukebox corner (0.38.4): a 3 x 3 stage at (1-3, 1, 28-30), the jukebox in its middle, glass on top. */
+    static final int STAGE_X0 = 1;
+    static final int STAGE_Z0 = 28;
+    static final int JUKEBOX_X = 2;
+    static final int JUKEBOX_Y = 2;
+    static final int JUKEBOX_Z = 29;
+    /**
+     * The trophy case (0.38.4): item frames on the west wall's inner face (x = minX + 1), on the skirting row,
+     * from z = minZ + {@value #TROPHY_Z0} every {@value #TROPHY_STEP}, under the My stats board, at most
+     * {@link ClubBoard#MAX_ROWS}.
+     */
+    static final int TROPHY_Y = 2;
+    static final int TROPHY_Z0 = 9;
+    static final int TROPHY_STEP = 2;
+    static final int TROPHY_MAX = ClubBoard.MAX_ROWS;
 
     // ---- the blocks --------------------------------------------------------------------------------
 
@@ -69,6 +91,8 @@ public final class ClubhousePlanner {
             "minecraft:light_gray_stained_glass", "minecraft:orange_stained_glass");
     public static final String TABLE_WEST = "minecraft:yellow_stained_glass";
     public static final String TABLE_EAST = "minecraft:lime_stained_glass";
+    public static final String STAGE = "minecraft:pink_stained_glass";
+    public static final String JUKEBOX = "minecraft:jukebox[has_record=false]";
 
     /** A bench: birch stairs, bottom half, their back ("facing") away from the table. */
     static String bench(String facing) {
@@ -91,7 +115,7 @@ public final class ClubhousePlanner {
     }
 
     /** The blocks a mob could stand on if open to the air: never left uncovered. */
-    static final Set<String> COVERED_ONLY = Set.of(WALL, SKIRTING, TRIM, PANEL, LIGHT, GOLD, IRON);
+    static final Set<String> COVERED_ONLY = Set.of(WALL, SKIRTING, TRIM, PANEL, LIGHT, GOLD, IRON, JUKEBOX);
 
     private ClubhousePlanner() {
     }
@@ -176,6 +200,14 @@ public final class ClubhousePlanner {
         // two tables, each with a lantern and four benches round it
         table(b, 5, 13, TABLE_WEST);
         table(b, 25, 13, TABLE_EAST);
+        // the jukebox corner (0.38.4): a small stage in the south-west corner, the jukebox on it, glass on top
+        for (int dx = 0; dx < 3; dx++) {
+            for (int dz = 0; dz < 3; dz++) {
+                b.set(STAGE_X0 + dx, 1, STAGE_Z0 + dz, STAGE);
+            }
+        }
+        b.set(JUKEBOX_X, JUKEBOX_Y, JUKEBOX_Z, JUKEBOX);
+        b.set(JUKEBOX_X, JUKEBOX_Y + 1, JUKEBOX_Z, ROOF_GLASS); // spawn-proof: nothing stands on a jukebox
         // the arrival spots, facing the podium
         List<ClubhouseSite.Spot> spawns = new ArrayList<>();
         for (int k : SPAWN_Z) {
@@ -188,9 +220,26 @@ public final class ClubhousePlanner {
         Box inside = new Box(box.minX() + 1, box.minY() + 1, box.minZ() + 1, box.maxX() - 1, box.minY() + WALL_TOP,
                 box.maxZ() - 1);
         List<String> summary = List.of("the Clubhouse: " + box.describe(), spawns.size() + " arrival spots, a podium "
-                + "of 3, the results board on the north wall", "plan " + ALGO);
+                + "of 3, the results board on the north wall, a jukebox in the south-west corner", "plan " + ALGO);
         Plan plan = Plan.of(SLOT, ALGO, 0L, box, b.palette, b.ops, List.of(), List.of(), null, summary, 0);
         return new ClubhouseSite(plan, spawns, podium, board, inside);
+    }
+
+    /** The jukebox block of the generated room in {@code box}: {x, y, z}. */
+    public static int[] jukebox(Box box) {
+        return new int[]{box.minX() + JUKEBOX_X, box.minY() + JUKEBOX_Y, box.minZ() + JUKEBOX_Z};
+    }
+
+    /**
+     * The trophy case's frame positions in {@code box} (0.38.4): {@value #TROPHY_MAX} blocks of air on the west
+     * wall's inner face, the wall's skirting behind each, under the My stats board; the frames face east.
+     */
+    public static List<int[]> trophyFrames(Box box) {
+        List<int[]> out = new ArrayList<>();
+        for (int n = 0; n < TROPHY_MAX; n++) {
+            out.add(new int[]{box.minX() + 1, box.minY() + TROPHY_Y, box.minZ() + TROPHY_Z0 + n * TROPHY_STEP});
+        }
+        return out;
     }
 
     /** Windows: three of every six blocks along a wall (away from the corners). */

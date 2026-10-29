@@ -665,6 +665,7 @@ public final class PartyRaces {
         List<PartyRace.Line> lines = race.results();
         if (line == null) {
             results.put(race.lobbyId(), lines);
+            com.dierks.homecraft.games.clubhouse.FamilyWeek.partyWon(games(), lines, race.racers().size()); // 0.38.4: the family week's win
         }
         for (UUID id : race.racers()) {
             hideBar(id);

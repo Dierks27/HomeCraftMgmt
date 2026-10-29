@@ -99,4 +99,18 @@ class StatsCardTest {
                 "not read yet");
         assertNull(StatsCard.build(null, null), "nothing read: nothing");
     }
+
+    /** 0.38.4: the family week's points and place come through to the card and its wall line. */
+    @Test
+    void theFamilyWeeksPointsAndPlace() {
+        ClubData.Snapshot snap = new ClubData.Snapshot(List.of(), List.of(), 0, -1, null, 0, Set.of(ME), 20_700, 20_693);
+        ClubData.Personal p = new ClubData.Personal(List.of(), List.of(), Map.of(), List.of(), 9, 2);
+        StatsCard.Mine m = StatsCard.build(snap, p);
+        assertEquals(9, m.weekPoints());
+        assertEquals(2, m.weekRank());
+        assertTrue(StatsCard.board("Sam", m).contains("\n" + ClubBoardText.statsWeek(9, 2) + "\n"), "on the wall");
+        StatsCard.Mine old = new StatsCard.Mine(List.of(), 0, null, 0);
+        assertEquals(0, old.weekPoints(), "0.38.3's shape: no points");
+        assertTrue(StatsCard.board("Sam", old).contains(ClubBoardText.statsWeek(0, 0)), "says none yet");
+    }
 }

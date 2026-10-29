@@ -764,6 +764,7 @@ public final class GolfRounds {
         int par = r.par();
         int holesInOne = r.holesInOne().size();
         boolean record = summary.result().record();
+        com.dierks.homecraft.games.clubhouse.FamilyWeek.scored(games(), p.getUniqueId(), com.dierks.homecraft.games.clubhouse.FamilyWeekRules.golfPoints(summary.result().personalBest(), record, holesInOne)); // 0.38.4
         games().tellProgress(g -> g.golfFinished(p, c.id(), strokes, par, holesInOne, c.generated(), record));
         GolfFinish.Daily daily = r.daily();
         if (daily != null && daily.tag() != null) {

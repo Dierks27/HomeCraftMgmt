@@ -34,6 +34,10 @@ import java.util.UUID;
  * and a golf course's board keeps each player's best, so "this week" is the best set since the week began (a best
  * set last week and not beaten since is not this week's); the Weekly Cup's week is its own (it turns at 04:00).
  *
+ * <p><b>The family week</b> (0.38.4): the week's points board ({@link FamilyWeekRules#boardOf}, higher is
+ * better), its race wins, and last week's top three for the ceremony, read when the snapshot carries the week's
+ * key; each viewer's own points and place come from the same list (no extra read).
+ *
  * <p><b>What is public.</b> The shared boards only ever show names, times and scores the high-score boards already
  * show. A player's own numbers ({@link Personal}) are read for them alone and shown only to them.
  *
@@ -44,6 +48,10 @@ public final class ClubData {
     /** The games the boards read: Time Trials' and Mini golf's ids (pinned to their specs by a test). */
     public static final String TRIALS = "trials";
     public static final String GOLF = "golf";
+    /** The family week's points boards live under the Clubhouse's own id (0.38.4; pinned to its spec by a test). */
+    public static final String CLUB = "clubhouse";
+    /** How many of the family week's rows are read (a page shows 8; a viewer beyond them has no place). */
+    static final int FAMILY_ROWS = 16;
     /** How deep a board that keeps every best ever is read for the best set this week. */
     static final int DEEP = 100;
 
@@ -71,14 +79,22 @@ public final class ClubData {
      * @param weekStart the first instant of this week (epoch ms): the quests' week, local midnight
      * @param cupWeek   the Weekly Cup's week now, or -1 while the Cup is off
      * @param pick      today's pick's name, or {@code null} for none
+     * @param weekKey   0.38.4: the family week's key (the local epoch day it began), or -1 for no family page
+     * @param lastWeekKey the week before's key (for the ceremony), or -1
      */
     public record Snapshot(List<CourseBoards> courses, List<GolfBoards> golf, long weekStart, long cupWeek,
-                           String pick, int pickBonus, Set<UUID> viewers) {
+                           String pick, int pickBonus, Set<UUID> viewers, long weekKey, long lastWeekKey) {
 
         public Snapshot {
             courses = List.copyOf(courses == null ? List.of() : courses);
             golf = List.copyOf(golf == null ? List.of() : golf);
             viewers = Set.copyOf(viewers == null ? Set.of() : viewers);
+        }
+
+        /** Without a family week (0.38.3's shape, kept for the tests). */
+        public Snapshot(List<CourseBoards> courses, List<GolfBoards> golf, long weekStart, long cupWeek, String pick,
+                        int pickBonus, Set<UUID> viewers) {
+            this(courses, golf, weekStart, cupWeek, pick, pickBonus, viewers, -1, -1);
         }
     }
 
@@ -87,13 +103,20 @@ public final class ClubData {
      * time on, and their token ledger's totals by source since the week began.
      */
     public record Personal(List<GamesDao.PlayerBoard> trials, List<GamesDao.PlayerBoard> golf,
-                           Map<String, Integer> ranks, List<TokenDao.SourceTotal> totals) {
+                           Map<String, Integer> ranks, List<TokenDao.SourceTotal> totals, long weekPoints,
+                           int weekRank) {
 
         public Personal {
             trials = List.copyOf(trials == null ? List.of() : trials);
             golf = List.copyOf(golf == null ? List.of() : golf);
             ranks = Map.copyOf(ranks == null ? Map.of() : ranks);
             totals = List.copyOf(totals == null ? List.of() : totals);
+        }
+
+        /** Without the family week's points (0.38.3's shape, kept for the tests). */
+        public Personal(List<GamesDao.PlayerBoard> trials, List<GamesDao.PlayerBoard> golf, Map<String, Integer> ranks,
+                        List<TokenDao.SourceTotal> totals) {
+            this(trials, golf, ranks, totals, 0, 0);
         }
     }
 
@@ -103,7 +126,8 @@ public final class ClubData {
      */
     public record Raw(Map<String, GamesDao.ScoreRow> week, Map<String, GamesDao.ScoreRow> records,
                       Map<String, GamesDao.ScoreRow> golfWeek, Map<String, GamesDao.ScoreRow> golfRecords,
-                      Map<String, CupEntry> cups, Map<UUID, Personal> personal) {
+                      Map<String, CupEntry> cups, Map<UUID, Personal> personal, List<GamesDao.ScoreRow> family,
+                      Map<UUID, Long> wins, List<GamesDao.ScoreRow> lastWeek) {
 
         public Raw {
             week = Map.copyOf(week == null ? Map.of() : week);
@@ -112,6 +136,16 @@ public final class ClubData {
             golfRecords = Map.copyOf(golfRecords == null ? Map.of() : golfRecords);
             cups = Map.copyOf(cups == null ? Map.of() : cups);
             personal = Map.copyOf(personal == null ? Map.of() : personal);
+            family = List.copyOf(family == null ? List.of() : family);
+            wins = Map.copyOf(wins == null ? Map.of() : wins);
+            lastWeek = List.copyOf(lastWeek == null ? List.of() : lastWeek);
+        }
+
+        /** Without the family week (0.38.3's shape, kept for the tests). */
+        public Raw(Map<String, GamesDao.ScoreRow> week, Map<String, GamesDao.ScoreRow> records,
+                   Map<String, GamesDao.ScoreRow> golfWeek, Map<String, GamesDao.ScoreRow> golfRecords,
+                   Map<String, CupEntry> cups, Map<UUID, Personal> personal) {
+            this(week, records, golfWeek, golfRecords, cups, personal, List.of(), Map.of(), List.of());
         }
     }
 
@@ -134,6 +168,11 @@ public final class ClubData {
 
         /** {@code player}'s ledger totals by source since {@code since}. */
         List<TokenDao.SourceTotal> totals(long since, UUID player) throws SQLException;
+
+        /** A points board's top {@code limit} rows, higher is better (0.38.4: the family week); none by default. */
+        default List<GamesDao.ScoreRow> topPoints(String game, String board, int limit) throws SQLException {
+            return List.of();
+        }
     }
 
     /** Everything {@code s} asks for, read through {@code db} (any thread: the database only). */
@@ -165,6 +204,18 @@ public final class ClubData {
                 }
             }
         }
+        List<GamesDao.ScoreRow> family = List.of();
+        Map<UUID, Long> wins = new LinkedHashMap<>();
+        List<GamesDao.ScoreRow> lastWeek = List.of();
+        if (s.weekKey() >= 0) {
+            family = db.topPoints(CLUB, FamilyWeekRules.boardOf(s.weekKey()), FAMILY_ROWS);
+            for (GamesDao.ScoreRow w : db.topPoints(CLUB, FamilyWeekRules.winsBoard(s.weekKey()), FAMILY_ROWS)) {
+                wins.put(w.player(), w.score());
+            }
+            if (s.lastWeekKey() >= 0) {
+                lastWeek = db.topPoints(CLUB, FamilyWeekRules.boardOf(s.lastWeekKey()), 3);
+            }
+        }
         Map<UUID, Personal> personal = new HashMap<>();
         for (UUID v : s.viewers()) {
             List<GamesDao.PlayerBoard> trials = db.boardsOf(v, TRIALS);
@@ -178,9 +229,19 @@ public final class ClubData {
                     ranks.put(c.record(), db.rank(v, TRIALS, c.record()));
                 }
             }
-            personal.put(v, new Personal(trials, db.boardsOf(v, GOLF), ranks, db.totals(s.weekStart(), v)));
+            long points = 0;
+            int place = 0;
+            for (int i = 0; i < family.size(); i++) {
+                if (family.get(i).player().equals(v)) {
+                    points = family.get(i).score();
+                    place = i + 1;
+                    break;
+                }
+            }
+            personal.put(v, new Personal(trials, db.boardsOf(v, GOLF), ranks, db.totals(s.weekStart(), v), points,
+                    place));
         }
-        return new Raw(week, records, golfWeek, golfRecords, cups, personal);
+        return new Raw(week, records, golfWeek, golfRecords, cups, personal, family, wins, lastWeek);
     }
 
     /** The first row (the best) set at or after {@code since}, or {@code null}: rows come best first. */

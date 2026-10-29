@@ -48,6 +48,8 @@ import java.util.concurrent.Executor;
  *       live state, read-only, once a second.</li>
  *   <li><b>My stats</b> on the west wall ({@link StatsCard}): each visitor sees their own board and nobody else's
  *       ({@link ViewerBoards}), and the kit's slot 7 opens the same numbers as a screen ({@link MyStatsMenu}).</li>
+ *   <li><b>The trophy case</b> (0.38.4, {@link TrophyWall}): one item frame and line per all-time record, from
+ *       the same cache, under My stats. The Fame board also pages the family week ({@link FamilyWeek}).</li>
  * </ul>
  *
  * <p>The database is read off the main thread and cached ({@link ClubReads}: every {@value ClubReads#EVERY_MS} ms
@@ -66,6 +68,7 @@ final class ClubBoards {
     private final BoardDisplay fameBoard;
     private final BoardDisplay nowBoard;
     private final ViewerBoards stats;
+    private final TrophyWall trophies;
     private final ClubReads reads;
     private final ClubData.Db db;
     private final Map<UUID, String> names = new HashMap<>();
@@ -77,6 +80,7 @@ final class ClubBoards {
         this.fameBoard = new BoardDisplay(club, TextDisplay.TextAlignment.LEFT);
         this.nowBoard = new BoardDisplay(club, TextDisplay.TextAlignment.LEFT);
         this.stats = new ViewerBoards(club, plugin);
+        this.trophies = new TrophyWall(club);
         GamesDao games = club.games().dao();
         this.db = new LiveDb(games, games.cup(), new TokenDao(plugin.database()));
         this.reads = new ClubReads(new LiveSource(), async(plugin), main(plugin), line -> club.log().warning(line));
@@ -136,6 +140,7 @@ final class ClubBoards {
                     stats.show(p, world, mine, WallBoards.pad(StatsCard.board(p.getName(), reads.mine(id))));
                 }
             }
+            trophies.redraw(room, reads.fame()); // 0.38.4
         } catch (RuntimeException | LinkageError e) {
             warn(now, "Clubhouse boards: " + e);
             clear();
@@ -203,7 +208,23 @@ final class ClubBoards {
         fameBoard.remove();
         nowBoard.remove();
         stats.clear();
+        trophies.remove();
         reads.clear();
+    }
+
+    /** This week's best as last read (the family week's ceremony reads last week's top three from it). */
+    FameBoard.Fame fame() {
+        return reads.fame();
+    }
+
+    /** A read soon (points were just added). */
+    void soon() {
+        reads.soon();
+    }
+
+    /** How many trophies stand (for the admin's status). */
+    int trophies() {
+        return trophies.count();
     }
 
     /** The Clubhouse stopped. */
@@ -240,7 +261,8 @@ final class ClubBoards {
             GamesService g = club.games();
             // the weekly boards', the Weekly Cup's and the quests' week (quests.week_starts_on), whether or not
             // Time Trials is on (R383-B1: golf's week and the week's tokens read the same boundary)
-            long weekStart = g.clock().startOfDay(g.clock().weekKey(DailyLookup.weekStart(g.plugin())));
+            long weekKey = g.clock().weekKey(DailyLookup.weekStart(g.plugin()));
+            long weekStart = g.clock().startOfDay(weekKey);
             Game cupGame = g.game(WeeklyCup.SPEC.id());
             long cupWeek = cupGame instanceof WeeklyCup w && g.enabled(w) ? w.desk().week() : -1;
             String pick = null;
@@ -250,7 +272,7 @@ final class ClubBoards {
                 pick = t.playable() != null ? t.playable().name() : t.game().name();
             }
             return new ClubData.Snapshot(TrialsNow.boards(g), GolfNow.boards(g), weekStart, cupWeek, pick,
-                    g.config().common().featuredBonus(), viewers);
+                    g.config().common().featuredBonus(), viewers, weekKey, weekKey - 7); // 0.38.4: the family week
         }
 
         @Override
@@ -297,6 +319,11 @@ final class ClubBoards {
         @Override
         public List<TokenDao.SourceTotal> totals(long since, UUID player) throws SQLException {
             return tokens.totals(since, player);
+        }
+
+        @Override
+        public List<GamesDao.ScoreRow> topPoints(String game, String board, int limit) throws SQLException {
+            return games.top(game, board, false, limit); // a points board: higher is better
         }
     }
 

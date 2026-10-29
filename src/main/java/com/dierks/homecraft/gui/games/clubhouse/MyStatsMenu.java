@@ -19,8 +19,8 @@ import org.bukkit.entity.Player;
  *
  * <pre>
  *  row 0     4 who (only you see these)
- *  row 2     19 runs this week · 21 tokens from games this week · 23 best golf · 25 personal bests
- *            (22 "counting" until the numbers have been read)
+ *  row 2     19 runs this week · 20 this week's family points (0.38.4) · 21 tokens from games this week ·
+ *            23 best golf · 25 personal bests (22 "counting" until the numbers have been read)
  *  rows 3-4  27-44 one per course played: its best time and the place on its board, best place first
  *  row 5     49 Close
  * </pre>
@@ -32,6 +32,7 @@ public final class MyStatsMenu extends GameMenu {
 
     static final int HEADER = 4;
     static final int RUNS = 19;
+    static final int WEEK = 20;
     static final int COUNTING = 22;
     static final int TOKENS = 21;
     static final int GOLF = 23;
@@ -60,6 +61,7 @@ public final class MyStatsMenu extends GameMenu {
         }
         set(RUNS, Menus.icon(Material.CLOCK, "&eRuns this week: &f" + mine.runsThisWeek(),
                 "&7Counted runs on this week's boards."), null);
+        set(WEEK, Menus.icon(Material.CAKE, weekName(mine), ClubBoardText.WEEK_LORE), null); // 0.38.4
         set(TOKENS, Menus.icon(Material.GOLD_NUGGET, "&eTokens from games this week: &f" + mine.tokensWon(),
                 "&7Courses, golf, cabinets, Race Night,", "&7Falling Floors and Weekly Cup prizes."), null);
         FameBoard.GolfRound g = mine.bestGolf();
@@ -73,6 +75,13 @@ public final class MyStatsMenu extends GameMenu {
             StatsCard.Best b = mine.bests().get(i);
             set(FIRST_BEST + i, Menus.icon(Material.FEATHER, bestName(b)), null);
         }
+    }
+
+    /** "&amp;eThis week: &amp;f9 pts, 2nd": the family week tile's name (0.38.4), its key fact in the NAME. */
+    static String weekName(StatsCard.Mine m) {
+        String line = Text.plain(ClubBoardText.statsWeek(m.weekPoints(), m.weekRank()));
+        int colon = line.indexOf(':');
+        return "&eThis week: &f" + line.substring(colon + 1).strip();
     }
 
     /** "&amp;fSky Rings &amp;7- &amp;e1:02.4 &amp;7(#2)": a course's best and its place. */

@@ -169,4 +169,85 @@ class ClubDataTest {
         assertNull(ClubData.leader(List.of(new CupEntry(sam, 10, 1, CupEntry.NO_TIME, 0))), "no time yet: no leader");
         assertNull(ClubData.firstSince(List.of(new GamesDao.ScoreRow(sam, 1, 5)), 6), "older than the week");
     }
+
+    /**
+     * 0.38.4: with the family week's key in the snapshot the week's points board, its race wins and last week's
+     * top three are read (higher is better), and each viewer's own points and place come from the same list; a
+     * {@code Db} without {@code topPoints} (the default) reads nothing and no page follows; without the key
+     * nothing is asked at all.
+     */
+    @Test
+    void theFamilyWeekIsReadWithTheWeeksKey() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            Database database = Database.open(conn, Logger.getAnonymousLogger());
+            GamesDao games = new GamesDao(database);
+            TokenDao tokens = new TokenDao(database);
+            games.addPoints(sam, ClubData.CLUB, FamilyWeekRules.boardOf(20_700), 9, WEEK_START + 1);
+            games.addPoints(lee, ClubData.CLUB, FamilyWeekRules.boardOf(20_700), 14, WEEK_START + 2);
+            games.addPoints(lee, ClubData.CLUB, FamilyWeekRules.winsBoard(20_700), 3, WEEK_START + 2);
+            games.addPoints(ana, ClubData.CLUB, FamilyWeekRules.boardOf(20_693), 20, WEEK_START - 2);
+            games.addPoints(sam, ClubData.CLUB, FamilyWeekRules.boardOf(20_693), 11, WEEK_START - 3);
+            List<String> asked = new ArrayList<>();
+            ClubData.Db db = new ClubData.Db() {
+                @Override
+                public List<GamesDao.ScoreRow> top(String game, String board, int limit) {
+                    return List.of();
+                }
+
+                @Override
+                public List<CupKey> openCups() {
+                    return List.of();
+                }
+
+                @Override
+                public List<CupEntry> cupEntries(CupKey key) {
+                    return List.of();
+                }
+
+                @Override
+                public List<GamesDao.PlayerBoard> boardsOf(UUID player, String game) {
+                    return List.of();
+                }
+
+                @Override
+                public int rank(UUID player, String game, String board) {
+                    return 0;
+                }
+
+                @Override
+                public List<TokenDao.SourceTotal> totals(long since, UUID player) throws SQLException {
+                    return tokens.totals(since, player);
+                }
+
+                @Override
+                public List<GamesDao.ScoreRow> topPoints(String game, String board, int limit) throws SQLException {
+                    asked.add(board);
+                    return games.top(game, board, false, limit);
+                }
+            };
+            ClubData.Snapshot snap = new ClubData.Snapshot(List.of(), List.of(), WEEK_START, -1, null, 0, Set.of(sam),
+                    20_700, 20_693);
+            ClubData.Raw raw = ClubData.read(snap, db);
+            assertEquals(List.of(lee, sam), raw.family().stream().map(GamesDao.ScoreRow::player).toList(),
+                    "most points first");
+            assertEquals(Map.of(lee, 3L), raw.wins(), "the wins");
+            assertEquals(List.of(ana, sam), raw.lastWeek().stream().map(GamesDao.ScoreRow::player).toList(),
+                    "last week's top");
+            assertEquals(9, raw.personal().get(sam).weekPoints(), "Sam's points");
+            assertEquals(2, raw.personal().get(sam).weekRank(), "and place");
+            assertEquals(List.of("club:20700", "clubwins:20700", "club:20693"), asked, "three reads");
+
+            ClubData.Raw plain = ClubData.read(new ClubData.Snapshot(List.of(), List.of(), WEEK_START, -1, null, 0,
+                    Set.of(sam)), db);
+            assertTrue(plain.family().isEmpty() && plain.lastWeek().isEmpty(), "no key: nothing read");
+            assertEquals(3, asked.size(), "and nothing asked");
+            assertEquals(0, plain.personal().get(sam).weekRank(), "no place");
+
+            ClubData.Raw none = ClubData.read(snap, db(games, tokens, new HashMap<>()));
+            assertTrue(none.family().isEmpty(), "a Db without topPoints reads nothing");
+            List<String> pages = FameBoard.pages(FameBoard.fame(snap, none, id -> "x"));
+            assertEquals(4, pages.size(), "the key is set: the page is there");
+            assertTrue(pages.get(3).endsWith(ClubBoardText.NO_FAMILY), "and says no points yet");
+        }
+    }
 }

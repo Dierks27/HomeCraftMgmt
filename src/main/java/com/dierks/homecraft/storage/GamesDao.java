@@ -858,6 +858,37 @@ public final class GamesDao {
         });
     }
 
+    /**
+     * {@link #addPoints} under a daily cap (the Clubhouse's family week, 0.38.4): {@code delta} points on
+     * {@code board}, but never more than {@code cap} a day on {@code dayBoard} (the day's own points board), both
+     * in one transaction, so the week's total and the day's count never disagree. As {@link #addPoints}, it is
+     * not idempotent by itself: every caller is a once-per-event place.
+     *
+     * @return the points actually added (0 when the day is full)
+     */
+    public long addPointsCapped(UUID player, String game, String board, String dayBoard, long delta, long cap,
+                                long now) throws SQLException {
+        if (delta < 0 || cap < 0) {
+            throw new IllegalArgumentException("a points board only rises: " + delta + " under " + cap);
+        }
+        if (player == null || game == null || game.isBlank() || board == null || board.isBlank() || dayBoard == null
+                || dayBoard.isBlank()) {
+            throw new IllegalArgumentException("points need a player, a game and two boards");
+        }
+        return database.transaction(c -> {
+            Long today = best(c, player, game, dayBoard);
+            long had = today == null ? 0L : today;
+            long add = Math.max(0, Math.min(delta, cap - had));
+            if (add == 0) {
+                return 0L;
+            }
+            writeScore(c, player, game, dayBoard, today, had + add, now);
+            Long total = best(c, player, game, board);
+            writeScore(c, player, game, board, total, (total == null ? 0L : total) + add, now);
+            return add;
+        });
+    }
+
     /** Set a player's score on a board (inserting it when {@code previous} is null), counting the run. */
     private static void writeScore(Connection c, UUID player, String game, String board, Long previous, long score,
                                    long now) throws SQLException {

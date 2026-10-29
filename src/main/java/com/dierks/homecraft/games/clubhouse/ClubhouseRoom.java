@@ -59,6 +59,14 @@ public final class ClubhouseRoom {
     /** 0.38.3: the owner-built room's wall boards, {@code BOARD_KEY + ".fame"} and so on (also under {@code gen.}). */
     public static final String WALL_KEY = BOARD_KEY + ".";
     public static final String PODIUM_KEY = META_PREFIX + "hand.podium.";
+    /**
+     * 0.38.4: the owner-built room's trophy case (the first frame's block, the row running to the admin's right)
+     * and its jukebox (the block under the admin's feet), and the family week's ceremony marker (the week key it
+     * last ran, or was skipped, for: {@link FamilyWeek}).
+     */
+    public static final String TROPHIES_KEY = META_PREFIX + "hand.trophies";
+    public static final String JUKEBOX_KEY = META_PREFIX + "hand.jukebox";
+    public static final String WEEK_DONE_KEY = META_PREFIX + "week.done";
     /** The build's time budget a tick, and the snapshots and chunk loads it may use. */
     static final int BUILD_MS = 3;
     static final int BUILD_SNAPSHOTS = 3;
@@ -131,6 +139,9 @@ public final class ClubhouseRoom {
     private final Place[] handPodium = new Place[3];
     /** 0.38.3: the owner-built room's wall boards ({@link WallBoards#WALLS}), where set. */
     private final Map<String, Place> handWalls = new HashMap<>();
+    /** 0.38.4: the owner-built room's trophy case and jukebox, where set. */
+    private Place handTrophies;
+    private Place handJukebox;
     private BuildJob job;
     private boolean jobScan;
     private long jobStarted;
@@ -185,6 +196,8 @@ public final class ClubhouseRoom {
                     handWalls.put(which, at);
                 }
             }
+            handTrophies = Place.of(host.meta(TROPHIES_KEY));
+            handJukebox = Place.of(host.meta(JUKEBOX_KEY));
         } catch (Exception e) {
             host.logger().log(Level.WARNING, "Clubhouse: could not read its settings from the database", e);
             waitingFor = "its settings can't be read from the database";
@@ -523,6 +536,32 @@ public final class ClubhouseRoom {
         return "&aThe " + wallName(w) + " board hangs where you stand, facing the way you face." + notOnYet();
     }
 
+    /**
+     * {@code /hcm games clubhouse trophies} (0.38.4): where the owner-built room's trophy case starts: the first
+     * frame hangs on the block the admin stands in, their back to the wall, and the row runs to their right.
+     */
+    public String trophies(Place at) {
+        if (!setMeta(TROPHIES_KEY, at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handTrophies = at;
+        return "&aThe trophy case starts where you stand and runs to your right." + notOnYet();
+    }
+
+    /**
+     * {@code /hcm games clubhouse jukebox} (0.38.4): the owner-built room's jukebox is the block under the admin's
+     * feet (they place a real jukebox and stand on it). Nothing is placed: without a jukebox there, there is no
+     * music, and nothing else changes.
+     */
+    public String jukebox(Place at) {
+        if (!setMeta(JUKEBOX_KEY, at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handJukebox = at;
+        return "&aThe jukebox is the block under your feet. &7(It plays only while a real jukebox is there.)"
+                + notOnYet();
+    }
+
     /** What a wall board is called in the admin's lines. */
     static String wallName(String which) {
         return switch (which) {
@@ -660,6 +699,65 @@ public final class ClubhouseRoom {
     }
 
     /**
+     * The trophy case's frame positions (0.38.4), {x, y, z} each, or {@code null} for none: the generated room's
+     * west wall ({@link ClubhousePlanner#trophyFrames}), or the owner-built room's row from the recorded spot
+     * along the admin's right (only in its world).
+     */
+    public List<int[]> trophyFrames() {
+        if (!hand) {
+            return site == null ? null : ClubhousePlanner.trophyFrames(box);
+        }
+        Place at = handTrophies;
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        float yaw = WallBoards.snap(at.yaw());
+        // the right hand of someone facing south (yaw 0) points west; north (180), east; west (90), north
+        int dx = yaw == 0f ? -1 : yaw == 180f ? 1 : 0;
+        int dz = yaw == 90f ? -1 : yaw == -90f ? 1 : 0;
+        List<int[]> out = new ArrayList<>();
+        for (int n = 0; n < ClubhousePlanner.TROPHY_MAX; n++) {
+            out.add(new int[]{(int) Math.floor(at.x()) + n * dx, (int) Math.floor(at.y()),
+                    (int) Math.floor(at.z()) + n * dz});
+        }
+        return out;
+    }
+
+    /**
+     * The way the trophy case faces (Minecraft yaw: 0 south, 90 west, 180 north, -90 east): east in the generated
+     * room (its frames hang on the west wall), the way the admin faced in an owner-built one.
+     */
+    public float trophyYaw() {
+        return hand ? (handTrophies == null ? 0f : WallBoards.snap(handTrophies.yaw())) : -90f;
+    }
+
+    /**
+     * The jukebox block (0.38.4), {x, y, z}, or {@code null} for none: the generated room's corner
+     * ({@link ClubhousePlanner#jukebox}), or the block under the owner-built room's recorded spot (only in its
+     * world). Whether a jukebox is really there is the corner's to check.
+     */
+    public int[] jukeboxBlock() {
+        if (!hand) {
+            return site == null ? null : ClubhousePlanner.jukebox(box);
+        }
+        Place at = handJukebox;
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        return new int[]{(int) Math.floor(at.x()), (int) Math.floor(at.y()) - 1, (int) Math.floor(at.z())};
+    }
+
+    /** A stored value under {@link #META_PREFIX} (the family week's marker), or {@code null}; a failure throws. */
+    String meta(String key) throws Exception {
+        return host.meta(key);
+    }
+
+    /** Store {@code value} under {@link #META_PREFIX} ({@code null} removes it); a failure throws. */
+    void meta(String key, String value) throws Exception {
+        host.meta(key, value);
+    }
+
+    /**
      * Whether feet at (x, y, z) of {@code worldName} are in the Clubhouse: the generated room's air,
      * or within {@value #HAND_REACH} blocks of an owner-built room's arrival spot.
      */
@@ -722,6 +820,8 @@ public final class ClubhouseRoom {
                 Place at = handWalls.get(which);
                 out.add(which + " board " + (at == null ? "not set (optional)" : at.text()));
             }
+            out.add("trophies " + (handTrophies == null ? "not set (optional)" : handTrophies.text())); // 0.38.4
+            out.add("jukebox " + (handJukebox == null ? "not set (optional)" : handJukebox.text()));
         }
         return out;
     }

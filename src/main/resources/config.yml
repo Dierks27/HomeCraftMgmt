@@ -1208,8 +1208,9 @@ sound_muffler:
 #  in: tap the golem with it, tap its chests, tap the golem again. A golem with
 #  chests of its own still takes from any copper chest, and puts things only
 #  into its chests (it keeps holding an item until one of them has room). A
-#  chest it uses is also marked as a CraftBridge golem chest, when that plugin
-#  is on. /hcm give golem_brush [player] hands one out.
+#  chest it uses is also marked as a CraftBridge golem chest (written whether or
+#  not that plugin is installed; CraftBridge reads it when it is; an unlink
+#  leaves it). /hcm give golem_brush [player] hands one out.
 # ---------------------------------------------------------------------
 golem:
   enabled: true                 # false: the brush does nothing, no recipe; golems use any chest as before

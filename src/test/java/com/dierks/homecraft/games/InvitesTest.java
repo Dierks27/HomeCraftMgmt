@@ -155,11 +155,16 @@ class InvitesTest {
 
     @Test
     void theSamePairWaitsThirtySecondsBetweenInvites() {
+        assertFalse(games.invites().coolingDown(alex.id, sam.id), "nothing asked yet: no cooldown");
         send(alex, sam, connect);
         games.invites().deny(sam.player);
         host.move(29_999);
         assertNull(send(sam, alex, connect), "the same two, either way round, wait 30 seconds");
+        assertTrue(games.invites().coolingDown(sam.id, alex.id), "and a picker can read that (0.38.4: a grey name)");
+        assertTrue(games.invites().coolingDown(alex.id, sam.id), "either way round");
+        assertFalse(games.invites().coolingDown(kim.id, sam.id), "another pair is free");
         host.move(1);
+        assertFalse(games.invites().coolingDown(sam.id, alex.id), "over: green again");
         assertNotNull(send(sam, alex, connect), "then they may ask again");
     }
 

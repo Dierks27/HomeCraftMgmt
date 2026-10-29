@@ -44,11 +44,22 @@ public final class ChallengePickerMenu extends GameMenu {
         init(54, Text.of("&6Challenge someone"));
     }
 
+    /**
+     * The lore under a Challenge tile (the course screen's and this screen's header): where the other player's
+     * Yes takes them. Into the Clubhouse while it is running ({@code PartyRaces.yesToClubhouse}); with it off,
+     * onto their party screen, as any party invite.
+     */
+    static String[] challengeLore(boolean clubOpen) {
+        return clubOpen
+                ? new String[]{"&7Pick a player who's free.", "&7They tap Yes and meet you", "&7in the Clubhouse."}
+                : new String[]{"&7Pick a player who's free.", "&7They tap Yes and join", "&7your party screen."};
+    }
+
     @Override
     protected void build() {
         fill();
-        set(4, Menus.icon(Material.GOLDEN_BOOTS, "&6Challenge someone", "&7Pick a player who's free.",
-                "&7They tap Yes and meet you", "&7in the Clubhouse."), null);
+        set(4, Menus.icon(Material.GOLDEN_BOOTS, "&6Challenge someone",
+                challengeLore(com.dierks.homecraft.games.clubhouse.Clubhouse.offered(plugin.games()))), null);
         List<Player> people = people();
         int p = clampPage(page, people.size());
         int from = p * GRID_SIZE;
@@ -77,7 +88,11 @@ public final class ChallengePickerMenu extends GameMenu {
         exitTile();
     }
 
-    /** The tile is a snapshot: the player is looked up and checked again on the tap. */
+    /**
+     * The tile is a snapshot: the player is looked up and checked again on the tap. The picker closes (outside
+     * the Clubhouse the party screen takes its place); when nothing was sent after all (Invites refused it: the
+     * host heard why) the picker comes back, its grey names saying why, so the host can pick someone else.
+     */
     private void pick(UUID id) {
         Player target = Bukkit.getPlayer(id);
         if (target == null || !target.isOnline() || trials.party().challengeNote(viewer, target) != null) {
@@ -87,7 +102,9 @@ public final class ChallengePickerMenu extends GameMenu {
             return;
         }
         viewer.closeInventory();
-        trials.party().sendChallenge(viewer, target, back);
+        if (!trials.party().sendChallenge(viewer, target, back)) {
+            new ChallengePickerMenu(plugin, trials, viewer, back, page).open(viewer);
+        }
     }
 
     /** Everyone the picker lists, by name: online, not the viewer, and seen by the viewer. */

@@ -72,18 +72,35 @@ final class ClubhouseAdmin implements GameAdmin {
                 } else if (room == null) {
                     out.add(notRunning(closedWhy()));
                 } else {
+                    if (sub.equals("here") || sub.equals("jukebox")) {
+                        game.quietMusic(); // the room's spots change: the disc out of the old jukebox first
+                    }
                     out.add(place(room, sub, args, p));
                 }
             }
-            case "generated" -> out.add(room == null ? notRunning(closedWhy()) : room.generated());
+            case "generated" -> {
+                if (room != null) {
+                    game.quietMusic();
+                }
+                out.add(room == null ? notRunning(closedWhy()) : room.generated());
+            }
             case "rebuild" -> {
                 if (room == null) {
                     out.add(notRunning(closedWhy()));
                 } else {
-                    out.addAll(room.rebuild(args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm")));
+                    boolean confirm = args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm");
+                    if (confirm) {
+                        game.quietMusic(); // while the room is still open: the disc out before the phase changes
+                    }
+                    out.addAll(room.rebuild(confirm));
                 }
             }
-            case "off" -> out.add(room == null ? notRunning(closedWhy()) : room.switchOff());
+            case "off" -> {
+                if (room != null) {
+                    game.quietMusic();
+                }
+                out.add(room == null ? notRunning(closedWhy()) : room.switchOff());
+            }
             default -> out.addAll(HELP);
         }
         for (String line : out) {

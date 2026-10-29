@@ -21,6 +21,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +38,9 @@ import java.util.UUID;
  * <p>Nothing to tap: a frame is fixed (it can't be turned, popped or taken), drops nothing, and like every board
  * is a game entity ({@link WorldEntities#tag}): never saved with its chunk, swept at every start, so a crash or a
  * reload leaves nothing. It is redrawn from the boards' cache once a second while anyone is in, writing only when
- * a row changed or an entity went (a chunk unloaded; it is made again when it loads: asked, never loaded).
- * Bedrock draws item frames and a text display (as a name tag) natively.
+ * a row changed, an entity went (a chunk unloaded; it is made again when it loads: asked, never loaded) or a slot
+ * moved or turned (an owner set the trophies spot again: {@link #moved}, the boards' rule). Bedrock draws item
+ * frames and a text display (as a name tag) natively.
  *
  * <p>The rows are pure ({@link #rows}, {@link #line}); the rest talks to the world.
  */
@@ -55,8 +57,8 @@ final class TrophyWall {
     record Trophy(String course, String holder, String score, boolean golf) {
     }
 
-    /** What is shown at one frame now. */
-    private record Shown(Trophy trophy, UUID frame, UUID line) {
+    /** What is shown at one frame now: the trophy, where the frame stands and faces, and the two entities. */
+    private record Shown(Trophy trophy, int[] at, float yaw, UUID frame, UUID line) {
     }
 
     private final Game game;
@@ -102,6 +104,15 @@ final class TrophyWall {
                 : Menus.icon(Material.GOLD_INGOT, "&6" + t.course() + " record");
     }
 
+    /**
+     * Whether a frame shown at {@code from} facing {@code fromYaw} has to be made again for a slot now at
+     * {@code to} facing {@code toYaw} (an owner set the trophies spot again, or faced another way): the boards'
+     * "moved or turned" rule ({@code BoardDisplay.current}), for the frames.
+     */
+    static boolean moved(int[] from, float fromYaw, int[] to, float toYaw) {
+        return !Arrays.equals(from, to) || WallBoards.snap(fromYaw) != WallBoards.snap(toYaw);
+    }
+
     /** The way a frame hangs for a yaw (0 south, 90 west, 180 north, -90 east), as {@link WallBoards}' boards. */
     static BlockFace facing(float yaw) {
         float y = WallBoards.snap(yaw);
@@ -135,10 +146,15 @@ final class TrophyWall {
                 }
                 continue;
             }
-            if (s != null && s.trophy().equals(t) && alive(s.frame(), w) && alive(s.line(), w)) {
+            boolean moved = s != null && moved(s.at(), s.yaw(), at, yaw);
+            if (s != null && !moved && s.trophy().equals(t) && alive(s.frame(), w) && alive(s.line(), w)) {
                 continue; // as it is
             }
             if (!w.isChunkLoaded(at[0] >> 4, at[2] >> 4)) {
+                if (moved) {
+                    take(s); // the old wall's frame doesn't linger while the new spot's chunk isn't loaded
+                    shown.remove(i);
+                }
                 continue; // asked, never loaded: drawn when it loads
             }
             if (s != null) {
@@ -172,7 +188,7 @@ final class TrophyWall {
             e.setAlignment(TextDisplay.TextAlignment.CENTER);
             e.text(Text.of(line(t)));
         });
-        return new Shown(t, frame.getUniqueId(), line.getUniqueId());
+        return new Shown(t, at.clone(), WallBoards.snap(yaw), frame.getUniqueId(), line.getUniqueId());
     }
 
     private static boolean alive(UUID id, World w) {

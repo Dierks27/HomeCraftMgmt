@@ -41,6 +41,15 @@ class TrophyWallTest {
     }
 
     @Test
+    void aFrameIsMadeAgainWhenItsSlotMovedOrTurned() {
+        int[] at = {10, 64, -5};
+        assertFalse(TrophyWall.moved(at, -90f, new int[]{10, 64, -5}, -90f), "the same slot, the same way: as it is");
+        assertTrue(TrophyWall.moved(at, -90f, new int[]{11, 64, -5}, -90f), "an owner set the trophies spot again");
+        assertTrue(TrophyWall.moved(at, -90f, new int[]{10, 64, -5}, 90f), "or faced the other way");
+        assertFalse(TrophyWall.moved(at, -90f, new int[]{10, 64, -5}, -100f), "a yaw squares to the same wall");
+    }
+
+    @Test
     void aFrameHangsTheWayItsYawFaces() {
         assertEquals(BlockFace.EAST, TrophyWall.facing(-90f), "the generated room's west wall: facing east");
         assertEquals(BlockFace.SOUTH, TrophyWall.facing(0f));

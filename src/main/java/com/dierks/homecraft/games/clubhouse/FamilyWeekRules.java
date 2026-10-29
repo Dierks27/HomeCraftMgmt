@@ -16,7 +16,7 @@ import java.util.UUID;
  * {@value #GOLF_ROUND}, a hole-in-one {@value #HOLE_IN_ONE}, a cheer given {@value #CHEER}; at most
  * {@value #DAY_CAP} a day per player, so the daughter can keep up and nothing can be farmed.
  *
- * <p><b>The week</b> is the wall boards' week: local midnight on {@code games.quests.week_starts}, NOT the
+ * <p><b>The week</b> is the wall boards' week: local midnight on {@code arcade.quests.week_starts}, NOT the
  * Weekly Cup's 04:00 week. Its key is the local epoch day it started ({@code GameClock.weekKey}).
  *
  * <p><b>The ceremony</b> runs once per week, the first time at least two of last week's top three are in the

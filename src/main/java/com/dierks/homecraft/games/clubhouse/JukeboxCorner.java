@@ -29,9 +29,13 @@ import java.util.UUID;
  * item anyone gets ({@code eject} would drop one: never called; the block's inventory is cleared instead). The
  * tap is handled at LOWEST and the block denied, so vanilla never pops the disc out and nothing else (the Arcade
  * Machine listener looks up placed custom blocks by position: this isn't one) sees it. The music stops and the
- * disc comes out when the song and its queue run out, when the room closes or moves, and when the Clubhouse
- * stops: a disc in the block is {@code has_record=true}, which the plan's empty jukebox isn't, so a converge or a
- * verify would otherwise find it. A disc left by a crash is taken out the same way when the room opens.
+ * disc comes out when the song and its queue run out, when the room closes or moves, when an admin switches it
+ * off, rebuilds it or changes its spots ({@link Clubhouse#quietMusic}), and when the Clubhouse stops: a disc in
+ * the block is {@code has_record=true}, which the plan's empty jukebox isn't, so a converge or a verify would
+ * otherwise find it. The corner remembers where its disc went in ({@link Songs.Disc}: the block, never the room's
+ * current spot or phase), so the clear reaches it whatever the room did since, and tries again each second while
+ * its chunk isn't loaded. A disc left by a crash is taken out the same way when the room opens (the block's item,
+ * not its {@code has_record}: a boot converge can hide one under {@code has_record=false}).
  *
  * <p>The sound is the client's block sound: Geyser plays it like any vanilla jukebox; the Sound Muffler has no
  * jukebox group, so the owner's zones can't hush it (the docs say so). The queue is pure ({@link Songs.Queue}).
@@ -41,8 +45,8 @@ final class JukeboxCorner implements SongMenu.Corner {
     private final Clubhouse club;
     private final Songs.Queue queue = new Songs.Queue();
     private List<Songs.Song> songs;
-    /** Whether a disc of ours is in the block now. */
-    private boolean discIn;
+    /** Whether a disc of ours is in a block now, and which. */
+    private final Songs.Disc disc = new Songs.Disc();
 
     JukeboxCorner(Clubhouse club) {
         this.club = club;
@@ -149,16 +153,19 @@ final class JukeboxCorner implements SongMenu.Corner {
         if (b == null || !(b.getState(false) instanceof Jukebox jb)) {
             return false;
         }
+        if (disc.in()) {
+            clearDisc(); // one of ours still in another block (the spot changed): out first
+        }
         jb.stopPlaying();
         jb.setRecord(new ItemStack(s.disc()));
         jb.update(true, false);
-        discIn = true;
+        disc.putIn(b.getWorld().getName(), b.getX(), b.getY(), b.getZ());
         return jb.startPlaying();
     }
 
     /** Once a second: the next song when the one playing is over; the disc out when nothing is left. */
     void second(long now) {
-        if (!discIn && queue.now() == null) {
+        if (!disc.in() && queue.now() == null) {
             return;
         }
         Songs.Song next = queue.due(now);
@@ -168,38 +175,69 @@ final class JukeboxCorner implements SongMenu.Corner {
             }
             return;
         }
-        if (queue.now() == null && discIn) {
+        if (queue.now() == null && disc.in()) {
             clearDisc();
         }
     }
 
-    /** The music off and our disc out of the block (the room closed or moved, the Clubhouse stopped, Quiet). */
+    /**
+     * The music off and our disc out of the block it went into (the room closed, moved or switched off, the
+     * Clubhouse stopped, Quiet). Called every second while the room is closed too, so a clear that couldn't
+     * reach the block gets its next try.
+     */
     void stop() {
         queue.clear();
         clearDisc();
     }
 
-    /** A disc left in the block (a crash) comes out when the room opens: ours or not, it fails the verify. */
+    /**
+     * A disc left in the room's block (a crash) comes out when the room opens: ours or not, it fails the verify.
+     * The block's item is what counts, not {@code has_record}: a boot converge writes the plan's empty jukebox
+     * over the block and hides a left disc under {@code has_record=false}.
+     */
     void sweep() {
+        if (disc.in()) {
+            clearDisc(); // one of ours remembered from before (a chunk that wasn't loaded): out first
+        }
         Block b = block();
-        if (b != null && b.getState(false) instanceof Jukebox jb && jb.hasRecord()) {
-            discIn = true;
+        if (b != null && b.getState(false) instanceof Jukebox jb && hasDisc(jb)) {
+            disc.putIn(b.getWorld().getName(), b.getX(), b.getY(), b.getZ());
             clearDisc();
         }
     }
 
+    private static boolean hasDisc(Jukebox jb) {
+        ItemStack in = jb.getRecord();
+        return in != null && !in.getType().isAir();
+    }
+
+    /**
+     * Our disc out of the block it went into, wherever the room is now: nothing when its chunk isn't loaded
+     * (remembered: tried again next second); forgotten when the block isn't a jukebox any more, when it was
+     * cleared, or when the clear threw (one WARN, never one a second).
+     */
     private void clearDisc() {
-        Block b = block();
-        if (b != null && b.getState(false) instanceof Jukebox jb) {
-            try {
-                jb.stopPlaying();
-                jb.getInventory().clear(); // the block's disc, nobody's inventory; never eject(): that drops it
-                jb.update(true, false);
-            } catch (RuntimeException | LinkageError e) {
-                club.log().warning("Clubhouse jukebox: could not take the disc out: " + e);
-            }
+        Songs.DiscAt at = disc.at();
+        if (at == null) {
+            return;
         }
-        discIn = false;
+        World w = Bukkit.getWorld(at.world());
+        if (w == null || !w.isChunkLoaded(at.x() >> 4, at.z() >> 4)) {
+            return; // asked, never loaded
+        }
+        Block b = w.getBlockAt(at.x(), at.y(), at.z());
+        if (!(b.getState(false) instanceof Jukebox jb)) {
+            disc.cleared(true); // not a jukebox any more: nothing of ours to take out
+            return;
+        }
+        try {
+            jb.stopPlaying();
+            jb.getInventory().clear(); // the block's disc, nobody's inventory; never eject(): that drops it
+            jb.update(true, false);
+        } catch (RuntimeException | LinkageError e) {
+            club.log().warning("Clubhouse jukebox: could not take the disc out: " + e);
+        }
+        disc.cleared(true);
     }
 
     // ---- reading it --------------------------------------------------------------------------------

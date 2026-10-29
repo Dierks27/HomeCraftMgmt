@@ -113,10 +113,14 @@ public final class CourseMenu extends GameMenu {
         exitTile();
     }
 
-    /** 0.38.4: "Challenge someone - race anyone online": a party race of two, the other player picked from everyone. */
+    /**
+     * 0.38.4: "Challenge someone - race anyone online": a party race of two, the other player picked from everyone.
+     * The lore says where their Yes takes them: the Clubhouse while it is running, else the party screen.
+     */
     private void challengeButton() {
+        boolean club = com.dierks.homecraft.games.clubhouse.Clubhouse.offered(plugin.games());
         set(CHALLENGE_SLOT, Menus.icon(Material.GOLDEN_BOOTS, "&6Challenge someone &7- race anyone online",
-                "&7Pick a player who's free.", "&7They tap Yes and meet you", "&7in the Clubhouse."),
+                ChallengePickerMenu.challengeLore(club)),
                 e -> trials.party().challengeOn(viewer, course.id(), this::reopen));
     }
 

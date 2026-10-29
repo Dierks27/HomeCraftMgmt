@@ -269,8 +269,9 @@ public final class PartyRaces {
     /**
      * Why {@code other} can't be challenged now, in the picker's words, or {@code null} when they can (pure):
      * "in a party", "in a game" (a session outside the Clubhouse: nobody is reached mid-run), "invites off"
-     * (their {@code trials} invite switch), "busy" (an invite waiting for them or out from them, or they
-     * can't open the races now). The viewer themselves is never listed.
+     * (their {@code trials} invite switch), "busy" (an invite waiting for them or out from them, the pair's
+     * 30 s invite cooldown still running, or they can't open the races now). The viewer themselves is never
+     * listed.
      */
     public static String challengeNote(boolean self, boolean inParty, boolean inGame, boolean invitesOff,
                                        boolean busy) {
@@ -295,6 +296,7 @@ public final class PartyRaces {
         UUID id = other.getUniqueId();
         boolean club = inClub(other);
         boolean busy = g.invites().pending(id) != null || g.invites().outgoing(id) != null
+                || g.invites().coolingDown(from.getUniqueId(), id) // asked just now: Invites.send would refuse
                 || (!club && g.canOpen(other, trials) != null);
         return challengeNote(id.equals(from.getUniqueId()), g.parties().of(id) != null,
                 !club && trials.sessions().session(other) != null, !g.invites().accepts(id, trials.id()), busy);
@@ -303,20 +305,21 @@ public final class PartyRaces {
     /**
      * The picker's tap: the challenge, as a party invite under the {@code trials} key named "Race challenge"
      * (the Games screen's book reads "Race challenge invite from ..."; {@code /hcm play invites off} covers
-     * it). The host stays in the Clubhouse (its kit shows Party now), or sees the lobby as before.
+     * it). The host stays in the Clubhouse (its kit shows Party now), or sees the lobby as before. False when
+     * nothing was sent (the host hears why, and keeps their party of one): the picker shows itself again.
      */
-    public void sendChallenge(Player from, Player to, Runnable back) {
+    public boolean sendChallenge(Player from, Player to, Runnable back) {
         PartyLobby lobby = lobby(from.getUniqueId());
         if (lobby == null || !canInvite(from, to)) {
             couldNotSend(from);
-            return;
+            return false;
         }
         Invite sent = games().invites().send(from, to, trials, trials.id(), "Race challenge",
                 "a race challenge on " + courseName(lobby) + " - free, just for fun", INVITE_SECONDS,
                 (invite, yes) -> games().guard(trials, () -> answered(invite, yes)));
         if (sent == null) {
             couldNotSend(from);
-            return;
+            return false;
         }
         invites.put(sent.id(), lobby.id());
         challenges.add(sent.id());
@@ -324,6 +327,7 @@ public final class PartyRaces {
         if (!inClub(from)) {
             openLobby(from, back); // the ordinary lobby flow (its "Go to the Clubhouse" is there when it is open)
         }
+        return true;
     }
 
     /** The Clubhouse kit's Challenge (slot 1), inside Time Trials' guard. */

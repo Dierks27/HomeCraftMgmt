@@ -248,7 +248,7 @@ class DatabaseMigrationTest {
     }
 
     @Test
-    void v38IsTheNewestAndV37IsTheWardrobe() {
+    void v39IsTheNewestAndV37IsTheWardrobe() {
         assertEquals(39, Database.latestVersion(), "v37 the wardrobe, v38 the trade log (SHOP-V2-SPEC §7.8), v39 splits");
         assertTrue(Database.migration(36).contains("cup_settlements"), "v36 is Race Night and the Cup, unchanged");
         String v37 = Database.migration(37);
@@ -271,7 +271,7 @@ class DatabaseMigrationTest {
     }
 
     @Test
-    void v37AndV38OnAnEmptyDatabase() throws SQLException {
+    void v37ToV39OnAnEmptyDatabase() throws SQLException {
         Database.open(conn, Logger.getAnonymousLogger());
         assertEquals(39, version());
         assertEquals(COSMETICS_V37, columns("cosmetics_owned"), "§3.2: the five columns after the four of v30");
@@ -295,7 +295,7 @@ class DatabaseMigrationTest {
     }
 
     @Test
-    void v37AndV38OnAV36DatabaseKeepEveryTrail() throws SQLException {
+    void v37ToV39OnAV36DatabaseKeepEveryTrail() throws SQLException {
         Database.openAt(conn, Logger.getAnonymousLogger(), 36);
         assertEquals(36, version());
         assertEquals(COSMETICS_V36, columns("cosmetics_owned"));

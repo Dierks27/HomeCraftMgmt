@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,6 +76,9 @@ class GolemTextTest {
         assertTrue(GolemText.armClear("Bolt").contains("Shift-tap Bolt again"), "the second tap, named");
         assertTrue(GolemText.farHint("Bolt").contains("32 blocks"), "the reach, in numbers");
         assertTrue(GolemText.gone("Bolt").contains("Bolt"));
+        assertTrue(GolemText.away("Bolt").contains("Bolt") && GolemText.away("Bolt").contains("too far"),
+                "unloaded is not gone: the golem is named, and the line says far, not gone");
+        assertFalse(GolemText.away("Bolt").contains("gone"));
         assertTrue(GolemText.otherWorld("Bolt").contains("another world"));
         assertTrue(GolemText.FULL.contains("32"), "the cap, in numbers");
         assertTrue(GolemText.OFF.contains("golem.enabled"), "the owner knows which key");

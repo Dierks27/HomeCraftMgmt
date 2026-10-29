@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -109,6 +110,13 @@ class KitSlotsTest {
 
     /** Where a raw write is the point: the kit rules themselves, and the saved state's own restore and clear. */
     private static final List<String> ALLOWED = List.of("world/KitItems.java", "world/BukkitStateAdapter.java");
+    /**
+     * A raw write on something that is nobody's inventory (0.38.4): an item frame's item, a jukebox block's disc.
+     * By file and code, never by a comment: a new raw write elsewhere has to be added here to pass.
+     */
+    private static final Map<String, String> ALLOWED_LINES = Map.of(
+            "clubhouse/TrophyWall.java", "f.setItem(item(t), false)",
+            "clubhouse/JukeboxCorner.java", "jb.getInventory().clear()");
 
     @Test
     void noGameWritesAPlayersInventoryExceptThroughTheKitRules() throws IOException {
@@ -124,9 +132,9 @@ class KitSlotsTest {
                 for (int i = 0; i < lines.size(); i++) {
                     String line = lines.get(i);
                     // an armour stand's or a display's equipment is nobody's inventory, and neither is a jukebox
-                    // block's disc or an item frame's item (0.38.4): those lines say so
+                    // block's disc or an item frame's item (0.38.4): those two writes are allowed by file and code
                     if (RAW.matcher(line).find() && !line.contains("getEquipment()")
-                            && !line.contains("nobody's inventory")) {
+                            && !line.contains(ALLOWED_LINES.getOrDefault(rel, "\u0000"))) {
                         raw.add(rel + ":" + (i + 1) + ": " + line.trim());
                     }
                 }

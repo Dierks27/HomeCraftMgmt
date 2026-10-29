@@ -197,6 +197,8 @@ class GolemRulesTest {
         assertEquals("Rusty", GolemRules.base("  ", null));
         assertEquals("Bolt", GolemRules.base("Bolt", null), "a name it was given is kept");
         assertEquals("Bolt", GolemRules.base("Bolt", "Old"), "the live name wins over the stored one");
+        assertEquals("Bolt", GolemRules.base("Bolt", "Rusty"),
+                "a name tag used after assignment replaces the stored base: the service re-reads it every pass");
         assertEquals("Bolt", GolemRules.base("Bolt -> 3 chests", "Bolt"), "our tag is never a base: the stored one");
         assertEquals("Bolt", GolemRules.base("Bolt - holding Cobblestone", "Bolt"));
         assertEquals("Rusty", GolemRules.base("Rusty -> no chests yet", null), "our tag and nothing stored");

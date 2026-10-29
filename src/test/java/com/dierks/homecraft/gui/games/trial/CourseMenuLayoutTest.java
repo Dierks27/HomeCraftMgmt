@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.Warmup;
+import com.dierks.homecraft.util.Text;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
@@ -50,6 +51,20 @@ class CourseMenuLayoutTest {
             assertTrue(taken.add(slot), slot + " is nobody else's");
         }
         assertEquals(CourseMenu.FIXED_SLOTS.size() + 3, taken.size(), "twelve items, twelve slots");
+    }
+
+    @Test
+    void theChallengeTileSaysWhereTheirYesTakesThem() {
+        String[] on = ChallengePickerMenu.challengeLore(true);
+        String[] off = ChallengePickerMenu.challengeLore(false);
+        assertEquals(3, on.length);
+        assertEquals(3, off.length);
+        assertEquals(on[0], off[0], "the first line is the same: pick a player who's free");
+        assertTrue(Text.plain(String.join(" ", on)).contains("meet you in the Clubhouse"),
+                "the Clubhouse running: they meet you there");
+        assertTrue(Text.plain(String.join(" ", off)).contains("join your party screen"),
+                "the Clubhouse off: their Yes opens the party screen, as any party invite");
+        assertFalse(String.join(" ", off).contains("Clubhouse"), "and no Clubhouse is promised");
     }
 
     @Test

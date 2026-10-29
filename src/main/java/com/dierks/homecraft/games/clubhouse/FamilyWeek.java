@@ -30,7 +30,7 @@ import java.util.logging.Level;
  * The marker is kept across restarts, so it runs once a week; a marker that can't be read means no ceremony this
  * run (one WARN), and one that can't be written may let it run again after a restart (the risks say so).
  *
- * <p>The week is the wall boards' week ({@code games.quests.week_starts}, local midnight), never the Cup's.
+ * <p>The week is the wall boards' week ({@code arcade.quests.week_starts}, local midnight), never the Cup's.
  */
 public final class FamilyWeek {
 

@@ -236,8 +236,9 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
-**Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it: the new
-`golem` section is one unknown-section WARN there, ignored) and WARNS once that the database was
+**Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it; 0.38.3 has no
+unknown-section check at the top level, so the new `golem` section is simply ignored there, without
+a WARN) and WARNS once that the database was
 written by a newer HomeCraft (schema v39), ignoring `game_splits`; nothing else from 0.38.4 is
 stored in a new place. A Copper Golem Brush becomes a glinting, gold-named brush that does nothing
 special (it still never breaks: that is on the item), and every golem keeps its chests in its own
@@ -1923,8 +1924,7 @@ safe for everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) 
   **[Accept]** in chat, and anyone can type `/hcm play accept` (or `deny`). Friend-game invites
   are on until a player turns them off; Coin Flip invites are off until the player turns them on,
   on the Take a break screen.
-- **The Play? screen (0.38.4).** Every invite (a party race, golf together, Falling Floors, Coin
-  Flip, Connect Four or Tic-Tac-Toe against a friend, a ride along, a race challenge) opens a small
+- **The Play? screen (0.38.4).** Every invite (a party race, golf together, Coin Flip, Connect Four or Tic-Tac-Toe against a friend, a ride along, a race challenge) opens a small
   **Play?** screen on the player it is for: **✗ Not now** on the left (slot 11), the asker's tile in
   the middle (13: "<name> invites you: Party race", with what it is and the seconds left ticking in
   its lore), **✓ Yes** on the right (15), the same places as every confirm screen and the Trade?
@@ -4089,9 +4089,9 @@ revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONF
     line. Never in a party race.
 25. The trophy frames under My stats: one per record, the right item and line; a new record shows up
     within half a minute of landing back in the room. On Bedrock the lines are name tags.
-26. Tap the jukebox: pick a record, hear it; pick another, "Next: ..."; Quiet. Leave the room empty
-    for a minute and check the block is empty again; `/hcm games clubhouse status` after a restart
-    shows the room built and checked.
+26. Tap the jukebox: pick a record, hear it; pick another, "Next: ..."; Quiet, and the block is empty
+    again. Pick a record and let it run out (or restart the server while it plays): the block is empty
+    afterwards; `/hcm games clubhouse status` after a restart shows the room built and checked.
 27. Finish a run, a personal best, a party race win and a cheer: the Fame board's Family week page and
     My stats count them, never more than 10 a day. After the week turns, with two of last week's top
     three in the room: the podium, "Photo time!", the firework over 1st and the "Last week:" line,

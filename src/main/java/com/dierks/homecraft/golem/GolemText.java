@@ -55,6 +55,11 @@ public final class GolemText {
         return "&7" + name + " is gone.";
     }
 
+    /** The session's golem is unloaded: not gone, just far. */
+    public static String away(String name) {
+        return "&7" + name + " is too far away - walk back to it and tap it again.";
+    }
+
     /** A chest in another world than the golem's. */
     public static String otherWorld(String name) {
         return "&c" + name + " can't reach a chest in another world.";

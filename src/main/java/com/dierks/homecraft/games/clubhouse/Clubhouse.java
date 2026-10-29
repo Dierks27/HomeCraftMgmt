@@ -384,6 +384,9 @@ public final class Clubhouse implements Game, ClubDoor {
     }
 
     private void stopRoom() {
+        if (jukebox != null) {
+            jukebox.stop(); // the music off and our disc cleared while the world is up, before the room goes
+        }
         if (room != null) {
             room.stop();
             room = null;
@@ -393,9 +396,6 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (boards != null) {
             boards.stop();
-        }
-        if (jukebox != null) {
-            jukebox.stop(); // the music off and our disc cleared while the world is up
         }
         if (watch != null) {
             watch.clear(); // every watcher seen again
@@ -1706,6 +1706,17 @@ public final class Clubhouse implements Game, ClubDoor {
     private TimeTrials trials() {
         Game g = games().game(TimeTrials.SPEC.id());
         return g instanceof TimeTrials t && games().enabled(t) ? t : null;
+    }
+
+    /**
+     * The music off and the disc out (0.38.4), before an admin command changes the room's phase or its spots
+     * ({@code off}, {@code rebuild confirm}, {@code generated}, {@code here}, {@code jukebox}): the corner
+     * remembers where its disc is either way, but the music shouldn't play on past the switch.
+     */
+    void quietMusic() {
+        if (jukebox != null) {
+            jukebox.stop();
+        }
     }
 
     long now() {

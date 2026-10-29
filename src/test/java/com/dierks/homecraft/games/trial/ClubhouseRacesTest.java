@@ -323,7 +323,7 @@ class ClubhouseRacesTest {
         assertEquals("in a party", party.challengeNote(ava, cal), "Cal has a party of their own: grey, and why");
         assertFalse(party.canInvite(ava, cal), "and can't be asked");
 
-        party.sendChallenge(ava, ben, null);
+        assertTrue(party.sendChallenge(ava, ben, null), "sent: the picker closes");
         Invite sent = games.invites().pending(id(ben));
         assertNotNull(sent, "Ben has the challenge waiting (the Play? screen, or [Accept] in chat)");
         assertEquals("Race challenge", sent.name(), "named for what it is: the Games screen's book says so");
@@ -339,7 +339,9 @@ class ClubhouseRacesTest {
         assertTrue(games.invites().deny(ben), "Not now");
         assertNull(games.invites().pending(id(ben)), "the challenge went (the game tells Ava in its own words)");
         assertEquals(1, lobby.size(), "still Ava's party of one");
-        assertNull(party.challengeNote(cal, ben), "Ben is free again");
+        assertEquals("busy", party.challengeNote(ava, ben),
+                "asked just now: the pair's 30 s cooldown greys Ben for Ava, so the picker never sends what is refused");
+        assertNull(party.challengeNote(cal, ben), "Ben is free again (for anyone else)");
         assertEquals(0, bench.severe(), "nothing threw");
     }
 

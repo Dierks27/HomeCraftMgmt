@@ -35,6 +35,24 @@ class SongsTest {
     }
 
     @Test
+    void theDiscIsRememberedWhereItWentInUntilAClearReallyTookItOut() {
+        Songs.Disc d = new Songs.Disc();
+        assertFalse(d.in(), "nothing in yet");
+        assertNull(d.at());
+        d.putIn("world", 10, 64, -20);
+        assertTrue(d.in());
+        assertEquals(new Songs.DiscAt("world", 10, 64, -20), d.at(), "the block it went into, not the room's spot");
+        d.cleared(false);
+        assertTrue(d.in(), "a clear that couldn't reach the block (its chunk not loaded) keeps the memory");
+        assertEquals(new Songs.DiscAt("world", 10, 64, -20), d.at(), "and the room closing or moving changes nothing");
+        d.cleared(true);
+        assertFalse(d.in(), "taken out (or no jukebox there any more): forgotten");
+        assertNull(d.at());
+        d.cleared(true);
+        assertFalse(d.in(), "a second clear is nothing");
+    }
+
+    @Test
     void aTitleIsTheKeysWords() {
         assertEquals("Pigstep", Songs.title("pigstep"));
         assertEquals("Creator Music Box", Songs.title("creator_music_box"));

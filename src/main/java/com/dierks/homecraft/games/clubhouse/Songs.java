@@ -101,6 +101,44 @@ public final class Songs {
         return ClubBoardText.clock(Math.max(0, seconds) * 1000L);
     }
 
+    /** Where the corner's disc is: a block in a world. The corner's own memory, never read from the room. */
+    public record DiscAt(String world, int x, int y, int z) {
+    }
+
+    /**
+     * Whether a disc of ours is in a block, and which (the corner's other pure half): set when a disc goes in,
+     * kept until a clear really took it out (a chunk that isn't loaded: tried again next second), and never read
+     * from the room, so a room that closed, moved, was switched off or had its jukebox spot changed still has its
+     * disc taken out of the block it went into.
+     */
+    public static final class Disc {
+        private DiscAt at;
+
+        /** A disc went into the block at {@code x, y, z} in {@code world}. */
+        public void putIn(String world, int x, int y, int z) {
+            at = new DiscAt(world, x, y, z);
+        }
+
+        /** Where the disc is, or {@code null}: none in. */
+        public DiscAt at() {
+            return at;
+        }
+
+        public boolean in() {
+            return at != null;
+        }
+
+        /**
+         * A clear's outcome: {@code out} when the disc was taken out, or there is no jukebox at the block any more
+         * (nothing of ours to take); false keeps the memory for another try.
+         */
+        public void cleared(boolean out) {
+            if (out) {
+                at = null;
+            }
+        }
+    }
+
     /** What is playing and what is next: the pure half of the corner. */
     public static final class Queue {
         private Song now;

@@ -366,6 +366,15 @@ public final class Invites {
         return lastPair.size();
     }
 
+    /**
+     * Whether {@code a} and {@code b} (either way round) had an invite within the last {@link #PAIR_COOLDOWN_MS},
+     * so {@link #send} would refuse another now: a picker greys the name instead of sending what is refused.
+     */
+    public boolean coolingDown(UUID a, UUID b) {
+        Long last = a == null || b == null ? null : lastPair.get(pair(a, b));
+        return last != null && now() - last < PAIR_COOLDOWN_MS;
+    }
+
     /** The invite {@code from} has out, or {@code null}. */
     public Invite outgoing(UUID from) {
         for (Pending p : pending.values()) {

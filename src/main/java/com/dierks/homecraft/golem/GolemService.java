@@ -166,7 +166,10 @@ public final class GolemService implements Listener {
 
     /**
      * {@code /hcm reload}: the config again; the recipe re-registered or removed; a switch to off ends every
-     * session and takes every hologram down (the golems keep their chests in their own data, ignored while off).
+     * session, takes every hologram down, stops the pass and drops the cache, so no loaded golem is filtered or
+     * tagged while off (the golems keep their chests in their own data, ignored until on again). A loaded golem's
+     * name is its own again at once; one in an unloaded chunk keeps its last tag until the brush is on again and
+     * the pass rewrites it.
      */
     public void reload() {
         boolean wasOn = config.enabled();
@@ -180,6 +183,11 @@ public final class GolemService implements Listener {
                 }
             }
             markers.clearAll();
+            if (timer != null) {
+                timer.cancel();
+                timer = null;
+            }
+            dropCache();
             if (wasOn) {
                 plugin.getLogger().info("Copper Golem Brush: off (golem.enabled).");
             }
@@ -207,7 +215,11 @@ public final class GolemService implements Listener {
         }
     }
 
-    /** At disable: the pass stops, every hologram comes down while the worlds are up, the recipe goes. */
+    /**
+     * At disable: the pass stops, every hologram comes down while the worlds are up, every loaded golem's name is
+     * its own again (a session's golem with no chest yet would otherwise be saved as "Rusty -> no chests yet"),
+     * the recipe goes.
+     */
     public void stop() {
         if (timer != null) {
             timer.cancel();
@@ -215,7 +227,23 @@ public final class GolemService implements Listener {
         }
         sessions.endAll(); // nothing said: the server is going
         markers.clearAll();
+        dropCache();
         GolemBrush.unregister(recipeKey);
+    }
+
+    /**
+     * The cache emptied (the brush switched off, the plugin stopping): every cached golem still loaded gets its
+     * own name back first, so no tag of ours is saved with it; its chests stay in its own data.
+     */
+    private void dropCache() {
+        for (UUID id : new ArrayList<>(golems.keySet())) {
+            Assignment a = golems.get(id);
+            if (a != null && plugin.getServer().getEntity(id) instanceof CopperGolem g && g.isValid()) {
+                resetTag(g, a);
+            }
+        }
+        golems.clear();
+        lastTag.clear();
     }
 
     /** One Copper Golem Brush, for {@code /hcm give golem_brush}. */
@@ -238,10 +266,20 @@ public final class GolemService implements Listener {
         return golems.get(golem);
     }
 
-    /** {@code g} into the cache from its own data, when it carries any. */
+    /**
+     * {@code g} into the cache from its own data, when it carries any. A golem with no chests but one of our tags
+     * as its name (a crash or an unload mid-session, before anything was linked) is healed: the name we stored
+     * when the session opened, else none.
+     */
     private void adopt(CopperGolem g) {
         PersistentDataContainer pdc = g.getPersistentDataContainer();
         if (!pdc.has(Keys.GOLEM_CHESTS, PersistentDataType.LONG_ARRAY)) {
+            if (GolemRules.isTag(plainName(g))) {
+                String stored = pdc.get(Keys.GOLEM_NAME, PersistentDataType.STRING);
+                pdc.remove(Keys.GOLEM_NAME);
+                resetTag(g, new Assignment(g.getWorld().getName(), new LinkedHashSet<>(),
+                        GolemRules.base(null, stored)));
+            }
             return;
         }
         long[] stored = pdc.get(Keys.GOLEM_CHESTS, PersistentDataType.LONG_ARRAY);
@@ -293,8 +331,21 @@ public final class GolemService implements Listener {
 
     // ---- the name tag ---------------------------------------------------------------------------------
 
-    /** The tag for where {@code g} stands now, set only when it changed. */
+    /**
+     * The tag for where {@code g} stands now, set only when it changed. A name given with a name tag after the
+     * assignment wins: the live name is read first ({@link GolemRules#base} never takes one of our own tags), the
+     * stored base follows it, and the tag is rewritten.
+     */
     private void refreshTag(CopperGolem g, Assignment a, String holding) {
+        String live = GolemRules.base(plainName(g), a.base());
+        if (!live.equals(a.base())) {
+            a.base = live;
+            PersistentDataContainer pdc = g.getPersistentDataContainer();
+            if (pdc.has(Keys.GOLEM_CHESTS, PersistentDataType.LONG_ARRAY)) {
+                pdc.set(Keys.GOLEM_NAME, PersistentDataType.STRING, live);
+            }
+            lastTag.remove(g.getUniqueId());
+        }
         String tag = GolemRules.tag(a.base(), a.chests().size(), holding);
         if (tag.equals(lastTag.get(g.getUniqueId()))) {
             return;
@@ -334,6 +385,9 @@ public final class GolemService implements Listener {
      */
     @EventHandler(priority = EventPriority.NORMAL)
     public void onValidate(ItemTransportingEntityValidateTargetEvent event) {
+        if (!config.enabled()) {
+            return; // off: any chest, as vanilla (the cache is empty too; belt and braces)
+        }
         if (!(event.getEntity() instanceof CopperGolem g)) {
             return;
         }
@@ -482,6 +536,11 @@ public final class GolemService implements Listener {
 
     private void open(Player p, CopperGolem g) {
         Assignment a = ensure(g);
+        if (a.chests().isEmpty()) {
+            // its own name stored before the tag goes on, so a crash mid-session heals to it (adopt); write()
+            // removes it again with no chest linked
+            g.getPersistentDataContainer().set(Keys.GOLEM_NAME, PersistentDataType.STRING, a.base());
+        }
         p.sendMessage(Text.of(GolemText.pick(a.base())));
         Sounds.received(p);
         refreshTag(g, a, holding(g));
@@ -532,7 +591,17 @@ public final class GolemService implements Listener {
     /** {@code clicked} linked to the session's golem, or unlinked: both halves of a double chest at once. */
     private void toggle(Player p, GolemRules.Session s, Block clicked) {
         UUID id = p.getUniqueId();
-        if (!(plugin.getServer().getEntity(s.golem()) instanceof CopperGolem g) || !g.isValid()) {
+        Entity e = plugin.getServer().getEntity(s.golem());
+        if (e == null) {
+            // not loaded (the player went far, or teleported): not gone, just away; the session ends all the same,
+            // since a chest its golem can't see shouldn't be linked blind
+            sessions.end(id);
+            markers.clear(id);
+            Assignment away = golems.get(s.golem());
+            p.sendMessage(Text.of(GolemText.away(away == null ? GolemRules.DEFAULT_NAME : away.base())));
+            return;
+        }
+        if (!(e instanceof CopperGolem g) || !g.isValid()) {
             sessions.end(id);
             markers.clear(id);
             Assignment gone = golems.get(s.golem());

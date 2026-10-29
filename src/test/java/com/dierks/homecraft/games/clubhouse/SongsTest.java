@@ -66,8 +66,9 @@ class SongsTest {
         assertEquals(stal, q.now());
         assertNull(q.next());
         assertNull(q.due(200_000), "nothing due while it plays");
-        assertTrue(q.over(281_000), "over with nothing next: the disc may come out");
-        assertNull(q.due(281_000), "nothing next: nothing starts");
+        assertFalse(q.over(281_000), "100 s and the grace from 181 s: not over yet");
+        assertTrue(q.over(282_000), "over with nothing next: the disc may come out");
+        assertNull(q.due(282_000), "nothing next: nothing starts");
         assertNull(q.now(), "and nothing plays");
         assertEquals(Songs.Act.PLAY, q.request(cat, 300_000), "a request after that plays at once");
         q.clear();

@@ -88,10 +88,11 @@ class StatsCardTest {
         assertEquals("&d&lMy stats &7- Sam", lines[0]);
         assertEquals("&7Runs this week: &f12", lines[1]);
         assertEquals("&7Tokens from games this week: &f45", lines[2]);
-        assertEquals("&7Best golf: &fTiny Golf 24 (-2)", lines[3]);
-        assertEquals("&fRiver Run &71:10.0 &e#1", lines[4], "best place first");
+        assertEquals(ClubBoardText.statsWeek(0, 0), lines[3], "0.38.4: the family week's line");
+        assertEquals("&7Best golf: &fTiny Golf 24 (-2)", lines[4]);
+        assertEquals("&fRiver Run &71:10.0 &e#1", lines[5], "best place first");
         assertEquals(ClubBoardText.ONLY_YOU, lines[8], "only they see it");
-        assertFalse(card.contains("&fC "), "four bests on the wall (the screen has them all)");
+        assertFalse(card.contains("&fB ") || card.contains("&fC "), "three bests on the wall (the screen has them all)");
         String none = StatsCard.board("Sam", new StatsCard.Mine(List.of(), 0, null, 0));
         assertTrue(none.contains("&7Best golf: &fnone yet") && none.contains(ClubBoardText.NO_BESTS), none);
         String counting = StatsCard.board("Sam", null);

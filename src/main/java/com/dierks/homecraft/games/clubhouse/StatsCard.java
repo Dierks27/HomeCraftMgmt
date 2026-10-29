@@ -31,8 +31,8 @@ public final class StatsCard {
      * entry and its refund (a player's own tokens going in and coming back).
      */
     public static final Set<String> GAME_SOURCES = gameSources();
-    /** Personal bests on the wall (the screen shows more). */
-    static final int WALL_BESTS = 4;
+    /** Personal bests on the wall (the screen shows more; 0.38.4: three, the family week's line took one row). */
+    static final int WALL_BESTS = 3;
 
     private StatsCard() {
     }

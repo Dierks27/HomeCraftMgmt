@@ -149,7 +149,7 @@ public final class ClubBoardText {
     // ---- the family week (0.38.4) ------------------------------------------------------------------
 
     public static final String FAMILY_TITLE = "&6&lFamily week";
-    public static final String NO_FAMILY = "&7No points yet this week - play something!";
+    public static final String NO_FAMILY = "&7No points yet this week - go play!";
     /** The Photo's small line when the podium is last week's top three (Race Night's says its own). */
     public static final String PHOTO_FAMILY = "&7Last week's top three";
     /** The My stats screen's week tile, and its lore. */
@@ -194,8 +194,8 @@ public final class ClubBoardText {
     public static final String SONGS_HEADER = "&dPick a record &7- it plays for the room";
     public static final String QUIET = "&cQuiet &7- stop the music";
     public static final String NOTHING_PLAYING = "&7Nothing playing";
-    public static final String SONGS_ELSEWHERE = "&7Songs play in the Clubhouse - come in first.";
-    public static final String NO_JUKEBOX = "&7There's no jukebox in the room right now.";
+    public static final String SONGS_ELSEWHERE = "&7Songs play in the Clubhouse - come in.";
+    public static final String NO_JUKEBOX = "&7There's no jukebox in the room now.";
 
     /** "&amp;dSam picked Pigstep": the room's line when a record starts. */
     public static String picked(String name, String title) {

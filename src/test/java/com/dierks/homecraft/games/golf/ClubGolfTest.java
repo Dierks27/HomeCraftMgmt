@@ -35,9 +35,14 @@ class ClubGolfTest {
     private static final class Door implements ClubDoor {
         final Map<UUID, ClubVisits.Kind> in = new LinkedHashMap<>();
         boolean golfAfter = true;
+        /** 0.38.3's switches. */
+        boolean soloAfter = true;
+        boolean soloFirst = true;
         /** Closing for a restart (the hold's last 66 s and the restart's own minute): the real one takes nobody in. */
         boolean closing;
         ClubBoard.Sheet sheet;
+        final Map<UUID, Consumer<Player>> solo = new LinkedHashMap<>();
+        final Map<UUID, String> lines = new LinkedHashMap<>();
         final List<UUID> handedOut = new ArrayList<>();
         final List<UUID> handedBack = new ArrayList<>();
         boolean handOutOk = true;
@@ -75,7 +80,23 @@ class ClubGolfTest {
         @Override
         public boolean takeIn(Player p, ClubVisits.Kind kind, String line) {
             in.put(p.getUniqueId(), kind);
+            lines.put(p.getUniqueId(), line);
             return true;
+        }
+
+        @Override
+        public boolean soloAfter() {
+            return soloAfter;
+        }
+
+        @Override
+        public boolean soloFirst() {
+            return soloFirst;
+        }
+
+        @Override
+        public void soloResult(Player p, Consumer<Player> opener) {
+            solo.put(p.getUniqueId(), opener);
         }
 
         @Override
@@ -247,5 +268,81 @@ class ClubGolfTest {
                 "no open party");
         assertFalse(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, true, true, true, false),
                 "the course is closed");
+    }
+
+    // ---- 0.38.3: a round alone through, from and back to the Clubhouse ----------------------------------
+
+    @Test
+    void aRoundAloneEndsInTheClubhouseWithItsOwnScorecard() {
+        Door door = new Door();
+        int[] forgot = {0};
+        java.util.function.Consumer<Player> scorecard = p -> { };
+        String line = com.dierks.homecraft.games.clubhouse.ClubhouseText.backSolo("Tiny Golf", "24 strokes (-2)");
+        assertTrue(ClubGolf.soloTake(door, player(SAM), "games", () -> forgot[0]++, line, scorecard),
+                "back to the Clubhouse (solo_after)");
+        assertEquals(1, forgot[0], "the finished round forgotten (it was recorded already)");
+        assertEquals(ClubVisits.Kind.VISIT, door.in.get(SAM), "in as a visitor");
+        assertEquals(line, door.lines.get(SAM), "reading how it went");
+        assertEquals(scorecard, door.solo.get(SAM), "their own scorecard, for them only");
+        assertEquals(1, door.solo.size(), "nobody else's");
+        assertNull(door.sheet, "the board (a golf group's ranking) is never touched");
+    }
+
+    @Test
+    void aRoundAloneGoesHomeWithSoloAfterOffOrTheClubhouseOffOrAnotherWorld() {
+        int[] forgot = {0};
+        assertFalse(ClubGolf.soloTake(null, player(SAM), "games", () -> forgot[0]++, "x", p -> { }), "no Clubhouse");
+        Door door = new Door();
+        door.soloAfter = false;
+        assertFalse(ClubGolf.soloTake(door, player(SAM), "games", () -> forgot[0]++, "x", p -> { }), "solo_after off");
+        door.soloAfter = true;
+        assertFalse(ClubGolf.soloTake(door, player(SAM), "other", () -> forgot[0]++, "x", p -> { }), "another world");
+        assertEquals(0, forgot[0], "nothing forgotten: home as before, the scorecard there");
+        assertTrue(door.in.isEmpty() && door.solo.isEmpty(), "and nothing of the Clubhouse's touched");
+    }
+
+    @Test
+    void aRoundAloneThatEndsAsTheClubhouseClosesForTheRestartGoesHome() {
+        Door door = new Door();
+        door.closing = true;
+        int[] forgot = {0};
+        assertFalse(ClubGolf.soloTake(door, player(SAM), "games", () -> forgot[0]++, "x", p -> { }), "home");
+        assertEquals(0, forgot[0], "untouched");
+        assertTrue(door.in.isEmpty(), "nobody taken in");
+    }
+
+    @Test
+    void aRoundAloneStartedInTheClubhouseIsHandedOutToHoleOne() {
+        Door door = new Door();
+        door.in.put(SAM, ClubVisits.Kind.VISIT);
+        List<UUID> moved = new ArrayList<>();
+        List<String> told = new ArrayList<>();
+        Boolean went = ClubGolf.fromClubhouse(door, player(SAM), null, "tiny", tee("games"),
+                (p, at) -> moved.add(p.getUniqueId()), p -> null, (p, r) -> told.add(r.message()));
+        assertEquals(Boolean.TRUE, went, "a round alone from the Clubhouse: on their way to hole 1");
+        assertEquals(List.of(SAM), door.handedOut, "handed out, in place");
+        assertEquals(List.of(SAM), moved, "the session's own teleport to the first tee");
+        door.in.put(AVA, ClubVisits.Kind.VISIT);
+        Boolean failed = ClubGolf.fromClubhouse(door, player(AVA), null, "tiny", tee("games"), (p, at) -> false,
+                p -> null, (p, r) -> told.add(r.message()));
+        assertEquals(Boolean.FALSE, failed, "the teleport failed");
+        assertEquals(List.of(AVA), door.handedBack, "handed back to the Clubhouse");
+        assertEquals(ClubVisits.Kind.GOLF, door.in.get(AVA), "still in it");
+        assertTrue(told.getLast().contains("hole 1"), told.toString());
+    }
+
+    @Test
+    void leaveGamePartwayThroughARoundFromTheClubhouseGoesBackThere() {
+        Door door = new Door();
+        int[] forgot = {0};
+        String line = com.dierks.homecraft.games.clubhouse.ClubhouseText.LEFT_ROUND;
+        assertTrue(ClubGolf.leftToClub(door, player(SAM), "games", () -> forgot[0]++, line), "back there");
+        assertEquals(1, forgot[0], "the round forgotten, never recorded");
+        assertEquals(line, door.lines.get(SAM), "reading where they are");
+        assertFalse(ClubGolf.leftToClub(null, player(AVA), "games", () -> forgot[0]++, line), "no Clubhouse: home");
+        assertFalse(ClubGolf.leftToClub(door, player(AVA), "other", () -> forgot[0]++, line), "another world: home");
+        door.closing = true;
+        assertFalse(ClubGolf.leftToClub(door, player(AVA), "games", () -> forgot[0]++, line), "closing: home");
+        assertEquals(1, forgot[0], "untouched when home");
     }
 }

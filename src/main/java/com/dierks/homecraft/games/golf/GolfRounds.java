@@ -60,6 +60,9 @@ import java.util.logging.Level;
  * counting while that layout still stands, even after the next set's layout went live, and what
  * it records and pays is {@link GolfFinish}'s.
  *
+ * <p>A round alone may start from the Clubhouse, or go through it first, and come back to it at its end
+ * (0.38.3, {@link ClubGolf}); with the Clubhouse off, everything here is exactly as before.
+ *
  * <p>Golf together's turn flow (D4) is {@link GolfGroups}'s; this class is its server side (the
  * {@link GolfGroups.Port}): a group player's round is finished and recorded at their own last hole,
  * and they go home when the group's round is over.
@@ -147,24 +150,36 @@ public final class GolfRounds {
         int maxOverPar = golf.settings().maxOverPar();
         GolfCourse.Tee tee = course.hole(1).tee();
         Location start = new Location(world, tee.x(), tee.y(), tee.z(), tee.yaw(), 0);
-        if (group != null) { // WP-CH: "Play again together" for a member waiting in the Clubhouse
-            Boolean fromClub = ClubGolf.fromClubhouse(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()),
-                    player, golf, course.id(), start, (q, at) -> games().sessions().teleport(q, at),
-                    q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r));
-            if (fromClub != null) {
-                if (fromClub) {
-                    begin(player, course, look, maxOverPar, group);
-                }
-                return fromClub;
+        if (group == null && ClubGolf.waiting(games(), player.getUniqueId(), course.world())) {
+            Refusal hold = games().sessions().entryRefusal(golf); // a round alone from the Clubhouse: the hold too
+            if (hold != null) {
+                games().tell(player, hold);
+                return false;
             }
+        }
+        // WP-CH: "Play again together" for a member waiting in the Clubhouse, and (0.38.3) any round started there
+        Boolean fromClub = ClubGolf.fromClubhouse(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()),
+                player, golf, course.id(), start, (q, at) -> games().sessions().teleport(q, at),
+                q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r));
+        if (fromClub != null) {
+            if (fromClub) {
+                begin(player, course, look, maxOverPar, group, group == null);
+            }
+            return fromClub;
         }
         Refusal refusal = games().canOpen(player, golf);
         if (refusal != null) {
             games().tell(player, refusal);
             return false;
         }
+        if (group == null) { // 0.38.3 (C1): a round alone goes through the Clubhouse first
+            Boolean lobby = ClubGolf.lobby(golf, player, course);
+            if (lobby != null) {
+                return lobby;
+            }
+        }
         return games().sessions().enter(player, golf, course.id(), start,
-                p -> begin(p, course, look, maxOverPar, group));
+                p -> begin(p, course, look, maxOverPar, group, false));
     }
 
     /**
@@ -187,7 +202,8 @@ public final class GolfRounds {
      * They're in, saved and cleared: the kit, the ball on the first tee — unless an admin closed
      * the course or changed its layout while they were on their way, when they go straight home.
      */
-    private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar, GolfGroup group) {
+    private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar, GolfGroup group,
+                       boolean fromClub) {
         GolfCourse now = golf.playableCourse(course.id());
         boolean standing = course.generated() && games().generated().standing(course.gen());
         if ((now == null || now.rev() != course.rev()) && !standing) {
@@ -198,6 +214,7 @@ public final class GolfRounds {
         }
         LiveRound r = new LiveRound(p.getUniqueId(), course, new GolfRun(course.pars(), maxOverPar),
                 new BallView(golf.plugin(), golf, p.getUniqueId(), look));
+        r.fromClub = fromClub;
         LiveRound old = live.put(p.getUniqueId(), r);
         if (old != null) {
             old.view.remove();
@@ -641,11 +658,17 @@ public final class GolfRounds {
 
     // ---- the finish ----------------------------------------------------------------------------------
 
-    /** A round alone is over: its lines and record, then home, and the final scorecard there. */
+    /**
+     * A round alone is over: its lines and record, then home, and the final scorecard there; or (0.38.3,
+     * {@code solo_after}) back to the Clubhouse, with the scorecard there.
+     */
     private void finish(Player p, LiveRound r) {
         r.state = LiveRound.State.DONE;
         finishLines(p, r);
         GolfCard card = r.card();
+        if (ClubGolf.soloBack(golf, this, p, r, card)) {
+            return; // 0.38.3: back to the Clubhouse, the scorecard there
+        }
         games().sessions().leave(p, EndReason.FINISH);
         showWhenHome(p.getUniqueId(), card, null, 0);
     }
@@ -910,6 +933,23 @@ public final class GolfRounds {
             out.put(g, groups.card(g));
         }
         return out;
+    }
+
+    /**
+     * 0.38.3: Leave game partway through a round alone that was handed out from the Clubhouse: back there,
+     * the round forgotten (not recorded, as a Leave game's never is). False: the session ends, home.
+     */
+    boolean leftToClub(Player p) {
+        LiveRound r = live.get(p.getUniqueId());
+        if (r == null || !r.fromClub || r.group != null || r.state == LiveRound.State.DONE) {
+            return false;
+        }
+        return ClubGolf.leftToClub(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()), p,
+                p.getWorld().getName(), () -> {
+                    forget(r);
+                    p.sendMessage(Text.of("&7Your round of &d" + r.course.name()
+                            + " &7ended early, so it isn't recorded."));
+                }, com.dierks.homecraft.games.clubhouse.ClubhouseText.LEFT_ROUND);
     }
 
     /** WP-CH: the round is over and its player goes to the Clubhouse: the ball goes, the round is forgotten. */

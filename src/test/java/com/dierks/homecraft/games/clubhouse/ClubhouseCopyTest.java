@@ -39,7 +39,8 @@ class ClubhouseCopyTest {
             }
         }
         for (String f : List.of("games/trial/ClubRaces.java", "games/event/ClubNight.java", "games/golf/ClubGolf.java",
-                "command/ClubhouseCheck.java", "games/trial/Riders.java", "games/trial/RideAlong.java")) {
+                "command/ClubhouseCheck.java", "games/trial/Riders.java", "games/trial/RideAlong.java",
+                "games/trial/ClubSolo.java")) {
             out.add(BASE.resolve(f));
         }
         return out;
@@ -77,7 +78,7 @@ class ClubhouseCopyTest {
     void theKitsKeyFactsAreInItsNames() {
         for (String name : List.of(ClubhouseText.KIT_PARTY, ClubhouseText.KIT_RESULTS, ClubhouseText.KIT_LEAVE,
                 ClubhouseText.GO_BUTTON, ClubhouseText.WATCH_BUTTON, ClubhouseText.WAIT_BUTTON,
-                com.dierks.homecraft.games.trial.RideAlong.BUTTON)) {
+                com.dierks.homecraft.games.trial.RideAlong.BUTTON, ClubhouseText.KIT_STAY, ClubhouseText.KIT_GAMES)) {
             assertTrue(name.contains("- ") && name.length() > 20, "Bedrock reads the NAME: the key fact is in it: " + name);
         }
     }

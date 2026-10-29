@@ -69,6 +69,8 @@ final class LiveRound {
     BallPhysics.Outcome outcome;
     /** The group this round plays in (golf together, D4), or {@code null} for a round alone. */
     GolfGroup group;
+    /** 0.38.3: a round alone handed out from the Clubhouse (its Leave game goes back there). */
+    boolean fromClub;
 
     LiveRound(UUID player, GolfCourse course, GolfRun run, BallView view) {
         this.player = player;

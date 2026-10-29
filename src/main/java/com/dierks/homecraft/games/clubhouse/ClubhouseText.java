@@ -85,4 +85,46 @@ public final class ClubhouseText {
 
     /** What the host reads after a party race that came back to the Clubhouse. */
     public static final String RACE_AGAIN = "&dRace again? &7Tap Party, then Race again!";
+
+    // ---- 0.38.3: through the Clubhouse (courses and mini golf) ----------------------------------
+
+    /** "Off to Sky Rings!" (the title on arriving for a game). */
+    public static String offTo(String name) {
+        return "&6Off to " + name + "!";
+    }
+
+    /** The title's small line. */
+    public static final String OFF_TO_SMALL = "&7Tap Stay here to hang out";
+
+    /** The chat line on arriving for a game. */
+    public static String offToLine(String name) {
+        return "&6Off to " + name + "! &7You go in a few seconds - or tap Go now. Stay here keeps you in.";
+    }
+
+    /** The action bar: "Sky Rings in 3". */
+    public static String countdown(String name, int seconds) {
+        return "&e" + name + " &7in &f" + seconds;
+    }
+
+    /** Kit slot 3: "Go now: Sky Rings". */
+    public static String goNow(String name) {
+        return "&aGo now: " + name;
+    }
+
+    public static final String KIT_STAY = "&eStay here - hang out";
+    public static final String KIT_GAMES = "&bGames &7- pick a game";
+    public static final String STAYING = "&7You're staying in the Clubhouse. Tap Games when you want to play.";
+    public static final String NEXT_CLOSED = "&7That game closed meanwhile - you're still in the Clubhouse.";
+
+    /** "Back in the Clubhouse! Sky Rings 1:23.4" (a solo run or a round alone, back here). */
+    public static String backSolo(String name, String score) {
+        return "&dBack in the Clubhouse! &f" + name + " " + score;
+    }
+
+    public static final String LEFT_RUN = "&7You left the course - back in the Clubhouse. Leave game again takes you"
+            + " home.";
+    public static final String LEFT_ROUND = "&7You left the round - back in the Clubhouse. Leave game again takes"
+            + " you home.";
+    /** A hand-out from here whose move to the start failed: they are handed back. */
+    public static final String NO_START = "Couldn't get you to the start - you're still in the Clubhouse.";
 }

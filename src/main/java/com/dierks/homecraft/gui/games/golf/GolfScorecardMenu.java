@@ -1,7 +1,9 @@
 package com.dierks.homecraft.gui.games.golf;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.golf.ClubGolf;
 import com.dierks.homecraft.games.golf.GolfCard;
+import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.gui.Menus;
@@ -22,7 +24,8 @@ import org.bukkit.inventory.ItemStack;
  *            green under par, white par, yellow over, red picked up, a star for a hole-in-one,
  *            light blue the hole being played, grey not played yet
  *  row 3     31 the total against par
- *  row 4     40 "Next hole" between holes; "Play again" at the end, once you're home
+ *  row 4     40 "Next hole" between holes; "Play again" at the end, once you're home (or, 0.38.3, back
+ *            in the Clubhouse)
  *  row 5     49 Close
  * </pre>
  *
@@ -63,7 +66,14 @@ public final class GolfScorecardMenu extends GameMenu {
                     "&7" + card.scores().size() + " of " + card.pars().size() + " holes done."), null);
         }
         if (card.finished()) {
-            if (golf.games().sessions().home(viewer) && golf.playableCourse(card.courseId()) != null) {
+            GolfCourse course = golf.playableCourse(card.courseId());
+            boolean inClub = course != null && ClubGolf.waiting(golf.games(), viewer.getUniqueId(), course.world());
+            if (back != null && inClub) { // 0.38.3: back in the Clubhouse, the way on, its key fact in the NAME
+                set(getInventory().getSize() - 5, Menus.icon(Material.BARRIER, "&cBack to the courses",
+                        "&7Pick another course,", "&7or tap Leave game to go home."), e -> back.run());
+            }
+            // home, or (0.38.3) in the Clubhouse, where Play again hands them straight out to hole 1
+            if (course != null && (golf.games().sessions().home(viewer) || inClub)) {
                 set(ACTION, Menus.icon(Material.LIME_CONCRETE, "&aPlay again", "&7Another round of " + card.courseName() + ".",
                         "&eClick to play"), e -> {
                     if (!golf.start(viewer, card.courseId())) {

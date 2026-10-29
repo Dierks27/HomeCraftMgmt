@@ -2,10 +2,13 @@ package com.dierks.homecraft.games.golf;
 
 import com.dierks.homecraft.games.clubhouse.ClubBoard;
 import com.dierks.homecraft.games.clubhouse.ClubDoor;
+import com.dierks.homecraft.games.clubhouse.ClubNext;
+import com.dierks.homecraft.games.clubhouse.ClubRoute;
 import com.dierks.homecraft.games.clubhouse.ClubVisits;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.clubhouse.ClubhouseText;
 import com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu;
+import com.dierks.homecraft.gui.games.golf.GolfScorecardMenu;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -15,10 +18,16 @@ import java.util.UUID;
 /**
  * Golf together's side of the Clubhouse (CLUBHOUSE-SPEC §3; WP-CH): when a group's round ends, the
  * group goes to the Clubhouse instead of home, and its board shows the group ranking. One line in
- * {@link GolfRounds}'s group end ({@code Port.home}); a round alone still goes home as before, and
- * with the Clubhouse off or not built (or {@code golf_after} off) so does the group, and while the
- * Clubhouse is closing for a restart ({@link ClubDoor#closingForRestart}, the hold's last minute or
- * so: nobody may be in the Clubhouse across a restart).
+ * {@link GolfRounds}'s group end ({@code Port.home}); a round alone goes home as before, unless
+ * {@code solo_after} brings it to the Clubhouse (0.38.3, {@link #soloBack}), and with the Clubhouse
+ * off or not built (or {@code golf_after} off) so does the group, and while the Clubhouse is closing
+ * for a restart ({@link ClubDoor#closingForRestart}, the hold's last minute or so: nobody may be in
+ * the Clubhouse across a restart).
+ *
+ * <p><b>A round alone</b> (0.38.3, the owner: "go to the clubhouse when click into a game"): its Start
+ * goes through the Clubhouse first ({@link #lobby}, {@code solo_first}), it is handed out from there
+ * to hole 1 ({@link #fromClubhouse}), its end comes back there with its own scorecard, and Leave game
+ * partway goes back there too ({@link #leftToClub}). Every fallback is {@link ClubRoute}'s.
  */
 public final class ClubGolf {
 
@@ -76,9 +85,10 @@ public final class ClubGolf {
 
     /**
      * "Play again together" for a member waiting in the Clubhouse (the checklist pass: a group that ended
-     * there could never play again): their Clubhouse session is handed to golf in place (their things
-     * stay saved once; anything that arrived meanwhile is banked), the gate asked again, then the
-     * session's own teleport to hole 1. On any failure they are handed back to the Clubhouse.
+     * there could never play again), and (0.38.3) any round alone started there: their Clubhouse session is
+     * handed to golf in place (their things stay saved once; anything that arrived meanwhile is banked), the
+     * gate asked again, then the session's own teleport to hole 1. On any failure they are handed back to
+     * the Clubhouse.
      *
      * @return {@code null} when they aren't waiting in the Clubhouse (the usual entry applies), else
      *         whether they are on their way to hole 1
@@ -102,6 +112,65 @@ public final class ClubGolf {
             return false;
         }
         return true;
+    }
+
+    /**
+     * A round alone's Start through the Clubhouse first (0.38.3, {@code solo_first}): {@code null} = straight
+     * to hole 1 as before; else whether they are on their way (false: told why). One in the Clubhouse whose
+     * course is in another world can't be handed out (a session teleport stays in its world): told so.
+     */
+    static Boolean lobby(MiniGolf golf, Player p, GolfCourse c) {
+        com.dierks.homecraft.games.GamesService g = golf.games();
+        ClubDoor club = Clubhouse.door(g);
+        ClubRoute.Way way = ClubRoute.start(club, p.getUniqueId(), c.world(), false, false,
+                g.sessions().session(p) != null, g.restartHeld() != null);
+        if (way == ClubRoute.Way.HAND_OUT) { // in the Clubhouse, but fromClubhouse couldn't: another world
+            g.tell(p, com.dierks.homecraft.games.Refusal.of(ClubhouseText.OTHER_WORLD));
+            return false;
+        }
+        if (way != ClubRoute.Way.LOBBY) {
+            return null;
+        }
+        return Clubhouse.lobby(g, p, new ClubNext(MiniGolf.SPEC.id(), c.id(), c.name(), false));
+    }
+
+    /** A round alone is over: back to the Clubhouse ({@code solo_after}) with its scorecard there; false = home. */
+    static boolean soloBack(MiniGolf golf, GolfRounds rounds, Player p, LiveRound r, GolfCard card) {
+        return soloTake(Clubhouse.door(golf.games()), p, p.getWorld().getName(), () -> rounds.forget(r),
+                ClubhouseText.backSolo(card.courseName(), GolfRun.strokesText(card.total()) + " ("
+                        + GolfRun.vsParText(card.vsPar()) + ")"),
+                q -> new GolfScorecardMenu(golf.plugin(), golf, q, card, () -> golf.open(q, null)).open(q));
+    }
+
+    /**
+     * {@link #soloBack} with the server's parts passed in: false (nothing touched) sends them home as
+     * before; while the Clubhouse is closing for a restart they read why. The scorecard is theirs only:
+     * never the board or the shared Results.
+     */
+    static boolean soloTake(ClubDoor club, Player p, String world, Runnable forget, String line,
+                            java.util.function.Consumer<Player> opener) {
+        if (!ClubRoute.after(club, world, false, false)) {
+            return false;
+        }
+        if (club.closingForRestart()) {
+            p.sendMessage(com.dierks.homecraft.util.Text.of(ClubhouseText.HOLD_NOT_TAKEN));
+            return false; // home with the scorecard, as with no Clubhouse
+        }
+        forget.run();
+        if (!club.takeIn(p, ClubVisits.Kind.VISIT, line)) {
+            return false;
+        }
+        club.soloResult(p, opener);
+        return true;
+    }
+
+    /** Leave game partway through a round alone handed out from the Clubhouse: back there (false: home). */
+    static boolean leftToClub(ClubDoor club, Player p, String world, Runnable forget, String line) {
+        if (!ClubRoute.leaveBack(club, world, true, false, false)) {
+            return false;
+        }
+        forget.run();
+        return club.takeIn(p, ClubVisits.Kind.VISIT, line);
     }
 
     /**

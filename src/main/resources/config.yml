@@ -2359,3 +2359,15 @@ games:
     race_night_after: true
     # A golf-together group comes here when its round ends.
     golf_after: true
+    # Start on a course or a mini golf course takes you here first ("Off to Sky Rings!"), then on to it
+    # after first_seconds, or at once with Go now; Stay here keeps you in. false = straight to the start,
+    # as before. A course in another world, or a run with a rider, always goes straight there.
+    solo_first: true
+    # A solo run's finish, or a round of golf alone, comes back here with your results and Play again,
+    # instead of going home. false = home, as before.
+    solo_after: true
+    # Seconds here before you're taken on to your course or round (1-30).
+    first_seconds: 5
+    # The walls show this week's best, who's playing now and your own stats (only you see yours).
+    # false = just the results board.
+    boards: true

@@ -95,6 +95,11 @@ final class TrialRun {
      */
     boolean hadRider;
     /**
+     * 0.38.3: the run was handed out from the Clubhouse ({@code ClubSolo}): Leave game partway goes back
+     * there, not home.
+     */
+    boolean fromClub;
+    /**
      * The server tick the warm-up ends at (then the player goes to the start and the normal 3-2-1
      * begins), or 0 for no time limit (the Dropper's practice drop ends on its first splash or bonk).
      */

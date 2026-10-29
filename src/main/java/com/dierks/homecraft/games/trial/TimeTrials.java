@@ -119,6 +119,8 @@ import java.util.logging.Logger;
  * the player reads the time, their best and the record (with who holds it); the rewards are paid
  * through {@link SkillRewards} — first clear, best this week, course of the week, today's pick —
  * and the session sends them home. Once they're there, a small result screen offers "Play again".
+ * 0.38.3: a Start may go through the Clubhouse first, and a solo finish come back to it with the result
+ * screen there ({@link ClubSolo}); with the Clubhouse off, everything here is exactly as before.
  *
  * <p>Everything live here — runs, boats — is in memory and cleaned up with the session: boats are
  * never saved with the world, and any left by a crash are swept when the game starts.
@@ -995,6 +997,47 @@ public final class TimeTrials implements Game {
         games().open(player, result.courseId(), null);
     }
 
+    /**
+     * 0.38.3: the Clubhouse's Go now (or its countdown) for a course: the gate again, the course, the warm-up
+     * choice carried across the trip, then the start (from the Clubhouse now: a hand-out).
+     */
+    public void fromLobby(Player player, String courseId, boolean warmUp) {
+        Course c = openCourse(courseId);
+        if (c == null) {
+            games().tell(player, Refusal.of("That course is closed right now."));
+            return;
+        }
+        Refusal r = games().canOpen(player, this);
+        if (r != null) {
+            games().tell(player, r);
+            return;
+        }
+        if (warmUp && Warmup.offered(settings(), false, c.kind())) {
+            warmups.want(player.getUniqueId(), c.id());
+        }
+        begin(player, c, false);
+    }
+
+    /** Whether "Play again" is lit: home, or in the Clubhouse (handed out from there, 0.38.3). */
+    public boolean playAgainReady(Player player) {
+        return home(player) || inClubhouse(player);
+    }
+
+    /** Whether the player is in the Clubhouse now (0.38.3: the result screen's way out reads "Back to the courses"). */
+    public boolean inClubhouse(Player player) {
+        return player != null && ClubSolo.inClubhouse(games(), player.getUniqueId());
+    }
+
+    /**
+     * 0.38.3: Leave game partway through a run that was handed out from the Clubhouse goes back there (the
+     * session kept, handed to the Clubhouse); any other run ends, and home, as always.
+     */
+    @Override
+    public boolean onLeaveItem(Player player) {
+        TrialRun run = runs.get(player.getUniqueId());
+        return run != null && ClubSolo.leftToClub(this, player, run);
+    }
+
     // ---- starting a run -----------------------------------------------------------------------
 
     /** An admin's test run: any complete course, open or not; records nothing. */
@@ -1040,6 +1083,13 @@ public final class TimeTrials implements Game {
             warmups.forget(player);
             return false;
         }
+        Boolean viaClub = ClubSolo.begin(this, player, course, test); // 0.38.3: from, or through, the Clubhouse
+        if (viaClub != null) {
+            if (!viaClub) {
+                warmups.forget(player);
+            }
+            return viaClub;
+        }
         Course.Spot s = course.start();
         Location start = new Location(world, s.x(), s.y(), s.z(), s.yaw(), s.pitch());
         boolean in = sessions().enter(player, this, course.id(), start, p -> ready(p, course, test));
@@ -1054,9 +1104,39 @@ public final class TimeTrials implements Game {
         end(p);
         TrialRun run = new TrialRun(p.getUniqueId(), course, test, COUNTDOWN_TICKS + 1);
         runs.put(p.getUniqueId(), run);
+        arm(p, run, true);
+    }
+
+    /**
+     * 0.38.3: the run for a player just handed over from the Clubhouse ({@link ClubSolo#seat}): made first, then
+     * the run's own teleport to the start (a boat is seated there by its re-seat, as a race seat's is), then
+     * {@link #ready}'s kit, lines, Dropper and warm-up. False when the teleport couldn't be made: the run is
+     * forgotten, and the caller hands them back to the Clubhouse.
+     */
+    boolean readyFromClub(Player p, Course course) {
+        end(p);
+        TrialRun run = new TrialRun(p.getUniqueId(), course, false, COUNTDOWN_TICKS + 1);
+        run.fromClub = true;
+        runs.put(p.getUniqueId(), run);
+        Location start = backTo(run, -1);
+        if (start == null || !move(p, run, start)) {
+            end(p);
+            return false;
+        }
+        arm(p, run, false);
+        return true;
+    }
+
+    /**
+     * A new run's kit, its boat (seated where the player stands when {@code seatHere}; a hand-out's re-seat
+     * seats it at the start), its lines, the Dropper's offer and the warm-up chosen.
+     */
+    private void arm(Player p, TrialRun run, boolean seatHere) {
+        Course course = run.course;
+        boolean test = run.test;
         giveKit(p, course.kind());
         p.setFallDistance(0f);
-        if (course.kind() == TrialKind.BOAT) {
+        if (course.kind() == TrialKind.BOAT && seatHere) {
             seat(p, run, p.getLocation());
         }
         p.sendMessage(Text.of("&b" + course.name() + " &7(" + TrialText.label(course) + ")"
@@ -1995,6 +2075,9 @@ public final class TimeTrials implements Game {
             Player q = Bukkit.getPlayer(id);
             Session session = q == null ? null : sessions().session(q);
             if (session != null && id().equals(session.gameId())) {
+                if (ClubSolo.back(this, q, run, result)) {
+                    return; // 0.38.3: back to the Clubhouse, and their results there
+                }
                 sessions().leave(q, EndReason.FINISH);
             }
         });
@@ -2195,8 +2278,8 @@ public final class TimeTrials implements Game {
                 return;
             }
             if (!home(p)) {
-                if (tries > 0) {
-                    showResult(id, result, tries - 1);
+                if (tries > 0 && !ClubSolo.inClubhouse(games(), id)) {
+                    showResult(id, result, tries - 1); // in the Clubhouse (0.38.3) their results opened there
                 }
                 return;
             }

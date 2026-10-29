@@ -463,6 +463,24 @@ public final class WorldSessions {
         };
     }
 
+    /**
+     * "Leave game" clicked twice (0.38.3): whether the session's game took it over and kept the session (see
+     * {@link Game#onLeaveItem}); a throw ends the session, as a kit use's does. False: the caller ends it.
+     */
+    boolean leaveItem(Player player) {
+        Session s = session(player);
+        Game game = s == null || s.phase() != Session.Phase.ACTIVE ? null : games.game(s.gameId());
+        if (game == null) {
+            return false;
+        }
+        boolean took = games.guard(game, () -> game.onLeaveItem(player), false);
+        if (games.failed(game)) {
+            core().leave(player, EndReason.GAME_OFF);
+            return true;
+        }
+        return took;
+    }
+
     /** The kit guard calls a game's kit use through here, so a failure ends the session too. */
     void kitUse(Player player, Game game, String action, boolean leftClick) {
         games.guard(game, () -> game.onKitUse(player, action, leftClick));

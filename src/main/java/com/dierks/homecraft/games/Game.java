@@ -175,6 +175,15 @@ public interface Game {
     default void onKitUse(Player player, String action, boolean leftClick) {
     }
 
+    /**
+     * "Leave game" was clicked twice (0.38.3): the game may take it over and keep the session (a run or a
+     * round that was handed out from the Clubhouse goes back there). False, the default: the session ends
+     * and they go home. {@code /hcm leave} never asks: it always goes home.
+     */
+    default boolean onLeaveItem(Player player) {
+        return false;
+    }
+
     /** The Games screen's tabs, besides All (which shows every tile). */
     enum Tab {
         /** Games of chance (plus links to the Scratch Ticket and Crates). */

@@ -113,7 +113,8 @@ class GamesMenuTest {
             assertTrue(slot > 0 && slot < 8, slot + " stays clear of the balance (0) and the invite (8)");
             assertTrue(seen.add(slot), slot + " holds one tab");
         }
-        assertFalse(GamesMenu.togetherShown(0, null), "with Race Night and Falling Floors off, slot 7 is as it was");
+        assertFalse(GamesMenu.togetherShown(0, null),
+                "with nothing on Together (Race Night, Falling Floors and the Clubhouse closed), slot 7 is as it was");
         assertFalse(GamesMenu.togetherShown(0, Game.Tab.COURSES), "on another tab too");
         assertTrue(GamesMenu.togetherShown(1, null), "one tile shows the tab");
         assertTrue(GamesMenu.togetherShown(0, Game.Tab.TOGETHER), "and a viewer on it keeps it");
@@ -153,6 +154,10 @@ class GamesMenuTest {
         assertSame(Refusal.IN_SESSION, GamesMenu.linkRefusal(session),
                 "a Scratch Ticket or crate from inside a world game is refused before anything is taken");
         assertNull(GamesMenu.linkRefusal(null), "outside one, go ahead");
+        Session club = new Session(UUID.randomUUID(), "clubhouse", "clubhouse", "s2", "games",
+                Session.Phase.ACTIVE, 0L);
+        assertSame(Refusal.NOT_IN_CLUBHOUSE, GamesMenu.linkRefusal(club),
+                "0.38.3: from the Clubhouse's Games item, luck stays outside with the Clubhouse's own line");
     }
 
     @Test

@@ -342,10 +342,15 @@ public final class TicTacToe extends CabinetGame {
         }
     }
 
-    /** In a world session, or looking at another game's screen: an accepted invite mustn't pull them out. */
+    /**
+     * In a world session, or looking at another game's screen: an accepted invite mustn't pull them out. A
+     * visitor hanging out in the Clubhouse isn't busy (0.38.3: cabinets play right there); one watching live is.
+     */
     private boolean busyElsewhere(Player player) {
         Game on = GameMenu.gameOnScreen(player);
-        return FriendGames.elsewhere(id(), on == null ? null : on.id(), games().sessions().session(player) != null);
+        boolean inGame = games().sessions().session(player) != null
+                && !com.dierks.homecraft.games.clubhouse.Clubhouse.hangingOut(games(), player.getUniqueId());
+        return FriendGames.elsewhere(id(), on == null ? null : on.id(), inGame);
     }
 
     /**

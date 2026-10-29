@@ -6,12 +6,17 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesScreens;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.Invite;
+import com.dierks.homecraft.games.Invites;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.gui.games.daily.TierMenu;
 import com.dierks.homecraft.gui.games.daily.FreshMenu;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.inventory.ItemStack;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -23,8 +28,8 @@ import java.util.function.Predicate;
 
 /**
  * The shared games screens, as the framework and the games reach them (spec §8, R3.4): the Games
- * screen, one board's high scores, Take a break, the player picker, and Fresh Courses' own screen
- * and parkour level picker (GEN-SPEC §5.4). Installed once at enable
+ * screen, one board's high scores, Take a break, the player picker, Fresh Courses' own screen
+ * and parkour level picker (GEN-SPEC §5.4), and (0.38.4) the "Play?" screen an invite opens. Installed once at enable
  * with {@code games.screens(new Screens(plugin))}; until then the service says "Coming soon!".
  *
  * <p>It also reads, for the screens, what each game publishes about itself through
@@ -70,6 +75,43 @@ public final class Screens implements GamesScreens {
     @Override
     public void parkourTiers(Player player, Runnable back) {
         new TierMenu(plugin, daily(), player, back).open(player);
+    }
+
+    /**
+     * 0.38.4: the "Play?" screen, when it may open now ({@link Invites#askScreenOpens}): nothing but the
+     * invitee's own crafting grid open, an empty cursor, and not in a world game unless hanging out in the
+     * Clubhouse (where party and ride invites reach them).
+     */
+    @Override
+    public boolean askInvite(Player to, Game owner, Invite invite, String fromName, int seconds) {
+        GamesService games = plugin.games();
+        if (to == null || !to.isOnline() || games == null) {
+            return false;
+        }
+        ItemStack cursor = to.getItemOnCursor();
+        boolean opens = Invites.askScreenOpens(
+                to.getOpenInventory().getTopInventory().getType() == InventoryType.CRAFTING,
+                cursor == null || cursor.getType().isAir(), games.sessions().session(to) != null,
+                Clubhouse.hangingOut(games, to.getUniqueId()));
+        if (!opens) {
+            return false;
+        }
+        new InviteAskMenu(plugin, owner, to, invite, fromName, seconds).open(to);
+        return true;
+    }
+
+    /** 0.38.4: the "Play?" screen for this invite closes, if it is still what the invitee is looking at. */
+    @Override
+    public void closeAsk(Player to, long id) {
+        try {
+            if (to != null && to.isOnline()
+                    && to.getOpenInventory().getTopInventory().getHolder(false) instanceof Invites.AskScreen s
+                    && s.inviteId() == id) {
+                to.closeInventory();
+            }
+        } catch (RuntimeException e) {
+            plugin.getLogger().fine("Could not close the Play? screen for " + to.getName() + ": " + e.getMessage());
+        }
     }
 
     /** Fresh Courses, the game its screens belong to (their guard), or {@code null} without one. */

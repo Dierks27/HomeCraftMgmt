@@ -121,6 +121,8 @@ public final class Clubhouse implements Game, ClubDoor {
     static final String GO_NOW = "go_now";
     static final String STAY = "stay";
     static final String GAMES = "games";
+    /** 0.38.4: "Challenge - race anyone online" (slot 1, while not in a party). */
+    static final String CHALLENGE = "challenge";
     static final String LEAVE = "leave";
     /**
      * A solo player's own results open once they are seen in the room: looked for this often (ticks), this many
@@ -176,8 +178,14 @@ public final class Clubhouse implements Game, ClubDoor {
     private record Results(ClubBoard.Sheet sheet, Consumer<Player> opener) {
     }
 
-    /** A solo player's own last results (0.38.3): their results screen, and when it came. */
-    private record Mine(Consumer<Player> opener, long at) {
+    /**
+     * A solo player's own last results (0.38.3): their results screen, and when it came; and (0.38.4) the chat line
+     * for a run or round that set the course's all-time record, or {@code null} for none.
+     */
+    private record Mine(Consumer<Player> opener, long at, String recordLine) {
+        Mine(Consumer<Player> opener, long at) {
+            this(opener, at, null);
+        }
     }
 
     /** Race Night's podium, waiting for its three to arrive. */
@@ -411,6 +419,7 @@ public final class Clubhouse implements Game, ClubDoor {
             case GO_NOW -> goNext(player);
             case STAY -> stay(player);
             case GAMES -> games().openGamesScreen(player, null);
+            case CHALLENGE -> com.dierks.homecraft.games.trial.PartyRaces.challengeFromClub(games(), player); // 0.38.4
             default -> {
                 // "leave" is the kit guard's
             }
@@ -794,7 +803,7 @@ public final class Clubhouse implements Game, ClubDoor {
         LiveRace live = followed();
         ClubNext next = lobby.next(id);
         boolean own = ownNewer(id);
-        String sig = (party ? "P" : "") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
+        String sig = (party ? "P" : "C") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
                 + (next != null ? "N" + next.gameId() + ":" + next.ref() : "") + "G"
                 + (settings().boards() ? "S" : "");
         if (sig.equals(kits.get(id)) || !inOurSession(p)) {
@@ -806,6 +815,10 @@ public final class Clubhouse implements Game, ClubDoor {
         if (party) {
             KitItems.put(inv, 0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
                     "&7Who's in, who's ready,", "&7and the host's Start."));
+        }
+        if (!party) { // 0.38.4: a challenge is a party race of two with anyone online
+            KitItems.put(inv, 1, KitItems.item(this, CHALLENGE, Material.GOLDEN_BOOTS, ClubhouseText.KIT_CHALLENGE,
+                    "&7Pick a course, then anyone", "&7who's free. They meet you here."));
         }
         KitItems.put(inv, 2, own
                 ? KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS_MINE, "&7Your time, and Play again.")
@@ -1253,6 +1266,11 @@ public final class Clubhouse implements Game, ClubDoor {
             }
 
             @Override
+            public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
+                g.guard(self, () -> self.soloResult(p, opener, recordLine));
+            }
+
+            @Override
             public void result(ClubBoard.Sheet sheet, Consumer<Player> opener) {
                 g.guard(self, () -> self.result(sheet, opener));
             }
@@ -1402,11 +1420,21 @@ public final class Clubhouse implements Game, ClubDoor {
      */
     @Override
     public void soloResult(Player p, Consumer<Player> opener) {
+        soloResult(p, opener, null);
+    }
+
+    /**
+     * {@link #soloResult(Player, Consumer)} with (0.38.4) the record line for a run or round that set the course's
+     * all-time record: once they have landed, "NEW RECORD!" for everyone in the room, the burst over the podium and
+     * the line in chat ({@link #newRecord}); {@code null} for no record.
+     */
+    @Override
+    public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
         if (p == null || opener == null) {
             return;
         }
         UUID id = p.getUniqueId();
-        Mine m = new Mine(opener, now());
+        Mine m = new Mine(opener, now(), recordLine);
         mine.put(id, m);
         if (ctx.plugin() == null) {
             return; // the framework's own tests: no server to open a screen on
@@ -1431,9 +1459,36 @@ public final class Clubhouse implements Game, ClubDoor {
             return; // not landed yet
         }
         visits.seen(id); // the arrival check's, done
+        if (m.recordLine() != null) {
+            newRecord(m.recordLine()); // 0.38.4
+        }
         InventoryType open = q.getOpenInventory().getType();
         if (open == InventoryType.CRAFTING || open == InventoryType.CREATIVE) {
             m.opener().accept(q);
+        }
+    }
+
+    /**
+     * 0.38.4: a solo run or a round alone that set the course's all-time record has landed here: "NEW RECORD!" for
+     * everyone in the room (the podium title's shape), {@code line} in chat, and the kid-safe burst over the podium.
+     */
+    private void newRecord(String line) {
+        for (ClubVisits.Visit v : visits.all()) {
+            Player p = online(v.id());
+            if (p == null) {
+                continue;
+            }
+            try {
+                p.showTitle(Title.title(Text.of(ClubhouseText.NEW_RECORD), Text.of(ClubhouseText.newRecordSmall(line)),
+                        Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(PHOTO_TICKS * 50L),
+                                Duration.ofMillis(400))));
+            } catch (RuntimeException | LinkageError ignored) {
+                // a title is decoration
+            }
+            p.sendMessage(Text.of(line));
+        }
+        if (room != null && room.podium(1) != null) {
+            display.firework(room.world(), room.podium(1), 3.0);
         }
     }
 

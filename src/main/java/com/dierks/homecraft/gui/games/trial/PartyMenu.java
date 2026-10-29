@@ -126,8 +126,8 @@ public final class PartyMenu extends GameMenu {
             int left = lobby.max() - lobby.size();
             if (left > 0) {
                 set(38, Menus.icon(Material.WRITABLE_BOOK, "&aInvite a friend &7- " + left + " place"
-                                + (left == 1 ? "" : "s") + " left", "&7They get [Accept] in chat,",
-                        "&7or type /hcm play accept."), e -> party.invite(viewer, this::reopen));
+                                + (left == 1 ? "" : "s") + " left", "&7They get a Play? screen, or",
+                        "&7[Accept] in chat."), e -> party.invite(viewer, this::reopen));
             } else {
                 set(38, Menus.icon(Material.BOOK, "&7The party is full"), null);
             }

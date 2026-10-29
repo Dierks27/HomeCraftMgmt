@@ -47,6 +47,20 @@ public interface GamesScreens {
         player.sendMessage(com.dierks.homecraft.util.Text.of("&7Coming soon!"));
     }
 
+    /**
+     * The "Play?" screen for an invite (0.38.4): Not now, the asker's tile, Yes, opened on the invitee when it
+     * may ({@link Invites#askScreenOpens}), inside {@code owner}'s guard. Nothing until the screens are built.
+     *
+     * @return whether it opened (false: the invites try again each second, until it has opened once)
+     */
+    default boolean askInvite(Player to, Game owner, Invite invite, String fromName, int seconds) {
+        return false;
+    }
+
+    /** Close the "Play?" screen for invite {@code id} if it is what {@code to} is looking at (0.38.4). */
+    default void closeAsk(Player to, long id) {
+    }
+
     /** What the service uses until the real screens are installed: a plain "Coming soon!". */
     GamesScreens NONE = new GamesScreens() {
         private void soon(Player player) {

@@ -99,6 +99,8 @@ final class TrialRun {
      * there, not home.
      */
     boolean fromClub;
+    /** 0.38.4: the player's best run's checkpoint times on this layout (ms, {@link Splits}), or null. */
+    long[] bestSplits;
     /**
      * The server tick the warm-up ends at (then the player goes to the start and the normal 3-2-1
      * begins), or 0 for no time limit (the Dropper's practice drop ends on its first splash or bonk).

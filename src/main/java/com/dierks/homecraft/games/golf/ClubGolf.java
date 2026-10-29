@@ -134,12 +134,22 @@ public final class ClubGolf {
         return Clubhouse.lobby(g, p, new ClubNext(MiniGolf.SPEC.id(), c.id(), c.name(), false));
     }
 
-    /** A round alone is over: back to the Clubhouse ({@code solo_after}) with its scorecard there; false = home. */
-    static boolean soloBack(MiniGolf golf, GolfRounds rounds, Player p, LiveRound r, GolfCard card) {
+    /**
+     * A round alone is over: back to the Clubhouse ({@code solo_after}) with its scorecard there (and, 0.38.4, the
+     * NEW RECORD line when {@code record}: the round set the course's all-time record); false = home.
+     */
+    static boolean soloBack(MiniGolf golf, GolfRounds rounds, Player p, LiveRound r, GolfCard card, boolean record) {
         return soloTake(Clubhouse.door(golf.games()), p, p.getWorld().getName(), () -> rounds.forget(r),
                 ClubhouseText.backSolo(card.courseName(), GolfRun.strokesText(card.total()) + " ("
                         + GolfRun.vsParText(card.vsPar()) + ")"),
-                q -> new GolfScorecardMenu(golf.plugin(), golf, q, card, () -> golf.open(q, null)).open(q));
+                q -> new GolfScorecardMenu(golf.plugin(), golf, q, card, () -> golf.open(q, null)).open(q),
+                recordLine(p, card, record));
+    }
+
+    /** 0.38.4: the Clubhouse's "<name> set a new record on <course>: <strokes>" when {@code record}, else null. */
+    static String recordLine(Player p, GolfCard card, boolean record) {
+        return record ? ClubhouseText.newRecordLine(p.getName(), card.courseName(), GolfRun.strokesText(card.total()))
+                : null;
     }
 
     /**
@@ -149,6 +159,12 @@ public final class ClubGolf {
      */
     static boolean soloTake(ClubDoor club, Player p, String world, Runnable forget, String line,
                             java.util.function.Consumer<Player> opener) {
+        return soloTake(club, p, world, forget, line, opener, null);
+    }
+
+    /** {@link #soloTake(ClubDoor, Player, String, Runnable, String, java.util.function.Consumer)} with the record line (0.38.4). */
+    static boolean soloTake(ClubDoor club, Player p, String world, Runnable forget, String line,
+                            java.util.function.Consumer<Player> opener, String recordLine) {
         if (!ClubRoute.after(club, world, false, false)) {
             return false;
         }
@@ -160,7 +176,7 @@ public final class ClubGolf {
         if (!club.takeIn(p, ClubVisits.Kind.VISIT, line)) {
             return false;
         }
-        club.soloResult(p, opener);
+        club.soloResult(p, opener, recordLine);
         return true;
     }
 

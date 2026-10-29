@@ -101,6 +101,16 @@ public interface ClubDoor {
     }
 
     /**
+     * 0.38.4: {@link #soloResult} with the all-time record flag: a solo run or a round alone that set the course's
+     * record lands in the Clubhouse to "NEW RECORD!" for everyone in the room, the burst over the podium, and
+     * {@code recordLine} in chat ("<name> set a new record on <course>: <time>"); {@code null} for no record. A door
+     * that doesn't say does what it always did.
+     */
+    default void soloResult(Player p, Consumer<Player> opener, String recordLine) {
+        soloResult(p, opener);
+    }
+
+    /**
      * An event's final result, for the board and the "Results" item.
      *
      * @param opener what "Results" opens for a player (a results screen), or {@code null} for the

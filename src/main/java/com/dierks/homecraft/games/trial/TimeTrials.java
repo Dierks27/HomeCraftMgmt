@@ -1095,7 +1095,21 @@ public final class TimeTrials implements Game {
         end(p);
         TrialRun run = new TrialRun(p.getUniqueId(), course, test, COUNTDOWN_TICKS + 1);
         runs.put(p.getUniqueId(), run);
+        loadSplits(run); // 0.38.4
         arm(p, run, true);
+    }
+
+    /**
+     * 0.38.4: the player's best run's checkpoint times on this layout ({@link Splits}), for the checkpoint line's
+     * "+0.4 s": one indexed row on the main thread, as {@link #best} is; a read that fails leaves the run without
+     * them (a split is decoration).
+     */
+    private void loadSplits(TrialRun run) {
+        try {
+            run.bestSplits = games().dao().splits(run.player, run.course.id(), run.layout);
+        } catch (SQLException e) {
+            log().fine("Could not read " + run.player + "'s splits on " + run.course.id() + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -1109,6 +1123,7 @@ public final class TimeTrials implements Game {
         TrialRun run = new TrialRun(p.getUniqueId(), course, false, COUNTDOWN_TICKS + 1);
         run.fromClub = true;
         runs.put(p.getUniqueId(), run);
+        loadSplits(run); // 0.38.4
         Location start = backTo(run, -1);
         run.lastReset = Bukkit.getCurrentTick(); // arms the countdown's hold: sent again if the move never lands
         if (start == null || !move(p, run, start)) {
@@ -1780,7 +1795,8 @@ public final class TimeTrials implements Game {
      */
     static void announce(Player p, TrialRun run, int index) {
         int of = run.course.checkpoints().size();
-        String time = TrialText.time(run.elapsedMs(run.progress.times()[index]));
+        String time = TrialText.time(run.elapsedMs(run.progress.times()[index]))
+                + Splits.deltaText(run.bestSplits, Splits.soFar(run), index, run.race != null, run.warmup); // 0.38.4
         float pitch = 1.4f + 0.4f * (index + 1) / Math.max(1, of);
         if (BoatHype.loud(run.course, index)) {
             title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time,
@@ -2113,6 +2129,9 @@ public final class TimeTrials implements Game {
                 if (ClubSolo.back(this, q, run, result)) {
                     return; // 0.38.3: back to the Clubhouse, and their results there
                 }
+                if (result.record() && result.counted()) {
+                    com.dierks.homecraft.util.Fireworks.spawn(q.getLocation(), 0); // 0.38.4: a record at home: a harmless burst
+                }
                 sessions().leave(q, EndReason.FINISH);
             }
         });
@@ -2145,10 +2164,35 @@ public final class TimeTrials implements Game {
     TrialFinish.Summary settleCounted(Player p, TrialRun run, long ms, FairPlay.Verdict verdict) {
         TimeTrialsSettings s = settings();
         TrialFinish.Summary summary = TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
+        settledSplits(p, run, ms, summary); // 0.38.4
         // The Weekly Cup (WP-C): a counted, timed run, solo or a party race's. A Race Night heat never
         // comes here (RaceMode.finish: its start is a grid spot), so it never sets a Cup time.
         CupLink.finished(games(), p, run.course, ms, verdict, run.warmup);
         return summary;
+    }
+
+    /**
+     * 0.38.4: a counted solo run's splits ({@link Splits}): the finish's sentence against the best run's, and on a
+     * personal best the run's checkpoint times stored for the next run (keyed on the course AND its layout). A
+     * race's run is never compared or stored: its course is the raced one (laps), whose targets differ. A voided
+     * run never reaches here, so a bad run never overwrites a best.
+     */
+    private void settledSplits(Player p, TrialRun run, long ms, TrialFinish.Summary summary) {
+        if (run.race != null) {
+            return;
+        }
+        long[] now = Splits.fromRun(run, ms);
+        String line = Splits.finishLine(run.bestSplits, now);
+        if (line != null) {
+            p.sendMessage(Text.of(line));
+        }
+        if (summary.course().personalBest()) {
+            try {
+                games().dao().saveSplits(p.getUniqueId(), run.course.id(), run.layout, now, games().clock().nowMillis());
+            } catch (SQLException e) {
+                log().log(Level.WARNING, "Could not save " + p.getName() + "'s splits on " + run.course.id(), e);
+            }
+        }
     }
 
     /**

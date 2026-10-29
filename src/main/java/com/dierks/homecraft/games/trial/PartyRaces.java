@@ -399,8 +399,8 @@ public final class PartyRaces {
     private void answered(Invite invite, boolean yes) {
         Long lobbyId = invites.remove(invite.id());
         boolean challenge = challenges.remove(invite.id()); // 0.38.4
-        Player from = Bukkit.getPlayer(invite.from());
-        Player to = Bukkit.getPlayer(invite.to());
+        Player from = online(invite.from());
+        Player to = online(invite.to());
         if (!yes) {
             if (from != null) {
                 from.sendMessage(Text.of("&7" + (to != null ? to.getName() : "Your friend") + " didn't join the party."));
@@ -426,11 +426,20 @@ public final class PartyRaces {
             return;
         }
         say(lobby, "&a" + to.getName() + " joined the party! &7(" + lobby.size() + " of " + lobby.max() + ")");
-        if (challenge && Clubhouse.offered(games()) && !inClub(to)) {
+        if (yesToClubhouse(challenge, Clubhouse.offered(games()), inClub(to))) {
             Clubhouse.go(games(), to); // 0.38.4: a challenge's Yes walks them into the Clubhouse as a party member
         } else {
             openLobby(to, null);
         }
+    }
+
+    /**
+     * 0.38.4: where an invitee's Yes takes them (pure): into the Clubhouse as a party member for a challenge while
+     * the Clubhouse is open and they aren't in it already (never a menu during the async entry); else their party
+     * screen, as every party invite's Yes (a challenge with the Clubhouse off is the ordinary lobby flow).
+     */
+    static boolean yesToClubhouse(boolean challenge, boolean clubOffered, boolean inClub) {
+        return challenge && clubOffered && !inClub;
     }
 
     // ---- in the lobby ----------------------------------------------------------------------------
@@ -950,6 +959,15 @@ public final class PartyRaces {
     public String courseName(PartyLobby lobby) {
         Course c = trials.course(lobby.course());
         return c == null ? lobby.course() : c.name();
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return id == null ? null : Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
     }
 
     /** A player's name, or "someone". */

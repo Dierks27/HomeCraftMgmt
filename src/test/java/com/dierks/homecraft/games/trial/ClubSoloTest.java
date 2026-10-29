@@ -46,6 +46,8 @@ class ClubSoloTest {
         final List<UUID> handedBack = new ArrayList<>();
         final List<ClubVisits.Kind> backKinds = new ArrayList<>();
         final Map<UUID, Consumer<Player>> solo = new LinkedHashMap<>();
+        /** 0.38.4: the record line that came with the results, or null. */
+        final Map<UUID, String> records = new LinkedHashMap<>();
         int shared;
         boolean soloAfter = true;
         boolean closing;
@@ -129,6 +131,12 @@ class ClubSoloTest {
         }
 
         @Override
+        public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
+            soloResult(p, opener);
+            records.put(p.getUniqueId(), recordLine);
+        }
+
+        @Override
         public void result(ClubBoard.Sheet sheet, Consumer<Player> opener) {
             shared++;
         }
@@ -143,6 +151,7 @@ class ClubSoloTest {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
                 (proxy, m, args) -> switch (m.getName()) {
                     case "getUniqueId" -> id;
+                    case "getName" -> id.equals(SAM) ? "Sam" : "Ava";
                     case "isOnline" -> true;
                     case "sendMessage" -> {
                         if (args != null && args.length == 1 && args[0] instanceof Component c) {
@@ -264,6 +273,35 @@ class ClubSoloTest {
         assertFalse(ClubSolo.back(door, player(SAM, new ArrayList<>()), "games", false, false, () -> forgot[0]++,
                 "x", p -> { }), "the caller sends them home");
         assertTrue(door.solo.isEmpty(), "no results kept for a player who isn't there");
+    }
+
+    // ---- 0.38.4: NEW RECORD -------------------------------------------------------------------------------
+
+    @Test
+    void theRecordLineReachesTheDoorOnlyWhenTheRunSetTheRecord() {
+        Door door = new Door();
+        Player sam = player(SAM, new ArrayList<>());
+        String line = ClubhouseText.newRecordLine("Sam", "Sky Rings", "1:02.4");
+        assertEquals("&6Sam set a new record on Sky Rings: &f1:02.4", line);
+        assertTrue(ClubSolo.back(door, sam, "games", false, false, () -> { }, "x", p -> { }, line), "back, a record");
+        assertEquals(line, door.records.get(SAM), "the Clubhouse hears the record with the results");
+        assertTrue(ClubSolo.back(door, player(AVA, new ArrayList<>()), "games", false, false, () -> { }, "x",
+                p -> { }, null), "back, no record");
+        assertTrue(door.records.containsKey(AVA) && door.records.get(AVA) == null, "nothing to celebrate");
+        assertTrue(ClubSolo.back(door, sam, "games", false, false, () -> { }, "x", p -> { }), "the 0.38.3 call");
+        assertNull(door.records.get(SAM), "says nothing about a record");
+
+        TimeTrials.Result record = new TimeTrials.Result("sky_rings", "Sky Rings", 62_400, true, false, null, true,
+                true, 62_400L, 0, null);
+        assertEquals(line, ClubSolo.recordLine(sam, record), "a counted record: the line");
+        TimeTrials.Result best = new TimeTrials.Result("sky_rings", "Sky Rings", 62_400, true, false, null, true,
+                false, 62_400L, 0, null);
+        assertNull(ClubSolo.recordLine(sam, best), "a personal best that isn't the record: none");
+        TimeTrials.Result test = new TimeTrials.Result("sky_rings", "Sky Rings", 62_400, false, true, null, false,
+                true, null, 0, null);
+        assertNull(ClubSolo.recordLine(sam, test), "never for a run that didn't count");
+        assertEquals("&7Sam set a new record on Sky Rings: 1:02.4", ClubhouseText.newRecordSmall(line),
+                "the title's small line, plain");
     }
 
     // ---- Leave game partway ---------------------------------------------------------------------------

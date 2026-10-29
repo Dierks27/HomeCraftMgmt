@@ -6,12 +6,15 @@ import com.dierks.homecraft.games.GamesKit.Fake;
 import com.dierks.homecraft.games.GamesKit.Host;
 import com.dierks.homecraft.games.GamesKit.SkillSettings;
 import com.dierks.homecraft.games.GamesKit.TestGame;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,8 +40,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * guard of the game that sent it, however it ends, and is named for what it is (#0); and {@code /hcm play
  * invites off} covers golf together and every invite key added later (the docs check), while Connect
  * Four's or Tic-Tac-Toe's own screen switch is just for that game.
+ *
+ * <p>0.38.4, the "Play?" screen: every invite asks the screens to open it on the invitee, inside the owning game's
+ * guard; every way an invite ends closes it; one that couldn't open yet is tried again each second until it has
+ * opened once, and never after that (an Esc is not an answer and never re-opens it); and the pure rule for when it
+ * may open ({@link Invites#askScreenOpens}).
  */
 class InvitesTest {
+
+    /** The screens, recording what the invites asked of them. */
+    private static final class Asks implements GamesScreens {
+        final List<String> log = new ArrayList<>();
+        boolean opens = true;
+
+        @Override
+        public void games(Player player, Runnable back) {
+        }
+
+        @Override
+        public void scores(Player player, Game game, String board, boolean lowerIsBetter, Runnable back) {
+        }
+
+        @Override
+        public void takeABreak(Player player, Runnable back) {
+        }
+
+        @Override
+        public void pickPlayer(Player player, Game game, Predicate<Player> eligible, Consumer<Player> chosen,
+                               Runnable back) {
+        }
+
+        @Override
+        public boolean askInvite(Player to, Game owner, Invite invite, String fromName, int seconds) {
+            log.add("ask:" + invite.id() + ":" + fromName + ":" + seconds + ":" + owner.id());
+            return opens;
+        }
+
+        @Override
+        public void closeAsk(Player to, long id) {
+            log.add("close:" + id);
+        }
+    }
 
     private Host host;
     private TestGame flip;
@@ -340,6 +382,91 @@ class InvitesTest {
         }
         games.invites().setAccepts(sam.id, "coin_flip", false); // /hcm play invites off's third row: now the mark
         assertFalse(games.invites().accepts(sam.id, "golf"), "all three off reads as an older /hcm play invites off");
+    }
+
+    // ---- 0.38.4: the "Play?" screen ---------------------------------------------------------------------
+
+    @Test
+    void theScreenMayOpenOnlyOverNothingWithAnEmptyCursorAndNotMidGameUnlessHangingOutInTheClubhouse() {
+        assertTrue(Invites.askScreenOpens(true, true, false, false), "free: it opens");
+        assertFalse(Invites.askScreenOpens(false, true, false, false), "a chest open: never (it would close it)");
+        assertFalse(Invites.askScreenOpens(true, false, false, false), "a stack on the cursor: never (it would drop)");
+        assertFalse(Invites.askScreenOpens(true, true, true, false), "mid-run: never");
+        assertTrue(Invites.askScreenOpens(true, true, true, true), "hanging out in the Clubhouse: party and ride"
+                + " invites reach them there, so the screen does too");
+        assertFalse(Invites.askScreenOpens(false, true, true, true), "but never over a chest, even there");
+    }
+
+    @Test
+    void everyInviteOpensThePlayScreenAndEveryEndClosesIt() {
+        Asks asks = new Asks();
+        games.screens(asks);
+        Invite one = send(alex, sam, connect);
+        assertEquals(List.of("ask:" + one.id() + ":Alex:60:connect_four"), asks.log,
+                "opened on the invitee with the asker's name, the seconds and the owning game");
+        games.invites().deny(sam.player);
+        assertEquals("close:" + one.id(), asks.log.get(1), "Not now (or a chat click) closes it");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite two = send(alex, sam, connect);
+        games.invites().accept(sam.player);
+        assertEquals("close:" + two.id(), asks.log.get(3), "a yes closes it (the game's own screen may replace it)");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite three = send(alex, sam, connect);
+        host.runTasks(); // its own expiry task
+        assertEquals("close:" + three.id(), asks.log.get(5), "running out closes it");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite four = send(alex, sam, connect);
+        host.tasks.clear();
+        host.move(60_000);
+        games.sweep();
+        assertEquals("close:" + four.id(), asks.log.get(7), "the sweep's expiry closes it too");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite five = send(alex, sam, connect);
+        games.invites().cancel(alex.id); // the inviter quit
+        assertEquals("close:" + five.id(), asks.log.get(9), "a quit closes it");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite six = send(alex, sam, connect);
+        games.invites().cancelFrom(alex.id); // the inviter took it back
+        assertEquals("close:" + six.id(), asks.log.get(11), "an invite taken back closes it");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        Invite seven = send(alex, sam, connect);
+        games.invites().cancelGame(connect.id()); // the game switched off
+        assertEquals("close:" + seven.id(), asks.log.get(13), "the game's switch-off closes it");
+        assertEquals(14, asks.log.size(), "one ask and one close per invite, nothing else: " + asks.log);
+        assertEquals(0, host.severe(), "nothing failed");
+    }
+
+    @Test
+    void aScreenThatCouldNotOpenIsTriedAgainEachSecondUntilItHasOpenedOnceAndNeverAfter() {
+        Asks asks = new Asks();
+        asks.opens = false; // a chest open, a stack on the cursor, or mid-run
+        games.screens(asks);
+        int before = host.tasks.size();
+        Invite invite = send(alex, sam, connect);
+        assertEquals(1, asks.log.size(), "asked once on the send");
+        assertEquals(before + 2, host.tasks.size(), "its expiry, and one retry a second from now");
+        GamesKit.Task retry = host.tasks.get(host.tasks.size() - 1);
+        retry.work.run(); // the second (never the expiry: runTasks() would run that first)
+        assertEquals(2, asks.log.size(), "asked again");
+        assertEquals(before + 3, host.tasks.size(), "still not open: armed again for the next second");
+        asks.opens = true; // she closed the chest
+        host.tasks.get(host.tasks.size() - 1).work.run();
+        assertEquals(3, asks.log.size(), "asked again, and it opened");
+        assertEquals(before + 3, host.tasks.size(), "shown once: no more retries are armed");
+        assertTrue(asks.log.stream().allMatch(l -> l.equals("ask:" + invite.id() + ":Alex:60:connect_four")
+                || l.startsWith("ask:" + invite.id() + ":Alex:")), "every ask was for this invite: " + asks.log);
+        games.sweep();
+        assertEquals(3, asks.log.size(), "never opened again after it showed (an Esc is not an answer)");
+        assertNotNull(games.invites().pending(sam.id), "the invite still waits, in chat");
+        games.invites().accept(sam.player);
+        assertEquals("close:" + invite.id(), asks.log.get(3), "and closes when it is answered");
+        assertEquals(0, host.severe(), "nothing failed");
     }
 
     @Test

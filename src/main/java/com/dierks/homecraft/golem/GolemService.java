@@ -755,6 +755,7 @@ public final class GolemService implements Listener {
         }
         golems.remove(golem);
         if (plugin.getServer().getEntity(golem) instanceof CopperGolem g && g.isValid()) {
+            g.getPersistentDataContainer().remove(Keys.GOLEM_NAME); // stored at open() for a crash's sake only
             resetTag(g, a);
         } else {
             lastTag.remove(golem);

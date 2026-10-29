@@ -1156,7 +1156,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
             case "muffler", "sound_muffler" -> item = plugin.items().soundMuffler();
-            case "golem_brush", "golembrush", "brush" -> item = plugin.golems() == null ? null : plugin.golems().brush();
+            case "golem_brush", "golembrush", "brush" -> item = plugin.golems() == null || !plugin.golems().enabled()
+                    ? null : plugin.golems().brush(); // off (golem.enabled): a brush that did nothing would only puzzle
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use printer, pc, card, filament, pack, prize, binder, vending, display, "
@@ -1165,7 +1166,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         }
         if (item == null) {
-            sender.sendMessage(Text.of("&cThe Copper Golem Brush isn't available right now."));
+            sender.sendMessage(Text.of("&cThe Copper Golem Brush isn't available right now (golem.enabled)."));
             return;
         }
 

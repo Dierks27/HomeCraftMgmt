@@ -574,9 +574,7 @@ public final class GolemService implements Listener {
                 p.sendMessage(Text.of(GolemText.farHint(a.base())));
             }
         }
-        if (golems.containsKey(g.getUniqueId())) {
-            refreshTag(g, a, holding(g));
-        }
+        refreshTag(g, ensure(g), holding(g)); // the last chest unlinked: "no chests yet" while the session is on
         markers.update(p);
     }
 

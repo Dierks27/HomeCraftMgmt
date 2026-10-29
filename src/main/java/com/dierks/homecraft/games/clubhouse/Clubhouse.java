@@ -112,6 +112,8 @@ public final class Clubhouse implements Game, ClubDoor {
     private ClubhouseRoom room;
     private LiveRoomHost host;
     private BoardDisplay display;
+    /** The walls' boards (0.38.3): this week's best, now playing, my stats; null with no server. */
+    private ClubBoards boards;
     private final ClubVisits visits = new ClubVisits();
     private final ClubBoard board = new ClubBoard();
     private final Map<UUID, Arrival> arriving = new HashMap<>();
@@ -248,6 +250,7 @@ public final class Clubhouse implements Game, ClubDoor {
         WorldEntities.sweep(this);
         host = new LiveRoomHost(this);
         display = new BoardDisplay(this);
+        boards = new ClubBoards(this);
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -288,6 +291,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (display != null) {
             display.remove();
+        }
+        if (boards != null) {
+            boards.stop();
         }
         if (watch != null) {
             watch.clear(); // every watcher seen again
@@ -345,6 +351,11 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         switch (action) {
+            case ClubBoards.STATS -> {
+                if (boards != null) {
+                    boards.openStats(player);
+                }
+            }
             case PARTY -> openParty(player);
             case RESULTS -> openResults(player);
             case WATCH -> watchNow(player, null);
@@ -452,6 +463,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         kits.remove(id);
         giveKit(p);
+        if (boards != null) {
+            boards.arrived(p);
+        }
         if (line != null && !line.isBlank()) {
             p.sendMessage(Text.of(line));
         }
@@ -524,6 +538,9 @@ public final class Clubhouse implements Game, ClubDoor {
         if (watch != null) {
             watch.gone(id); // seen by everyone again; the session's end puts their game mode back
         }
+        if (boards != null) {
+            boards.gone(id);
+        }
         if (visits.leave(id) != null) {
             noPushOff(id, p);
         }
@@ -572,6 +589,9 @@ public final class Clubhouse implements Game, ClubDoor {
             }
             display.remove();
             board.forget();
+            if (boards != null) {
+                boards.clear();
+            }
             return;
         }
         watch.refresh(liveRaces());
@@ -610,6 +630,9 @@ public final class Clubhouse implements Game, ClubDoor {
             }
         }
         drawBoard(now);
+        if (boards != null) {
+            boards.second(now);
+        }
     }
 
     /**
@@ -631,6 +654,9 @@ public final class Clubhouse implements Game, ClubDoor {
         r.stop();
         display.remove();
         board.forget();
+        if (boards != null) {
+            boards.clear();
+        }
         room = newRoom();
         room.start();
         return true;
@@ -691,6 +717,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         KitItems.put(inv, 2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
                 "&7The last race's results."));
+        if (settings().boards()) {
+            KitItems.put(inv, 7, ClubBoards.kitItem(this)); // My stats (0.38.3)
+        }
         if (live != null) {
             KitItems.put(inv, 4, KitItems.item(this, WATCH, Material.SPYGLASS, ClubhouseText.KIT_WATCH,
                     "&7" + Text.plain(live.title()), "&7Fly round and see who leads.",

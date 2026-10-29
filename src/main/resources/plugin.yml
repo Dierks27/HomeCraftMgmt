@@ -53,7 +53,7 @@ commands:
       /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade|muffler> [player]
+      /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade|muffler|golem_brush> [player]
       /hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]
       /hcm give prize <id> [player]  - admin: give back a lost prize (free)
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>

@@ -186,6 +186,15 @@ public final class Keys {
      * only while the Games are on) or {@link #EFFECT_ENTITY} (deleted by the effects service on sight).
      */
     public static NamespacedKey CANDY_DROP;
+    /** On the Copper Golem Brush (0.38.4): the tool that picks a Copper Golem's chests (BYTE 1). */
+    public static NamespacedKey GOLEM_BRUSH;
+    /** On a Copper Golem: the chests it may put things in, packed x/y/z (LONG_ARRAY), and their world (String). */
+    public static NamespacedKey GOLEM_CHESTS;
+    public static NamespacedKey GOLEM_WORLD;
+    /** On a Copper Golem we named: its own name before our tag ("Rusty" when it had none) (String). */
+    public static NamespacedKey GOLEM_NAME;
+    /** On a "#N" hologram over a linked chest: its viewer's uuid (String). Never persistent; swept on load. */
+    public static NamespacedKey GOLEM_MARKER;
 
     private Keys() {
     }
@@ -246,5 +255,10 @@ public final class Keys {
         GAME_SIGN = new NamespacedKey(plugin, "game_sign");
         GAME_ENTITY = new NamespacedKey(plugin, "game_entity");
         CANDY_DROP = new NamespacedKey(plugin, "candy_drop");
+        GOLEM_BRUSH = new NamespacedKey(plugin, "golem_brush");
+        GOLEM_CHESTS = new NamespacedKey(plugin, "golem_chests");
+        GOLEM_WORLD = new NamespacedKey(plugin, "golem_world");
+        GOLEM_NAME = new NamespacedKey(plugin, "golem_name");
+        GOLEM_MARKER = new NamespacedKey(plugin, "golem_marker");
     }
 }

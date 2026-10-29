@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.games.GamesBench;
+import com.dierks.homecraft.games.golf.GolfNow;
+import com.dierks.homecraft.games.trial.TrialsNow;
 import org.bukkit.Location;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -56,5 +58,30 @@ class CheersTest {
         assertTrue(sam.said.getLast().contains("off"), "and said: " + sam.said);
         Clubhouse.cheersCommand(bench.games(), sam.player, new String[]{"play", "cheers", "on"});
         assertTrue(club.cheersOn(sam.id), "on again");
+    }
+
+    @Test
+    void withNoRaceGoingACheerReachesEveryoneOnASoloRunOrARoundAlone() {
+        UUID sam = UUID.randomUUID();
+        UUID lee = UUID.randomUUID();
+        UUID ana = UUID.randomUUID();
+        UUID max = UUID.randomUUID();
+        UUID eve = UUID.randomUUID();
+        UUID me = UUID.randomUUID();
+        List<TrialsNow.Run> runs = List.of(
+                new TrialsNow.Run(sam, "Sky Rings", 3, 12, 41_900, false, false, false, false), // the clock running
+                new TrialsNow.Run(lee, "Sky Rings", 0, 12, 0, false, true, false, false), // warming up
+                new TrialsNow.Run(ana, "Lava Leap", 0, 5, 0, true, false, false, false), // the 3-2-1: not yet
+                new TrialsNow.Run(max, "Lava Leap", 5, 5, 60_000, false, false, false, true), // finished
+                new TrialsNow.Run(eve, "Ice Boat", 1, 4, 9_000, false, false, true, false), // a racer: the race's
+                new TrialsNow.Run(me, "Sky Rings", 1, 12, 5_000, false, false, false, false)); // the cheerer
+        List<GolfNow.Round> rounds = List.of(
+                new GolfNow.Round(eve, "Tiny Golf", 4, 9, false, false), // a round alone (Eve again: once)
+                new GolfNow.Round(max, "Tiny Golf", 9, 9, false, true), // done
+                new GolfNow.Round(ana, "Tiny Golf", 2, 9, true, false)); // a group: the group's
+        assertEquals(List.of(sam, lee, eve), Cheers.solo(runs, rounds, me),
+                "on a run with the clock going or warming up, or in a round alone; never the cheerer");
+        assertEquals(List.of(), Cheers.solo(List.of(), List.of(), me), "nobody: " + Cheers.NOBODY);
+        assertTrue(Cheers.NOBODY.contains("Nobody"), "the line says so");
     }
 }

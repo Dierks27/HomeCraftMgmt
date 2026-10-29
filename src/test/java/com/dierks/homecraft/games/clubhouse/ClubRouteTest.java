@@ -164,6 +164,11 @@ class ClubRouteTest {
         assertFalse(ClubRoute.after(door, "nether_course", false, false), "another world: home");
         door.soloAfter = false;
         assertFalse(ClubRoute.after(door, "games", false, false), "solo_after off: home, as 0.38.2");
+        door.soloAfter = true;
+        door.closing = true;
+        assertTrue(ClubRoute.after(door, "games", false, false), "after() never looks at the hold: early in the"
+                + " hold a finish still comes back, warned and home a minute later, as a race's end; the caller"
+                + " asks closingForRestart() itself for the last minute (R383-S3)");
     }
 
     @Test

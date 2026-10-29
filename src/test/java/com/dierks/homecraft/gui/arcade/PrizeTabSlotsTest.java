@@ -118,6 +118,16 @@ class PrizeTabSlotsTest {
         assertFalse(ArcadeMenu.courseTile(GameKind.CABINET, true, 1));
     }
 
+    @Test
+    void theGolfDoorLightsForAGolfTile() {
+        assertTrue(ArcadeMenu.golfTile(GameKind.GOLF, true, false), "Mini golf");
+        assertTrue(ArcadeMenu.golfTile(GameKind.TRIAL, true, true), "Fresh Courses: its set is on the Golf tab too");
+        assertFalse(ArcadeMenu.golfTile(GameKind.GOLF, false, false), "Mini golf off");
+        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, false, true), "Fresh Courses off");
+        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, true, false), "Time Trials: the Courses door");
+        assertFalse(ArcadeMenu.golfTile(GameKind.CABINET, true, false));
+    }
+
     private static PluginConfig.Arcade arcade(List<Prize> prizes) {
         return new PluginConfig.Arcade(true, true, List.of(), true, 60, Map.of(), prizes, 150, Rarity.RARE, 1, null,
                 Map.of(), null, Map.of(), true, true);

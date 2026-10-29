@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.clubhouse.ClubVisits;
 import com.dierks.homecraft.games.clubhouse.ClubhouseText;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
@@ -283,5 +284,29 @@ class ClubSoloTest {
         door.closing = true;
         assertFalse(ClubSolo.leftToClub(door, player(AVA, new ArrayList<>()), "games", true, false, false,
                 () -> forgot[0]++, ClubhouseText.LEFT_RUN), "closing for the restart: home");
+    }
+
+    // ---- the 3-2-1 after a hand-out (R383-S1) ------------------------------------------------------------
+
+    @Test
+    void theCountdownWaitsForTheHandOutsMoveToLandAndSendsAgainWhenItNeverComes() {
+        TrialRun run = new TrialRun(SAM, LapsTest.straight(), false, TimeTrials.COUNTDOWN_TICKS + 1);
+        run.fromClub = true;
+        long made = 1000;
+        run.lastReset = made; // readyFromClub's: the hold is armed before the move
+        run.expect = new Location(null, 1, 2, 3); // move(): the run's own teleport, on its way
+        run.suspended = true;
+        run.countdown = 40; // as if ticks had been counted off in the Clubhouse
+        assertEquals(TimeTrials.Hold.WAIT, TimeTrials.hold(run, made + 1), "still in flight: nothing counts");
+        assertEquals(TimeTrials.COUNTDOWN_TICKS + 1, run.countdown, "the full 3-2-1 begins at the line");
+        assertEquals(TimeTrials.Hold.WAIT, TimeTrials.hold(run, made + TimeTrials.WAIT_TICKS - 1), "not yet");
+        assertEquals(TimeTrials.Hold.AGAIN, TimeTrials.hold(run, made + TimeTrials.WAIT_TICKS),
+                "our teleport never came: sent to the start again, as running() does");
+        run.expect = null; // the teleport listener: the landing matched
+        run.suspended = false;
+        assertEquals(TimeTrials.Hold.NONE, TimeTrials.hold(run, made + 5), "landed: the 3-2-1 counts");
+        assertEquals(TimeTrials.COUNTDOWN_TICKS + 1, run.countdown, "from its full length");
+        run.suspended = true; // moved by someone else (no expect): never held, as before
+        assertEquals(TimeTrials.Hold.NONE, TimeTrials.hold(run, made + 5), "only the run's own move holds it");
     }
 }

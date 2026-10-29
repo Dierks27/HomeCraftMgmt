@@ -1501,8 +1501,9 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Yours for good.** One of each per player, ever. They never run out, and no crate hands one
   out. Each cap carries its number ("No. 3"), and the cap and its tile say "Halloween 2026
   collector" and "Yours for good!".
-- **On the counter** they are the first two tiles of the Cosmetics tab, with "On sale until 31 Oct"
-  (from 0.38 the caps are on the Looks tab).
+- **On the counter** the cap is the first tile of the Looks tab's hats row and Autumn Leaves heads
+  the trails row (the second row) of the Fireworks & Trails tab (the tab that was "Cosmetics"), each
+  with "On sale until 31 Oct".
   The cap leaves the shop at midnight going into 1 November (Chicago time on the shipped clock),
   the trail on 1 December. Out of season a collector is off the counter and the website feed, and
   can't be bought or given. What players own keeps working: the cap is the item itself, and an owned trail
@@ -1539,9 +1540,10 @@ as presents, all exactly as Halloween's above.
 - **The season is in the line.** The cap and both tiles say "Christmas 2026 collector", in red
   (Halloween's line stays gold), and "Yours for good!". Twinkle is a 2026 collector, though it is
   sold into January.
-- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock), as the
-  first two tiles of the Cosmetics tab (from 0.38 the cap is on the Looks tab and Twinkle stays on
-  Cosmetics). The cap leaves at midnight going into 1 January, Twinkle at
+- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock): the
+  cap as the first tile of the Looks tab's hats row and Twinkle heading the trails row (the second
+  row) of the Fireworks & Trails tab (the tab that was "Cosmetics" before 0.38.3). The cap leaves at
+  midnight going into 1 January, Twinkle at
   midnight going into 7 January. Before 1 December neither is on the counter, in Give a present or
   in the website feed. Don't use `/hcm give prize` to look at one early: given to a player, it is
   their one Santa Cap.
@@ -1882,7 +1884,8 @@ safe for everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) 
   as before: a player on a break sees the "Taking a break" tile in their place, and one without
   `hcm.games.chance` sees none of them (and no Games of luck). Take a break and Card Packs show with
   the games off too. **Courses** lights only while there is a course to play (an open course, or
-  Fresh Courses); a kind with nothing open is a grey "closed" tile. With the games off, the Play row
+  Fresh Courses), and **Mini golf** while Mini golf or Fresh Courses (its set is on the Golf tab too)
+  is open; a kind with nothing open is a grey "closed" tile. With the games off, the Play row
   is border and the rest is the same.
 - **Today's pick:** one skill game or course a day, the same for everyone, changing at local
   midnight. Its first finish of the day pays `games.featured_bonus`. A game of chance is never
@@ -2195,7 +2198,8 @@ Easy, Medium, Hard and "Why did we build this?".
   are on it first asks "Warm up (3:00)" or "Go straight to the timed run"). A tile on the Games
   screen, the course list or the hub's Today's pick opens the **course screen** first: the rules,
   your best, this week's best, the record and who holds it, what it pays, and Start.
-- **A run.** You arrive at the start line with only the course kit: Back to checkpoint and Leave
+- **A run.** You arrive at the start line (from 0.38.3 by way of the Clubhouse first, see [The
+  Clubhouse](#the-clubhouse)) with only the course kit: Back to checkpoint and Leave
   game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
@@ -3714,8 +3718,8 @@ every race and round works exactly as before**.
   arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
   is no way out on foot, and nothing a mob can spawn on.
 - **Visit any time:** `/hcm play clubhouse`. The kit: **Party** (slot 0, while in a party),
-  **Results** (slot 2: the last results, yours after a solo run or round here, or the last race's,
-  whichever is newer), **Go now** and **Stay here** (slots 3 and 5, while you're on your way to a
+  **Results** (slot 2: named "Results - your last run" after a solo run or round here and "Results -
+  the last race" otherwise, whichever is newer), **Go now** and **Stay here** (slots 3 and 5, while you're on your way to a
   course or a round), **Watch live** (slot 4, while a race is going), **Games** (slot 6, pick a
   game), **My stats** (slot 7, while the boards are on: your times and tokens, as a screen) and
   **Leave game** (slot 8, click twice). Visiting also works from the Games screen's **Together** tab
@@ -3784,7 +3788,8 @@ every race and round works exactly as before**.
     for example "Sam - Sky Rings - checkpoint 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
     "Max - in the Clubhouse". Games come first, then cabinets, then the Clubhouse. It shows up to
     seven rows ("and 3 more"), with "Cheer them on: /hcm play cheer" while anyone is in a game.
-    Cheers reach racers in a party race, Race Night or golf together.
+    Cheers reach the racers of a party race, Race Night or golf together, and with no race going,
+    everyone on a solo run (the clock running or warming up) or in a round alone.
   - **My stats** is on the west wall, and you see only your own. It shows your runs this week, the
     tokens you won from games this week, your best golf round, and your personal bests with your
     place on each course ("Sky Rings 1:02.4 #2"). The **My stats** item opens the same numbers as a
@@ -3822,7 +3827,9 @@ every race and round works exactly as before**.
   crash) puts back the game mode you came with; a watcher who leaves or quits is first brought down
   to the Clubhouse's floor, never left in mid-air where they flew.
 - **Cheer.** `/hcm play cheer` sends the racers "<name> cheers for you!" on the action bar, once
-  every 10 seconds. A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
+  every 10 seconds; with no race going (0.38.3) it reaches everyone on a solo run or in a round alone,
+  the ones Now playing shows, and with nobody in a game: "Nobody's in a game to cheer for right now."
+  A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
 - **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
   party race or Race Night: **Take a rider (back seat)** on a boat course's screen, on the party screen
   of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
@@ -3847,8 +3854,9 @@ every race and round works exactly as before**.
   anywhere.
 - **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
   home, with a warning a minute before. In the restart hold nobody new comes in, except arriving from
-  a race already going: a party race, golf group or Race Night that ends then still brings its players
-  here. Everyone there is sent home a minute after the hold starts (or after they arrive), with a
+  a game already going: a party race, golf group or Race Night that ends then still brings its players
+  here, and so does a solo run or round alone that started through the Clubhouse. Everyone there is
+  sent home a minute after the hold starts (or after they arrive), with a
   warning, and always at least 5 seconds before the restart's minute (sooner than the minute with
   `restart_hold_minutes: 1`), so nobody is in it across a restart. From 66 seconds before the restart
   to the end of its minute, too late for that minute, it takes nobody at all: a party race or golf

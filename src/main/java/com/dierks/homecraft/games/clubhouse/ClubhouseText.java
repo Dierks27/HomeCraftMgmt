@@ -68,6 +68,8 @@ public final class ClubhouseText {
 
     public static final String KIT_PARTY = "&dParty &7- open your party screen";
     public static final String KIT_RESULTS = "&eResults &7- the last race";
+    /** 0.38.3: the same item while the player's own solo run or round here is newer than the last race's. */
+    public static final String KIT_RESULTS_MINE = "&eResults &7- your last run";
     public static final String KIT_LEAVE = "&cLeave game &7- click twice";
     public static final String KIT_WATCH = "&bWatch live &7- fly round the course";
     public static final String NO_RESULTS = "&7No results yet - they show here after a race.";
@@ -127,4 +129,14 @@ public final class ClubhouseText {
             + " you home.";
     /** A hand-out from here whose move to the start failed: they are handed back. */
     public static final String NO_START = "Couldn't get you to the start - you're still in the Clubhouse.";
+
+    /**
+     * The lore under a run's or a round's "Leave game" (the name stays, Bedrock reads it): where its second
+     * click goes. One handed out from the Clubhouse goes back there, with the player's things still kept
+     * (R383-J2); any other ends the session, home with their things.
+     */
+    public static String[] leaveLore(boolean fromClub) {
+        return fromClub ? new String[] {"&7Click twice: back to", "&7the Clubhouse."}
+                : new String[] {"&7Click twice to leave.", "&7Your things come back."};
+    }
 }

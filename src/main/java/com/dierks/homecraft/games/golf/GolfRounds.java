@@ -223,13 +223,14 @@ public final class GolfRounds {
         if (group != null && r.group == null) {
             p.sendMessage(Text.of("&7Your group went on without you, so this round is just yours."));
         }
-        giveKit(p);
+        giveKit(p, r.fromClub && r.group == null); // a group's Leave game goes home (0.38.3)
         p.sendMessage(Text.of("&d" + course.name() + " &7- " + MiniGolf.holes(course.holes().size()) + ", par "
                 + course.par() + ". &7Click with a club to putt the way you look."));
         startHole(p, r, false);
     }
 
-    private void giveKit(Player p) {
+    /** The golf kit; {@code fromClub} says under Leave game where its second click goes (back to the Clubhouse). */
+    private void giveKit(Player p, boolean fromClub) {
         // final gate #16 (fx2-A): KitItems.put, never setItem: a round from the Clubhouse or the next one
         // gives the kit mid-session, over nothing of theirs that arrived meanwhile
         PlayerInventory inv = p.getInventory();
@@ -245,7 +246,7 @@ public final class GolfRounds {
                 "&7Puts it back where you", "&7last putted from."));
         KitItems.put(inv, 7, KitItems.item(golf, CARD, Material.PAPER, "&fScorecard", "&7Your strokes so far."));
         KitItems.put(inv, 8, KitItems.item(golf, LEAVE, Material.BARRIER, "&cLeave game",
-                "&7Click twice to leave.", "&7Your things come back."));
+                com.dierks.homecraft.games.clubhouse.ClubhouseText.leaveLore(fromClub)));
         inv.setHeldItemSlot(1);
     }
 

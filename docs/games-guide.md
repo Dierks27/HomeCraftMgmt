@@ -34,7 +34,7 @@
 
 - The server owner switches the games on. They ship switched off. Until they are on, /hcm play says "The games are closed right now." Take a break (/hcm play break) and /hcm leave still work.
 - Type /hcm play to open the Games screen. It shows every game that is open right now. A closed game has no tile at all.
-- You can also open the Arcade (type /hcm arcade, or right-click an Arcade Machine) and use the Play row. It is the second row, right under your Wallet. It has All games, Today's pick, Courses, Mini golf, Cabinets, Together (while Race Night or Falling Floors is on), The Clubhouse (while it's open; it says how many people are in it, like "The Clubhouse - 2 here") and High scores. The Play row only shows while the games are on. If a kind of game is switched off, its button (Cabinets, Courses or Mini golf) turns grey and says "closed". Courses also says "closed" when there is no course to play. If there is no pick, the star says "No pick today". The crates, the Scratch Ticket, Card Packs, Games of luck and Take a break are together in the Luck row, under the Prize Counter.
+- You can also open the Arcade (type /hcm arcade, or right-click an Arcade Machine) and use the Play row. It is the second row, right under your Wallet. It has All games, Today's pick, Courses, Mini golf, Cabinets, Together (while Race Night or Falling Floors is on), The Clubhouse (while it's open; it says how many people are in it, like "The Clubhouse - 2 here") and High scores. The Play row only shows while the games are on. If a kind of game is switched off, its button (Cabinets, Courses or Mini golf) turns grey and says "closed". Courses also says "closed" when there is no course to play, and Mini golf stays lit while Fresh Courses is on (its set is on the Golf tab too). If there is no pick, the star says "No pick today". The crates, the Scratch Ticket, Card Packs, Games of luck and Take a break are together in the Luck row, under the Prize Counter.
 - Top row of the Games screen: a sunflower with your tokens ("You have 42 tokens"), then the tabs. The tabs are All games, Luck (games of chance, plus the Scratch Ticket and each crate), Cabinets (little video games), Courses (time trials), Golf (mini golf) and Together (Race Night and Falling Floors; this tab only shows while one of them is open). Each tab shows how many tiles are in it. If someone has invited you to a game, a glowing book shows in the top-right corner.
 - Bottom row of the Games screen: Today's pick (a nether star), High scores (a sign), Take a break (a blue bed that shows your pause or your limit), Back or Close, and How the games work (a book that opens the Games page of the guide). Arrows show in the bottom corners when there is more than one page.
 - Click a tile to open that game. Every game shows its rules first. A game of chance also shows what it gives back and what each result pays, before you put any tokens in. A time-trial or golf tile opens the course screen first, with a Start button. One tile is different: the Scratch Ticket tile on the Luck tab buys a ticket (10 tokens) as soon as you click it. A crate tile opens the crate screen, which shows the chances first.
@@ -64,7 +64,7 @@
 | `/hcm play falling_floors` | Takes you straight into the Falling Floors gallery (`/hcm play tnt_run` works too). |
 | `/hcm play clubhouse` | Takes you to the Clubhouse, to wait, watch or hang out. While you're watching live, it brings you back. If it isn't open: "The Clubhouse isn't open right now." |
 | `/hcm play watch` | Watch live: fly round the course of the race going on, in spectator mode. `/hcm play watch <player>` watches that player's race or golf group. |
-| `/hcm play cheer` | Cheers the racers on: "<your name> cheers for you!". Once every 10 seconds. |
+| `/hcm play cheer` | Cheers the racers on: "<your name> cheers for you!". With no race going, it reaches everyone on a solo run or a round alone (the ones Now playing shows). Once every 10 seconds. |
 | `/hcm play cheers off` | No more cheers on your screen (`on` brings them back; with no word it says which). |
 | `/hcm play rider <player>` | Invites a friend to ride in the back seat of your boat. |
 | `/hcm play break` | Opens Take a break, where you can set your own daily limit or a pause for games of chance. Works even while the games are off. |
@@ -1141,7 +1141,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - You can also find them on the Games screen (/hcm play): the Courses tab has the time trials and the Golf tab has mini golf. The Arcade hub (/hcm arcade) has Courses and Mini golf buttons on its Play row, which open those tabs, a Today's pick button, and a door to the Clubhouse. A right-click on an [Arcade] sign with a course on it opens that course too.
 - A time trial started by typing /hcm play <course id> or right-clicking its sign skips the course screen. Instead you get the small choice: Warm up (3:00), or Go straight to the timed run. A Dropper starts right away. Clicking a tile or the Today's pick button opens the course screen first. A golf course always opens its course screen first, and only Start takes you anywhere.
 - When you start, the game saves everything about you: your whole inventory (armour and off-hand too), XP, health, hunger, potion effects, game mode, and where you were standing. Then you get an empty inventory, full health and food, no effects, no XP, adventure mode, and the game's kit.
-- When you finish or leave, everything is put back exactly as it was, and you go back to where you were standing. Things are put back once and never doubled. If you log out or the server restarts during a game, your things come back when you join again.
+- When you finish or leave, everything is put back exactly as it was, and you go back to where you were standing. A solo course run or round of golf that started through the Clubhouse comes back there first, and your things come back when you leave the Clubhouse (see [The Clubhouse](#the-clubhouse)). Things are put back once and never doubled. If you log out or the server restarts during a game, your things come back when you join again.
 - Anything that reaches you during a game (like an auction delivery) is handed to you once you are home. If it doesn't all fit you see: Some of your things didn't fit. Make room, then type /hcm leave to get the rest.
 - If the trip home ever gets stuck, type /hcm leave. It finishes the trip and brings your things.
 - Kit items say Game item — stays in the game. You can't drop, move, store or keep them, and they vanish when the game ends.
@@ -1204,18 +1204,18 @@ These are played in the Games world, on courses the server's builders make. Each
 
 1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Parkour courses have a feather icon and a label like (Parkour · Easy).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
-4. Your things are saved and put away. You arrive at the start line with only the course kit.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run. If the course is Today's pick, the Today's pick button opens its course screen.
+4. Your things are saved and put away, and you go to the Clubhouse first: "Off to Sky Rings!" and a countdown, "Sky Rings in 5". After 5 seconds you go on to the start line, or at once with Go now: Sky Rings; Stay here - hang out keeps you in the Clubhouse (tap Games to start later). You arrive at the start line with only the course kit. (With the Clubhouse off, you go straight to the start and home afterwards, as before.)
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
 6. Land on every checkpoint in order. On the Fresh Courses, a checkpoint counts only when your feet are over its pad: falling past it, jumping short beside it or standing on the pad before it doesn't count. Anywhere on the pad counts, even the very edge or a corner. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Fall too far and you go back to your last checkpoint, facing the next one. The clock keeps running.
 8. After the last checkpoint, reach the finish. You see your time, your best and the course record.
-9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
+9. You come back to the Clubhouse ("Back in the Clubhouse! Sky Rings 1:23.4") and your result screen opens there. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're taken straight back to the start line; Back to the courses picks another. Leave game in the Clubhouse takes you home with all your things.
 
 **On the screen**
 
 - Hotbar slot 1: Back to checkpoint (a recovery compass). Click it to go back to your last checkpoint, or to the start if you have none yet. The clock keeps running. During the countdown it just says Wait for the countdown.
-- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. You leave and your things come back.
+- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise you leave and your things come back. /hcm leave always goes home.
 - You move with your normal keys: walk, sprint and jump.
 - Typing /hcm leave also ends the run and brings your things back.
 - Kit items say Game item — stays in the game. You can't drop them, move them or keep them.
@@ -1277,21 +1277,21 @@ These are played in the Games world, on courses the server's builders make. Each
 
 1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Elytra courses have an elytra icon and a label like (Elytra · Medium).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
-4. Your things are saved and put away. You arrive at the start line wearing an elytra, with 3 rockets and the course kit.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run. If the course is Today's pick, the Today's pick button opens its course screen.
+4. Your things are saved and put away, and you go to the Clubhouse first: "Off to Sky Rings!" and a countdown, "Sky Rings in 5". After 5 seconds you go on to the start line, or at once with Go now: Sky Rings; Stay here - hang out keeps you in the Clubhouse (tap Games to start later). You arrive at the start line wearing an elytra, with 3 rockets and the course kit. (With the Clubhouse off, you go straight to the start and home afterwards, as before.)
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
 6. Take off and glide: jump, then press jump again while you fall to open your wings. Fly through every ring in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time.
 7. Click the rockets while gliding for a boost. Your rockets are filled back up to 3 at every ring, and each time you go back.
 8. If you land anywhere except near the start, inside a ring or at the finish, or if you touch water, you go back to your last ring and keep gliding from it. If you haven't reached a ring yet, you go back to the start. The clock keeps running.
 9. After the last ring, fly into the finish. You see your time, your best and the course record.
-10. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
+10. You come back to the Clubhouse ("Back in the Clubhouse! Sky Rings 1:23.4") and your result screen opens there. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're taken straight back to the start line; Back to the courses picks another. Leave game in the Clubhouse takes you home with all your things.
 
 **On the screen**
 
 - Hotbar slot 1: Back to checkpoint (a recovery compass). Click it to go back to your last ring, or to the start if you have none yet. The clock keeps running. During the countdown it just says Wait for the countdown.
 - Hotbar slot 2: Rockets (3 of them). Click while gliding for a boost. If you aren't gliding it just says Rockets work while you glide.
 - Your chest slot: the elytra. It never breaks.
-- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. You leave and your things come back.
+- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise you leave and your things come back. /hcm leave always goes home.
 - Typing /hcm leave also ends the run and brings your things back.
 - Kit items say Game item — stays in the game. You can't drop them, move them or keep them.
 - Bedrock: the kit and the rules are the same. On the course screen, the Tokens for finishing tile has the first-finish reward in its name, so you don't have to tap and hold to read it. High-score lists show numbered paper tiles instead of player heads.
@@ -1354,19 +1354,19 @@ These are played in the Games world, on courses the server's builders make. Each
 
 1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Boat courses have a boat icon and a label like (Boat · Medium).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
-4. Your things are saved and put away. You arrive at the start line sitting in a boat of your own, with the course kit.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run. If the course is Today's pick, the Today's pick button opens its course screen.
+4. Your things are saved and put away, and you go to the Clubhouse first: "Off to Ice Boat!" and a countdown, "Ice Boat in 5". After 5 seconds you go on to the start line, or at once with Go now: Ice Boat; Stay here - hang out keeps you in the Clubhouse (tap Games to start later). You arrive at the start line sitting in a boat of your own, with the course kit. (With the Clubhouse off, you go straight to the start and home afterwards, as before.)
 5. Wait for the countdown: 3, 2, 1, Go! Your boat is held still until Go. The clock starts on Go.
 6. Row through every checkpoint in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Trying to get out of the boat doesn't let you out. It sends you back to your last checkpoint in a new boat. The clock keeps running.
 8. After the last checkpoint, row into the finish. You see your time, your best and the course record.
-9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
+9. You come back to the Clubhouse ("Back in the Clubhouse! Ice Boat 1:23.4") and your result screen opens there. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're taken straight back to the start line in a new boat; Back to the courses picks another. Leave game in the Clubhouse takes you home with all your things.
 
 **On the screen**
 
 - Steer and row with your normal boat keys.
 - Hotbar slot 1: Back to checkpoint (a recovery compass). Click it to go back to your last checkpoint (or the start) in a new boat. The clock keeps running. During the countdown it just says Wait for the countdown.
-- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. You leave and your things come back.
+- Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise you leave and your things come back. /hcm leave always goes home.
 - Trying to get out of the boat (like pressing sneak) sends you back to your last checkpoint. Holding it down only sends you back once every 2 seconds. During the countdown it just says Wait for the countdown.
 - Typing /hcm leave also ends the run and brings your things back.
 - Kit items say Game item — stays in the game. You can't drop them, move them or keep them.
@@ -1430,11 +1430,11 @@ These are played in the Games world, on courses the server's builders make. Each
 1. Type /hcm play golf to see every open golf course. You can also open the Games screen (/hcm play) and pick the Golf tab. Or click Mini golf on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Each course shows its holes and par, like Meadow Links - 9 holes, par 27.
 2. Click a course. Every course also has its own id: /hcm play <course id>, its [Arcade] sign, or the Today's pick button opens the same course screen. Golf always opens this screen first, and nothing starts until you click Start.
 3. Click Pick your ball to choose a golf ball you bought, one of your Minis, or the plain white ball. The game remembers your choice. The Pick your ball button is on the golf course list too.
-4. Click the green Start button. Your things are saved and put away, and you arrive at hole 1's tee with only the golf kit.
+4. Click the green Start button. Your things are saved and put away, and you go to the Clubhouse first ("Off to Meadow Links!", "Meadow Links in 5"). After 5 seconds, or when you tap Go now, you arrive at hole 1's tee with only the golf kit; Stay here - hang out keeps you in the Clubhouse. (With the Clubhouse off, you go straight to hole 1 and home afterwards, as before.)
 5. Turn to face the way you want the ball to go. Hold a club and click. You must be within 4 blocks of your ball, and it must be still.
 6. Wait for the ball to stop. Walk to it, or use Go to my ball, and putt again. The bar above your hotbar shows the hole, par, your strokes and how far away the cup is.
 7. When the ball drops into the cup, the hole is done. The scorecard shows for 5 seconds, then you go to the next tee. Click Next hole to go right away.
-8. After the last hole, your score is saved and any tokens are paid. You go home with all your things, and your final scorecard opens. Click Play again to go straight to hole 1.
+8. After the last hole, your score is saved and any tokens are paid. You come back to the Clubhouse with all your things still put away, and your final scorecard opens there. Click Play again to go straight to hole 1; Leave game in the Clubhouse takes you home with your things.
 
 **On the screen**
 
@@ -1444,7 +1444,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - Hotbar slot 6: Go to my ball (a compass). It takes you right next to your ball, facing it.
 - Hotbar slot 7: Reset ball (a recovery compass). It puts your ball back where you last putted from, for +1 stroke. If the ball is already there, nothing happens and it costs nothing.
 - Hotbar slot 8: Scorecard (paper). It shows your strokes so far.
-- Hotbar slot 9: Leave game (a barrier). Click it, then click again within 3 seconds. You leave and your things come back.
+- Hotbar slot 9: Leave game (a barrier). Click it, then click again within 3 seconds. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise you leave and your things come back. /hcm leave always goes home.
 - Typing /hcm leave also ends the round and brings your things back.
 - Bedrock: a golf ball you bought shows its colour, the same as on Java (0.38). Otherwise your ball is a white block, because Bedrock can't show Mini heads reliably. The Pick your ball screen lists your golf balls and says so. High-score lists show numbered paper tiles instead of player heads.
 
@@ -1683,7 +1683,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 **On the screen**
 
 - Hotbar slot 1: Back to the top - of this level (a recovery compass). It counts as a bonk.
-- Hotbar slot 9: Leave game. Your things come back.
+- Hotbar slot 9: Leave game. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise your things come back. /hcm leave always goes home.
 - The bar above your hotbar shows your time, the level and your bonks: 0:12.4 · level 2 of 5 · 1 bonk.
 - Other players in the same shaft can't push you.
 
@@ -1725,7 +1725,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - **Open it:** `/hcm play clubhouse` any time it's open. It's also on the Games screen's Together tab ("The Clubhouse - 2 here · visit!") and the Arcade's Play row while it's open. It's free, and nothing in it pays or costs tokens. Your things are kept safe and come back when you leave, like every world game.
 - **The room:** a big glass-floored hall with windows, lanterns, benches, two tables, a podium for the top three and a board with the results. You can't fall out or get hurt, nobody can push anybody, and nobody can break or place blocks.
-- **The kit:** Results (your last run or round here, or the last race's), Party (while you're in a party race's lobby), Go now and Stay here (while you're on your way to a course), Watch live (while a race or golf group is going), Games (pick a game), My stats (your own numbers) and Leave game (click twice).
+- **The kit:** Results ("Results - your last run" after a solo run or round here, "Results - the last race" otherwise), Party (while you're in a party race's lobby), Go now and Stay here (while you're on your way to a course), Watch live (while a race or golf group is going), Games (pick a game), My stats (your own numbers) and Leave game (click twice).
 - **Before a party race:** on the party screen, tap **Go to the Clubhouse** to wait there. When the host starts the race, you go straight to the grid. You don't have to go.
 - **Before Race Night:** tap **Wait in the Clubhouse** on the Race Night screen, or in the join message. You go to the track when the night starts.
 - **After a party race:** you come back to the Clubhouse instead of going home: "Back in the Clubhouse! Look at the board for the results." The board shows the order, times and gaps. The host can tap **Race again** on the party screen, and everyone still in the Clubhouse goes back to the grid. While your party is racing, Go to the Clubhouse and Take a rider aren't on the party screen; Watch is, for anyone who isn't racing.
@@ -1738,14 +1738,14 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **The boards:** four boards hang flat on the walls like signs and don't turn as you walk.
   - The **results** board (north) shows the race positions while a race or golf group is going, then the final result.
   - **This week's best** (east) shows the fastest run on each course this week and who ran it, the best golf round, Today's pick and the Weekly Cup leaders. It turns its page every 8 seconds and ends with the all-time records.
-  - **Now playing** (south) shows who's in which game right now and how far they've got, like "Sam - Sky Rings - checkpoint 3 - 0:41". Cheer them on with `/hcm play cheer`.
+  - **Now playing** (south) shows who's in which game right now and how far they've got, like "Sam - Sky Rings - checkpoint 3 - 0:41". Cheer them on with `/hcm play cheer`: it reaches the racers of a race, or with no race going, everyone on a solo run or in a round alone.
   - **My stats** (west) is only for you: your runs this week, tokens you won from games this week, your best golf round, and your best times with your place on each course. Nobody else can see yours. Tap the **My stats** item to see them on a screen.
   - On Bedrock the boards show as floating name tags that turn to face you.
 - **Just watching:** anyone can come and watch without racing. Tap **Watch** on the party screen or the Race Night screen, or use `/hcm play clubhouse`. A watcher is never put in a race, never counted and never paid.
 - **Watch live:** while a race or golf group is going, tap **Watch live** in the Clubhouse, or use `/hcm play watch` (or `/hcm play watch <player>` for that player's race). On the Ice Boat's Mountain Run you start over the viewing stand at the bottom, looking up the mountain. You fly round the course in spectator mode and can click a racer to see what they see. You stay near the course, the racers can't see you, and you can't touch anything. The bar at the bottom shows the positions, then "| /hcm play clubhouse to go back" (before there are positions it reads "Watching live | /hcm play clubhouse to go back"). When the race ends you come back to the Clubhouse by yourself, just in time for the results and the photo. However you leave, your own game mode comes back.
-- **Cheer!** `/hcm play cheer` shows the racers "<your name> cheers for you!". Once every 10 seconds. Racers who'd rather not see cheers: `/hcm play cheers off` (and `on` to see them again).
+- **Cheer!** `/hcm play cheer` shows the racers "<your name> cheers for you!", and with no race going, everyone on a solo run or in a round alone. Once every 10 seconds. Racers who'd rather not see cheers: `/hcm play cheers off` (and `on` to see them again).
 - **Ride along:** in a boat, a driver can take one friend in the back seat, on a solo boat run, a party race or Race Night. Tap **Take a rider (back seat)** on a boat course's screen, the party screen or the Race Night screen once you've joined, or use `/hcm play rider <player>`. Your friend gets an invite ([Accept] in chat, or `/hcm play accept` on Bedrock). They hop in behind you at every start, hold "Riding with (your name) - hold on tight!" and can't fall out during the run. Their Leave game takes only them home; you carry on. When you finish or leave, they come with you: to the Clubhouse after a party race or Race Night, home after a solo run, and from the Clubhouse they ride with you again in your next race. A rider is never timed or paid and isn't on any board. Between races they wait on the stand with you, kept on it just like the racers, so they're never on the track when the boats come round. A passenger doesn't make a boat faster, so your run counts as normal (unless the owner has set rides with a rider to be just for fun; then you're told first, and in a party race your place still counts).
-- **Time limits:** after 30 minutes with no race or party going you're sent home, with a warning a minute before. While you're on your way to a course, or playing a cabinet game, the 30 minutes don't count down. Just before a planned restart, nobody new comes in except from a race or golf round that ends then, and everyone is sent home with a warning a minute later, before the restart. In the last minute or so before it, the Clubhouse takes nobody at all. A party race or golf round that ends then takes you home and says why: "The Clubhouse is closed for the restart, so you're going home. Your things are back." When Race Night ends then, it takes you home with its usual "Race Night is over - great racing! Your things are back."
+- **Time limits:** after 30 minutes with no race or party going you're sent home, with a warning a minute before. While you're on your way to a course, or playing a cabinet game, the 30 minutes don't count down. Just before a planned restart, nobody new comes in except from a race, golf round or solo run that ends then, and everyone is sent home with a warning a minute later, before the restart. In the last minute or so before it, the Clubhouse takes nobody at all. A party race or golf round that ends then takes you home and says why: "The Clubhouse is closed for the restart, so you're going home. Your things are back." When Race Night ends then, it takes you home with its usual "Race Night is over - great racing! Your things are back."
 - **One thing at a time:** from the Clubhouse, the Games item starts courses and golf and opens cabinets. Games of luck, crates, the Scratch Ticket, Card Packs, Falling Floors and Race Night are outside: "That one isn't played in the Clubhouse - tap Leave game first."
 - **When it's off** (the owner's switch, or while it's being built), courses, golf and races work exactly as before, starting and ending at home, and the Clubhouse buttons aren't shown.
 <!-- ---- end the Clubhouse ---- -->

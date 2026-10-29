@@ -40,7 +40,8 @@ import java.util.function.Supplier;
  * the Clubhouse goes back there too ({@link #leftToClub}); {@code /hcm leave} always goes home.
  *
  * <p>Every fallback is {@link ClubRoute}'s: with the Clubhouse off, a course in another world, the restart
- * hold, a rider, a test run or another session, the run starts and ends exactly as before.
+ * hold (the start) or the Clubhouse closing for it (the end), a rider, a test run or another session, the
+ * run starts and ends exactly as before.
  */
 public final class ClubSolo {
 

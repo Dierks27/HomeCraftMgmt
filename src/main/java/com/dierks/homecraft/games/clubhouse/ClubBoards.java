@@ -14,6 +14,7 @@ import com.dierks.homecraft.games.trial.TrialsNow;
 import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.clubhouse.MyStatsMenu;
 import com.dierks.homecraft.storage.CupDao;
 import com.dierks.homecraft.storage.GamesDao;
@@ -26,7 +27,6 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
-import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -238,8 +238,9 @@ final class ClubBoards {
         @Override
         public ClubData.Snapshot snapshot(Set<UUID> viewers) {
             GamesService g = club.games();
-            long week = TrialsNow.weekKey(g);
-            long weekStart = g.clock().startOfDay(week >= 0 ? week : g.clock().weekKey(DayOfWeek.MONDAY));
+            // the weekly boards', the Weekly Cup's and the quests' week (quests.week_starts_on), whether or not
+            // Time Trials is on (R383-B1: golf's week and the week's tokens read the same boundary)
+            long weekStart = g.clock().startOfDay(g.clock().weekKey(DailyLookup.weekStart(g.plugin())));
             Game cupGame = g.game(WeeklyCup.SPEC.id());
             long cupWeek = cupGame instanceof WeeklyCup w && g.enabled(w) ? w.desk().week() : -1;
             String pick = null;

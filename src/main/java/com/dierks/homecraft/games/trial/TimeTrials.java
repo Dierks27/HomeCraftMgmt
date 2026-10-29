@@ -69,7 +69,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
 
 import java.sql.SQLException;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -730,18 +729,10 @@ public final class TimeTrials implements Game {
         return isFeatured.test(courseId) || isFeatured.test(SPEC.id());
     }
 
-    /** This week's key (the same week as the weekly quests). */
+    /** This week's key (the same week as the weekly quests, {@code DailyLookup.weekStart}: the Clubhouse's boards too). */
     long weekKey() {
-        DayOfWeek start = DayOfWeek.MONDAY;
-        try {
-            var quests = ctx.plugin().config().quests();
-            if (quests != null && quests.weekStartsOn() != null) {
-                start = quests.weekStartsOn();
-            }
-        } catch (RuntimeException e) {
-            // the default week
-        }
-        return games().clock().weekKey(start); // the framework's clock: the plugin's, live
+        // the framework's clock: the plugin's, live
+        return games().clock().weekKey(com.dierks.homecraft.gui.games.daily.DailyLookup.weekStart(ctx.plugin()));
     }
 
     private long today() {
@@ -1119,6 +1110,7 @@ public final class TimeTrials implements Game {
         run.fromClub = true;
         runs.put(p.getUniqueId(), run);
         Location start = backTo(run, -1);
+        run.lastReset = Bukkit.getCurrentTick(); // arms the countdown's hold: sent again if the move never lands
         if (start == null || !move(p, run, start)) {
             end(p);
             return false;
@@ -1134,7 +1126,7 @@ public final class TimeTrials implements Game {
     private void arm(Player p, TrialRun run, boolean seatHere) {
         Course course = run.course;
         boolean test = run.test;
-        giveKit(p, course.kind());
+        giveKit(p, course.kind(), run.fromClub);
         p.setFallDistance(0f);
         if (course.kind() == TrialKind.BOAT && seatHere) {
             seat(p, run, p.getLocation());
@@ -1151,9 +1143,13 @@ public final class TimeTrials implements Game {
         warmups.begin(p, run); // WP-R1 (D3): the warm-up chosen, if any (never on a Dropper)
     }
 
-    void giveKit(Player p, TrialKind kind) {
+    /**
+     * The course kit; {@code fromClub} (0.38.3) says under Leave game where its second click goes (back to the
+     * Clubhouse for a run handed out from it, else home: {@code ClubhouseText.leaveLore}).
+     */
+    void giveKit(Player p, TrialKind kind, boolean fromClub) {
         if (kind == TrialKind.DROPPER) {
-            drops.giveKit(p, DropperRun.Kit.DROP);
+            drops.giveKit(p, DropperRun.Kit.DROP, fromClub);
             return;
         }
         // a race seat or a Clubhouse hand-out gives this kit mid-session: every item goes in with
@@ -1171,8 +1167,8 @@ public final class TimeTrials implements Game {
             }
             KitItems.put(inv, KitItems.CHESTPLATE, wings);
         }
-        KitItems.put(inv, 8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
-                "&7Your things come back."));
+        KitItems.put(inv, 8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game",
+                com.dierks.homecraft.games.clubhouse.ClubhouseText.leaveLore(fromClub)));
         inv.setHeldItemSlot(0);
     }
 
@@ -1256,6 +1252,18 @@ public final class TimeTrials implements Game {
     }
 
     private void countdown(Player p, TrialRun run, long now) {
+        switch (hold(run, now)) {
+            case WAIT -> {
+                return; // the run's own move to the start is still on its way: the 3-2-1 begins at the line
+            }
+            case AGAIN -> {
+                toStart(p, run); // our teleport never came: sent again, as running() does
+                return;
+            }
+            case NONE -> {
+                // at the start: count
+            }
+        }
         if (drops.countdown(p, run)) {
             return; // a dropper's practice drop is offered, or on: no 3-2-1 yet
         }
@@ -1290,6 +1298,33 @@ public final class TimeTrials implements Game {
         title(p, "&aGo!", "", 15);
         ping(p, 2.0f);
         watch(p, run);
+    }
+
+    /** What the 3-2-1 does this tick about the run's own teleport ({@link #hold}). */
+    enum Hold {
+        /** Not waiting on one: count. */
+        NONE,
+        /** Still on its way: nothing counts, the full 3-2-1 begins once it lands. */
+        WAIT,
+        /** It never came ({@value #WAIT_TICKS} ticks): sent to the start again. */
+        AGAIN
+    }
+
+    /**
+     * 0.38.3: the 3-2-1 waits while the run's own teleport to the start is on its way. A hand-out from the
+     * Clubhouse ({@link #readyFromClub}) makes the run and then moves the player some 576 blocks, usually into
+     * an unloaded chunk, so the move is async and lands ticks later; until it does the countdown stays at its
+     * full length (so the "3" is never shown in the Clubhouse, no boat is seated there, and the whole 3-2-1 is
+     * had at the line), and one that never lands is sent again after {@value #WAIT_TICKS} ticks, as
+     * {@link #running} does. A start from home ran its countdown only after the session's move had landed,
+     * and still does. Pure, for the tests.
+     */
+    static Hold hold(TrialRun run, long now) {
+        if (!run.suspended || run.expect == null) {
+            return Hold.NONE;
+        }
+        run.countdown = COUNTDOWN_TICKS + 1;
+        return now - run.lastReset >= WAIT_TICKS ? Hold.AGAIN : Hold.WAIT;
     }
 
     private void running(Player p, TrialRun run, long now) {

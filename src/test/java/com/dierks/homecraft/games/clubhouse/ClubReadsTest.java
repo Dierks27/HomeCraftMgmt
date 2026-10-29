@@ -105,6 +105,17 @@ class ClubReadsTest {
     }
 
     @Test
+    void aViewerWhoLeavesDuringAReadIsNotCachedWhenItComesBack() {
+        reads.second(1_000, List.of(SAM, LEE));
+        drainAsync();
+        reads.forget(LEE); // left the Clubhouse while the database was being read
+        drainMain();
+        assertNull(reads.mine(LEE), "left during the read: not cached when it comes back (R383-B2)");
+        assertFalse(reads.cached().contains(LEE), "their numbers went");
+        assertNotNull(reads.mine(SAM), "the others' numbers came");
+    }
+
+    @Test
     void oneReadAtATimeEveryThirtySecondsAndNothingWhileNobodyIsIn() {
         reads.second(0, List.of());
         assertEquals(0, reads.reads(), "nobody in: nothing read");

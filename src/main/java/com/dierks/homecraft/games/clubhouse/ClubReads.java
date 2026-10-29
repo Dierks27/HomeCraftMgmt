@@ -63,6 +63,8 @@ final class ClubReads {
     private FameBoard.Fame fame;
     private final Map<UUID, StatsCard.Mine> mine = new HashMap<>();
     private final Set<UUID> wanted = new LinkedHashSet<>();
+    /** Who the read on its way is still for: one who leaves meanwhile is taken out, and nothing comes back for them. */
+    private final Set<UUID> reading = new LinkedHashSet<>();
     private long started = Long.MIN_VALUE / 2;
     private boolean soon;
     private boolean inFlight;
@@ -110,6 +112,8 @@ final class ClubReads {
         soon = false;
         wanted.clear();
         inFlight = true;
+        reading.clear();
+        reading.addAll(viewers);
         reads++;
         int gen = generation;
         try {
@@ -143,7 +147,12 @@ final class ClubReads {
             return;
         }
         fame = r.fame();
-        mine.putAll(r.mine());
+        r.mine().forEach((id, m) -> {
+            if (reading.contains(id)) {
+                mine.put(id, m); // not one who left while it was read: their numbers went (R383-B2)
+            }
+        });
+        reading.clear();
     }
 
     private void failed(int gen, long now, Throwable e) {
@@ -174,10 +183,11 @@ final class ClubReads {
         soon();
     }
 
-    /** {@code viewer} left the Clubhouse: their numbers go. */
+    /** {@code viewer} left the Clubhouse: their numbers go, and a read on its way brings none back for them. */
     void forget(UUID viewer) {
         mine.remove(viewer);
         wanted.remove(viewer);
+        reading.remove(viewer);
     }
 
     /** Everything goes (the room closed or moved): a read on its way is dropped, the next one comes at once. */
@@ -187,6 +197,7 @@ final class ClubReads {
         fame = null;
         mine.clear();
         wanted.clear();
+        reading.clear();
         started = Long.MIN_VALUE / 2;
         soon = false;
     }

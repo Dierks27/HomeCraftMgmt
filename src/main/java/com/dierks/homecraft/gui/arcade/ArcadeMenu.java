@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.event.RaceNight;
+import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.BreakMenu;
@@ -160,8 +161,7 @@ public final class ArcadeMenu extends Menu {
                 "&7Every game that's open.", "&eClick to see them"), e -> tab(null));
         pick(games);
         door(PLAY[3], anyCourse(games), Game.Tab.COURSES, Material.FEATHER, "Courses", "Race the clock.");
-        door(PLAY[4], anyOpen(games, GameKind.GOLF), Game.Tab.GOLF, Material.SNOWBALL, "Mini golf",
-                "Your Mini is the ball.");
+        door(PLAY[4], anyGolf(games), Game.Tab.GOLF, Material.SNOWBALL, "Mini golf", "Your Mini is the ball.");
         door(PLAY[5], anyOpen(games, GameKind.CABINET), Game.Tab.CABINETS, Material.JUKEBOX, "Cabinets",
                 "Little video games.");
         together(games);
@@ -187,6 +187,24 @@ public final class ArcadeMenu extends Menu {
             }
         }
         return false;
+    }
+
+    /** Whether the Games screen's Golf tab has a tile: some open game passes {@link #golfTile}. */
+    private static boolean anyGolf(GamesService games) {
+        for (Game g : games.games()) {
+            if (games.enabled(g) && golfTile(g.kind(), true, DailyCourses.SPEC.id().equals(g.id()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a game puts a tile on the Golf tab (R383-A2, as {@link #courseTile}): an open GOLF-kind game, or
+     * Fresh Courses, whose set is on the Golf tab too. Pure, for the tests.
+     */
+    static boolean golfTile(GameKind kind, boolean enabled, boolean freshCourses) {
+        return enabled && (kind == GameKind.GOLF || freshCourses);
     }
 
     /** Whether the Games screen's Courses tab has a tile: some open game passes {@link #courseTile}. */

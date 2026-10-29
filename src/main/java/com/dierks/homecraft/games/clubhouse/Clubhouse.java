@@ -45,6 +45,7 @@ import org.bukkit.inventory.PlayerInventory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -121,8 +122,12 @@ public final class Clubhouse implements Game, ClubDoor {
     static final String STAY = "stay";
     static final String GAMES = "games";
     static final String LEAVE = "leave";
-    /** A solo player's own results open this long after they arrive back (ticks): the move has landed. */
+    /**
+     * A solo player's own results open once they are seen in the room: looked for this often (ticks), this many
+     * times (15 s, past {@link ClubVisits#ARRIVAL_MS}: by then an arrival never seen has been sent home).
+     */
     static final long RESULT_TICKS = 10;
+    static final int RESULT_TRIES = 30;
     /** "Photo time!" stays up this long (ticks), and waits at most this long for the podium (ms). */
     static final int PHOTO_TICKS = 200;
     static final long PHOTO_WAIT_MS = 5_000L;
@@ -236,7 +241,7 @@ public final class Clubhouse implements Game, ClubDoor {
     public ItemStack tile(Player viewer) {
         boolean open = room != null && room.open();
         return Menus.icon(Material.CAKE, open ? "&6The Clubhouse &7- " + visits.size() + " here · visit!"
-                : "&7The Clubhouse &8- closed right now", "&7Hang out with friends,", "&7before and after races.",
+                : "&7The Clubhouse &8- closed right now", "&7Hang out with friends,", "&7before and after your games.",
                 "&7/hcm play clubhouse");
     }
 
@@ -788,7 +793,8 @@ public final class Clubhouse implements Game, ClubDoor {
         boolean party = raceLobby(id) != null;
         LiveRace live = followed();
         ClubNext next = lobby.next(id);
-        String sig = (party ? "P" : "") + "R" + (live != null ? "W" + live.key() : "")
+        boolean own = ownNewer(id);
+        String sig = (party ? "P" : "") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
                 + (next != null ? "N" + next.gameId() + ":" + next.ref() : "") + "G"
                 + (settings().boards() ? "S" : "");
         if (sig.equals(kits.get(id)) || !inOurSession(p)) {
@@ -801,8 +807,9 @@ public final class Clubhouse implements Game, ClubDoor {
             KitItems.put(inv, 0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
                     "&7Who's in, who's ready,", "&7and the host's Start."));
         }
-        KitItems.put(inv, 2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
-                "&7The last race's results."));
+        KitItems.put(inv, 2, own
+                ? KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS_MINE, "&7Your time, and Play again.")
+                : KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS, "&7The last race's results."));
         if (settings().boards()) {
             KitItems.put(inv, 7, ClubBoards.kitItem(this)); // My stats (0.38.3)
         }
@@ -841,7 +848,7 @@ public final class Clubhouse implements Game, ClubDoor {
     private void openResults(Player p) {
         Mine m = mine.get(p.getUniqueId());
         Results r = last;
-        if (m != null && (r == null || m.at() >= lastAt)) {
+        if (ownNewer(p.getUniqueId())) {
             m.opener().accept(p);
             return;
         }
@@ -939,7 +946,16 @@ public final class Clubhouse implements Game, ClubDoor {
         }
     }
 
-    /** Give the kit again (back from Watch live). */
+    /**
+     * Whether the player's own results (a solo run or a round alone here) are what their Results opens: kept,
+     * and newer than the shared ones (the last race's). The kit's Results is named for it (R383-J3).
+     */
+    private boolean ownNewer(UUID id) {
+        Mine m = mine.get(id);
+        return m != null && (last == null || m.at() >= lastAt);
+    }
+
+    /** Give the kit again (back from Watch live, or the Results item's name changed). */
     void kitAgain(Player p) {
         kits.remove(p.getUniqueId());
         giveKit(p);
@@ -1008,8 +1024,13 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         LiveRace r = watch.watching(id) ? watch.watched(id) : followed();
-        if (r == null) {
-            p.sendMessage(Text.of(WatchLive.NOTHING));
+        // 0.38.3 (R383-J1): no race going, the cheer reaches everyone on a solo run or a round alone, as Now
+        // playing shows them ("Cheer them on")
+        Collection<UUID> racers = r != null ? r.racers() : Cheers.solo(
+                com.dierks.homecraft.games.trial.TrialsNow.runs(games()),
+                com.dierks.homecraft.games.golf.GolfNow.rounds(games()), id);
+        if (racers.isEmpty()) {
+            p.sendMessage(Text.of(Cheers.NOBODY));
             return;
         }
         long now = now();
@@ -1018,7 +1039,7 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         int heard = 0;
-        for (UUID racer : r.racers()) {
+        for (UUID racer : racers) {
             Player q = online(racer);
             if (q != null && !racer.equals(id) && cheersOn(racer)) {
                 q.sendActionBar(Text.of(Cheers.line(p.getName())));
@@ -1374,8 +1395,10 @@ public final class Clubhouse implements Game, ClubDoor {
 
     /**
      * A solo run's or a round alone's results, for that player only (0.38.3): kept as what their Results
-     * opens, and opened for them half a second after they arrive (the move has landed), unless they are
-     * looking at another screen or watching live. The board and the shared Results are never touched.
+     * opens (the kit's Results is named for it), and opened for them once they have landed in the room (the
+     * move back is usually async, into an unloaded chunk, and a landing closes any screen open: R383-S2),
+     * unless they are looking at another screen or watching live by then. The board and the shared Results
+     * are never touched.
      */
     @Override
     public void soloResult(Player p, Consumer<Player> opener) {
@@ -1383,20 +1406,35 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         UUID id = p.getUniqueId();
-        mine.put(id, new Mine(opener, now()));
+        Mine m = new Mine(opener, now());
+        mine.put(id, m);
         if (ctx.plugin() == null) {
             return; // the framework's own tests: no server to open a screen on
         }
-        games().later(this, RESULT_TICKS, () -> {
-            Player q = online(id);
-            if (q == null || !visits.in(id) || (watch != null && watch.watching(id))) {
-                return;
+        if (visits.in(id)) {
+            kitAgain(p); // takeIn's kit came before these results existed: Results reads "your last run" now
+        }
+        games().later(this, RESULT_TICKS, () -> soloOpen(id, m, RESULT_TRIES));
+    }
+
+    /** Open {@code m} once its player is seen in the room, looking at no other screen; {@code tries} more looks. */
+    private void soloOpen(UUID id, Mine m, int tries) {
+        Player q = online(id);
+        if (q == null || !visits.in(id) || mine.get(id) != m || (watch != null && watch.watching(id))) {
+            return; // gone, or a newer result of theirs took over
+        }
+        ClubhouseRoom r = room;
+        if (r == null || !r.contains(q.getWorld().getName(), q.getX(), q.getY(), q.getZ())) {
+            if (tries > 0) {
+                games().later(this, RESULT_TICKS, () -> soloOpen(id, m, tries - 1));
             }
-            InventoryType open = q.getOpenInventory().getType();
-            if (open == InventoryType.CRAFTING || open == InventoryType.CREATIVE) {
-                opener.accept(q);
-            }
-        });
+            return; // not landed yet
+        }
+        visits.seen(id); // the arrival check's, done
+        InventoryType open = q.getOpenInventory().getType();
+        if (open == InventoryType.CRAFTING || open == InventoryType.CREATIVE) {
+            m.opener().accept(q);
+        }
     }
 
     @Override
@@ -1404,6 +1442,12 @@ public final class Clubhouse implements Game, ClubDoor {
         if (sheet != null) {
             last = new Results(sheet, opener);
             lastAt = now();
+            for (UUID id : new ArrayList<>(mine.keySet())) {
+                Player q = online(id);
+                if (q != null && visits.in(id)) {
+                    kitAgain(q); // their Results opens the race now: named for it again
+                }
+            }
         }
     }
 

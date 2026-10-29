@@ -13,7 +13,9 @@ import java.util.UUID;
  * <ul>
  *   <li>the Clubhouse's door is {@code null} (switched off, still building, its check failed);</li>
  *   <li>the course is in another world (a session teleport never leaves its world);</li>
- *   <li>the restart hold is on, or the Clubhouse is closing for the restart;</li>
+ *   <li>the restart hold is on (the start only: a start would be refused anyway), or the Clubhouse is closing
+ *       for the restart (the end: earlier in the hold a finish still comes in and is sent home a minute later,
+ *       warned, as a race's end is);</li>
  *   <li>a ride is booked (the driver has a rider, or the player rides with someone);</li>
  *   <li>it is an admin's test run;</li>
  *   <li>the player is in some other world session;</li>

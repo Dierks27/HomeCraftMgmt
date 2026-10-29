@@ -271,7 +271,8 @@ class PlayGateTest {
         assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.trial.TimeTrials.SPEC.id()), "trials");
         assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.gen.DailyCourses.SPEC.id()),
                 "Fresh Courses");
-        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.cup.live.WeeklyCup.SPEC.id()), "the Cup");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.cup.live.WeeklyCup.SPEC.id()),
+                "the Cup");
         assertEquals(3, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
         assertEquals(GameKind.GOLF, com.dierks.homecraft.games.golf.MiniGolf.SPEC.kind(), "golf passes by its kind");
     }

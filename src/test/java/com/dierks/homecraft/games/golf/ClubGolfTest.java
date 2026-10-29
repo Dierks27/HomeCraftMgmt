@@ -277,7 +277,8 @@ class ClubGolfTest {
         Door door = new Door();
         int[] forgot = {0};
         java.util.function.Consumer<Player> scorecard = p -> { };
-        String line = com.dierks.homecraft.games.clubhouse.ClubhouseText.backSolo("Tiny Golf", "24 strokes (-2)");
+        String line = com.dierks.homecraft.games.clubhouse.ClubhouseText.backSolo("Tiny Golf",
+                "24 strokes (2 under par)");
         assertTrue(ClubGolf.soloTake(door, player(SAM), "games", () -> forgot[0]++, line, scorecard),
                 "back to the Clubhouse (solo_after)");
         assertEquals(1, forgot[0], "the finished round forgotten (it was recorded already)");

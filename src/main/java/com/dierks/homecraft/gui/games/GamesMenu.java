@@ -50,10 +50,11 @@ import java.util.logging.Level;
  *
  * <p>The tiles are the games' own ({@link Game#tiles}), so each game says its key fact in the
  * name; this screen only sorts, pages and routes a click to {@code /hcm play <id>}'s entry point,
- * which runs the gate. Together also holds the Clubhouse's tile while it is open (0.38.3), and the
- * Clubhouse's Games item opens this screen inside it: courses and golf start from there, cabinets
- * play there, and the gate says "That one isn't played in the Clubhouse" for the rest. A closed game shows no tile at all. The Luck tab also links to the Scratch
+ * which runs the gate. A closed game shows no tile at all. The Luck tab also links to the Scratch
  * Ticket (with its "gives back about" line) and each crate, since Take a break covers them too.
+ * Together also holds the Clubhouse's tile while it is open (0.38.3), and the Clubhouse's Games item
+ * opens this screen inside it: courses and golf start from there, cabinets play there, and the gate
+ * says "That one isn't played in the Clubhouse" for the rest.
  *
  * <p><b>Fresh Courses come first</b> on their tabs (GEN-SPEC §5.4): the Fresh Courses tile, then
  * each daily course, then everything else in catalog order — the courses that are new every

@@ -38,8 +38,8 @@ import java.util.Map;
  *
  * <p>A collector's tile is a plain buy for yourself, like every other tile, so a child tapping her
  * own cap to look at it can never reach a present. Presents have their own entry, "Give a present"
- * at slot {@value #GIFT_SLOT} of the Cosmetics and Looks tabs ({@link GiftPickerMenu}), shown only while one can be
- * given.
+ * at slot {@value #GIFT_SLOT} of the Fireworks &amp; Trails and Looks tabs ({@link GiftPickerMenu}), shown only while one
+ * can be given.
  *
  * <p>The Looks tab (0.38) holds the hats, the caps (the collectors' first) and the golf balls. A hat or cap that
  * names its {@code material} is drawn as itself, the game's own head or the dyed cap, on both editions
@@ -48,6 +48,12 @@ import java.util.Map;
  * <p>A rented look's tile (0.38, SHOP-V2-SPEC §3.12) says where its buyer stands: the price and "Yours for 90 days."
  * before a first buy, "Yours until 18 Jan" while it runs (a tap opens the look screen, {@link LookMenu}), "Buy again: 120
  * tokens (6 days left)" or "(ended)" while the window is open, and "Yours for good" when it is kept.
+ *
+ * <p>The tiles stand in rows by kind (0.38.3, {@link PrizeShelves}; on screen only, config order untouched): on Boosts
+ * the boosts and the Quest Reroll, then Make it Day! and Sunny Day; on Fireworks &amp; Trails (the COSMETICS tab, its
+ * label since 0.38.3) the fireworks, the Launcher, the Remote and Party Time!, then the trails; on Looks the hats and
+ * caps, then the golf balls. Each kind starts its own row while the tab fits one page; a longer tab packs and pages
+ * as before.
  *
  * <p>Row 0 is the balance (slot 0) and the eight tabs (1-8, {@link #TAB_SLOTS}); the Keepers tab is drawn only
  * while there are Keepers. The bottom row holds the page arrows (45, 53), the way out (49) and the present (47).
@@ -133,6 +139,17 @@ public final class PrizeCounterMenu extends Menu {
         if (rows.isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&7Nothing here yet", "&8Check back soon!"), null);
         }
+        int[] shelf = PrizeShelves.slots(tab, rows.stream().map(Prize::type).toList(), GRID_SIZE / PrizeShelves.PER_ROW);
+        if (shelf != null) {
+            // 0.38.3: one page, each kind from its own row (PrizeShelves); a later page shows the same one page
+            for (int i = 0; i < rows.size(); i++) {
+                Prize p = rows.get(i);
+                set(GRID_START + shelf[i], tile(p, tokens), e -> click(p));
+            }
+            setWayOut();
+            return;
+        }
+        // more than one page's rows: packed and paged, as before
         int from = page * GRID_SIZE;
         for (int i = 0; i < GRID_SIZE && from + i < rows.size(); i++) {
             Prize p = rows.get(from + i);
@@ -262,7 +279,10 @@ public final class PrizeCounterMenu extends Menu {
                 }, this::reopen).open(player);
     }
 
-    /** The tabs that show "Give a present" (slot {@value #GIFT_SLOT}): where the presents are, Cosmetics and Looks. */
+    /**
+     * The tabs that show "Give a present" (slot {@value #GIFT_SLOT}): where the presents are, Fireworks &amp; Trails
+     * and Looks.
+     */
     static boolean giftTab(PrizeTab t) {
         return t == PrizeTab.COSMETICS || t == PrizeTab.LOOKS;
     }
@@ -280,7 +300,7 @@ public final class PrizeCounterMenu extends Menu {
         String blurb = switch (t) {
             case BOOSTS -> "Run fast, mine fast, see in the dark.";
             case HUNT -> "Radar and Lure for wild Minis.";
-            case COSMETICS -> "Fireworks, trails and parties.";
+            case COSMETICS -> "Firework shows, trails and parties.";
             case LOOKS -> "Hats, caps and golf balls.";
             case PERKS -> "Extra homes and more.";
             case TROPHIES -> "Something big to save up for.";

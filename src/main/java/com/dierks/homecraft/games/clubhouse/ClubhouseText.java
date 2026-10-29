@@ -139,4 +139,22 @@ public final class ClubhouseText {
         return fromClub ? new String[] {"&7Click twice: back to", "&7the Clubhouse."}
                 : new String[] {"&7Click twice to leave.", "&7Your things come back."};
     }
+
+    // ---- 0.38.4: the record, the challenge ----------------------------------------------------
+
+    /** The title everyone in the room sees when a solo run or round that set the course record lands here. */
+    public static final String NEW_RECORD = "&6NEW RECORD!";
+
+    /** Its small line: the record line, in grey ("Sam set a new record on Sky Rings: 1:02.4"). */
+    public static String newRecordSmall(String recordLine) {
+        return "&7" + com.dierks.homecraft.util.Text.plain(recordLine);
+    }
+
+    /** The chat line: "Sam set a new record on Sky Rings: 1:02.4". */
+    public static String newRecordLine(String name, String course, String time) {
+        return "&6" + name + " set a new record on " + course + ": &f" + time;
+    }
+
+    /** Kit slot 1, while not in a party: a challenge is a party race of two with anyone online. */
+    public static final String KIT_CHALLENGE = "&6Challenge &7- race anyone online";
 }

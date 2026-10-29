@@ -99,6 +99,15 @@ class ClubGolfTest {
             solo.put(p.getUniqueId(), opener);
         }
 
+        /** 0.38.4: the record line that came with the scorecard, or null. */
+        final Map<UUID, String> records = new LinkedHashMap<>();
+
+        @Override
+        public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
+            soloResult(p, opener);
+            records.put(p.getUniqueId(), recordLine);
+        }
+
         @Override
         public boolean partyAfter() {
             return true;
@@ -133,6 +142,7 @@ class ClubGolfTest {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
                 (proxy, m, args) -> switch (m.getName()) {
                     case "getUniqueId" -> id;
+                    case "getName" -> id.equals(SAM) ? "Sam" : "Ava";
                     case "isOnline" -> true;
                     case "hashCode" -> id.hashCode();
                     case "equals" -> proxy == args[0];
@@ -287,6 +297,21 @@ class ClubGolfTest {
         assertEquals(scorecard, door.solo.get(SAM), "their own scorecard, for them only");
         assertEquals(1, door.solo.size(), "nobody else's");
         assertNull(door.sheet, "the board (a golf group's ranking) is never touched");
+    }
+
+    @Test
+    void theRecordLineReachesTheDoorOnlyWhenTheRoundSetTheRecord() {
+        Door door = new Door();
+        String line = com.dierks.homecraft.games.clubhouse.ClubhouseText.newRecordLine("Sam", "Tiny Golf", "24 strokes");
+        assertTrue(ClubGolf.soloTake(door, player(SAM), "games", () -> { }, "x", p -> { }, line), "back, a record");
+        assertEquals(line, door.records.get(SAM), "the Clubhouse hears the record with the scorecard");
+        assertTrue(ClubGolf.soloTake(door, player(SAM), "games", () -> { }, "x", p -> { }, null), "back, no record");
+        assertNull(door.records.get(SAM), "nothing to celebrate");
+        GolfCard card = new GolfCard("tiny", "Tiny Golf", java.util.List.of(3, 3, 3), java.util.List.of(
+                new GolfRun.HoleScore(3, 8, false), new GolfRun.HoleScore(3, 8, false), new GolfRun.HoleScore(3, 8, false)),
+                24, false);
+        assertEquals("&6Sam set a new record on Tiny Golf: &f24 strokes", ClubGolf.recordLine(player(SAM), card, true));
+        assertNull(ClubGolf.recordLine(player(SAM), card, false), "no record, no line");
     }
 
     @Test

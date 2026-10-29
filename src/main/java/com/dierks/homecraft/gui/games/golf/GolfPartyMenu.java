@@ -164,7 +164,7 @@ public final class GolfPartyMenu extends GameMenu {
         out[INVITE] = !v.open() ? new Tile(INVITE, Material.GRAY_DYE, "&7Playing now", List.of("&7Invite after the round."))
                 : full ? new Tile(INVITE, Material.GRAY_DYE, "&7The party is full &8(" + v.max() + ")", List.of())
                 : new Tile(INVITE, Material.WRITABLE_BOOK, "&bInvite a friend", List.of("&7Pick someone to ask.",
-                "&7Java: they click [Accept].", "&7Bedrock: /hcm play accept", "&eClick to pick"));
+                "&7They get a Play? screen", "&7(or [Accept] in chat).", "&eClick to pick"));
         out[READY] = v.youReady()
                 ? new Tile(READY, Material.LIME_DYE, "&aYou're ready", List.of("&eClick if you're not"))
                 : new Tile(READY, Material.GRAY_DYE, "&7Not ready &8- click when you are", List.of("&7So the host knows."));

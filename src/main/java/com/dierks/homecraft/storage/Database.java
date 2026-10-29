@@ -1027,6 +1027,20 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_trades_a ON trades (a, closed_at);
             CREATE INDEX IF NOT EXISTS idx_trades_b ON trades (b, closed_at)
+            """,
+            // v39 — checkpoint splits (0.38.4): a player's checkpoint times on their best run of a course, one row
+            //   per (player, course, layout): times is the ms from the start at each checkpoint, then the finish,
+            //   comma-separated (at most 128 values); layout is the course's layout hash when the run started, so a
+            //   Fresh course's next edition (or an edited course) starts a new row and an old one is never compared.
+            """
+            CREATE TABLE IF NOT EXISTS game_splits (
+                player TEXT    NOT NULL,
+                course TEXT    NOT NULL,
+                layout INTEGER NOT NULL,
+                times  TEXT    NOT NULL,
+                at     INTEGER NOT NULL,
+                PRIMARY KEY (player, course, layout)
+            )
             """
     };
 

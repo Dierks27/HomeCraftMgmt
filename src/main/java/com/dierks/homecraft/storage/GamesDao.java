@@ -716,6 +716,84 @@ public final class GamesDao {
         }
     }
 
+    // ---- 0.38.4: checkpoint splits ----------------------------------------------------------------
+
+    /** The most checkpoint times a splits row keeps (a Mountain Run v2 has up to 128 targets). */
+    public static final int SPLITS_MAX = 128;
+
+    /**
+     * A player's checkpoint times (ms from the start at each checkpoint, then the finish) on their best run of
+     * {@code course} on {@code layout} (its layout hash: a Fresh course's next edition is another row), or
+     * {@code null} when none is stored.
+     */
+    public long[] splits(UUID player, String course, int layout) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT times FROM game_splits WHERE player = ? AND course = ? AND layout = ?")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, course);
+                ps.setInt(3, layout);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? decodeSplits(rs.getString(1)) : null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Keep {@code ms} as the player's splits on {@code course}'s {@code layout} (a personal best: it replaces what
+     * was there); more than {@link #SPLITS_MAX} values are cut.
+     */
+    public void saveSplits(UUID player, String course, int layout, long[] ms, long now) throws SQLException {
+        if (ms == null || ms.length == 0) {
+            return;
+        }
+        String times = encodeSplits(ms);
+        database.transaction(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO game_splits (player, course, layout, times, at) VALUES (?, ?, ?, ?, ?)"
+                            + " ON CONFLICT(player, course, layout) DO UPDATE SET times = excluded.times, at = excluded.at")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, course);
+                ps.setInt(3, layout);
+                ps.setString(4, times);
+                ps.setLong(5, now);
+                ps.executeUpdate();
+            }
+            return null;
+        });
+    }
+
+    /** The row's text: the ms comma-separated, at most {@link #SPLITS_MAX} of them. */
+    static String encodeSplits(long[] ms) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ms.length && i < SPLITS_MAX; i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(ms[i]);
+        }
+        return sb.toString();
+    }
+
+    /** The ms a row's text holds, or {@code null} for an empty or unreadable one (a split is decoration). */
+    static long[] decodeSplits(String times) {
+        if (times == null || times.isBlank()) {
+            return null;
+        }
+        String[] parts = times.split(",");
+        long[] out = new long[Math.min(parts.length, SPLITS_MAX)];
+        try {
+            for (int i = 0; i < out.length; i++) {
+                out[i] = Long.parseLong(parts[i].trim());
+            }
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return out;
+    }
+
     /** The boards this game has scores on. */
     public List<String> boards(String game) throws SQLException {
         Connection c = database.connection();

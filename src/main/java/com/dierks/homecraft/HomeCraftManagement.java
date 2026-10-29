@@ -204,6 +204,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.FireworkShows fireworkShows;
     private com.dierks.homecraft.arcade.MegaShowService megaShows;
     private com.dierks.homecraft.arcade.RemoteService remotes;
+    private com.dierks.homecraft.golem.GolemService golems;
     private com.dierks.homecraft.arcade.looks.LookService looks;
     private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
@@ -382,6 +383,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.megaShows = new com.dierks.homecraft.arcade.MegaShowService(this);
         // The Firework Remote (0.38.2): each player's linked launchers, their holograms, My Show and the Show Map.
         this.remotes = new com.dierks.homecraft.arcade.RemoteService(this);
+        // The Copper Golem Brush (0.38.4): which chests a Copper Golem may use, picked with a special brush.
+        this.golems = new com.dierks.homecraft.golem.GolemService(this);
         // The wardrobe (0.38): rented hats, caps and trails, their bound keys, My Looks and the heads-up.
         this.looks = new com.dierks.homecraft.arcade.looks.LookService(
                 this, new com.dierks.homecraft.storage.LookDao(database));
@@ -496,6 +499,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
         getServer().getPluginManager().registerEvents(megaShows, this); // a quit ends that player's Mega shows
         getServer().getPluginManager().registerEvents(remotes, this); // the Remote's lore, holograms and map
+        getServer().getPluginManager().registerEvents(golems, this); // the brush's taps, the golems' filter
         // The wardrobe: rows read at join and swept after it; a bound key stays with its owner (§3.7).
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.LookListener(looks), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.looks.BoundItemGuard(this), this);
@@ -544,6 +548,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.arcade.start();
         this.radar.start(); // the Mini Radar's two-second ping
         this.remotes.start(); // the holograms' pass, the sets of everyone on, and every Show Map's renderer
+        this.golems.start(); // the recipe, the loaded golems, the tag and marker pass
         this.tradeService.start(); // prune the trade log, a WARN per trade that didn't finish, the trade clock
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
         this.courier.start(); // sweep abandoned delivery runs
@@ -679,6 +684,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (remotes != null) {
             remotes.stop(); // the holograms come down while the worlds are up, before the database closes
         }
+        if (golems != null) {
+            golems.stop(); // the holograms come down and the recipe goes while the server is up
+        }
         if (candy != null) {
             candy.stop(); // removes every live candy and boss bar, while the worlds are still up
             candy = null;
@@ -780,6 +788,9 @@ public final class HomeCraftManagement extends JavaPlugin {
             config.keepGames(gamesBefore);
         }
         recipeManager.registerRecipes();
+        if (golems != null) {
+            golems.reload(); // the switch and the brush's recipe
+        }
         market.reload(); // also tells the live market the catalog changed
         if (marketSim != null) {
             try {
@@ -2556,6 +2567,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The Firework Remote: each player's linked launchers (0.38.2). */
     public com.dierks.homecraft.arcade.RemoteService remotes() {
         return remotes;
+    }
+
+    /** The Copper Golem Brush and the golems' chests (0.38.4). */
+    public com.dierks.homecraft.golem.GolemService golems() {
+        return golems;
     }
 
     /** The wardrobe: rented looks, their keys, My Looks and the heads-up notices. */

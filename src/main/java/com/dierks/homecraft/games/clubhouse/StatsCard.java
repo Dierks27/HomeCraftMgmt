@@ -16,7 +16,7 @@ import java.util.Set;
 /**
  * My stats (0.38.3): a player's own numbers, on the Clubhouse's west wall where only they see them, and on the My
  * stats screen. Their personal best and place on each course they have played, their counted runs this week, their
- * best round of golf, and the tokens they won from games this week.
+ * best round of golf, the tokens they won from games this week, and (0.38.4) their family week points and place.
  *
  * <p><b>Tokens from games</b> are the token ledger's earnings this week from the skill games, the courses, Fresh
  * Courses' goals, the Dropper, Race Night, Falling Floors and Weekly Cup prizes ({@link #GAME_SOURCES}): never the
@@ -31,8 +31,8 @@ public final class StatsCard {
      * entry and its refund (a player's own tokens going in and coming back).
      */
     public static final Set<String> GAME_SOURCES = gameSources();
-    /** Personal bests on the wall (the screen shows more). */
-    static final int WALL_BESTS = 4;
+    /** Personal bests on the wall (the screen shows more; 0.38.4: three, the family week's line took one row). */
+    static final int WALL_BESTS = 3;
 
     private StatsCard() {
     }
@@ -48,11 +48,19 @@ public final class StatsCard {
      * @param runsThisWeek their counted runs this week
      * @param bestGolf     their best round (fewest strokes against par), or {@code null}
      * @param tokensWon    tokens won from games this week
+     * @param weekPoints   0.38.4: their family week points
+     * @param weekRank     their place on the family week's board (0: none yet)
      */
-    public record Mine(List<Best> bests, int runsThisWeek, FameBoard.GolfRound bestGolf, int tokensWon) {
+    public record Mine(List<Best> bests, int runsThisWeek, FameBoard.GolfRound bestGolf, int tokensWon,
+                       long weekPoints, int weekRank) {
 
         public Mine {
             bests = List.copyOf(bests == null ? List.of() : bests);
+        }
+
+        /** Without the family week (0.38.3's shape, kept for the tests). */
+        public Mine(List<Best> bests, int runsThisWeek, FameBoard.GolfRound bestGolf, int tokensWon) {
+            this(bests, runsThisWeek, bestGolf, tokensWon, 0, 0);
         }
     }
 
@@ -113,7 +121,7 @@ public final class StatsCard {
                 won += Math.max(0, t.earned());
             }
         }
-        return new Mine(bests, runs, bestGolf, (int) Math.min(Integer.MAX_VALUE, won));
+        return new Mine(bests, runs, bestGolf, (int) Math.min(Integer.MAX_VALUE, won), p.weekPoints(), p.weekRank());
     }
 
     private static Map<String, GamesDao.PlayerBoard> byBoard(List<GamesDao.PlayerBoard> boards) {
@@ -125,7 +133,7 @@ public final class StatsCard {
     }
 
     /**
-     * The wall's card for {@code name}: the title, runs this week, tokens from games, best golf, up to
+     * The wall's card for {@code name}: the title, runs this week, tokens from games, the family week, best golf, up to
      * {@value #WALL_BESTS} personal bests, and "Only you can see this". {@code null}: counting.
      */
     public static String board(String name, Mine m) {
@@ -135,6 +143,7 @@ public final class StatsCard {
         }
         b.append('\n').append(ClubBoardText.runs(m.runsThisWeek()));
         b.append('\n').append(ClubBoardText.tokens(m.tokensWon()));
+        b.append('\n').append(ClubBoardText.statsWeek(m.weekPoints(), m.weekRank())); // 0.38.4
         FameBoard.GolfRound g = m.bestGolf();
         b.append('\n').append(g == null ? ClubBoardText.bestGolf(null, 0, 0)
                 : ClubBoardText.bestGolf(g.course(), g.strokes(), g.vsPar()));

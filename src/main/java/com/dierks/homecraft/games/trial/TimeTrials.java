@@ -2203,6 +2203,7 @@ public final class TimeTrials implements Game {
      */
     private void progress(Player p, Course c, TrialFinish.Run run, TrialFinish.Summary summary) {
         boolean record = summary.course().record();
+        com.dierks.homecraft.games.clubhouse.FamilyWeek.scored(games(), p.getUniqueId(), com.dierks.homecraft.games.clubhouse.FamilyWeekRules.runPoints(summary.course().personalBest(), summary.week().record() && !record, record)); // 0.38.4: the family week
         games().tellProgress(g -> g.courseFinished(p, c.id(), c.generated(), record));
         TrialFinish.Daily d = run.daily();
         if (d != null && d.tag() != null) {

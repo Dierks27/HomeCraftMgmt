@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -283,8 +284,8 @@ class ClubhouseRoomTest {
     @Test
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
-        assertEquals(List.of("status", "tp", "here", "podium", "board", "generated", "rebuild", "off"),
-                admin.tab(null, new String[]{""}), "every subcommand");
+        assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "generated", "rebuild",
+                "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("confirm"), admin.tab(null, new String[]{"rebuild", "c"}), "rebuild confirm");
         assertEquals(List.of("1", "2", "3"), admin.tab(null, new String[]{"podium", ""}), "the three places");
         assertEquals(List.of("fame", "playing", "stats"), admin.tab(null, new String[]{"board", ""}),
@@ -348,6 +349,56 @@ class ClubhouseRoomTest {
 
         host.meta.put(ClubhouseRoom.BOARD_KEY + ".stats", "hub;1;2;3;0");
         assertNull(room().wall(WallBoards.STATS), "a board in another world than the room's isn't drawn");
+    }
+
+    /**
+     * 0.38.4: an owner-built room's trophy case and jukebox are saved under {@code gen.} and read back after a
+     * restart: the frames run from the recorded block to the admin's right for each way they faced (squared), the
+     * jukebox is the block under their feet; unset, or in another world, there is none; the generated room has
+     * both from its plan; and the family week's marker goes through the same store.
+     */
+    @Test
+    void theTrophyCaseAndTheJukeboxOfAnOwnerBuiltRoomAreSavedAndReadBack() throws Exception {
+        ClubhouseRoom generated = room();
+        until(generated, ClubhouseRoom.Phase.READY, 3_000);
+        assertEquals(ClubBoard.MAX_ROWS, generated.trophyFrames().size(), "the generated room's west wall");
+        assertEquals(-90f, generated.trophyYaw(), 0.001f, "facing east, into the room");
+        assertArrayEquals(ClubhousePlanner.jukebox(BOX), generated.jukeboxBlock(), "the generated room's corner");
+
+        ClubhouseRoom r = room();
+        r.here(new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f));
+        assertNull(r.trophyFrames(), "not set: no trophy case");
+        assertNull(r.jukeboxBlock(), "nor a jukebox");
+        assertTrue(r.trophies(new ClubhouseRoom.Place("games", 110.3, 71.0, -30.7, 3f)).contains("to your right"),
+                "trophies");
+        assertTrue(r.jukebox(new ClubhouseRoom.Place("games", 95.5, 71.0, -25.5, 0f)).contains("under your feet"),
+                "jukebox");
+        List<int[]> frames = r.trophyFrames();
+        assertEquals(8, frames.size(), "eight frames");
+        assertArrayEquals(new int[]{110, 71, -31}, frames.get(0), "the first where the admin stood");
+        assertArrayEquals(new int[]{109, 71, -31}, frames.get(1), "facing south, the row runs west (their right)");
+        assertEquals(0f, r.trophyYaw(), 0.001f, "the frames face the way they faced");
+        assertArrayEquals(new int[]{95, 70, -26}, r.jukeboxBlock(), "the block under their feet");
+        assertTrue(GenMetaDao.allowed(ClubhouseRoom.TROPHIES_KEY) && GenMetaDao.allowed(ClubhouseRoom.JUKEBOX_KEY)
+                && GenMetaDao.allowed(ClubhouseRoom.WEEK_DONE_KEY), "under gen.: the live store keeps them");
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("trophies games;110")), r.statusLines().toString());
+
+        ClubhouseRoom later = room();
+        assertArrayEquals(new int[]{110, 71, -31}, later.trophyFrames().get(0), "read back after a restart");
+        for (float[] way : new float[][]{{180f, 1, 0}, {90f, 0, -1}, {-90f, 0, 1}, {-2f, -1, 0}}) {
+            later.trophies(new ClubhouseRoom.Place("games", 10, 71, 10, way[0]));
+            int[] second = later.trophyFrames().get(1);
+            assertEquals(10 + (int) way[1], second[0], "yaw " + way[0] + ": x");
+            assertEquals(10 + (int) way[2], second[2], "yaw " + way[0] + ": z");
+        }
+        host.meta.put(ClubhouseRoom.TROPHIES_KEY, "hub;1;2;3;0");
+        host.meta.put(ClubhouseRoom.JUKEBOX_KEY, "hub;1;2;3;0");
+        assertNull(room().trophyFrames(), "a trophy case in another world than the room's isn't drawn");
+        assertNull(room().jukeboxBlock(), "nor a jukebox");
+
+        later.meta(ClubhouseRoom.WEEK_DONE_KEY, "20700");
+        assertEquals("20700", later.meta(ClubhouseRoom.WEEK_DONE_KEY), "the week marker round-trips");
+        assertEquals("20700", host.meta.get(ClubhouseRoom.WEEK_DONE_KEY), "through the store");
     }
 
     /**

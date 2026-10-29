@@ -18,6 +18,8 @@ import java.util.function.Function;
  *   <li><b>This week</b>: the best golf round of the week (fewest strokes against par), today's pick and its
  *       bonus, and each Weekly Cup's leader.</li>
  *   <li><b>All-time records</b>: each course's record, then each golf course's.</li>
+ *   <li><b>Family week</b> (0.38.4): each player's points this week and their race wins
+ *       ({@link FamilyWeekRules}), or "No points yet this week - play something!".</li>
  * </ol>
  * It starts again with the weekly boards (each course's own week: {@link ClubData}). Names, times and scores only,
  * as on the high-score boards.
@@ -46,15 +48,34 @@ public final class FameBoard {
     public record CupLead(String course, String name, long ms) {
     }
 
-    /** Everything the wall shows. */
+    /** A row of the family week (0.38.4): who, their points this week and their party race wins. */
+    public record FamilyRow(UUID id, String name, long points, long wins) {
+    }
+
+    /**
+     * Everything the wall shows.
+     *
+     * @param family   0.38.4: this week's family rows, most points first
+     * @param lastWeek last week's top three (the ceremony's)
+     * @param weekKey  the week the family rows are for, or -1 (no family week)
+     */
     public record Fame(List<CourseTime> week, GolfRound golfWeek, String pick, int pickBonus, List<CupLead> cups,
-                       List<CourseTime> records, List<GolfRound> golfRecords) {
+                       List<CourseTime> records, List<GolfRound> golfRecords, List<FamilyRow> family,
+                       List<FamilyRow> lastWeek, long weekKey) {
 
         public Fame {
             week = List.copyOf(week == null ? List.of() : week);
             cups = List.copyOf(cups == null ? List.of() : cups);
             records = List.copyOf(records == null ? List.of() : records);
             golfRecords = List.copyOf(golfRecords == null ? List.of() : golfRecords);
+            family = List.copyOf(family == null ? List.of() : family);
+            lastWeek = List.copyOf(lastWeek == null ? List.of() : lastWeek);
+        }
+
+        /** Without the family week (0.38.3's shape, kept for the tests). */
+        public Fame(List<CourseTime> week, GolfRound golfWeek, String pick, int pickBonus, List<CupLead> cups,
+                    List<CourseTime> records, List<GolfRound> golfRecords) {
+            this(week, golfWeek, pick, pickBonus, cups, records, golfRecords, List.of(), List.of(), -1);
         }
     }
 
@@ -99,13 +120,23 @@ public final class FameBoard {
                         (int) r.score() - g.par()));
             }
         }
-        return new Fame(week, golfWeek, s.pick(), s.pickBonus(), cups, records, golfRecords);
+        List<FamilyRow> family = new ArrayList<>();
+        for (GamesDao.ScoreRow r : raw.family()) {
+            family.add(new FamilyRow(r.player(), names.apply(r.player()), r.score(),
+                    raw.wins().getOrDefault(r.player(), 0L)));
+        }
+        List<FamilyRow> lastWeek = new ArrayList<>();
+        for (GamesDao.ScoreRow r : raw.lastWeek()) {
+            lastWeek.add(new FamilyRow(r.player(), names.apply(r.player()), r.score(), 0));
+        }
+        return new Fame(week, golfWeek, s.pick(), s.pickBonus(), cups, records, golfRecords, family, lastWeek,
+                s.weekKey());
     }
 
     /**
      * The wall's pages, each its title and up to {@value #ROWS} rows: this week's best (as many pages as it
-     * takes), this week (golf, the pick, the Cups), the all-time records. {@code null}: one page saying the
-     * numbers are on their way.
+     * takes), this week (golf, the pick, the Cups), the all-time records, and (0.38.4, when the family week is
+     * on) the family week. {@code null}: one page saying the numbers are on their way.
      */
     public static List<String> pages(Fame f) {
         List<String> out = new ArrayList<>();
@@ -140,6 +171,17 @@ public final class FameBoard {
             records.add(ClubBoardText.golfRecord(r.course(), r.name(), r.strokes(), r.vsPar()));
         }
         paged(out, ClubBoardText.RECORDS_TITLE, records, ClubBoardText.NO_RECORDS);
+
+        if (f.weekKey() >= 0) {
+            List<String> family = new ArrayList<>();
+            for (FamilyRow r : f.family()) {
+                if (family.size() >= ROWS) {
+                    break;
+                }
+                family.add(ClubBoardText.familyRow(family.size() + 1, r.name(), r.points(), r.wins()));
+            }
+            paged(out, ClubBoardText.FAMILY_TITLE, family, ClubBoardText.NO_FAMILY);
+        }
         return out;
     }
 

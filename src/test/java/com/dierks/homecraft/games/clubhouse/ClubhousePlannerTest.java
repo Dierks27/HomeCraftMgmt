@@ -49,7 +49,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("f0f30283fb3d", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("948a67d26f10", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -188,5 +188,41 @@ class ClubhousePlannerTest {
                     + s);
         }
         assertEquals(16, benches, "two tables, four sides, two seats each");
+    }
+
+    /**
+     * 0.38.4: the jukebox corner is a pink glass stage in the south-west corner with the jukebox in its middle and
+     * glass on top (a jukebox is a full block a mob could stand on), so the spawn-proof scan still passes; the
+     * trophy case's frame positions are air on the west wall's inner face with the wall's skirting behind each,
+     * under the My stats board; nothing of the frames is in the plan (they are entities).
+     */
+    @Test
+    void theJukeboxCornerAndTheTrophyWall() {
+        Map<Long, String> b = blocks(SITE.plan());
+        int[] j = ClubhousePlanner.jukebox(BOX);
+        assertEquals(ClubhousePlanner.JUKEBOX, b.get(key(j[0], j[1], j[2])), "the jukebox, empty");
+        assertEquals(ClubhousePlanner.ROOF_GLASS, b.get(key(j[0], j[1] + 1, j[2])), "glass on top: nothing stands on it");
+        assertTrue(SITE.in(j[0] + 0.5, j[1] + 1, j[2] + 0.5), "it is in the room's air (the block above it is)");
+        for (int dx = 0; dx < 3; dx++) {
+            for (int dz = 0; dz < 3; dz++) {
+                String stage = b.get(key(BOX.minX() + ClubhousePlanner.STAGE_X0 + dx, BOX.minY() + 1,
+                        BOX.minZ() + ClubhousePlanner.STAGE_Z0 + dz));
+                assertEquals(ClubhousePlanner.STAGE, stage, "a 3 x 3 stage at " + dx + "," + dz);
+                assertTrue(ClubhousePlanner.spawnProof(stage), "the stage is glass");
+            }
+        }
+        assertTrue(ClubhousePlanner.COVERED_ONLY.contains(ClubhousePlanner.JUKEBOX), "a jukebox is never left open");
+        List<int[]> frames = ClubhousePlanner.trophyFrames(BOX);
+        assertEquals(ClubBoard.MAX_ROWS, frames.size(), "one frame per record row, at most");
+        Set<String> seen = new HashSet<>();
+        for (int[] f : frames) {
+            assertNull(b.get(key(f[0], f[1], f[2])), "a frame hangs in air: " + f[0] + "," + f[1] + "," + f[2]);
+            assertEquals(ClubhousePlanner.SKIRTING, b.get(key(f[0] - 1, f[1], f[2])), "on the west wall's skirting");
+            assertEquals(BOX.minX() + 1, f[0], "on the wall's inner face");
+            assertTrue(f[1] < BOX.minY() + 3, "under the windows and the My stats board");
+            assertTrue(seen.add(f[2] + ""), "no two frames share a block");
+            assertTrue(SITE.in(f[0] + 0.5, f[1] + 0.5, f[2] + 0.5), "in the room");
+        }
+        assertTrue(SITE.plan().summary().get(1).contains("jukebox"), SITE.plan().summary().toString());
     }
 }

@@ -70,7 +70,7 @@ public final class WalletMenu extends Menu {
                 lure ? "&7The next wild Mini will appear near you." : "&7Get one at the Prize Counter (Hunt Gear)."),
                 lure), null);
 
-        set(16, myLooksTile(), plugin.looks() == null ? null
+        set(16, myLooksTile(plugin, player), plugin.looks() == null ? null
                 : e -> new MyLooksMenu(plugin, player, this::reopen).open(player));
 
         set(18, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lWays to earn"), null);
@@ -113,9 +113,10 @@ public final class WalletMenu extends Menu {
 
     /**
      * The My Looks tile (§3.11): what's on now, a trail and a hat, each with its end; one tap opens My Looks, where
-     * one more tap switches a trail or puts a hat on. (The trail cycle stays for {@code /hcm trail next}.)
+     * one more tap switches a trail or puts a hat on. (The trail cycle stays for {@code /hcm trail next}.) Shared
+     * with the Arcade hub's You row (0.38.3).
      */
-    private org.bukkit.inventory.ItemStack myLooksTile() {
+    static org.bukkit.inventory.ItemStack myLooksTile(HomeCraftManagement plugin, Player player) {
         var trail = plugin.trails() == null ? null : plugin.trails().current(player);
         var hat = plugin.looks() == null ? null : plugin.looks().worn(player);
         java.util.List<String> lore = new java.util.ArrayList<>();

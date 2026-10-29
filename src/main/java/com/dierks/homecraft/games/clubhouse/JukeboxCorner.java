@@ -193,7 +193,7 @@ final class JukeboxCorner implements SongMenu.Corner {
         if (b != null && b.getState(false) instanceof Jukebox jb) {
             try {
                 jb.stopPlaying();
-                jb.getInventory().clear(); // never eject(): that drops the disc as an item
+                jb.getInventory().clear(); // the block's disc, nobody's inventory; never eject(): that drops it
                 jb.update(true, false);
             } catch (RuntimeException | LinkageError e) {
                 club.log().warning("Clubhouse jukebox: could not take the disc out: " + e);

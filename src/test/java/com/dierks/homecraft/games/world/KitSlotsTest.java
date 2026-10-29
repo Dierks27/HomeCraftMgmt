@@ -123,8 +123,10 @@ class KitSlotsTest {
                 List<String> lines = Files.readAllLines(f);
                 for (int i = 0; i < lines.size(); i++) {
                     String line = lines.get(i);
-                    // an armour stand's or a display's equipment is nobody's inventory
-                    if (RAW.matcher(line).find() && !line.contains("getEquipment()")) {
+                    // an armour stand's or a display's equipment is nobody's inventory, and neither is a jukebox
+                    // block's disc or an item frame's item (0.38.4): those lines say so
+                    if (RAW.matcher(line).find() && !line.contains("getEquipment()")
+                            && !line.contains("nobody's inventory")) {
                         raw.add(rel + ":" + (i + 1) + ": " + line.trim());
                     }
                 }

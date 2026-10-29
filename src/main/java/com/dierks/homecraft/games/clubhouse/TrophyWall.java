@@ -152,7 +152,7 @@ final class TrophyWall {
         ItemFrame frame = w.spawn(new Location(w, at[0] + 0.5, at[1] + 0.5, at[2] + 0.5), ItemFrame.class, f -> {
             WorldEntities.tag(f, game, null);
             f.setFacingDirection(facing(yaw), true);
-            f.setItem(item(t), false);
+            f.setItem(item(t), false); // the frame's item, nobody's inventory
             f.setFixed(true);
             f.setItemDropChance(0f);
         });

@@ -287,12 +287,66 @@ class ClubhouseRoomTest {
                 admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("confirm"), admin.tab(null, new String[]{"rebuild", "c"}), "rebuild confirm");
         assertEquals(List.of("1", "2", "3"), admin.tab(null, new String[]{"podium", ""}), "the three places");
+        assertEquals(List.of("fame", "playing", "stats"), admin.tab(null, new String[]{"board", ""}),
+                "0.38.3: the walls' boards");
+        assertEquals(List.of("playing"), admin.tab(null, new String[]{"board", "p"}), "a start");
         assertEquals(List.of("generated"), admin.tab(null, new String[]{"g"}), "a start");
         List<String> status = ClubhouseAdmin.status(room(), 2, "off");
         assertTrue(status.get(1).contains("generated room") && status.get(status.size() - 1).contains("2 in it"),
                 status.toString());
         assertTrue(ClubhouseAdmin.status(null, 0, "games.clubhouse.enabled is false").get(1).contains("Not running"),
                 "not running");
+    }
+
+    /**
+     * 0.38.3: an owner-built room's wall boards (this week's best, now playing, my stats) are saved under
+     * {@code gen.} and read back after a restart, each facing the way the admin faced (squared); they are optional
+     * (the check still asks only for the arrival spot, the podium and the results board); an unknown word is
+     * refused; the generated room has all four on its walls.
+     */
+    @Test
+    void theWallBoardsOfAnOwnerBuiltRoomAreSavedAndReadBack() {
+        ClubhouseRoom generated = room();
+        until(generated, ClubhouseRoom.Phase.READY, 3_000);
+        for (String which : List.of(WallBoards.RESULTS, WallBoards.FAME, WallBoards.PLAYING, WallBoards.STATS)) {
+            assertEquals(WallBoards.generated(which, BOX), generated.wall(which), "the generated room's " + which);
+        }
+        assertNull(generated.wall("podium"), "only the boards");
+
+        ClubhouseRoom r = room();
+        r.here(new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f));
+        assertNull(r.wall(WallBoards.FAME), "not set: no board on that wall");
+        assertNull(r.wall(WallBoards.RESULTS), "nor the results board");
+        for (int n = 1; n <= 3; n++) {
+            r.podium(n, new ClubhouseRoom.Place("games", 100 + n, 71, -21, 0f));
+        }
+        assertTrue(r.board("results", new ClubhouseRoom.Place("games", 102, 73, -25, 170f))
+                .startsWith("&aThe results board hangs"), "board results is the results board");
+        assertTrue(r.handComplete(), "complete without the walls' boards: they are optional");
+        String fame = r.board("fame", new ClubhouseRoom.Place("games", 110, 72, -20, -95f));
+        assertTrue(fame.startsWith("&aThe this week's best board hangs") && fame.contains("facing the way you face"),
+                fame);
+        assertTrue(r.board("playing", new ClubhouseRoom.Place("games", 100, 72, -10, 3f)).contains("now playing"),
+                "now playing");
+        assertTrue(r.board("STATS", new ClubhouseRoom.Place("games", 90, 72, -20, 88f)).contains("my stats"),
+                "my stats (any case)");
+        String no = r.board("podium", new ClubhouseRoom.Place("games", 90, 72, -20, 88f));
+        assertTrue(no.startsWith("&c") && no.contains("fame, playing and stats"), "an unknown word: " + no);
+        assertEquals("games;110.00;72.00;-20.00;-95.00", host.meta.get(ClubhouseRoom.BOARD_KEY + ".fame"),
+                "saved as it was set");
+        assertTrue(GenMetaDao.allowed(ClubhouseRoom.WALL_KEY + WallBoards.STATS), "under gen.: the live store keeps it");
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("fame board games;110")), r.statusLines().toString());
+
+        ClubhouseRoom later = room();
+        assertEquals(new WallBoards.Wall(110, 72, -20, -90f, WallBoards.HAND_SCALE, WallBoards.LINE_WIDTH),
+                later.wall(WallBoards.FAME), "read back after a restart, squared to east");
+        assertEquals(0f, later.wall(WallBoards.PLAYING).yaw(), 0.001f, "south");
+        assertEquals(90f, later.wall(WallBoards.STATS).yaw(), 0.001f, "west");
+        assertEquals(180f, later.wall(WallBoards.RESULTS).yaw(), 0.001f, "the results board: north");
+        assertTrue(later.handSpots().stream().noneMatch(l -> l.startsWith("fame")), "the check's spots are as before");
+
+        host.meta.put(ClubhouseRoom.BOARD_KEY + ".stats", "hub;1;2;3;0");
+        assertNull(room().wall(WallBoards.STATS), "a board in another world than the room's isn't drawn");
     }
 
     /**

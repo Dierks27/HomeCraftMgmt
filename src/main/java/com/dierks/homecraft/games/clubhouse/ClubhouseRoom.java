@@ -8,8 +8,10 @@ import com.dierks.homecraft.games.gen.engine.Person;
 import com.dierks.homecraft.games.gen.engine.WorldPort;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.logging.Level;
@@ -28,7 +30,8 @@ import java.util.logging.Level;
  *       Courses' own converge-and-verify ({@link BuildJob}), so after a crash it simply puts the room
  *       back. A failed verify closes the Clubhouse, and every flow goes back to today's behaviour.</li>
  *   <li><b>Owner-built.</b> {@code /hcm games clubhouse here} makes a room the owner built by hand the
- *       Clubhouse: its arrival spot is where they stand, the podium and board where they set them.
+ *       Clubhouse: its arrival spot is where they stand, the podium and board where they set them (and,
+ *       0.38.3, the walls' boards: {@code board fame|playing|stats}, each facing the way the admin faced).
  *       Nothing is built, checked or guarded then; {@code generated} goes back.</li>
  *   <li><b>Off.</b> {@code /hcm games clubhouse off} closes it (it stays closed across restarts)
  *       until {@code generated}, {@code here} or {@code rebuild confirm}.</li>
@@ -53,6 +56,8 @@ public final class ClubhouseRoom {
     /** The owner-built room's spots: "world;x;y;z;yaw". */
     public static final String SPAWN_KEY = META_PREFIX + "hand.spawn";
     public static final String BOARD_KEY = META_PREFIX + "hand.board";
+    /** 0.38.3: the owner-built room's wall boards, {@code BOARD_KEY + ".fame"} and so on (also under {@code gen.}). */
+    public static final String WALL_KEY = BOARD_KEY + ".";
     public static final String PODIUM_KEY = META_PREFIX + "hand.podium.";
     /** The build's time budget a tick, and the snapshots and chunk loads it may use. */
     static final int BUILD_MS = 3;
@@ -124,6 +129,8 @@ public final class ClubhouseRoom {
     private Place handSpawn;
     private Place handBoard;
     private final Place[] handPodium = new Place[3];
+    /** 0.38.3: the owner-built room's wall boards ({@link WallBoards#WALLS}), where set. */
+    private final Map<String, Place> handWalls = new HashMap<>();
     private BuildJob job;
     private boolean jobScan;
     private long jobStarted;
@@ -170,6 +177,13 @@ public final class ClubhouseRoom {
             handBoard = Place.of(host.meta(BOARD_KEY));
             for (int n = 0; n < 3; n++) {
                 handPodium[n] = Place.of(host.meta(PODIUM_KEY + (n + 1)));
+            }
+            handWalls.clear();
+            for (String which : WallBoards.WALLS) {
+                Place at = Place.of(host.meta(WALL_KEY + which));
+                if (at != null) {
+                    handWalls.put(which, at);
+                }
             }
         } catch (Exception e) {
             host.logger().log(Level.WARNING, "Clubhouse: could not read its settings from the database", e);
@@ -477,14 +491,50 @@ public final class ClubhouseRoom {
                 + " room is on: /hcm games clubhouse here.)");
     }
 
-    /** {@code /hcm games clubhouse board}: where the owner-built room's results board floats. */
+    /**
+     * {@code /hcm games clubhouse board}: where the owner-built room's results board hangs, facing the way the
+     * admin faces (0.38.3: locked in place, squared to north, east, south or west).
+     */
     public String board(Place at) {
         if (!setMeta(BOARD_KEY, at.text())) {
             return "&cThat can't be saved to the database right now.";
         }
         handBoard = at;
-        return "&aThe results board floats where you stand." + (hand ? "" : " &7(It's used once the owner-built"
-                + " room is on: /hcm games clubhouse here.)");
+        return "&aThe results board hangs where you stand, facing the way you face." + notOnYet();
+    }
+
+    /**
+     * {@code /hcm games clubhouse board [fame|playing|stats]} (0.38.3): the results board (no word, or
+     * {@code results}), or one of the walls' boards: this week's best, now playing, my stats. Each hangs where the
+     * admin stands, facing the way they face. They are optional: the check still asks only for the results board.
+     */
+    public String board(String which, Place at) {
+        String w = which == null ? "" : which.trim().toLowerCase(Locale.ROOT);
+        if (w.isEmpty() || w.equals(WallBoards.RESULTS)) {
+            return board(at);
+        }
+        if (!WallBoards.WALLS.contains(w)) {
+            return "&cThe boards are fame, playing and stats (or just board for the results).";
+        }
+        if (!setMeta(WALL_KEY + w, at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handWalls.put(w, at);
+        return "&aThe " + wallName(w) + " board hangs where you stand, facing the way you face." + notOnYet();
+    }
+
+    /** What a wall board is called in the admin's lines. */
+    static String wallName(String which) {
+        return switch (which) {
+            case WallBoards.FAME -> "this week's best";
+            case WallBoards.PLAYING -> "now playing";
+            case WallBoards.STATS -> "my stats";
+            default -> "results";
+        };
+    }
+
+    private String notOnYet() {
+        return hand ? "" : " &7(It's used once the owner-built room is on: /hcm games clubhouse here.)";
     }
 
     /** {@code /hcm games clubhouse generated}: back to the generated room (built and checked first). */
@@ -582,12 +632,31 @@ public final class ClubhouseRoom {
         return site == null ? null : site.podium().get(n - 1);
     }
 
-    /** Where the board floats, or {@code null} for none. */
+    /**
+     * Where the results board floats, or {@code null} for none (kept for the tests and the admin's check: the
+     * boards are drawn from {@link #wall}).
+     */
     public ClubhouseSite.Spot board() {
         if (hand) {
             return handBoard == null || !handBoard.world().equalsIgnoreCase(world()) ? null : handBoard.spot();
         }
         return site == null ? null : site.board();
+    }
+
+    /**
+     * Where board {@code which} ({@link WallBoards#RESULTS} or one of {@link WallBoards#WALLS}) hangs, locked in
+     * place (0.38.3), or {@code null} for none: the generated room's wall, or the owner-built room's spot (only in
+     * its world) facing the way the admin faced.
+     */
+    public WallBoards.Wall wall(String which) {
+        if (which == null) {
+            return null;
+        }
+        if (!hand) {
+            return site == null ? null : WallBoards.generated(which, box);
+        }
+        Place at = WallBoards.RESULTS.equals(which) ? handBoard : handWalls.get(which);
+        return at == null || !at.world().equalsIgnoreCase(world()) ? null : WallBoards.hand(at);
     }
 
     /**
@@ -649,6 +718,10 @@ public final class ClubhouseRoom {
         }
         if (hand) {
             out.addAll(handSpots());
+            for (String which : WallBoards.WALLS) { // 0.38.3: optional, the check doesn't ask for them
+                Place at = handWalls.get(which);
+                out.add(which + " board " + (at == null ? "not set (optional)" : at.text()));
+            }
         }
         return out;
     }

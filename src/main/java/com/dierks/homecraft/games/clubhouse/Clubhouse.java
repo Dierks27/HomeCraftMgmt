@@ -932,7 +932,7 @@ public final class Clubhouse implements Game, ClubDoor {
 
     /** Draw the board when its text changed (a new result), or when it had to be made again. */
     private void drawBoard(long now) {
-        ClubhouseSite.Spot at = room.board();
+        WallBoards.Wall at = room.wall(WallBoards.RESULTS); // 0.38.3: locked in place on its wall
         if (at == null) {
             return;
         }
@@ -940,7 +940,7 @@ public final class Clubhouse implements Game, ClubDoor {
         if (!display.standing(room.world(), at)) {
             board.forget();
         }
-        if (board.offer(s, now) && !display.show(room.world(), at, s.text())) {
+        if (board.offer(s, now) && !display.show(room.world(), at, WallBoards.pad(s.text()))) {
             board.forget(); // its chunk isn't loaded: drawn once it is
         }
     }

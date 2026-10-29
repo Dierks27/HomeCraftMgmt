@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board|generated|rebuild confirm|off}
+ * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board [fame|playing|stats]|generated|rebuild confirm|off}
  * (CLUBHOUSE-SPEC §6), with tab completion.
  *
  * <ul>
@@ -25,7 +25,8 @@ import java.util.Locale;
  *   <li>{@code here}: the room the admin stands in, built by hand, is the Clubhouse: visitors arrive
  *       where they stand, facing their way. Nothing there is built or guarded.</li>
  *   <li>{@code podium <n>} and {@code board}: the owner-built room's podium places and results board,
- *       where the admin stands.</li>
+ *       where the admin stands; {@code board fame|playing|stats} (0.38.3) the walls' boards (this week's best,
+ *       now playing, my stats). A board hangs facing the way the admin faces: their back to the wall.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -118,7 +119,8 @@ final class ClubhouseAdmin implements GameAdmin {
         ClubhouseRoom.Place at = new ClubhouseRoom.Place(world, l.getX(), l.getY(), l.getZ(), l.getYaw());
         return switch (sub) {
             case "here" -> room.here(at);
-            case "board" -> room.board(at);
+            case "board" -> args != null && args.length > 1 ? room.board(args[1].toLowerCase(Locale.ROOT), at)
+                    : room.board(at);
             default -> {
                 int n;
                 try {
@@ -193,6 +195,12 @@ final class ClubhouseAdmin implements GameAdmin {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("rebuild") && "confirm".startsWith(last)) {
             out.add("confirm");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("board")) {
+            for (String w : WallBoards.WALLS) {
+                if (w.startsWith(last)) {
+                    out.add(w);
+                }
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("podium")) {
             for (String n : List.of("1", "2", "3")) {
                 if (n.startsWith(last)) {
@@ -206,7 +214,8 @@ final class ClubhouseAdmin implements GameAdmin {
     /** The usage lines. */
     static final List<String> HELP = List.of(
             "&e/hcm games clubhouse status|tp &7- the Clubhouse: how it is, go and look",
-            "&e/hcm games clubhouse here|podium <1|2|3>|board &7- use a room you built (stand where it goes)",
+            "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats] &7- use a room you built (stand"
+                    + " where it goes, facing into the room)",
             "&e/hcm games clubhouse generated|rebuild confirm|off &7- the built room, build it again, switch it off");
 
     @Override

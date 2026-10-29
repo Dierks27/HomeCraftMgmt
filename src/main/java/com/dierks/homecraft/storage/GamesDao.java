@@ -682,6 +682,40 @@ public final class GamesDao {
         return top.isEmpty() ? null : top.get(0);
     }
 
+    /** One of a player's boards (the Clubhouse's My stats, 0.38.3): their best, when it was set, their counted runs. */
+    public record PlayerBoard(String board, long score, long at, int runs) {
+    }
+
+    /** Every board {@code player} has a score on in {@code game}, by board name (the Clubhouse's My stats). */
+    public List<PlayerBoard> boardsOf(UUID player, String game) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT board, score, at, runs FROM game_scores WHERE player = ? AND game = ? ORDER BY board")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, game);
+                List<PlayerBoard> out = new ArrayList<>();
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(new PlayerBoard(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getInt(4)));
+                    }
+                }
+                return out;
+            }
+        }
+    }
+
+    /**
+     * The player's place on a board, as {@link #submit} ranks it (1 = the record; a tie ranks whoever got there
+     * first), or 0 when they have no score there.
+     */
+    public int rank(UUID player, String game, String board, boolean lowerIsBetter) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            return best(c, player, game, board) == null ? 0 : rank(c, player, game, board, lowerIsBetter);
+        }
+    }
+
     /** The boards this game has scores on. */
     public List<String> boards(String game) throws SQLException {
         Connection c = database.connection();

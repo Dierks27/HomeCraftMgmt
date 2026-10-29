@@ -37,6 +37,7 @@ import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.hanging.HangingPlaceEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.inventory.ItemStack;
@@ -44,6 +45,7 @@ import org.bukkit.inventory.PlayerInventory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -74,7 +76,8 @@ import java.util.logging.Logger;
  *
  * <p><b>In the room</b>: nobody is hurt or pushed (the world session and {@link NoPush}), nobody
  * changes a block (the box is guarded, like the Falling Floors arena's), chat is the server's. The
- * kit: Party (while in a party race's lobby), Results (the last results screen) and Leave game.
+ * kit: Party (while in a party race's lobby), Results (the last results screen), Go now and Stay here
+ * (while on the way to a course or a round), Watch live (while a race is going), Games and Leave game.
  * Anyone here longer than {@code max_minutes} with no race or party going is sent home, with a
  * warning a minute before; the restart hold sends everyone home a minute after it starts or after
  * they arrive from a race or golf already going (and always before the restart's own minute), and
@@ -84,6 +87,18 @@ import java.util.logging.Logger;
  * <p><b>The board</b> shows the last event's result (a party race's times and gaps, Race Night's
  * points, golf's strokes), drawn only on a new result. At the end of Race Night its top three stand
  * on the podium for "Photo time!", with a firework over 1st.
+ *
+ * <p><b>Through the Clubhouse</b> (0.38.3, the owner: "Can you make it so we go to the clubhouse when
+ * click into a game? I just feel like the clubhouse isnt really used"). A Start on a course or a mini
+ * golf course comes here first ({@code solo_first}, {@link #lobby}): "Off to Sky Rings!", a countdown of
+ * {@code first_seconds} on the action bar, then the session is handed out to the start ({@link
+ * #goNext}); "Go now" skips the wait and "Stay here" calls it off. A solo run's finish or a round
+ * alone's end comes back here ({@code solo_after}) with that player's own results ({@link
+ * #soloResult}: never the board or the shared Results), and Play again hands them straight out again.
+ * The Games item opens the Games screen here: courses and golf start by hand-out, cabinets play on
+ * their screens right here, and games of luck, Falling Floors and Race Night stay outside (the play
+ * gate's step 0). {@link ClubRoute} holds every fallback: with the Clubhouse off, a course in another
+ * world, the restart hold, a rider or a test run, everything is exactly as before.
  *
  * <p>Nothing here moves a token, and nothing counts toward a board, quest, achievement or the Cup.
  * It runs inside the framework's guard: a bug switches the Clubhouse off, never a race.
@@ -102,7 +117,17 @@ public final class Clubhouse implements Game, ClubDoor {
     static final String PARTY = "party";
     static final String RESULTS = "results";
     static final String WATCH = "watch";
+    /** 0.38.3: "Go now: Sky Rings", "Stay here - hang out" and "Games - pick a game". */
+    static final String GO_NOW = "go_now";
+    static final String STAY = "stay";
+    static final String GAMES = "games";
     static final String LEAVE = "leave";
+    /**
+     * A solo player's own results open once they are seen in the room: looked for this often (ticks), this many
+     * times (15 s, past {@link ClubVisits#ARRIVAL_MS}: by then an arrival never seen has been sent home).
+     */
+    static final long RESULT_TICKS = 10;
+    static final int RESULT_TRIES = 30;
     /** "Photo time!" stays up this long (ticks), and waits at most this long for the podium (ms). */
     static final int PHOTO_TICKS = 200;
     static final long PHOTO_WAIT_MS = 5_000L;
@@ -112,6 +137,8 @@ public final class Clubhouse implements Game, ClubDoor {
     private ClubhouseRoom room;
     private LiveRoomHost host;
     private BoardDisplay display;
+    /** The walls' boards (0.38.3): this week's best, now playing, my stats; null with no server. */
+    private ClubBoards boards;
     private final ClubVisits visits = new ClubVisits();
     private final ClubBoard board = new ClubBoard();
     private final Map<UUID, Arrival> arriving = new HashMap<>();
@@ -123,17 +150,34 @@ public final class Clubhouse implements Game, ClubDoor {
     private WatchLive watch;
     private final Cheers cheers = new Cheers();
     private final Map<UUID, Boolean> cheersOn = new HashMap<>();
+    /** 0.38.3: who is on their way to a course or a round from here, and their countdowns. */
+    private final ClubLobby lobby = new ClubLobby();
+    /** Each solo player's own last results here (0.38.3): what their Results opens while newer than {@link #last}. */
+    private final Map<UUID, Mine> mine = new HashMap<>();
+    /** When {@link #last} was set (the clock's ms), so the newer of a player's own and the shared one opens. */
+    private long lastAt;
 
-    /** Someone on their way into the Clubhouse's own session: why they come, and whether to watch live at once. */
-    private record Arrival(ClubVisits.Kind kind, boolean spectator, boolean watch) {
+    /**
+     * Someone on their way into the Clubhouse's own session: why they come, whether to watch live at once,
+     * and (0.38.3) the course or round they go on to after the countdown, or {@code null}.
+     */
+    private record Arrival(ClubVisits.Kind kind, boolean spectator, boolean watch, ClubNext next) {
 
         Arrival(ClubVisits.Kind kind, boolean spectator) {
             this(kind, spectator, false);
+        }
+
+        Arrival(ClubVisits.Kind kind, boolean spectator, boolean watch) {
+            this(kind, spectator, watch, null);
         }
     }
 
     /** The last event's result: the board's sheet, and what "Results" opens. */
     private record Results(ClubBoard.Sheet sheet, Consumer<Player> opener) {
+    }
+
+    /** A solo player's own last results (0.38.3): their results screen, and when it came. */
+    private record Mine(Consumer<Player> opener, long at) {
     }
 
     /** Race Night's podium, waiting for its three to arrive. */
@@ -189,22 +233,27 @@ public final class Clubhouse implements Game, ClubDoor {
 
     @Override
     public List<String> rules() {
-        return List.of("A room to hang out in before and after races.", "Chat, cheer and see the results.",
-                "Leave game takes you home, with your things.");
+        return List.of("A room to hang out in before and after your games.", "Chat, cheer, see the boards"
+                + " and pick a game.", "Leave game takes you home, with your things.");
     }
 
     @Override
     public ItemStack tile(Player viewer) {
         boolean open = room != null && room.open();
         return Menus.icon(Material.CAKE, open ? "&6The Clubhouse &7- " + visits.size() + " here · visit!"
-                : "&7The Clubhouse &8- closed right now", "&7Hang out with friends,", "&7before and after races.",
+                : "&7The Clubhouse &8- closed right now", "&7Hang out with friends,", "&7before and after your games.",
                 "&7/hcm play clubhouse");
     }
 
-    /** No tile of its own: it is reached from the party and Race Night screens, and /hcm play clubhouse. */
+    /**
+     * Its tile on the Games screen's Together tab while it is open (0.38.3: "The Clubhouse - 2 here · visit!");
+     * a click comes in ({@link #open}). Closed, no tile at all. It is also reached from the party and Race
+     * Night screens, the Arcade's door and {@code /hcm play clubhouse}.
+     */
     @Override
     public List<GameTile> tiles(Player viewer) {
-        return List.of();
+        ClubhouseRoom r = room;
+        return r != null && r.open() ? List.of(new GameTile(Tab.TOGETHER, tile(viewer), id(), 0)) : List.of();
     }
 
     /** {@code /hcm play clubhouse}: come in (or, from Watch live, come back). */
@@ -248,6 +297,7 @@ public final class Clubhouse implements Game, ClubDoor {
         WorldEntities.sweep(this);
         host = new LiveRoomHost(this);
         display = new BoardDisplay(this);
+        boards = new ClubBoards(this);
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -289,6 +339,9 @@ public final class Clubhouse implements Game, ClubDoor {
         if (display != null) {
             display.remove();
         }
+        if (boards != null) {
+            boards.stop();
+        }
         if (watch != null) {
             watch.clear(); // every watcher seen again
         }
@@ -298,6 +351,8 @@ public final class Clubhouse implements Game, ClubDoor {
         visits.clear();
         arriving.clear();
         kits.clear();
+        lobby.clear();
+        mine.clear();
         photo = null;
         board.forget();
     }
@@ -345,9 +400,17 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         switch (action) {
+            case ClubBoards.STATS -> {
+                if (boards != null) {
+                    boards.openStats(player);
+                }
+            }
             case PARTY -> openParty(player);
             case RESULTS -> openResults(player);
             case WATCH -> watchNow(player, null);
+            case GO_NOW -> goNext(player);
+            case STAY -> stay(player);
+            case GAMES -> games().openGamesScreen(player, null);
             default -> {
                 // "leave" is the kit guard's
             }
@@ -391,15 +454,25 @@ public final class Clubhouse implements Game, ClubDoor {
         enter(p, kindFor(id), true, raceFor(id) != null);
     }
 
-    private void enter(Player p, ClubVisits.Kind kind, boolean spectator) {
-        enter(p, kind, spectator, false);
+    private boolean enter(Player p, ClubVisits.Kind kind, boolean spectator) {
+        return enter(p, kind, spectator, false);
     }
 
-    private void enter(Player p, ClubVisits.Kind kind, boolean spectator, boolean watchLive) {
+    private boolean enter(Player p, ClubVisits.Kind kind, boolean spectator, boolean watchLive) {
+        return enter(p, kind, spectator, watchLive, null);
+    }
+
+    /**
+     * Into the Clubhouse's own session. {@code next} (0.38.3): the course or round they go on to after the
+     * countdown, or {@code null} for a stay.
+     *
+     * @return whether the entry started (false: refused, and they were told why; nothing taken or moved)
+     */
+    private boolean enter(Player p, ClubVisits.Kind kind, boolean spectator, boolean watchLive, ClubNext next) {
         ClubhouseRoom r = room;
         if (r == null || !r.open()) {
             refuse(p, ClubhouseText.CLOSED);
-            return;
+            return false;
         }
         // Final gate, group B (#2): every way in from outside (/hcm play watch, Watch, Go to / Wait in the
         // Clubhouse) runs the play gate, as /hcm play clubhouse does: hcm.games.play, a world games are
@@ -407,20 +480,22 @@ public final class Clubhouse implements Game, ClubDoor {
         com.dierks.homecraft.games.Refusal gate = games().canOpen(p, this);
         if (gate != null) {
             games().tell(p, gate);
-            return;
+            return false;
         }
         World w = Bukkit.getWorld(r.world());
         ClubhouseSite.Spot s = r.spawn(nextSpot++);
         if (w == null || s == null) {
             refuse(p, ClubhouseText.CLOSED);
-            return;
+            return false;
         }
         UUID id = p.getUniqueId();
-        arriving.put(id, new Arrival(kind, spectator, watchLive));
+        arriving.put(id, new Arrival(kind, spectator, watchLive, next));
         Location at = new Location(w, s.x(), s.y(), s.z(), s.yaw(), 0f);
         if (!games().sessions().enter(p, this, REF, at, this::arrived)) {
             arriving.remove(id); // refused (they were told why): nothing was taken or moved
+            return false;
         }
+        return true;
     }
 
     /** In, saved and cleared: into the Clubhouse, or home again if it closed meanwhile. */
@@ -437,7 +512,15 @@ public final class Clubhouse implements Game, ClubDoor {
             case NIGHT -> ClubhouseText.WAIT_NIGHT;
             default -> ClubhouseText.WELCOME;
         };
+        if (a.next() != null) {
+            // 0.38.3: on their way to a course or a round: the countdown, Go now and Stay here in the kit
+            lobby.start(p.getUniqueId(), a.next(), now(), settings().firstSeconds());
+            line = ClubhouseText.offToLine(a.next().name());
+        }
         welcome(p, a.kind(), a.spectator(), line);
+        if (a.next() != null) {
+            title(p, ClubhouseText.offTo(a.next().name()), ClubhouseText.OFF_TO_SMALL);
+        }
         if (a.watch()) {
             watchNow(p, null); // a Watch button while the race is going: straight on to Watch live
         }
@@ -452,6 +535,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         kits.remove(id);
         giveKit(p);
+        if (boards != null) {
+            boards.arrived(p);
+        }
         if (line != null && !line.isBlank()) {
             p.sendMessage(Text.of(line));
         }
@@ -521,8 +607,13 @@ public final class Clubhouse implements Game, ClubDoor {
         arriving.remove(id);
         kits.remove(id);
         toldGuarded.remove(id);
+        lobby.forget(id); // a trip waiting: no more
+        mine.remove(id);
         if (watch != null) {
             watch.gone(id); // seen by everyone again; the session's end puts their game mode back
+        }
+        if (boards != null) {
+            boards.gone(id);
         }
         if (visits.leave(id) != null) {
             noPushOff(id, p);
@@ -572,6 +663,9 @@ public final class Clubhouse implements Game, ClubDoor {
             }
             display.remove();
             board.forget();
+            if (boards != null) {
+                boards.clear();
+            }
             return;
         }
         watch.refresh(liveRaces());
@@ -602,6 +696,7 @@ public final class Clubhouse implements Game, ClubDoor {
                 case HOME_HOLD -> sendHome(p, ClubhouseText.HOLD_HOME);
             }
         }
+        countdowns(now);
         podium(now);
         for (ClubVisits.Visit v : visits.all()) {
             Player p = online(v.id());
@@ -610,6 +705,9 @@ public final class Clubhouse implements Game, ClubDoor {
             }
         }
         drawBoard(now);
+        if (boards != null) {
+            boards.second(now);
+        }
     }
 
     /**
@@ -631,6 +729,9 @@ public final class Clubhouse implements Game, ClubDoor {
         r.stop();
         display.remove();
         board.forget();
+        if (boards != null) {
+            boards.clear();
+        }
         room = newRoom();
         room.start();
         return true;
@@ -656,8 +757,19 @@ public final class Clubhouse implements Game, ClubDoor {
         toSpawn(p); // out of the room some other way: back in it
     }
 
-    /** Whether a race or a party is going for the visitor (their idle clock stands still). */
+    /**
+     * Whether a race or a party is going for the visitor (their idle clock stands still); 0.38.3: also while
+     * a trip to a course or a round is pending, or a cabinet's screen is open for them (a game of Snake in
+     * the Clubhouse never times them out).
+     */
     private boolean busy(UUID id) {
+        if (lobby.waiting(id)) {
+            return true; // a pending Go
+        }
+        Game on = com.dierks.homecraft.gui.games.GameMenu.gameOnScreen(online(id));
+        if (on != null && on.kind() == GameKind.CABINET) {
+            return true;
+        }
         if (games().parties().of(id) != null || (watch != null && watch.watching(id))) {
             return true;
         }
@@ -668,8 +780,10 @@ public final class Clubhouse implements Game, ClubDoor {
     // ---- the kit --------------------------------------------------------------------------------
 
     /**
-     * The kit, key facts in the NAMES: Party (while in a party race's lobby), Results, and Leave game
-     * (two clicks, the kit guard's). Given again only when it changes.
+     * The kit, key facts in the NAMES: 0 Party (while in a party race's lobby), 2 Results, 3 Go now (0.38.3,
+     * while on the way to a course or a round), 4 Watch live (while a race is going), 5 Stay here (with Go
+     * now), 6 Games (0.38.3: pick a game), 7 My stats (0.38.3, the boards'), 8 Leave game (two clicks, the
+     * kit guard's). Given again only when it changes.
      */
     private void giveKit(Player p) {
         UUID id = p.getUniqueId();
@@ -678,7 +792,11 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         boolean party = raceLobby(id) != null;
         LiveRace live = followed();
-        String sig = (party ? "P" : "") + "R" + (live != null ? "W" + live.key() : "");
+        ClubNext next = lobby.next(id);
+        boolean own = ownNewer(id);
+        String sig = (party ? "P" : "") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
+                + (next != null ? "N" + next.gameId() + ":" + next.ref() : "") + "G"
+                + (settings().boards() ? "S" : "");
         if (sig.equals(kits.get(id)) || !inOurSession(p)) {
             return;
         }
@@ -689,16 +807,28 @@ public final class Clubhouse implements Game, ClubDoor {
             KitItems.put(inv, 0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
                     "&7Who's in, who's ready,", "&7and the host's Start."));
         }
-        KitItems.put(inv, 2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
-                "&7The last race's results."));
+        KitItems.put(inv, 2, own
+                ? KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS_MINE, "&7Your time, and Play again.")
+                : KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS, "&7The last race's results."));
+        if (settings().boards()) {
+            KitItems.put(inv, 7, ClubBoards.kitItem(this)); // My stats (0.38.3)
+        }
         if (live != null) {
             KitItems.put(inv, 4, KitItems.item(this, WATCH, Material.SPYGLASS, ClubhouseText.KIT_WATCH,
                     "&7" + Text.plain(live.title()), "&7Fly round and see who leads.",
                     "&7/hcm play clubhouse brings you back."));
         }
+        if (next != null) {
+            KitItems.put(inv, 3, KitItems.item(this, GO_NOW, Material.LIME_CONCRETE, ClubhouseText.goNow(next.name()),
+                    "&7Skip the wait.", "&7Off you go!"));
+            KitItems.put(inv, 5, KitItems.item(this, STAY, Material.ORANGE_DYE, ClubhouseText.KIT_STAY,
+                    "&7Stay in the Clubhouse.", "&7Pick a game when you're ready."));
+        }
+        KitItems.put(inv, 6, KitItems.item(this, GAMES, Material.BOOKSHELF, ClubhouseText.KIT_GAMES,
+                "&7Courses, mini golf and cabinets.", "&7Luck games are outside."));
         KitItems.put(inv, 8, KitItems.item(this, LEAVE, Material.OAK_DOOR, ClubhouseText.KIT_LEAVE,
                 "&7Click twice to go home.", "&7Your things come back."));
-        inv.setHeldItemSlot(2);
+        inv.setHeldItemSlot(next != null ? 3 : 2);
     }
 
     /** The kit's Party: the party race's lobby screen. */
@@ -711,9 +841,17 @@ public final class Clubhouse implements Game, ClubDoor {
         games().guard(t, () -> t.party().openLobby(p, null));
     }
 
-    /** The kit's Results: the last results screen, or the board's lines in chat. */
+    /**
+     * The kit's Results: the last results screen, or the board's lines in chat; 0.38.3: the player's own
+     * results from a solo run or a round alone here, while they are newer than the shared ones.
+     */
     private void openResults(Player p) {
+        Mine m = mine.get(p.getUniqueId());
         Results r = last;
+        if (ownNewer(p.getUniqueId())) {
+            m.opener().accept(p);
+            return;
+        }
         if (r == null) {
             p.sendMessage(Text.of(ClubhouseText.NO_RESULTS));
             return;
@@ -808,7 +946,16 @@ public final class Clubhouse implements Game, ClubDoor {
         }
     }
 
-    /** Give the kit again (back from Watch live). */
+    /**
+     * Whether the player's own results (a solo run or a round alone here) are what their Results opens: kept,
+     * and newer than the shared ones (the last race's). The kit's Results is named for it (R383-J3).
+     */
+    private boolean ownNewer(UUID id) {
+        Mine m = mine.get(id);
+        return m != null && (last == null || m.at() >= lastAt);
+    }
+
+    /** Give the kit again (back from Watch live, or the Results item's name changed). */
     void kitAgain(Player p) {
         kits.remove(p.getUniqueId());
         giveKit(p);
@@ -877,8 +1024,13 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         LiveRace r = watch.watching(id) ? watch.watched(id) : followed();
-        if (r == null) {
-            p.sendMessage(Text.of(WatchLive.NOTHING));
+        // 0.38.3 (R383-J1): no race going, the cheer reaches everyone on a solo run or a round alone, as Now
+        // playing shows them ("Cheer them on")
+        Collection<UUID> racers = r != null ? r.racers() : Cheers.solo(
+                com.dierks.homecraft.games.trial.TrialsNow.runs(games()),
+                com.dierks.homecraft.games.golf.GolfNow.rounds(games()), id);
+        if (racers.isEmpty()) {
+            p.sendMessage(Text.of(Cheers.NOBODY));
             return;
         }
         long now = now();
@@ -887,7 +1039,7 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         int heard = 0;
-        for (UUID racer : r.racers()) {
+        for (UUID racer : racers) {
             Player q = online(racer);
             if (q != null && !racer.equals(id) && cheersOn(racer)) {
                 q.sendActionBar(Text.of(Cheers.line(p.getName())));
@@ -932,7 +1084,7 @@ public final class Clubhouse implements Game, ClubDoor {
 
     /** Draw the board when its text changed (a new result), or when it had to be made again. */
     private void drawBoard(long now) {
-        ClubhouseSite.Spot at = room.board();
+        WallBoards.Wall at = room.wall(WallBoards.RESULTS); // 0.38.3: locked in place on its wall
         if (at == null) {
             return;
         }
@@ -940,7 +1092,7 @@ public final class Clubhouse implements Game, ClubDoor {
         if (!display.standing(room.world(), at)) {
             board.forget();
         }
-        if (board.offer(s, now) && !display.show(room.world(), at, s.text())) {
+        if (board.offer(s, now) && !display.show(room.world(), at, WallBoards.pad(s.text()))) {
             board.forget(); // its chunk isn't loaded: drawn once it is
         }
     }
@@ -1086,6 +1238,21 @@ public final class Clubhouse implements Game, ClubDoor {
             }
 
             @Override
+            public boolean soloFirst() {
+                return call(self::soloFirst, false);
+            }
+
+            @Override
+            public boolean soloAfter() {
+                return call(self::soloAfter, false);
+            }
+
+            @Override
+            public void soloResult(Player p, Consumer<Player> opener) {
+                g.guard(self, () -> self.soloResult(p, opener));
+            }
+
+            @Override
             public void result(ClubBoard.Sheet sheet, Consumer<Player> opener) {
                 g.guard(self, () -> self.result(sheet, opener));
             }
@@ -1217,9 +1384,70 @@ public final class Clubhouse implements Game, ClubDoor {
     }
 
     @Override
+    public boolean soloFirst() {
+        return settings().soloFirst();
+    }
+
+    @Override
+    public boolean soloAfter() {
+        return settings().soloAfter();
+    }
+
+    /**
+     * A solo run's or a round alone's results, for that player only (0.38.3): kept as what their Results
+     * opens (the kit's Results is named for it), and opened for them once they have landed in the room (the
+     * move back is usually async, into an unloaded chunk, and a landing closes any screen open: R383-S2),
+     * unless they are looking at another screen or watching live by then. The board and the shared Results
+     * are never touched.
+     */
+    @Override
+    public void soloResult(Player p, Consumer<Player> opener) {
+        if (p == null || opener == null) {
+            return;
+        }
+        UUID id = p.getUniqueId();
+        Mine m = new Mine(opener, now());
+        mine.put(id, m);
+        if (ctx.plugin() == null) {
+            return; // the framework's own tests: no server to open a screen on
+        }
+        if (visits.in(id)) {
+            kitAgain(p); // takeIn's kit came before these results existed: Results reads "your last run" now
+        }
+        games().later(this, RESULT_TICKS, () -> soloOpen(id, m, RESULT_TRIES));
+    }
+
+    /** Open {@code m} once its player is seen in the room, looking at no other screen; {@code tries} more looks. */
+    private void soloOpen(UUID id, Mine m, int tries) {
+        Player q = online(id);
+        if (q == null || !visits.in(id) || mine.get(id) != m || (watch != null && watch.watching(id))) {
+            return; // gone, or a newer result of theirs took over
+        }
+        ClubhouseRoom r = room;
+        if (r == null || !r.contains(q.getWorld().getName(), q.getX(), q.getY(), q.getZ())) {
+            if (tries > 0) {
+                games().later(this, RESULT_TICKS, () -> soloOpen(id, m, tries - 1));
+            }
+            return; // not landed yet
+        }
+        visits.seen(id); // the arrival check's, done
+        InventoryType open = q.getOpenInventory().getType();
+        if (open == InventoryType.CRAFTING || open == InventoryType.CREATIVE) {
+            m.opener().accept(q);
+        }
+    }
+
+    @Override
     public void result(ClubBoard.Sheet sheet, Consumer<Player> opener) {
         if (sheet != null) {
             last = new Results(sheet, opener);
+            lastAt = now();
+            for (UUID id : new ArrayList<>(mine.keySet())) {
+                Player q = online(id);
+                if (q != null && visits.in(id)) {
+                    kitAgain(q); // their Results opens the race now: named for it again
+                }
+            }
         }
     }
 
@@ -1419,6 +1647,105 @@ public final class Clubhouse implements Game, ClubDoor {
     public static boolean inside(GamesService games, UUID player) {
         Clubhouse c = running(games);
         return c != null && c.visits.in(player);
+    }
+
+    // ---- 0.38.3: through the Clubhouse (courses and mini golf) --------------------------------------
+
+    /**
+     * 0.38.3 (design C1, the owner: "go to the clubhouse when click into a game"): a course's or a round's
+     * Start goes through the Clubhouse first: in as a visitor, "Off to Sky Rings!" and a countdown, then on to
+     * it ({@link #goNext}). {@code null} when the Clubhouse isn't open (the caller starts it straight away, as
+     * before); false when the entry was refused (they were told why, as a direct start would tell them).
+     */
+    public static Boolean lobby(GamesService games, Player p, ClubNext next) {
+        Clubhouse c = running(games);
+        if (c == null || p == null || next == null) {
+            return null;
+        }
+        return games.guard(c, () -> c.enter(p, c.kindFor(p.getUniqueId()), false, false, next), null);
+    }
+
+    /**
+     * Whether the player is hanging out in the Clubhouse (in it, not watching live): a friend game's invite
+     * reaches them there, and its screen opens where they stand.
+     */
+    public static boolean hangingOut(GamesService games, UUID player) {
+        Clubhouse c = running(games);
+        return c != null && c.visits.in(player) && (c.watch == null || !c.watch.watching(player));
+    }
+
+    /** Once a second: the countdowns on the action bar ("Sky Rings in 3"), and the trips that are due. */
+    private void countdowns(long now) {
+        for (ClubLobby.Tick t : lobby.second(now)) {
+            Player p = online(t.player());
+            if (p == null || !visits.in(t.player())) {
+                lobby.forget(t.player());
+            } else if (t.left() <= 0) {
+                goNext(p);
+            } else {
+                p.sendActionBar(Text.of(ClubhouseText.countdown(t.next().name(), t.left())));
+            }
+        }
+    }
+
+    /**
+     * "Go now", or the countdown ran out: the trip is handed to its game, which hands the player out from
+     * here to the start (its gate, the warm-up choice carried across, its own teleport). Refused (the
+     * restart hold began, the course closed meanwhile), they stay here, told why, and the kit loses Go now.
+     */
+    private void goNext(Player p) {
+        ClubNext n = lobby.take(p.getUniqueId());
+        if (n == null) {
+            return;
+        }
+        kits.remove(p.getUniqueId());
+        Game g = games().game(n.gameId());
+        if (g instanceof TimeTrials t && games().enabled(t)) {
+            games().guard(t, () -> t.fromLobby(p, n.ref(), n.warmUp()));
+        } else if (g instanceof com.dierks.homecraft.games.golf.MiniGolf m && games().enabled(m)) {
+            games().guard(m, () -> m.fromLobby(p, n.ref()));
+        } else {
+            p.sendMessage(Text.of(ClubhouseText.NEXT_CLOSED));
+        }
+        if (visits.in(p.getUniqueId())) {
+            giveKit(p); // still here (refused, and told why): the kit without Go now
+        }
+    }
+
+    /** "Stay here": the trip is called off and they hang out (the Games item starts one again). */
+    private void stay(Player p) {
+        if (lobby.stay(p.getUniqueId()) == null) {
+            return;
+        }
+        p.sendMessage(Text.of(ClubhouseText.STAYING));
+        p.sendActionBar(Text.of(""));
+        kitAgain(p);
+    }
+
+    /** A title for one player ("Off to Sky Rings!"); a title is decoration. */
+    private static void title(Player p, String big, String small) {
+        try {
+            p.showTitle(Title.title(Text.of(big), Text.of(small), Title.Times.times(Duration.ofMillis(200),
+                    Duration.ofMillis(2_500), Duration.ofMillis(400))));
+        } catch (RuntimeException | LinkageError ignored) {
+            // a title is decoration
+        }
+    }
+
+    /** Someone on the way in for a trip on to {@code next} (a test's own, as {@link #lobby} records one). */
+    void expect(UUID id, ClubVisits.Kind kind, ClubNext next) {
+        arriving.put(id, new Arrival(kind, false, false, next));
+    }
+
+    /** The trip the next arrival of {@code id} carries on to, or {@code null} (none, or not on the way). */
+    ClubNext arrivingFor(UUID id) {
+        Arrival a = arriving.get(id);
+        return a == null ? null : a.next();
+    }
+
+    /** The lobby's countdowns (for the tests). */
+    ClubLobby lobby() {
+        return lobby;
     }
 
     // ---- for /hcm games check --------------------------------------------------------------------

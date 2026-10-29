@@ -47,6 +47,12 @@ public record Refusal(Reason reason, String message) {
     }
 
     public static final Refusal IN_SESSION = new Refusal(Reason.IN_SESSION, "Finish your game first (/hcm leave).");
+    /**
+     * 0.38.3: a game that isn't played from the Clubhouse (a game of luck, a crate, the Scratch Ticket, Card
+     * Packs, Falling Floors, Race Night), opened by a visitor there: one plain line (gate step 0).
+     */
+    public static final Refusal NOT_IN_CLUBHOUSE = new Refusal(Reason.IN_SESSION,
+            "That one isn't played in the Clubhouse - tap Leave game first.");
     public static final Refusal CLOSED = new Refusal(Reason.CLOSED, "That game is closed right now.");
     /** What a player sees when a game failed and switched itself off. */
     public static final Refusal BROKEN = new Refusal(Reason.CLOSED, "That game is taking a break. Try another one!");

@@ -29,6 +29,7 @@ import com.dierks.homecraft.mini.MiniType;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Heads;
+import com.dierks.homecraft.util.Sounds;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -333,6 +334,12 @@ public final class MiniGolf implements Game {
         rounds.kit(player, action);
     }
 
+    /** 0.38.3: Leave game partway through a round alone from the Clubhouse goes back there. */
+    @Override
+    public boolean onLeaveItem(Player player) {
+        return rounds.leftToClub(player);
+    }
+
     // ---- for the rounds, the screens and the admin tool --------------------------------------------
 
     public GamesService games() {
@@ -361,6 +368,17 @@ public final class MiniGolf implements Game {
     /** Start {@code courseId} for the player (the course screen's Start, "Play again"). */
     public boolean start(Player player, String courseId) {
         return rounds.start(player, courseId);
+    }
+
+    /** 0.38.3: the Clubhouse's Go now (or its countdown) for a round alone: the usual start, handed out from there. */
+    public void fromLobby(Player player, String courseId) {
+        if (!rounds.start(player, courseId)) {
+            try {
+                Sounds.refused(player); // told why already
+            } catch (RuntimeException | LinkageError ignored) {
+                // a sound is decoration
+            }
+        }
     }
 
     /** {@code games.worlds}: where courses may be built. */

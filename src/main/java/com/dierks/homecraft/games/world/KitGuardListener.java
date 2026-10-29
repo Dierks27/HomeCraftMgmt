@@ -217,7 +217,9 @@ public final class KitGuardListener implements Listener {
         Long first = leaveClicks.get(p.getUniqueId());
         if (first != null && now - first >= LEAVE_MIN_MS && now - first <= LEAVE_WINDOW_MS) {
             leaveClicks.remove(p.getUniqueId());
-            sessions.leave(p, EndReason.QUIT_ITEM);
+            if (!sessions.leaveItem(p)) { // 0.38.3: a run from the Clubhouse goes back there
+                sessions.leave(p, EndReason.QUIT_ITEM);
+            }
             return;
         }
         if (first == null || now - first > LEAVE_WINDOW_MS) {

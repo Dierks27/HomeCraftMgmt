@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -17,7 +18,9 @@ import java.util.logging.Level;
  * The ordered checks before any play (spec §4.1, R1.10, R3.9). One gate for every game, so no
  * game can forget a limit, and the order is the order a player is told things in:
  * <ol start="0">
- *   <li>in a world session, only that session's game ("Finish your game first");</li>
+ *   <li>in a world session, only that session's game ("Finish your game first"); in the Clubhouse, also the
+ *       courses, mini golf and the cabinets (0.38.3), and anything else is "That one isn't played in the
+ *       Clubhouse";</li>
  *   <li>{@code games.enabled}, the game's own switch, not failed;</li>
  *   <li>{@code hcm.games.play}, and {@code hcm.games.chance} for a game of chance;</li>
  *   <li>an economy world, a {@code games.worlds} world or a {@code games.play_worlds} world;</li>
@@ -176,10 +179,41 @@ public final class PlayGate {
         return r;
     }
 
-    /** Step 0: a player in a world session may only use that session's game. */
+    /** The Clubhouse's game id (pinned to {@code Clubhouse.SPEC} by PlayGateTest). */
+    public static final String CLUBHOUSE = "clubhouse";
+    /**
+     * The course games a Clubhouse visitor may open from its Games item (0.38.3): Time Trials, Fresh Courses
+     * and the Weekly Cup (pinned to their specs by PlayGateTest). Their starts hand the visitor out from the
+     * Clubhouse; any start with no Clubhouse way still stops at the session's own entry (IN_SESSION).
+     */
+    static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup");
+
+    /**
+     * Step 0: a player in a world session may only use that session's game; in the Clubhouse, also the
+     * courses, mini golf and the cabinets (0.38.3: courses and golf are handed out from there, a cabinet is
+     * played on its screen right there).
+     */
     private Refusal session(Player player, Game game) {
-        Session s = games.sessions().session(player);
-        return s != null && !s.gameId().equals(game.id()) ? Refusal.IN_SESSION : null;
+        return session(games.sessions().session(player), game);
+    }
+
+    /** {@link #session(Player, Game)} over the player's session, or {@code null} for none (pure, tested). */
+    static Refusal session(Session s, Game game) {
+        if (s == null || s.gameId().equals(game.id())) {
+            return null;
+        }
+        if (!CLUBHOUSE.equals(s.gameId())) {
+            return Refusal.IN_SESSION;
+        }
+        return fromClubhouse(game) ? null : Refusal.NOT_IN_CLUBHOUSE;
+    }
+
+    /**
+     * Whether a Clubhouse visitor may open {@code game} there: the cabinets, mini golf and the course games.
+     * Games of luck, Falling Floors and Race Night wait until they leave (one plain line).
+     */
+    static boolean fromClubhouse(Game game) {
+        return game.kind() == GameKind.CABINET || game.kind() == GameKind.GOLF || FROM_CLUBHOUSE.contains(game.id());
     }
 
     /** Step 1: the games, the game's own switch, and not failed. */

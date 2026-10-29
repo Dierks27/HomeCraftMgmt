@@ -69,7 +69,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.Vector;
 
 import java.sql.SQLException;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -119,6 +118,8 @@ import java.util.logging.Logger;
  * the player reads the time, their best and the record (with who holds it); the rewards are paid
  * through {@link SkillRewards} — first clear, best this week, course of the week, today's pick —
  * and the session sends them home. Once they're there, a small result screen offers "Play again".
+ * 0.38.3: a Start may go through the Clubhouse first, and a solo finish come back to it with the result
+ * screen there ({@link ClubSolo}); with the Clubhouse off, everything here is exactly as before.
  *
  * <p>Everything live here — runs, boats — is in memory and cleaned up with the session: boats are
  * never saved with the world, and any left by a crash are swept when the game starts.
@@ -728,18 +729,10 @@ public final class TimeTrials implements Game {
         return isFeatured.test(courseId) || isFeatured.test(SPEC.id());
     }
 
-    /** This week's key (the same week as the weekly quests). */
+    /** This week's key (the same week as the weekly quests, {@code DailyLookup.weekStart}: the Clubhouse's boards too). */
     long weekKey() {
-        DayOfWeek start = DayOfWeek.MONDAY;
-        try {
-            var quests = ctx.plugin().config().quests();
-            if (quests != null && quests.weekStartsOn() != null) {
-                start = quests.weekStartsOn();
-            }
-        } catch (RuntimeException e) {
-            // the default week
-        }
-        return games().clock().weekKey(start); // the framework's clock: the plugin's, live
+        // the framework's clock: the plugin's, live
+        return games().clock().weekKey(com.dierks.homecraft.gui.games.daily.DailyLookup.weekStart(ctx.plugin()));
     }
 
     private long today() {
@@ -995,6 +988,47 @@ public final class TimeTrials implements Game {
         games().open(player, result.courseId(), null);
     }
 
+    /**
+     * 0.38.3: the Clubhouse's Go now (or its countdown) for a course: the gate again, the course, the warm-up
+     * choice carried across the trip, then the start (from the Clubhouse now: a hand-out).
+     */
+    public void fromLobby(Player player, String courseId, boolean warmUp) {
+        Course c = openCourse(courseId);
+        if (c == null) {
+            games().tell(player, Refusal.of("That course is closed right now."));
+            return;
+        }
+        Refusal r = games().canOpen(player, this);
+        if (r != null) {
+            games().tell(player, r);
+            return;
+        }
+        if (warmUp && Warmup.offered(settings(), false, c.kind())) {
+            warmups.want(player.getUniqueId(), c.id());
+        }
+        begin(player, c, false);
+    }
+
+    /** Whether "Play again" is lit: home, or in the Clubhouse (handed out from there, 0.38.3). */
+    public boolean playAgainReady(Player player) {
+        return home(player) || inClubhouse(player);
+    }
+
+    /** Whether the player is in the Clubhouse now (0.38.3: the result screen's way out reads "Back to the courses"). */
+    public boolean inClubhouse(Player player) {
+        return player != null && ClubSolo.inClubhouse(games(), player.getUniqueId());
+    }
+
+    /**
+     * 0.38.3: Leave game partway through a run that was handed out from the Clubhouse goes back there (the
+     * session kept, handed to the Clubhouse); any other run ends, and home, as always.
+     */
+    @Override
+    public boolean onLeaveItem(Player player) {
+        TrialRun run = runs.get(player.getUniqueId());
+        return run != null && ClubSolo.leftToClub(this, player, run);
+    }
+
     // ---- starting a run -----------------------------------------------------------------------
 
     /** An admin's test run: any complete course, open or not; records nothing. */
@@ -1040,6 +1074,13 @@ public final class TimeTrials implements Game {
             warmups.forget(player);
             return false;
         }
+        Boolean viaClub = ClubSolo.begin(this, player, course, test); // 0.38.3: from, or through, the Clubhouse
+        if (viaClub != null) {
+            if (!viaClub) {
+                warmups.forget(player);
+            }
+            return viaClub;
+        }
         Course.Spot s = course.start();
         Location start = new Location(world, s.x(), s.y(), s.z(), s.yaw(), s.pitch());
         boolean in = sessions().enter(player, this, course.id(), start, p -> ready(p, course, test));
@@ -1054,9 +1095,40 @@ public final class TimeTrials implements Game {
         end(p);
         TrialRun run = new TrialRun(p.getUniqueId(), course, test, COUNTDOWN_TICKS + 1);
         runs.put(p.getUniqueId(), run);
-        giveKit(p, course.kind());
+        arm(p, run, true);
+    }
+
+    /**
+     * 0.38.3: the run for a player just handed over from the Clubhouse ({@link ClubSolo#seat}): made first, then
+     * the run's own teleport to the start (a boat is seated there by its re-seat, as a race seat's is), then
+     * {@link #ready}'s kit, lines, Dropper and warm-up. False when the teleport couldn't be made: the run is
+     * forgotten, and the caller hands them back to the Clubhouse.
+     */
+    boolean readyFromClub(Player p, Course course) {
+        end(p);
+        TrialRun run = new TrialRun(p.getUniqueId(), course, false, COUNTDOWN_TICKS + 1);
+        run.fromClub = true;
+        runs.put(p.getUniqueId(), run);
+        Location start = backTo(run, -1);
+        run.lastReset = Bukkit.getCurrentTick(); // arms the countdown's hold: sent again if the move never lands
+        if (start == null || !move(p, run, start)) {
+            end(p);
+            return false;
+        }
+        arm(p, run, false);
+        return true;
+    }
+
+    /**
+     * A new run's kit, its boat (seated where the player stands when {@code seatHere}; a hand-out's re-seat
+     * seats it at the start), its lines, the Dropper's offer and the warm-up chosen.
+     */
+    private void arm(Player p, TrialRun run, boolean seatHere) {
+        Course course = run.course;
+        boolean test = run.test;
+        giveKit(p, course.kind(), run.fromClub);
         p.setFallDistance(0f);
-        if (course.kind() == TrialKind.BOAT) {
+        if (course.kind() == TrialKind.BOAT && seatHere) {
             seat(p, run, p.getLocation());
         }
         p.sendMessage(Text.of("&b" + course.name() + " &7(" + TrialText.label(course) + ")"
@@ -1071,9 +1143,13 @@ public final class TimeTrials implements Game {
         warmups.begin(p, run); // WP-R1 (D3): the warm-up chosen, if any (never on a Dropper)
     }
 
-    void giveKit(Player p, TrialKind kind) {
+    /**
+     * The course kit; {@code fromClub} (0.38.3) says under Leave game where its second click goes (back to the
+     * Clubhouse for a run handed out from it, else home: {@code ClubhouseText.leaveLore}).
+     */
+    void giveKit(Player p, TrialKind kind, boolean fromClub) {
         if (kind == TrialKind.DROPPER) {
-            drops.giveKit(p, DropperRun.Kit.DROP);
+            drops.giveKit(p, DropperRun.Kit.DROP, fromClub);
             return;
         }
         // a race seat or a Clubhouse hand-out gives this kit mid-session: every item goes in with
@@ -1091,8 +1167,8 @@ public final class TimeTrials implements Game {
             }
             KitItems.put(inv, KitItems.CHESTPLATE, wings);
         }
-        KitItems.put(inv, 8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
-                "&7Your things come back."));
+        KitItems.put(inv, 8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game",
+                com.dierks.homecraft.games.clubhouse.ClubhouseText.leaveLore(fromClub)));
         inv.setHeldItemSlot(0);
     }
 
@@ -1176,6 +1252,18 @@ public final class TimeTrials implements Game {
     }
 
     private void countdown(Player p, TrialRun run, long now) {
+        switch (hold(run, now)) {
+            case WAIT -> {
+                return; // the run's own move to the start is still on its way: the 3-2-1 begins at the line
+            }
+            case AGAIN -> {
+                toStart(p, run); // our teleport never came: sent again, as running() does
+                return;
+            }
+            case NONE -> {
+                // at the start: count
+            }
+        }
         if (drops.countdown(p, run)) {
             return; // a dropper's practice drop is offered, or on: no 3-2-1 yet
         }
@@ -1210,6 +1298,33 @@ public final class TimeTrials implements Game {
         title(p, "&aGo!", "", 15);
         ping(p, 2.0f);
         watch(p, run);
+    }
+
+    /** What the 3-2-1 does this tick about the run's own teleport ({@link #hold}). */
+    enum Hold {
+        /** Not waiting on one: count. */
+        NONE,
+        /** Still on its way: nothing counts, the full 3-2-1 begins once it lands. */
+        WAIT,
+        /** It never came ({@value #WAIT_TICKS} ticks): sent to the start again. */
+        AGAIN
+    }
+
+    /**
+     * 0.38.3: the 3-2-1 waits while the run's own teleport to the start is on its way. A hand-out from the
+     * Clubhouse ({@link #readyFromClub}) makes the run and then moves the player some 576 blocks, usually into
+     * an unloaded chunk, so the move is async and lands ticks later; until it does the countdown stays at its
+     * full length (so the "3" is never shown in the Clubhouse, no boat is seated there, and the whole 3-2-1 is
+     * had at the line), and one that never lands is sent again after {@value #WAIT_TICKS} ticks, as
+     * {@link #running} does. A start from home ran its countdown only after the session's move had landed,
+     * and still does. Pure, for the tests.
+     */
+    static Hold hold(TrialRun run, long now) {
+        if (!run.suspended || run.expect == null) {
+            return Hold.NONE;
+        }
+        run.countdown = COUNTDOWN_TICKS + 1;
+        return now - run.lastReset >= WAIT_TICKS ? Hold.AGAIN : Hold.WAIT;
     }
 
     private void running(Player p, TrialRun run, long now) {
@@ -1995,6 +2110,9 @@ public final class TimeTrials implements Game {
             Player q = Bukkit.getPlayer(id);
             Session session = q == null ? null : sessions().session(q);
             if (session != null && id().equals(session.gameId())) {
+                if (ClubSolo.back(this, q, run, result)) {
+                    return; // 0.38.3: back to the Clubhouse, and their results there
+                }
                 sessions().leave(q, EndReason.FINISH);
             }
         });
@@ -2195,8 +2313,8 @@ public final class TimeTrials implements Game {
                 return;
             }
             if (!home(p)) {
-                if (tries > 0) {
-                    showResult(id, result, tries - 1);
+                if (tries > 0 && !ClubSolo.inClubhouse(games(), id)) {
+                    showResult(id, result, tries - 1); // in the Clubhouse (0.38.3) their results opened there
                 }
                 return;
             }

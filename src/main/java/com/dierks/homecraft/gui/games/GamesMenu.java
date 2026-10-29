@@ -52,6 +52,9 @@ import java.util.logging.Level;
  * name; this screen only sorts, pages and routes a click to {@code /hcm play <id>}'s entry point,
  * which runs the gate. A closed game shows no tile at all. The Luck tab also links to the Scratch
  * Ticket (with its "gives back about" line) and each crate, since Take a break covers them too.
+ * Together also holds the Clubhouse's tile while it is open (0.38.3), and the Clubhouse's Games item
+ * opens this screen inside it: courses and golf start from there, cabinets play there, and the gate
+ * says "That one isn't played in the Clubhouse" for the rest.
  *
  * <p><b>Fresh Courses come first</b> on their tabs (GEN-SPEC §5.4): the Fresh Courses tile, then
  * each daily course, then everything else in catalog order — the courses that are new every
@@ -207,10 +210,15 @@ public final class GamesMenu extends GameMenu {
 
     /**
      * Gate step 0 for the Arcade's own links (the Scratch Ticket, a crate): nothing of theirs while
-     * the player is in a world game, before anything is taken. {@code null} = go ahead.
+     * the player is in a world game, before anything is taken; in the Clubhouse, its own plain line
+     * (0.38.3: luck stays outside it). {@code null} = go ahead.
      */
     static Refusal linkRefusal(Session session) {
-        return session == null ? null : Refusal.IN_SESSION;
+        if (session == null) {
+            return null;
+        }
+        return com.dierks.homecraft.games.PlayGate.CLUBHOUSE.equals(session.gameId()) ? Refusal.NOT_IN_CLUBHOUSE
+                : Refusal.IN_SESSION;
     }
 
     /**
@@ -351,9 +359,9 @@ public final class GamesMenu extends GameMenu {
     }
 
     /**
-     * Whether the Together tab shows: only while it has a tile (Race Night or Falling Floors is
-     * open), or while the viewer is on it. With both of those off, the screen is exactly as it was
-     * before they existed: slot 7 stays filler.
+     * Whether the Together tab shows: only while it has a tile (Race Night, Falling Floors or, 0.38.3,
+     * the Clubhouse is open), or while the viewer is on it. With all of those off, the screen is exactly
+     * as it was before they existed: slot 7 stays filler.
      */
     static boolean togetherShown(int count, Game.Tab current) {
         return count > 0 || current == Game.Tab.TOGETHER;

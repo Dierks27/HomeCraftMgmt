@@ -128,6 +128,14 @@ class EventsShippedDefaultsTest {
         assertTrue(club.raceNightAfter(), "everyone at the track goes to the Clubhouse at the end of Race Night");
         assertTrue(yml.getBoolean("games.clubhouse.golf_after"), "config.yml: golf_after");
         assertTrue(club.golfAfter(), "a golf-together group goes to the Clubhouse when its round ends");
+        assertTrue(yml.getBoolean("games.clubhouse.solo_first"), "config.yml: solo_first");
+        assertTrue(club.soloFirst(), "0.38.3: a course's or a round's Start goes through the Clubhouse first");
+        assertTrue(yml.getBoolean("games.clubhouse.solo_after"), "config.yml: solo_after");
+        assertTrue(club.soloAfter(), "0.38.3: a solo finish comes back to the Clubhouse");
+        assertEquals(5, yml.getInt("games.clubhouse.first_seconds"), "config.yml: 5 seconds");
+        assertEquals(5, club.firstSeconds(), "on to the course 5 seconds after arriving");
+        assertTrue(yml.getBoolean("games.clubhouse.boards"), "config.yml: boards");
+        assertTrue(club.boards(), "0.38.3: the walls' boards ship on");
         assertEquals(ClubhouseSettings.ORIGIN, yml.getIntegerList("games.clubhouse.origin"),
                 "config.yml: the shipped corner (ExtraBoxesApartTest keeps it apart from everything else)");
         assertEquals(ClubhouseSettings.defaults(), club, "the shipped block is exactly the Clubhouse's defaults");

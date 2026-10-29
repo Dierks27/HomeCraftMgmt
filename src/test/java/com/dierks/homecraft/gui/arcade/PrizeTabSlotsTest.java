@@ -4,6 +4,7 @@ import com.dierks.homecraft.arcade.Keepers;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
+import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.mini.Rarity;
 import org.junit.jupiter.api.Test;
 
@@ -26,9 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The slot plan of 0.38's eight Prize Counter tabs (SHOP-V2-SPEC §5.9): the counter's tabs in 1-8 after the
- * balance, the present at 47, the hub's tabs in 19-26 and Card Packs at 35, none on another tile or on the nav
- * anchors {@code NavAnchorTest} pins (45 and 53 the arrows, 49 the way out); and the Keepers tab drawn only while
- * there are Keepers.
+ * balance, the present at 47, the hub's tabs in 19-26, none on another tile or on the nav anchors
+ * {@code NavAnchorTest} pins (45 and 53 the arrows, 49 the way out); and the Keepers tab drawn only while there are
+ * Keepers. The hub's rows by purpose (0.38.3): Play on top (9-17), the Prize Counter (18-26), Luck with Card Packs at
+ * 33 (27-35), You (36-41); and its Courses door lit only for a course tile.
  */
 class PrizeTabSlotsTest {
 
@@ -41,6 +43,8 @@ class PrizeTabSlotsTest {
                 PrizeTab.TROPHIES, PrizeTab.MINIS, PrizeTab.KEEPERS), List.of(PrizeTab.values()), "their order");
         assertEquals("Looks", PrizeTab.LOOKS.label());
         assertEquals("Keepers", PrizeTab.KEEPERS.label());
+        assertEquals("Fireworks & Trails", PrizeTab.COSMETICS.label(), "0.38.3: the tab's label only");
+        assertEquals("COSMETICS", PrizeTab.COSMETICS.name(), "its name stays: config's tab: and the website feed");
     }
 
     @Test
@@ -57,8 +61,8 @@ class PrizeTabSlotsTest {
     }
 
     /**
-     * The hub's tab slots, read from its source: {@code ArcadeMenu} builds its tiles as it loads, which needs a
-     * server, so its array can't be touched here (its {@code int} constants are copied in by the compiler).
+     * The hub's tab slots, read from its source, as they always were (before 0.38.3 {@code ArcadeMenu} built a tile as
+     * it loaded, which needs a server; it no longer does, so its other constants are read directly).
      */
     private static int[] hubTabs() throws IOException {
         String src = Files.readString(Path.of("src", "main", "java", "com", "dierks", "homecraft", "gui", "arcade",
@@ -72,14 +76,56 @@ class PrizeTabSlotsTest {
     void theHubsTabsAndPacks() throws IOException {
         int[] tabs = hubTabs();
         assertArrayEquals(new int[] {19, 20, 21, 22, 23, 24, 25, 26}, tabs, "row 2 after its label at 18");
-        assertEquals(35, ArcadeMenu.PACKS, "row 3's free end");
-        Set<Integer> taken = new HashSet<>(Set.of(ArcadeMenu.WALLET, ArcadeMenu.WILD, 9, 10, 11, 12, 13, 14, 18, 27,
-                29, 31, 33, 49));
+        assertArrayEquals(tabs, ArcadeMenu.TABS, "the source and the class agree");
+        assertEquals(33, ArcadeMenu.PACKS, "the Luck row, next to the Scratch Ticket");
+        assertEquals(4, ArcadeMenu.WALLET);
+        assertEquals(8, ArcadeMenu.WILD, "the wild-Mini tracker: row 0, out of the Luck row");
+        // labels 9 (Play), 18, 27 (Luck), 36 (You); crates 28-31, the ticket 32, Games of luck 34, Take a break 35;
+        // Quests, Achievements, My Looks, How It Works, Give a present 37-41; Close 49
+        Set<Integer> taken = new HashSet<>(Set.of(ArcadeMenu.WALLET, ArcadeMenu.WILD, 18, 27, 28, 29, 30, 31, 32, 34,
+                35, 36, 37, 38, 39, 40, 41, 49));
+        for (int s : ArcadeMenu.PLAY) {
+            assertTrue(taken.add(s), "slot " + s + " is used twice");
+        }
         for (int s : tabs) {
             assertTrue(taken.add(s), "slot " + s + " is used twice");
         }
         assertTrue(taken.add(ArcadeMenu.PACKS), "Card Packs on a slot of its own");
-        assertTrue(ArcadeMenu.PACKS < 36, "and above the Play row (36-43), which is border while the games are off");
+        assertTrue(ArcadeMenu.PACKS >= 27 && ArcadeMenu.PACKS < 36, "in the Luck row (27-35), shown with the games off");
+        for (int anchor : new int[] {45, 53}) {
+            assertFalse(taken.contains(anchor), anchor + " is a page arrow's slot");
+        }
+    }
+
+    @Test
+    void theHubsPlayRowIsOnTop() {
+        assertArrayEquals(new int[] {9, 10, 11, 12, 13, 14, 15, 16, 17}, ArcadeMenu.PLAY,
+                "label, All games, Today's pick, Courses, Mini golf, Cabinets, Together, the Clubhouse, High scores");
+        for (int s : ArcadeMenu.PLAY) {
+            assertTrue(s >= 9 && s < 18, "row 1, right under the Wallet: " + s);
+            assertTrue(s != 45 && s != 49 && s != 53, "never on a nav anchor: " + s);
+        }
+    }
+
+    @Test
+    void theCoursesDoorLightsOnlyForACourseTile() {
+        assertTrue(ArcadeMenu.courseTile(GameKind.TRIAL, true, 3), "Time Trials with three open courses");
+        assertTrue(ArcadeMenu.courseTile(GameKind.TRIAL, true, 1), "Fresh Courses (its parkour levels)");
+        assertFalse(ArcadeMenu.courseTile(GameKind.TRIAL, true, 0),
+                "the Clubhouse, Race Night, Falling Floors and the Cup: TRIAL-kind with nothing to play");
+        assertFalse(ArcadeMenu.courseTile(GameKind.TRIAL, false, 3), "a closed game");
+        assertFalse(ArcadeMenu.courseTile(GameKind.GOLF, true, 3), "golf has its own door");
+        assertFalse(ArcadeMenu.courseTile(GameKind.CABINET, true, 1));
+    }
+
+    @Test
+    void theGolfDoorLightsForAGolfTile() {
+        assertTrue(ArcadeMenu.golfTile(GameKind.GOLF, true, false), "Mini golf");
+        assertTrue(ArcadeMenu.golfTile(GameKind.TRIAL, true, true), "Fresh Courses: its set is on the Golf tab too");
+        assertFalse(ArcadeMenu.golfTile(GameKind.GOLF, false, false), "Mini golf off");
+        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, false, true), "Fresh Courses off");
+        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, true, false), "Time Trials: the Courses door");
+        assertFalse(ArcadeMenu.golfTile(GameKind.CABINET, true, false));
     }
 
     private static PluginConfig.Arcade arcade(List<Prize> prizes) {

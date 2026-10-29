@@ -260,7 +260,7 @@ final class RaceMode {
         TrialRun run = new TrialRun(p.getUniqueId(), warm ? rr.base : raced, false, 0);
         run.race = rr;
         trials.replaceRun(run);
-        trials.giveKit(p, run.course.kind());
+        trials.giveKit(p, run.course.kind(), run.fromClub);
         p.setFallDistance(0f);
         inRace(p, rr);
         if (run.course.kind() == TrialKind.BOAT) {

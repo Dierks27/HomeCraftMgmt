@@ -24,7 +24,7 @@ Spend them in the **Arcade** (`/hcm arcade`):
 - **Prize Counter.** Pick exactly what you want, at a fixed price:
   - Boosts: speed, mining, night vision, water breathing, lucky fishing, Bouncy Boots (jump high) and Floaty Feather (float down). **Make it Day!** turns night into day in your world, and **Sunny Day** stops the rain for 10 minutes. You can't buy them when it's already day or not raining, so you never pay for nothing.
   - Hunt gear: a Mini Radar and a Mini Lure (when wild Minis are on).
-  - Cosmetics: fireworks (the **Firework Show**, and the **Grand Firework Show**: 15 seconds with a big finale. One grand show at a time: wait for it to finish before the next. A grand show is for home, not the games: it stops if you join a game, and a tap on the Arcade Machine, a game's sign or a Mini doesn't use it up), trails for a month, and **Party Time!**: 10 seconds of fireworks around everyone who's playing.
+  - Fireworks & Trails (one row of fireworks, then a row of trails): fireworks (the **Firework Show**, and the **Grand Firework Show**: 15 seconds with a big finale. One grand show at a time: wait for it to finish before the next. A grand show is for home, not the games: it stops if you join a game, and a tap on the Arcade Machine, a game's sign or a Mini doesn't use it up), trails for a month, and **Party Time!**: 10 seconds of fireworks around everyone who's playing.
     - The **Mega Firework Show** (75 tokens): a whole minute of fireworks from your **Firework Launchers**, for a special day. Buy three launchers (5 tokens each, yours to keep), put them in a row a few steps apart with open sky above, stand near them (within 32 blocks) facing them, and use the show: tap a launcher, the ground or the air. Each launcher has its own colours, and it ends with gold from all three. It keeps going if you walk away. With one or two launchers it fires from those; with none nearby, or if they're in someone's show already, it stays in your bag. It counts as your one long show, like the grand one, and not in the games.
     - Each player can have 15 launchers set up at once. Only you (or an admin) can pick yours up, and you can use anyone's that are near you. A tap on a launcher says whose it is.
     - Bigger shows: the **Super Firework Show** (100 tokens, 4 launchers), the **Ultra Firework Show** (125, 5 launchers) and the **Ultimate Firework Show** (200, 10 launchers, a minute and a half, for special events). Each launcher has its own colours. With fewer launchers they fire the same show from the ones you have.
@@ -39,6 +39,9 @@ Spend them in the **Arcade** (`/hcm arcade`):
   - Minis: a Rare Card once a week, filament, a Display Case.
   - **Keepers:** the Legend Crown, three keeper trails and two keeper hats. Yours for good.
 - **Card Packs.** Some packs can be bought with tokens as well as dollars.
+- The Arcade has one row for each thing you do: **Play** (while the games are on), the **Prize Counter**,
+  **Luck** (the crates, the Scratch Ticket, Card Packs, Take a break) and **You** (quests, achievements, My
+  Looks, this guide).
 
 Your **Wallet** (top of the Arcade) shows your tokens, your streak, when your next playtime token
 comes, and your last ten token changes.

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.2-firework-remote`
+- **Version:** `0.38.3-clubhouse`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -72,8 +72,9 @@ Tokens are **earned by playing and never become dollars**.
   achievements**, wild hunts and Card trade-in.
   - Days roll over at **local midnight** (`clock.time_zone`).
   - Every token change is written to an auditable ledger.
-- **The hub:** one screen with your **Wallet**, the games, the Prize Counter, Card Packs,
-  Quests, Achievements and How It Works. A live countdown shows any wild Mini that's out.
+- **The hub:** one screen with your **Wallet**, the games, the Prize Counter, the crates and
+  Card Packs, Quests, Achievements, My Looks and How It Works, one row for each (0.38.3). A live
+  countdown shows any wild Mini that's out.
 - **Games:**
   - **Crates** spin and land on their prize.
   - The **Scratch Ticket** has three squares to scratch and a growing jackpot.
@@ -227,6 +228,17 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.2 from 0.38.3:** the jar alone (0.38.2 reads revision 24 and the v38 database;
+0.38.3 changes neither). 0.38.2 reports `games.clubhouse.solo_first`, `solo_after`, `first_seconds`
+and `boards` as unknown keys (one WARN each) and ignores them: courses and golf start and end at home
+as before, the Clubhouse has no Games or My stats item, the results board turns to face the viewer
+again, and This week's best, Now playing and My stats are gone. They were never saved, so nothing is
+left in the room: 0.38.2's start sweeps any board as before. Nothing is saved for a trip or a solo
+result either, so nothing is left behind. An owner-built room's wall-board spots
+(`gen.clubhouse.hand.board.fame`, `.playing`, `.stats`) stay in the database, unread, and come back
+after the upgrade. The Arcade goes back to its 0.38.2 rows and the Prize Counter to its packed
+shelves with the "Cosmetics" label; nothing about the Arcade is stored. Nothing is lost.
 
 **Back to 0.38.1 from 0.38.2:** the jar alone (0.38.1 reads revision 24 and runs nothing, with one
 WARN; 0.38.2 changes no schema). While rolled back, 0.38.1 reads the Super, Ultra and Ultimate rows'
@@ -535,7 +547,7 @@ player-facing guide, also in game with `/hcm guide`).
 
 | Command | Who | What |
 |---|---|---|
-| `/hcm arcade` | `hcm.arcade.use` | The Arcade hub: Wallet, crates, Scratch Ticket, wild-Mini status, Prize Counter, Card Packs, Quests, Achievements, How It Works |
+| `/hcm arcade` | `hcm.arcade.use` | The Arcade hub: Wallet, wild-Mini status, the Play row (games on), Prize Counter, crates, Scratch Ticket, Card Packs, Take a break, Quests, Achievements, My Looks, How It Works |
 | `/hcm quests` | `hcm.quests.use` | Your daily and weekly quests |
 | `/hcm achievements` | `hcm.achievements.use` | Your achievements, grouped, with progress |
 | `/hcm guide [tokens\|minis\|wild\|arcade\|games]` | `hcm.guide.use` | How It Works |
@@ -601,6 +613,18 @@ people's trails and parties. It is config revision 22 and database v38: see
 | Trophies | the **Trophy of the Month** ("November 2026 Trophy #4") | 1,000, one a month | for good |
 | Keepers (new) | the **Legend Crown** (with its own Royal Trail) 5,000; the **Aurora, Stardust** and **Frost** trails 3,000 each; the **Wizard Hat** and the **Knight's Helm** 2,500 each | one each | for good; never given or traded |
 
+- **On the counter, one kind to a row (0.38.3).** Each tab's tiles stand in rows by kind, on the
+  screen only: **Boosts** has the boosts and the Quest Reroll, then **Make it Day!** and **Sunny Day**
+  from a new row; **Fireworks & Trails** (the tab that was "Cosmetics") has every firework thing (the
+  shows, the Firework Launcher, the Firework Remote and Party Time!), then the trails from a new row
+  (a collector trail first: Autumn Leaves 2026 until 30 November, Twinkle 2026 in December); **Looks**
+  has the hats and caps, then the golf balls from a new row. Each kind starts its own row while the
+  tab fits on one page; a tab that would need more than its four rows that way (say an owner adds a
+  dozen hats) packs its tiles and pages as before. A row of a type a tab doesn't expect (a Mini Radar
+  moved to Boosts) gets a row after the rest. Every other tab is one kind and looks as before. Nothing
+  in `config.yml` moves: rows keep their order, their `tab:` and their prices, and the tab is still
+  `COSMETICS` in config and on the website feed (`category: cosmetics`); only its label on the screen
+  changed.
 - **The Arcade Crate holds no hats any more** (hats are bought, never won): its hat share went to the
   Firework Show (weight 15 to 18), and its 1-day trail never draws a collector or a Keeper.
 - **A trophy is named from its row** ("Bronze Trophy #3", "Bought by <name>"). The server hears about
@@ -651,7 +675,7 @@ a minute long; it would be for those special events".
 
 **How to set up your launchers**
 
-1. Buy three **Firework Launchers** on the Prize Counter's Cosmetics tab (5 tokens each, yours for
+1. Buy three **Firework Launchers** on the Prize Counter's Fireworks & Trails tab (5 tokens each, yours for
    good).
 2. Place them a few blocks apart, in a row in front of where you'll watch, with open sky above:
    each is a dropper pointing up. A tap on one says whose it is and how many you have set up ("Your
@@ -730,7 +754,7 @@ minute's pace (about 4.4 rockets a second). Never more than 10 rockets go up in 
 finale, nor 20 in it. With fewer launchers than the show has, it fires the same show from those. The
 Mega show is 0.38.1's to the rocket. 100 tokens or more asks "are you sure?" first.
 
-**Linking launchers with the Firework Remote** (10 tokens, Cosmetics; yours for good, never used up)
+**Linking launchers with the Firework Remote** (10 tokens, Fireworks & Trails; yours for good, never used up)
 
 1. Hold the Remote and **tap a Firework Launcher**: "✔ Linked as #1! (1 linked)". Tap the next one:
    #2, and so on, up to 10. The order you tap them is the order they fire: #1 is the first lane. The
@@ -830,7 +854,7 @@ can't be read is skipped with one WARN. Halloween is on from the first start of 
 | Runs out (rented) | Kept for good |
 |---|---|
 | Hats and caps from the Looks tab: 90 days (Creeper, Dragon, the four caps, and the animal hats once switched on) | Collectors (caps and trails), Keepers (the Crown, the hats, the trails), trophies, golf balls, `/hat`, +1 Home, hats bought before 0.38, Firework Launchers, the Firework Remote |
-| Trails from the Cosmetics tab: 30 days; a crate's trail: 1 day | Boosts and firework shows are used up when they're used, not rented |
+| Trails from the Fireworks & Trails tab: 30 days; a crate's trail: 1 day | Boosts and firework shows are used up when they're used, not rented |
 
 ### Rented looks
 
@@ -980,7 +1004,7 @@ changes how it rolls.
 
 ### Give a present (0.38)
 
-**Give a present** moves to slot 47 and shows on the Cosmetics and Looks tabs. It now covers rented
+**Give a present** moves to slot 47 and shows on the Fireworks & Trails and Looks tabs. It now covers rented
 looks (a first buy, or buying again for someone whose window is open), golf balls and the collectors.
 Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 
@@ -1477,8 +1501,9 @@ It also keeps every prize safe (below). It also brings the Candy Apple shower.
 - **Yours for good.** One of each per player, ever. They never run out, and no crate hands one
   out. Each cap carries its number ("No. 3"), and the cap and its tile say "Halloween 2026
   collector" and "Yours for good!".
-- **On the counter** they are the first two tiles of the Cosmetics tab, with "On sale until 31 Oct"
-  (from 0.38 the caps are on the Looks tab).
+- **On the counter** the cap is the first tile of the Looks tab's hats row and Autumn Leaves heads
+  the trails row (the second row) of the Fireworks & Trails tab (the tab that was "Cosmetics"), each
+  with "On sale until 31 Oct".
   The cap leaves the shop at midnight going into 1 November (Chicago time on the shipped clock),
   the trail on 1 December. Out of season a collector is off the counter and the website feed, and
   can't be bought or given. What players own keeps working: the cap is the item itself, and an owned trail
@@ -1515,9 +1540,10 @@ as presents, all exactly as Halloween's above.
 - **The season is in the line.** The cap and both tiles say "Christmas 2026 collector", in red
   (Halloween's line stays gold), and "Yours for good!". Twinkle is a 2026 collector, though it is
   sold into January.
-- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock), as the
-  first two tiles of the Cosmetics tab (from 0.38 the cap is on the Looks tab and Twinkle stays on
-  Cosmetics). The cap leaves at midnight going into 1 January, Twinkle at
+- **On the counter from midnight going into 1 December** (Chicago time on the shipped clock): the
+  cap as the first tile of the Looks tab's hats row and Twinkle heading the trails row (the second
+  row) of the Fireworks & Trails tab (the tab that was "Cosmetics" before 0.38.3). The cap leaves at
+  midnight going into 1 January, Twinkle at
   midnight going into 7 January. Before 1 December neither is on the counter, in Give a present or
   in the website feed. Don't use `/hcm give prize` to look at one early: given to a player, it is
   their one Santa Cap.
@@ -1534,9 +1560,9 @@ as presents, all exactly as Halloween's above.
 ### Give a present
 
 From 0.38 a present can also be a rented look or a golf ball, and the tile is in the bottom row of the
-Cosmetics and Looks tabs: see [Give a present (0.38)](#give-a-present-038). The rest is as below.
+Fireworks & Trails and Looks tabs: see [Give a present (0.38)](#give-a-present-038). The rest is as below.
 
-- **The Give a present tile** (a cake, top right of the Cosmetics tab) shows while a collector is
+- **The Give a present tile** (a cake, top right of the Fireworks & Trails tab) shows while a collector is
   on sale and `arcade.collectors.gifting` is true. Tapping a collector's own tile only ever buys it
   for yourself, so a child looking at her cap can't give it away by accident.
 - **Three screens, every one Bedrock-safe:**
@@ -1847,17 +1873,26 @@ safe for everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) 
   sign skips the course screen and starts a time trial (after the warm-up choice while warm-ups are
   on; its tile on the Games screen opens the course screen first); a golf course always opens its
   course screen. `/hcm play blackjack` opens Twenty-One.
-- **The hub's Play row** (row 4, only while the games are on): All games, Today's pick, Luck,
-  Cabinets, Courses, Mini golf and Take a break. Row 1's label changes from "Games" to "Luck", and
-  its crates and Scratch Ticket follow Take a break: a player on a break sees the "Taking a break"
-  tile there, and one without `hcm.games.chance` sees none of them. With the games off, the hub is
-  exactly what it was.
+- **The hub's rows** (0.38.3; the owner: "a quick reorganization of the Arcade now that we have
+  added all the stuff its a bit out of place"): the **Wallet** and the wild-Mini tracker on top;
+  **Play** (the second row, only while the games are on): All games, Today's pick, Courses, Mini
+  golf, Cabinets, **Together** (while Race Night or Falling Floors is open), **The Clubhouse - 2
+  here** (while it's open; a click goes in) and **High scores**; then the Prize Counter's tabs;
+  **Luck**: the crates, the Scratch Ticket, **Card Packs**, **Games of luck** (the Games screen's
+  Luck tab) and **Take a break**; **You**: Quests, Achievements, **My Looks**, How It Works, and
+  **Give a present** while one can be given. The crates and the Scratch Ticket follow Take a break
+  as before: a player on a break sees the "Taking a break" tile in their place, and one without
+  `hcm.games.chance` sees none of them (and no Games of luck). Take a break and Card Packs show with
+  the games off too. **Courses** lights only while there is a course to play (an open course, or
+  Fresh Courses), and **Mini golf** while Mini golf or Fresh Courses (its set is on the Golf tab too)
+  is open; a kind with nothing open is a grey "closed" tile. With the games off, the Play row
+  is border and the rest is the same.
 - **Today's pick:** one skill game or course a day, the same for everyone, changing at local
   midnight. Its first finish of the day pays `games.featured_bonus`. A game of chance is never
   the pick. An admin who pins `trials` or `golf` makes every course of that game the pick.
 - **High scores:** your best on a board, then its top ten with their names. Only the website
   feed leaves names out.
-- **Take a break:** the Wallet's blue bed (slot 51), the hub's Play row, the Games screen, or
+- **Take a break:** the Wallet's blue bed (slot 51), the hub's Luck row, the Games screen, or
   `/hcm play break`. A player sets their own daily limit on the tokens they put into games of
   chance, or pauses them for 1, 7 or 30 days. It works while the games are off, and it also
   covers Crates, Scratch Tickets and Card Packs bought with tokens.
@@ -2163,7 +2198,8 @@ Easy, Medium, Hard and "Why did we build this?".
   are on it first asks "Warm up (3:00)" or "Go straight to the timed run"). A tile on the Games
   screen, the course list or the hub's Today's pick opens the **course screen** first: the rules,
   your best, this week's best, the record and who holds it, what it pays, and Start.
-- **A run.** You arrive at the start line with only the course kit: Back to checkpoint and Leave
+- **A run.** You arrive at the start line (from 0.38.3 by way of the Clubhouse first, see [The
+  Clubhouse](#the-clubhouse)) with only the course kit: Back to checkpoint and Leave
   game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
@@ -3667,9 +3703,12 @@ off (`games.falling_floors.enabled: false`).
 ### The Clubhouse
 
 <!-- ---- The Clubhouse (CLUBHOUSE-SPEC, WP-CH) ---- -->
-One room in the Games world where racers wait before a race and hang out after it: "a waiting room,
-and the same room after the race so folks can hang out and joke around and talk about what
-happened." It is part of the world games, not a new game: you are in it inside your normal world-game
+One room in the Games world where racers wait before a race, courses and mini golf start, and
+everyone hangs out after: "a waiting room, and the same room after the race so folks can hang out
+and joke around and talk about what happened." Since 0.38.3 a Start on a course or a mini golf
+course takes you through it (the owner: "Can you make it so we go to the clubhouse when click into
+a game? I just feel like the clubhouse isnt really used"), and its walls show the week's best runs,
+who is playing right now and your own stats. It is part of the world games, not a new game: you are in it inside your normal world-game
 session, so your things are kept safe and come back when you leave. It ships switched on
 (`games.clubhouse.enabled: true`), builds itself, and **while it is off, not built or not checked,
 every race and round works exactly as before**.
@@ -3678,9 +3717,14 @@ every race and round works exactly as before**.
   tables, a three-step podium (1st in the middle and highest) and a results board. Sixteen spread-out
   arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
   is no way out on foot, and nothing a mob can spawn on.
-- **Visit any time:** `/hcm play clubhouse`. The kit is **Leave game** (click twice), **Results**
-  (the last race's results) and, while in a party, **Party** (the party screen). No damage, no pushing,
-  and nobody can change a block of the room. Chat is normal chat.
+- **Visit any time:** `/hcm play clubhouse`. The kit: **Party** (slot 0, while in a party),
+  **Results** (slot 2: named "Results - your last run" after a solo run or round here and "Results -
+  the last race" otherwise, whichever is newer), **Go now** and **Stay here** (slots 3 and 5, while you're on your way to a
+  course or a round), **Watch live** (slot 4, while a race is going), **Games** (slot 6, pick a
+  game), **My stats** (slot 7, while the boards are on: your times and tokens, as a screen) and
+  **Leave game** (slot 8, click twice). Visiting also works from the Games screen's **Together** tab
+  ("The Clubhouse - 2 here · visit!", while it's open) and the Arcade's Clubhouse door. No damage, no
+  pushing, and nobody can change a block of the room. Chat is normal chat.
 - **Before a party race** every member of the lobby can tap **Go to the Clubhouse** on the party
   screen and wait there. When the host presses Start, everyone waiting is taken straight to the grid;
   members who didn't go are seated exactly as before. It's optional.
@@ -3698,10 +3742,75 @@ every race and round works exactly as before**.
 - **After golf together** the group comes to the Clubhouse and the board shows the group's order.
   **Play again together** works from there: the Results item's card offers it, and the host's Start
   on the golf party screen takes everyone waiting in the Clubhouse straight to hole 1.
-- **Solo runs** go home as always.
-- **The board** shows, while a party race, Race Night or golf group is going, the live positions
-  (place, name, lap or checkpoint, gap; golf: the group's card), at most once a second; after it ends,
-  the final result. It is one floating text, cleared and made again on every start.
+- **Courses and mini golf start here** (`solo_first`). Start on any course (every kind, the Dropper
+  too) or mini golf course: from its screen, Today's pick, a Fresh Courses or Weekly Cup screen, a
+  join sign, `/hcm play <course>` or Play again (the warm-up choice still comes first, and is kept
+  across the trip) brings you into the Clubhouse first. The title says "Off to Sky Rings!", the
+  action bar counts down "Sky Rings in 5" (`first_seconds`), then you're taken to the start and the
+  usual 3-2-1 runs. **Go now: Sky Rings** (slot 3) skips the wait; **Stay here - hang out** (slot 5)
+  stays, and you start again from **Games**. While a trip is waiting you're never timed out.
+  Straight to the start, exactly as before, when the Clubhouse is off (or still building, or failed
+  its check), the course is in another world, the restart hold is on (the start is refused as
+  before), you have a rider booked, it's an admin's test run, or you're in another game. If the
+  hand-out can't be made (the restart hold began, the course closed) you stay in the Clubhouse and
+  read why.
+- **After a solo run or a round alone** (`solo_after`) you come back here instead of going home
+  ("Back in the Clubhouse! Sky Rings 1:23.4"; golf: "Back in the Clubhouse! Tiny Golf 24 strokes (2
+  under par)"), and your own results screen (golf: the scorecard) opens a moment later. **Play
+  again** takes you straight back to the start line or hole 1: no trip home, no inventory swap.
+  **Back to the courses** lists them. These results are yours only: the board and a party race's or
+  golf group's Results aren't touched, and your Results item shows yours until a newer race result
+  comes. A run with a rider, a test run, a course in another world, or the Clubhouse closing for the
+  restart ("The Clubhouse is closed for the restart, so you're going home.") goes home as before.
+- **Leave game** partway through a run or round that started from the Clubhouse brings you back
+  there ("You left the course - back in the Clubhouse. Leave game again takes you home."; nothing of
+  the run is recorded, as with any Leave game). **Leave game** in the Clubhouse takes you home with
+  your things. `/hcm leave` always goes straight home.
+- **The Games item** opens the Games screen in the Clubhouse: courses, Fresh Courses, the Weekly Cup
+  and golf start from here (handed straight to the start), and cabinets (Snake, Connect Four,
+  Tic-Tac-Toe and the rest) play right here on their screens; a Connect Four or Tic-Tac-Toe invite
+  reaches you here, and a cabinet screen open keeps the 30-minute clock still. Games of luck, crates,
+  the Scratch Ticket, Card Packs, Falling Floors and Race Night are played outside: "That one isn't
+  played in the Clubhouse - tap Leave game first." The Arcade, the Wallet and the guide still don't
+  open inside a game.
+- **The boards** (0.38.3, `boards`): the walls give you a reason to hang out.
+  - **The results board** is on the north wall. While a party race, Race Night or golf group is going
+    it shows the live positions (place, name, lap or checkpoint, gap; golf: the group's card), at
+    most once a second. When it ends, it shows the final result.
+  - **This week's best** is on the east wall. It shows each course's fastest run this week and who
+    ran it, eight to a page. Then comes a page with the week's best golf round (fewest strokes
+    against par), Today's pick and its bonus, and each Weekly Cup's leader. Last come the all-time
+    records. Pages turn every 8 seconds. It starts again with the weekly boards: a hand-built
+    course's week turns with the weekly quests' `week_starts_on` at midnight, the Cup's with the Cup
+    at 04:00. A Fresh course or a golf course keeps each player's best, so it counts on this week's
+    page only if that best was set this week.
+  - **Now playing** is on the south wall. It shows who is in which game right now and how far along,
+    for example "Sam - Sky Rings - checkpoint 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
+    "Max - in the Clubhouse". Games come first, then cabinets, then the Clubhouse. It shows up to
+    seven rows ("and 3 more"), with "Cheer them on: /hcm play cheer" while anyone is in a game.
+    Cheers reach the racers of a party race, Race Night or golf together, and with no race going,
+    everyone on a solo run (the clock running or warming up) or in a round alone.
+  - **My stats** is on the west wall, and you see only your own. It shows your runs this week, the
+    tokens you won from games this week, your best golf round, and your personal bests with your
+    place on each course ("Sky Rings 1:02.4 #2"). The **My stats** item opens the same numbers as a
+    screen, with every course you've played. Tokens from games are the ledger's winnings from the
+    skill games, courses, Fresh Courses' goals, the Dropper, Race Night, Falling Floors and Weekly
+    Cup prizes. They never include games of chance, and never count a Cup entry or its refund.
+    Tokens never become money.
+  - The shared boards show only names, times and scores the high-score boards already show.
+- **Locked in place.** Every board hangs flat on its wall like a sign, facing into the room, just off
+  the wall, and big enough to read from anywhere in the room. They used to turn to face whoever
+  looked at them, half into the wall from the side.
+  - **On Bedrock**, Geyser draws each board as a floating name tag (a Java text display reaches
+    Bedrock as an invisible armor stand's name tag; Geyser carries over neither the locked facing
+    nor the size). A name tag always turns to face you and is smaller, but the words are the same.
+  - The boards are floating text only: the room's blocks never change, so it isn't rebuilt or
+    checked again.
+  - The database is read off the main thread: every 30 seconds while someone is in the Clubhouse,
+    and a few seconds after someone arrives or comes back from a finish. Nothing is read while it's
+    empty.
+  - `boards: false` takes down This week's best, Now playing and My stats, and the My stats item.
+    The results board stays.
 - **Watchers.** Anyone can come and watch without racing: **Watch** on the party screen and the Race
   Night screen, or `/hcm play clubhouse`. A watcher is never put in a race, never counted and never
   paid, and is on no racer list.
@@ -3718,7 +3827,9 @@ every race and round works exactly as before**.
   crash) puts back the game mode you came with; a watcher who leaves or quits is first brought down
   to the Clubhouse's floor, never left in mid-air where they flew.
 - **Cheer.** `/hcm play cheer` sends the racers "<name> cheers for you!" on the action bar, once
-  every 10 seconds. A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
+  every 10 seconds; with no race going (0.38.3) it reaches everyone on a solo run or in a round alone,
+  the ones Now playing shows, and with nobody in a game: "Nobody's in a game to cheer for right now."
+  A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
 - **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
   party race or Race Night: **Take a rider (back seat)** on a boat course's screen, on the party screen
   of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
@@ -3743,8 +3854,9 @@ every race and round works exactly as before**.
   anywhere.
 - **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
   home, with a warning a minute before. In the restart hold nobody new comes in, except arriving from
-  a race already going: a party race, golf group or Race Night that ends then still brings its players
-  here. Everyone there is sent home a minute after the hold starts (or after they arrive), with a
+  a game already going: a party race, golf group or Race Night that ends then still brings its players
+  here, and so does a solo run or round alone that started through the Clubhouse. Everyone there is
+  sent home a minute after the hold starts (or after they arrive), with a
   warning, and always at least 5 seconds before the restart's minute (sooner than the minute with
   `restart_hold_minutes: 1`), so nobody is in it across a restart. From 66 seconds before the restart
   to the end of its minute, too late for that minute, it takes nobody at all: a party race or golf
@@ -3752,11 +3864,15 @@ every race and round works exactly as before**.
   the restart, so you're going home.", and a Race Night sends its racers home with the night's own line
   (its results skip the board). With a one-minute hold that is the whole hold. After a crash, their
   things come back at the next join as from any world game.
-- **One place at a time.** A solo run, another game or golf from the Clubhouse is refused, as from
-  any world game: "Finish your game first (/hcm leave)". Going from the Clubhouse to a race hands your
+- **One place at a time.** From the Clubhouse, the Games item (or `/hcm play <course>`) starts
+  courses and golf and opens the cabinets; everything else says "That one isn't played in the
+  Clubhouse - tap Leave game first." From any other world game, another game still says "Finish your
+  game first (/hcm leave)". Going from the Clubhouse to a race, a course or a round hands your
   session over; nothing is saved or given back twice.
 - **Nothing here pays or counts.** The Clubhouse moves no tokens and counts toward no board, quest,
-  achievement or Cup; a race from it is the same race as always.
+  achievement or Cup; a race from it is the same race as always. A run or round started from the
+  Clubhouse is the same run as always: times, boards, the Weekly Cup, Today's pick's bonus and
+  rewards count exactly as from home.
 - **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 6080-6111, y
   160-175, z 8544-8575, 576 blocks from everything else), checked like the Falling Floors arena: 32
   blocks from every Fresh Courses
@@ -3768,8 +3884,14 @@ every race and round works exactly as before**.
   today's. Nobody, admins included, can change a block of the generated room while it's on.
 - **Your own room.** Build one by hand, stand where visitors should arrive and run `/hcm games
   clubhouse here` (in a Games world: another world is refused, and `/hcm games check` warns about a room
-  stored in one); set the podium with `/hcm games clubhouse podium <1|2|3>` and the board with `/hcm
-  games clubhouse board`. Nothing is built or guarded then. `/hcm games clubhouse generated` goes back.
+  stored in one); set the podium with `/hcm games clubhouse podium <1|2|3>` and the results board
+  with `/hcm games clubhouse board`. Stand where it goes with your back to the wall, facing into the
+  room: it hangs facing the way you face, squared to north, east, south or west, at 1.5x. Set the
+  walls' boards the same way with `board fame` (this week's best), `board playing` (now playing) and
+  `board stats` (my stats). They're optional: a wall with no board set shows nothing. `/hcm games
+  clubhouse status` lists them. A results board set before 0.38.3 keeps the way you faced then, so if
+  it faces the wall, set it again. Nothing is built or guarded then. `/hcm games clubhouse generated`
+  goes back.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
 
@@ -3781,10 +3903,15 @@ every race and round works exactly as before**.
 | `clubhouse.party_after` | `true` | Party racers come back here after the race |
 | `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium; on a track with no viewing stand, racers (and their riders) also wait here between races |
 | `clubhouse.golf_after` | `true` | A golf-together group comes here when its round ends |
+| `clubhouse.solo_first` | `true` | A Start on a course or a mini golf course comes through the Clubhouse first ("Off to ...", a countdown, Go now / Stay here). `false`: straight to the start (the finish can still come back) |
+| `clubhouse.solo_after` | `true` | A solo run's finish or a round alone's end comes back here with your own results and Play again. `false`: home, as before |
+| `clubhouse.first_seconds` | `5` | Seconds in the Clubhouse before you're taken on to your course or round (1-30) |
+| `clubhouse.boards` | `true` | This week's best, Now playing and My stats (the board and the item); `false` = just the results board |
 | `trials.rider_runs_count` | `true` | `false`: a run with a rider is just for fun, and Race Night takes no riders |
 
 A bad value logs a WARN and uses its shipped value. `/hcm games check` has Clubhouse rows: on or off,
-the box and its problems, the claim, built and checked, and an owner-built room's spots.
+the box and its problems, the claim, built and checked, and an owner-built room's spots. No config
+revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONFIG_REVISION` stays 24).
 
 **Verify in game** (on Java and on Bedrock)
 
@@ -3809,6 +3936,37 @@ the box and its problems, the claim, built and checked, and an owner-built room'
 8. **Owner live checks:** a **Bedrock** player can Watch live (Geyser supports spectator mode) and
    comes back in their own mode; with **Multiverse**, the Games world's game mode isn't forced back
    while someone is watching (they stay in spectator mode until they come back).
+9. Start a course from its screen (Java and Bedrock): you arrive in the Clubhouse, "Off to
+   <course>!", the action bar counts 5-4-3-2-1, then you're at the start and the 3-2-1 runs. Finish:
+   "Back in the Clubhouse! <course> <time>" and your results screen opens there. **Play again**:
+   straight to the start, no trip home. Try **Go now** (no wait) and **Stay here** (you stay; the kit
+   drops Go now).
+10. Start a mini golf course: the same, through the Clubhouse to hole 1, and back with the scorecard
+    and its Play again.
+11. Partway through a course started from the Clubhouse tap **Leave game** twice: back in the
+    Clubhouse. Leave game there: home with your things. `/hcm leave` mid-run: home.
+12. **Games** in the Clubhouse: Snake opens and plays there; a game of luck or a crate says "That one
+    isn't played in the Clubhouse - tap Leave game first."; the Together tab shows "The Clubhouse - N
+    here".
+13. Live checks: a boat course and a Dropper course started from the Clubhouse (the boat is seated
+    at the start; the Dropper's practice drop is offered as from home); a course in another world
+    goes straight there as before.
+14. `games.clubhouse.solo_first: false` and `/hcm reload`: Start goes straight to the course, the
+    finish still comes back. `solo_after: false`: the finish goes home. `games.clubhouse.enabled:
+    false`: every start and end is exactly 0.38.2's.
+15. In the Clubhouse, look at each wall from a corner and from the middle. All four boards face into
+    the room and don't turn as you walk: results north, This week's best east, Now playing south, My
+    stats west. This week's best turns its page every 8 seconds. **Live check:** if the north board
+    shows its back to the room, report it: one constant, `WallBoards.FRONT` (0 to 180), turns them all.
+16. Two players in the Clubhouse each see their own My stats on the west wall, never the other's.
+    Tap the My stats item: the same numbers as a screen. Finish a run and come back: within a few
+    seconds your runs this week and that course's best (and This week's best) show it.
+17. While someone is on a course, Now playing shows them with their checkpoint and clock, and
+    someone at Snake shows as "- Snake".
+18. `boards: false` + `/hcm reload`: only the results board is left, and there is no My stats item.
+19. Owner-built room: `/hcm games clubhouse board fame` with your back to a wall: the board hangs
+    there, facing you.
+20. On **Bedrock** the boards show as name tags that face you, with the same words.
 <!-- ---- end the Clubhouse ---- -->
 
 ### Commands
@@ -3895,7 +4053,7 @@ entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 | `/hcm play rider <player>` | `hcm.games.play` | Take a friend in the back seat of your boat (an invite) |
 | `/hcm games clubhouse [status]` | `hcm.games.admin` | The Clubhouse: generated or owner-built, built and checked, why it is closed, how many are in it |
 | `/hcm games clubhouse tp` | `hcm.games.admin` | Into the Clubhouse to look (a plain teleport); refused until it is built and checked |
-| `/hcm games clubhouse here\|podium <1\|2\|3>\|board` | `hcm.games.admin` | Use a room you built: its arrival spot (facing your way), podium places and board, where you stand |
+| `/hcm games clubhouse here\|podium <1\|2\|3>\|board [fame\|playing\|stats]` | `hcm.games.admin` | Use a room you built: its arrival spot (facing your way), podium places, the results board and (optional) the walls' boards: this week's best, now playing, my stats. A board hangs where you stand, facing the way you face |
 | `/hcm games clubhouse generated` | `hcm.games.admin` | Back to the generated room (built and checked first) |
 | `/hcm games clubhouse rebuild [confirm]` | `hcm.games.admin` | Build the generated room again and check it; claims the box even with blocks in it |
 | `/hcm games clubhouse off` | `hcm.games.admin` | Close it (kept across restarts): everyone in it goes home, every race works as before |
@@ -4275,17 +4433,25 @@ the backfill never replaces a single value you wrote where a section belongs, it
 
 **The screens and Take a break**
 
-1. With `games.enabled: false`: `/hcm play` says "The games are closed right now.", the hub looks
-   as before, and the Wallet has a blue bed (Take a break) at slot 51.
+1. With `games.enabled: false`: `/hcm play` says "The games are closed right now.", the hub has no
+   Play row (row 1 is border), its Luck row has the crates, the Scratch Ticket, Card Packs and Take a
+   break, and the Wallet has a blue bed (Take a break) at slot 51.
 2. Set `games.enabled: true` and `/hcm reload`: no games WARN in the console. `/hcm games status`
    lists every game, open or closed with the reason, and today's pick.
-3. `/hcm arcade`: row 1 reads "Luck" and row 4 is the Play row. `/hcm play` opens the Games
-   screen; the Luck tab shows the Scratch Ticket ("gives back about 89 of every 100 tokens") and
-   the crates.
+3. `/hcm arcade`: row 1 is the Play row, right under the Wallet; row 3 reads "Luck". `/hcm play`
+   opens the Games screen; the Luck tab shows the Scratch Ticket ("gives back about 89 of every 100
+   tokens") and the crates. With the Clubhouse open, "The Clubhouse - 0 here" at slot 16 takes you
+   in; with Time Trials off (and Fresh Courses off) but the Clubhouse on, Courses reads "Courses -
+   closed" (it used to open an empty tab). Together shows only while Race Night or Falling Floors is
+   on. My Looks (39) opens My Looks; High scores (17) the boards. The Prize Counter: Boosts has the
+   eight boosts (with the Quest Reroll) on the first row and Make it Day! and Sunny Day on the
+   second; **Fireworks & Trails** has the shows, the Launcher, the Remote and Party Time! on the
+   first row and the trails on the second (in October Autumn Leaves first, nine each); Looks has
+   the hats and caps, then the golf balls from a new row.
 4. `/hcm play blackjack` opens Twenty-One. `/hcm play nope` says there's no game called "nope".
 5. Take a break: pick 25 (it starts now), then 100 (it waits; the clock tile at 17 cancels it).
 6. The pause tiles and the pause confirm say "can't be undone" in their names. Pause for 1 day
-   and confirm: the hub (row 1 and slot 39) and the Luck tab read "Taking a break until … 12 AM",
+   and confirm: the hub's Luck row (slot 28) and the Luck tab read "Taking a break until … 12 AM",
    the Scratch Ticket, a crate and a token pack are refused, and cabinets still open.
    `/hcm games break <you> clear-own confirm` lifts it, with a WARNING in the console.
 7. `/hcm games break <you> limit 5`, then spin Ore Slots at 5: the next spin says "That's your

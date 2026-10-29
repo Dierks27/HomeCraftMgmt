@@ -19,7 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * How a run went (27, spec §11), opened once the player is back home.
+ * How a run went (27, spec §11), opened once the player is back home, or (0.38.3) back in the Clubhouse,
+ * where Play again hands them straight out to the start and 22 reads "Back to the courses".
  *
  * <p>4 the time; 11 how it was taken (a new best, your best, "That run didn't count" and why, or
  * a test run); 12 a dropper's bonks ("No bonks - perfect drop!" or "Bonks: 2"); 13 "Play again" — offered only once the return teleport has landed (a time trial is
@@ -51,7 +52,7 @@ public final class ResultMenu extends GameMenu {
             set(12, Menus.icon(Material.WATER_BUCKET, DropperText.bonks(result.bonks()),
                     "&7Bonks send you back to the top of a level.", "&7Fewer bonks, faster time!"), null);
         }
-        if (trials.home(viewer)) {
+        if (trials.playAgainReady(viewer)) { // home, or (0.38.3) in the Clubhouse: handed straight out
             set(13, Menus.icon(Material.LIME_CONCRETE, "&aPlay again", "&7Back to the start line."),
                     e -> trials.again(viewer, result));
         } else {
@@ -78,6 +79,10 @@ public final class ResultMenu extends GameMenu {
                     + " board." : "&7Your time is on the high scores."), null);
         }
         exitTile();
+        if (trials.inClubhouse(viewer)) { // 0.38.3: the way on from the Clubhouse, its key fact in the NAME
+            set(getInventory().getSize() - 5, Menus.icon(Material.BARRIER, "&cBack to the courses",
+                    "&7Pick another course,", "&7or tap Leave game to go home."), e -> back.run());
+        }
     }
 
     /** The header's NAME: "&amp;bHard Parkour: &amp;f0:42.1 &amp;8· &amp;7Course code HARD-40" (no code: none). */

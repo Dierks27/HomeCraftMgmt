@@ -406,10 +406,12 @@ public final class PluginConfig {
 
     /**
      * The Prize Counter's tabs, in the order they appear. LOOKS holds the worn looks (hats, caps, golf balls);
-     * KEEPERS holds only the plugin's own Keepers ({@code arcade.Keepers}): a config row may not use it.
+     * KEEPERS holds only the plugin's own Keepers ({@code arcade.Keepers}): a config row may not use it. COSMETICS is
+     * labelled "Fireworks &amp; Trails" from 0.38.3 (the label only: its name, the {@code tab:} key and the website
+     * feed's category stay COSMETICS).
      */
     public enum PrizeTab {
-        BOOSTS("Boosts"), HUNT("Hunt Gear"), COSMETICS("Cosmetics"), LOOKS("Looks"), PERKS("Perks"),
+        BOOSTS("Boosts"), HUNT("Hunt Gear"), COSMETICS("Fireworks & Trails"), LOOKS("Looks"), PERKS("Perks"),
         TROPHIES("Trophies"), MINIS("Minis"), KEEPERS("Keepers");
 
         private final String label;

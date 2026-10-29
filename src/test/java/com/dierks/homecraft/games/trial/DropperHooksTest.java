@@ -176,7 +176,7 @@ class DropperHooksTest {
         for (String hook : List.of("drops.start(p, run)", "drops.countdown(p, run)", "drops.running(p, run)",
                 "drops.moved(p, run, e.getTo())", "drops.kit(player, run, action)",
                 "drops.bonk(player, run, DropperRules.Why.VOID)", "drops.back(p, run)", "drops.finished(p, run,",
-                "drops.giveKit(p, DropperRun.Kit.DROP)")) {
+                "drops.giveKit(p, DropperRun.Kit.DROP, fromClub)")) {
             assertTrue(src.contains(hook), "Time Trials calls " + hook);
         }
         assertFalse(src.contains("new DropperRules.Landing"), "the landing watch is DropperRun's, not Time Trials'");

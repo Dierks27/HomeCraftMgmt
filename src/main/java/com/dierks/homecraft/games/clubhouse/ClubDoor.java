@@ -17,6 +17,10 @@ import java.util.function.Consumer;
  * <p><b>One session all along.</b> A racer seated from the Clubhouse, or back in it after a race, is
  * in one world session: {@link #handOut} and {@link #takeIn} hand it from one game to the other in
  * place (nothing restored, nothing saved again), so their things are saved once and come back once.
+ *
+ * <p><b>Solo runs and rounds</b> (0.38.3): a course's or a round's Start may come through the Clubhouse
+ * first ({@link #soloFirst}), and its end come back here ({@link #soloAfter}) with the player's own results
+ * ({@link #soloResult}); {@link ClubRoute} decides, over this door.
  */
 public interface ClubDoor {
 
@@ -72,6 +76,29 @@ public interface ClubDoor {
 
     /** {@code golf_after}: a golf-together group comes here when its round ends. */
     boolean golfAfter();
+
+    /**
+     * {@code solo_first}: a course's or a round's Start goes through the Clubhouse first (0.38.3). False
+     * here, the default: a door that doesn't say is the Clubhouse with the new switches off (0.38.2).
+     */
+    default boolean soloFirst() {
+        return false;
+    }
+
+    /** {@code solo_after}: a solo run's finish, or a round alone's end, comes back here (0.38.3). */
+    default boolean soloAfter() {
+        return false;
+    }
+
+    /**
+     * A solo player's own results (0.38.3): opened for them here a moment after they arrive, and on their
+     * Results item while it is newer than the shared one. Never the board, never the shared Results: a
+     * party race's or a golf group's stay as they were.
+     *
+     * @param opener what their Results opens (their results screen)
+     */
+    default void soloResult(Player p, Consumer<Player> opener) {
+    }
 
     /**
      * An event's final result, for the board and the "Results" item.

@@ -238,10 +238,13 @@ final class DropperHooks {
 
     // ---- the kits -------------------------------------------------------------------------------
 
-    /** Hand the player one of the Dropper's kits: slot 0 (and 1), and "Leave game" in 8. */
-    void giveKit(Player p, DropperRun.Kit kit) {
+    /**
+     * Hand the player one of the Dropper's kits: slot 0 (and 1), and "Leave game" in 8 ({@code fromClub}: its
+     * second click goes back to the Clubhouse, as the lore says; 0.38.3).
+     */
+    void giveKit(Player p, DropperRun.Kit kit, boolean fromClub) {
         PlayerInventory inv = p.getInventory();
-        kit(KitItems.slots(inv), kit, this::kitItem);
+        kit(KitItems.slots(inv), kit, action -> kitItem(action, fromClub));
         inv.setHeldItemSlot(0);
     }
 
@@ -268,7 +271,7 @@ final class DropperHooks {
     static final String LEAVE_ACTION = "leave";
 
     /** The Dropper's kit item for {@code action}. */
-    private ItemStack kitItem(String action) {
+    private ItemStack kitItem(String action, boolean fromClub) {
         return switch (action) {
             case DropperRun.PRACTICE_ACTION -> item(action, Material.LIGHT_BLUE_DYE, DropperText.PRACTICE_ITEM,
                     DropperText.PRACTICE_LORE);
@@ -278,8 +281,8 @@ final class DropperHooks {
                     DropperText.TIMED_LORE);
             case DropperRun.BACK_ACTION -> item(action, Material.RECOVERY_COMPASS, DropperText.BACK_ITEM,
                     DropperText.BACK_LORE);
-            default -> KitItems.item(trials, LEAVE_ACTION, Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
-                    "&7Your things come back.");
+            default -> KitItems.item(trials, LEAVE_ACTION, Material.OAK_DOOR, "&cLeave game",
+                    com.dierks.homecraft.games.clubhouse.ClubhouseText.leaveLore(fromClub));
         };
     }
 
@@ -327,7 +330,7 @@ final class DropperHooks {
 
             @Override
             public void kit(DropperRun.Kit kit) {
-                giveKit(p, kit);
+                giveKit(p, kit, run.fromClub);
             }
 
             @Override

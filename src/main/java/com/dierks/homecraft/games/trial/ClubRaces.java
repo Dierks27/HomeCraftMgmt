@@ -73,7 +73,7 @@ public final class ClubRaces {
             club.handBack(p, kind(link));
             return Refusal.of(com.dierks.homecraft.games.clubhouse.ClubhouseText.NO_GRID);
         }
-        trials.giveKit(p, run.course.kind());
+        trials.giveKit(p, run.course.kind(), run.fromClub); // a race seat's Leave game goes home: never fromClub
         p.setFallDistance(0f);
         mode.inRace(p, rr);
         if (warmNow && run.beginWarmup(until)) {

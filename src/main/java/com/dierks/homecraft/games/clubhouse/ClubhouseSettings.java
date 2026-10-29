@@ -26,13 +26,24 @@ import java.util.Map;
  * @param partyAfter     party racers come back to the Clubhouse after the race, instead of home
  * @param raceNightAfter everyone at the track goes to the Clubhouse at the end of Race Night
  * @param golfAfter      a golf-together group goes to the Clubhouse when its round ends
+ * @param soloFirst      0.38.3: a course's or a round of golf's Start goes through the Clubhouse first, and on
+ *                       to it after {@code firstSeconds} (or "Go now")
+ * @param soloAfter      0.38.3: a solo run's finish, or a round alone's end, comes back to the Clubhouse with the
+ *                       player's own results, instead of home
+ * @param firstSeconds   0.38.3: how long the Clubhouse waits before taking a player on (1-30 s)
+ * @param boards         0.38.3: the walls' boards (this week's best, now playing, my stats); the results board
+ *                       shows either way
  */
 public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMinutes, boolean partyAfter,
-                                boolean raceNightAfter, boolean golfAfter) {
+                                boolean raceNightAfter, boolean golfAfter, boolean soloFirst, boolean soloAfter,
+                                int firstSeconds, boolean boards) {
 
     /** The leaves under {@code games.clubhouse}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "origin", "max_minutes", "party_after",
-            "race_night_after", "golf_after");
+            "race_night_after", "golf_after", "solo_first", "solo_after", "first_seconds", "boards");
+
+    /** The shipped wait before a player is taken on from the Clubhouse (s). */
+    public static final int FIRST_SECONDS = 5;
 
     /** The box's size (§1): 32 x 16 x 32, fixed by the plan. */
     public static final int SIZE_X = 32;
@@ -51,9 +62,18 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
         origin = List.copyOf(origin == null ? ORIGIN : origin);
     }
 
-    /** The shipped settings: on, at {@link #ORIGIN}, 30 minutes, and back to the Clubhouse after everything. */
+    /** 0.38.2's six settings, with 0.38.3's at their shipped values (the tests that build a room use it). */
+    public ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMinutes, boolean partyAfter,
+                             boolean raceNightAfter, boolean golfAfter) {
+        this(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter, true, true, FIRST_SECONDS, true);
+    }
+
+    /**
+     * The shipped settings: on, at {@link #ORIGIN}, 30 minutes, back to the Clubhouse after everything, the
+     * courses and golf through it ({@value #FIRST_SECONDS} s), and its boards.
+     */
     public static ClubhouseSettings defaults() {
-        return new ClubhouseSettings(true, ORIGIN, 30, true, true, true);
+        return new ClubhouseSettings(true, ORIGIN, 30, true, true, true, true, true, FIRST_SECONDS, true);
     }
 
     /**
@@ -81,7 +101,12 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
         boolean partyAfter = k.bool("party_after", d.partyAfter());
         boolean raceNightAfter = k.bool("race_night_after", d.raceNightAfter());
         boolean golfAfter = k.bool("golf_after", d.golfAfter());
-        return new ClubhouseSettings(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter);
+        boolean soloFirst = k.bool("solo_first", d.soloFirst());
+        boolean soloAfter = k.bool("solo_after", d.soloAfter());
+        int firstSeconds = k.whole("first_seconds", d.firstSeconds(), 1, 30);
+        boolean boards = k.bool("boards", d.boards());
+        return new ClubhouseSettings(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter, soloFirst,
+                soloAfter, firstSeconds, boards);
     }
 
     /**

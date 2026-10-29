@@ -211,6 +211,71 @@ class PlayGateTest {
         assertNull(games.canOpen(alex.player, snake), "skill games don't read the limits and still open");
     }
 
+    /** A session in {@code gameId}'s game, ACTIVE. */
+    private static com.dierks.homecraft.games.world.Session in(String gameId) {
+        return new com.dierks.homecraft.games.world.Session(java.util.UUID.randomUUID(), gameId, gameId, "s1", "games",
+                com.dierks.homecraft.games.world.Session.Phase.ACTIVE, 0L);
+    }
+
+    /**
+     * 0.38.3 (the owner: "go to the clubhouse when click into a game"): a visitor in the Clubhouse passes
+     * step 0 for the courses (Time Trials, Fresh Courses, the Cup), mini golf and the cabinets, which are
+     * handed out from there or played on a screen right there.
+     */
+    @Test
+    void aClubhouseVisitorMayOpenCoursesGolfAndCabinets() {
+        var club = in("clubhouse");
+        assertNull(PlayGate.session(club, new TestGame("trials", GameKind.TRIAL, "Time Trials",
+                com.dierks.homecraft.arcade.TokenService.Source.GAMES_PARKOUR)), "the courses");
+        assertNull(PlayGate.session(club, new TestGame("fresh_courses", GameKind.TRIAL, "Fresh Courses",
+                com.dierks.homecraft.arcade.TokenService.Source.GAMES_DAILY)), "Fresh Courses");
+        assertNull(PlayGate.session(club, new TestGame("cup", GameKind.TRIAL, "Weekly Cup",
+                com.dierks.homecraft.arcade.TokenService.Source.GAMES_DAILY)), "the Weekly Cup");
+        assertNull(PlayGate.session(club, new TestGame("golf", GameKind.GOLF, "Mini Golf",
+                com.dierks.homecraft.arcade.TokenService.Source.GAMES_DAILY)), "mini golf");
+        assertNull(PlayGate.session(club, snake), "a cabinet plays on its screen in the Clubhouse");
+        assertNull(PlayGate.session(club, new TestGame("clubhouse", GameKind.TRIAL, "The Clubhouse",
+                com.dierks.homecraft.arcade.TokenService.Source.GAMES_RACE_NIGHT)), "the Clubhouse itself, as before");
+    }
+
+    @Test
+    void luckRaceNightAndFallingFloorsWaitUntilTheyLeave() {
+        var club = in("clubhouse");
+        assertEquals(Refusal.NOT_IN_CLUBHOUSE, PlayGate.session(club, slots), "a game of luck stays outside");
+        assertEquals(Refusal.NOT_IN_CLUBHOUSE, PlayGate.session(club, new TestGame("race_night", GameKind.TRIAL,
+                "Race Night", com.dierks.homecraft.arcade.TokenService.Source.GAMES_RACE_NIGHT)),
+                "Race Night is joined from home, as before (now with the Clubhouse's own line)");
+        assertEquals(Refusal.NOT_IN_CLUBHOUSE, PlayGate.session(club, new TestGame("falling_floors", GameKind.TRIAL,
+                "Falling Floors", com.dierks.homecraft.arcade.TokenService.Source.GAMES_RACE_NIGHT)),
+                "Falling Floors too");
+        assertEquals("That one isn't played in the Clubhouse - tap Leave game first.",
+                Refusal.NOT_IN_CLUBHOUSE.message(), "one plain line, the way out in it");
+        assertEquals(Refusal.Reason.IN_SESSION, Refusal.NOT_IN_CLUBHOUSE.reason(), "still gate step 0");
+    }
+
+    @Test
+    void anyOtherSessionIsStillRefused() {
+        assertEquals(Refusal.IN_SESSION, PlayGate.session(in("trials"), snake),
+                "on a course: a cabinet waits, as before");
+        assertEquals(Refusal.IN_SESSION, PlayGate.session(in("golf"), new TestGame("trials", GameKind.TRIAL,
+                "Time Trials", com.dierks.homecraft.arcade.TokenService.Source.GAMES_PARKOUR)),
+                "in a round of golf: a course waits, as before");
+        assertNull(PlayGate.session(in("test_snake"), snake), "the session's own game");
+        assertNull(PlayGate.session(null, slots), "no session: go ahead");
+        assertNull(games.canOpen(alex.player, snake), "and the live gate with no session, unchanged");
+    }
+
+    @Test
+    void theIdsArePinnedToTheGames() {
+        assertEquals(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC.id(), PlayGate.CLUBHOUSE, "the Clubhouse");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.trial.TimeTrials.SPEC.id()), "trials");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.gen.DailyCourses.SPEC.id()),
+                "Fresh Courses");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.cup.live.WeeklyCup.SPEC.id()), "the Cup");
+        assertEquals(3, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
+        assertEquals(GameKind.GOLF, com.dierks.homecraft.games.golf.MiniGolf.SPEC.kind(), "golf passes by its kind");
+    }
+
     /** Put {@code n} tokens into a game of chance today (a ledger debit under a chance source). */
     private void spend(int n) {
         try {

@@ -123,6 +123,13 @@ single sound, including ones it has just heard nearby. Then pick how much: **Qui
 also stops the rumble of minecarts rolling and the buzz of bees flying. Needs **ProtocolLib**
 (silencing the minecarts and bees themselves works without it).
 
+### The Copper Golem Brush — tell a Copper Golem which chests are its
+A special brush. Tap a Copper Golem with it, tap the chests it may use, tap the golem again.
+From then on that golem still takes from any copper chest but puts things only into its own
+chests, and its name tag says how many it has ("Rusty -> 3 chests"). Craft it from three
+feathers, a slime ball and any copper block, or `/hcm give golem_brush [player]`. Both
+editions, no typing, no sneak button needed. See [The Copper Golem Brush](#the-copper-golem-brush).
+
 ### Data-driven and safe to upgrade
 - **Config-driven:** recipes, skins, prices, odds, prizes, quests and achievements all live in
   `config.yml` and reload live.
@@ -228,6 +235,20 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it: the new
+`golem` section is one unknown-section WARN there, ignored) and WARNS once that the database was
+written by a newer HomeCraft (schema v39), ignoring `game_splits`; nothing else from 0.38.4 is
+stored in a new place. A Copper Golem Brush becomes a glinting, gold-named brush that does nothing
+special (it still never breaks: that is on the item), and every golem keeps its chests in its own
+data, unread, and uses any chest as before; the upgrade reads them again. The CraftBridge marks on
+linked chests stay (they are CraftBridge's, not HomeCraft's). The Clubhouse's jukebox corner is
+converged away at the next start (0.38.3 plans the room without it: the stage becomes floor glass,
+the jukebox and its cap air); the family week's points rows (`club:*`, `clubday:*`, `clubwins:*` on
+game `clubhouse`) stay in `game_scores`, unread, and an owner-built room's trophy and jukebox spots
+and the week marker stay under `gen.clubhouse.*`, unread, all back after the upgrade. The trophy
+frames, the "#N" labels and the music were never saved, so nothing is left in the world. Invites,
+challenges and the record title are memory only. Nothing is lost.
 
 **Back to 0.38.2 from 0.38.3:** the jar alone (0.38.2 reads revision 24 and the v38 database;
 0.38.3 changes neither). 0.38.2 reports `games.clubhouse.solo_first`, `solo_after`, `first_seconds`
@@ -1280,10 +1301,11 @@ money can go in, except in a trade with an Arcade prize. Tokens never. Every tra
    (`/trade accept` / `/trade deny`; the click itself runs `/homecraftmanagement:trade ...`, so it works
    even where another plugin owns `/trade`, and the hints then say `/hcm trade`); crouch-clicking back
    accepts too. The asker sees "Waiting for
-   <name>... (25)". **On Bedrock a "Trade?" screen opens** (the asker in the middle, Yes on the right,
-   No thanks on the left), but only while no chest, crafting table or other screen is open and nothing
-   is on her cursor, so it never closes a chest or drops a stack. Until then she gets the chat line and
-   a reminder over her hotbar every 10 seconds, and the screen opens as soon as she is free. Esc is not
+   <name>... (25)". **A "Trade?" screen opens** (the asker in the middle, Yes on the right,
+   No thanks on the left; on Bedrock since 0.38, on Java too since 0.38.4, with the chat buttons
+   still under it), but only while no chest, crafting table or other screen is open and nothing
+   is on their cursor, so it never closes a chest or drops a stack. Until then they get the chat line and
+   a reminder over their hotbar every 10 seconds, and the screen opens as soon as they are free. Esc is not
    an answer, and the screen closes by itself when the request runs out or is called off. **A yes waits
    the same way:** if the asker opened a chest or a crafting table meanwhile, or carries a stack, the
    windows open the second both have nothing open ("<name> said yes! Close what you have open and the
@@ -1897,9 +1919,25 @@ safe for everyone. See [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run) 
   chance, or pauses them for 1, 7 or 30 days. It works while the games are off, and it also
   covers Crates, Scratch Tickets and Card Packs bought with tokens.
 - **Invites:** Connect Four and Tic-Tac-Toe can be played against a friend, and Coin Flip is
-  always two players. Java players click **[Accept]**; Bedrock players type `/hcm play accept`
-  (or `deny`). Friend-game invites are on until a player turns them off; Coin Flip invites are
-  off until the player turns them on, on the Take a break screen.
+  always two players. Every invite opens a **Play?** screen (below); Java players can also click
+  **[Accept]** in chat, and anyone can type `/hcm play accept` (or `deny`). Friend-game invites
+  are on until a player turns them off; Coin Flip invites are off until the player turns them on,
+  on the Take a break screen.
+- **The Play? screen (0.38.4).** Every invite (a party race, golf together, Falling Floors, Coin
+  Flip, Connect Four or Tic-Tac-Toe against a friend, a ride along, a race challenge) opens a small
+  **Play?** screen on the player it is for: **✗ Not now** on the left (slot 11), the asker's tile in
+  the middle (13: "<name> invites you: Party race", with what it is and the seconds left ticking in
+  its lore), **✓ Yes** on the right (15), the same places as every confirm screen and the Trade?
+  screen. It opens only when nothing else is open (so it never closes a chest), the cursor is empty
+  (so nothing is dropped) and the player isn't in a world game, unless they are hanging out in the
+  Clubhouse, where party and ride invites reach them anyway. If it can't open right then, the chat
+  line stays and the screen is tried again each second until it has opened once; after that it is
+  never opened again for that invite (Esc is not an answer: the invite waits in chat until it runs
+  out). It closes itself when the invite runs out, is called off, or is answered another way (a
+  Java click on [Accept]/[Deny], `/hcm play accept|deny`, the Games screen's glowing book). Java
+  keeps the clickable [Accept] [Deny] in chat as well; Bedrock keeps the typed line as the fallback.
+  A yes on Coin Flip opens its own Confirm screen over the Play? screen (the second ✓ is what moves
+  tokens, as before). The daughter's way to say yes: she can't click chat or type.
 - **`[Arcade]` join signs:** an admin writes `[Arcade]` on line 1 and a game or course id on
   line 2. A tick later the sign reads **[Arcade] / the game's name / Click to play** and is
   waxed. A click opens the game through the same checks as `/hcm play`. Anyone else who writes
@@ -2210,7 +2248,8 @@ Easy, Medium, Hard and "Why did we build this?".
   beside it, one that hit its side and slid down, or the edge of the pad before it. A hand-built (or
   kept) course's checkpoints count anywhere in their sphere, as they always did. Each move is
   checked as the line it really travelled, so a fast glide through a ring counts and no checkpoint
-  can be skipped. The action bar shows the clock and the checkpoints so far.
+  can be skipped. The action bar shows the clock and the checkpoints so far, and since 0.38.4 how
+  a solo run compares with your own best (see **Checkpoint splits** below).
 - **Going wrong** sends you back to your last checkpoint, facing the next one, and the clock keeps
   running. On parkour that's a fall `fall_depth` (6) blocks below the lower of the last and next
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
@@ -2298,7 +2337,7 @@ test run never warms up, and the Dropper has its own practice drop instead.
 parkour, elytra or boat, never a Dropper) can be raced together, any time, free and just for fun.
 Click **Race with friends** on the course screen (bottom row, left of the way out; the Weekly Cup's
 item is right of it), or type `/hcm play race <course>`, to open your party. Anyone in it
-can invite through the usual invites ([Accept] on Java, `/hcm play accept` on Bedrock; the 30 s
+can invite through the usual invites (the Play? screen, [Accept] on Java, `/hcm play accept`; the 30 s
 cooldown stays, and `/hcm play invites off` turns party invites off too, including for a player who
 turned them off before party races existed), up to `party_max`. The party screen shows who's in and
 who's ready, and the course's Weekly Cup item when it runs one. Only the host starts, and the host
@@ -2319,6 +2358,28 @@ and the others carry on; a disconnect is the same. A host who leaves passes the 
 restart due soon refuses a new start (and ends a shared warm-up: straight to the grid), and a course
 held for Race Night can't be party-raced: when Race Night takes the track, a party race still on it is
 called off, its racers go home with their things, and nothing they hadn't finished counts.
+
+**Challenge someone (0.38.4).** Slot 19 on a course's screen (left of Race with friends, never
+on a Dropper): a party race of two with anyone online. It opens a picker of everyone online: green
+names can be tapped; grey names say why not in the name itself ("in a game", "in a party",
+"invites off", "busy"), so nobody mid-run is ever reached. Tapping a name sends the challenge as
+a party invite under the party races' key ("Race challenge": `/hcm play invites off` covers it;
+the Games screen's book reads "Race challenge invite from ..."; the summary reads "a race
+challenge on <course> - free, just for fun"). The other player's Yes walks them into the Clubhouse
+as a member of the party; the host's Party → Start seats both from the room; `party_after` brings
+both back to the results and the board. With the Clubhouse off it is the ordinary party lobby,
+exactly as Race with friends. The same two players wait 30 seconds between invites, and one invite
+is out at a time (the refusal line says so). The Clubhouse kit has the same challenge at slot 1.
+
+**Checkpoint splits (0.38.4).** On a solo run, each checkpoint's action-bar line gains how the run
+compares with your own best run on that course: **+0.4 s** in red (behind) or **-0.6 s** in green
+(ahead), tenths rounded down. At the line a sentence says where it went: "Faster than your best
+from checkpoint 3." / "Behind your best from checkpoint 2." / "Faster than your best on the last
+stretch." / "Level with your best all the way." The times are stored only on a personal best, per
+course **and** layout (`game_splits`, schema v39), so a Fresh course's next edition (or an edited
+course) starts fresh and an old run is never compared. Never shown in a party race, at Race Night
+or in a warm-up, and never to anyone else. An account move leaves `game_splits` where it is, like
+`game_scores`.
 
 **Race mode** is the engine party races and Race Night share: racers are held on the grid until one
 go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
@@ -2449,7 +2510,7 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 - **Golf together** (owner decision D4). The course screen (`/hcm play golf <course>` or
   `/hcm play <course>`) has **Play with friends**: a party of up to 4 through C1's parties (one party
   per player, shared with party races). Anyone in it can invite a friend (the usual invites:
-  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown stays, and `/hcm play invites off`
+  the Play? screen, [Accept] on Java, `/hcm play accept`; the pair cooldown stays, and `/hcm play invites off`
   turns golf together invites off too, including for a player who turned them off earlier); only
   the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
   time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
@@ -3718,6 +3779,9 @@ every race and round works exactly as before**.
   arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
   is no way out on foot, and nothing a mob can spawn on.
 - **Visit any time:** `/hcm play clubhouse`. The kit: **Party** (slot 0, while in a party),
+  **Challenge** (slot 1, golden boots, while not in a party: "Challenge - race anyone online", 0.38.4:
+  a course picker, then the everyone-online picker of **Challenge someone**; you stay in the room and
+  the kit shows Party once the challenge is out),
   **Results** (slot 2: named "Results - your last run" after a solo run or round here and "Results -
   the last race" otherwise, whichever is newer), **Go now** and **Stay here** (slots 3 and 5, while you're on your way to a
   course or a round), **Watch live** (slot 4, while a race is going), **Games** (slot 6, pick a
@@ -3781,7 +3845,7 @@ every race and round works exactly as before**.
     ran it, eight to a page. Then comes a page with the week's best golf round (fewest strokes
     against par), Today's pick and its bonus, and each Weekly Cup's leader. Last come the all-time
     records. Pages turn every 8 seconds. It starts again with the weekly boards: a hand-built
-    course's week turns with the weekly quests' `week_starts_on` at midnight, the Cup's with the Cup
+    course's week turns with the weekly quests' `arcade.quests.week_starts` at midnight, the Cup's with the Cup
     at 04:00. A Fresh course or a golf course keeps each player's best, so it counts on this week's
     page only if that best was set this week.
   - **Now playing** is on the south wall. It shows who is in which game right now and how far along,
@@ -3798,6 +3862,50 @@ every race and round works exactly as before**.
     Cup prizes. They never include games of chance, and never count a Cup entry or its refund.
     Tokens never become money.
   - The shared boards show only names, times and scores the high-score boards already show.
+- **NEW RECORD! (0.38.4).** When a solo run or a round alone that set the course's all-time record
+  lands back in the Clubhouse (`solo_after`), everyone in the room sees the title **NEW RECORD!**
+  (small line: who, which course, the time), the kid-safe burst goes up over the podium, and chat
+  reads "<name> set a new record on <course>: <time>". Outside the Clubhouse (the switches off,
+  another world, a rider, a test run) a harmless burst goes up where the player stands instead; a
+  round "changed while played" is never a record.
+- **The trophy case (0.38.4).** A row of item frames on the west wall under My stats, one per
+  all-time record on the Fame board's list (the courses first, then golf): a gold ingot for a
+  course's record, a golf ball for a golf course's, each with a one-line sign over it ("Sky Rings
+  1:02.4 - Sam"). At most 8 (the board's rows). Nothing to tap: a frame can't be turned, popped or
+  taken, and like the boards it is redrawn from the boards' cache (read every 30 s while anyone is
+  in) and swept at every start, so a crash leaves nothing behind. Owner-built rooms: stand where the
+  first frame goes, your back to the wall, facing into the room, and run `/hcm games clubhouse
+  trophies`; the row runs to your right. Without it there is no trophy case (nothing fails).
+- **The jukebox corner (0.38.4).** A small pink glass stage in the south-west corner with a real
+  jukebox on it (glass on top, so nothing can stand on it). Tap the jukebox, Java or Bedrock, or tap
+  **Songs** on the Games screen's Together tab while you are inside, and a Songs screen lists every
+  record the server knows (22 in this build), its title in the name. Tap one: "Sam picked Pigstep"
+  and it plays for the room; tap another while one plays and it goes next ("Next: Cat"); **Quiet**
+  stops it. The disc is the room's: it is never an item anyone gets, it comes out when the music
+  runs out, when the room closes or moves, and when the plugin stops, and a disc left by a crash is
+  taken out when the room opens. The sound is the ordinary jukebox block sound (Geyser plays it
+  like any jukebox); the Sound Muffler has no jukebox group, so the owner's zones can't hush it.
+  Owner-built rooms: place a jukebox, stand on it and run `/hcm games clubhouse jukebox`. Without
+  one there is no music. The generated room gains the corner once at the next start (the plan's
+  ALGO goes 1 -> 2 and the room converges: only the corner's blocks are written).
+- **The family week (0.38.4).** Points per player per week: a finished run 1, a personal best 2,
+  the week's best 3, a record 5, a party race win 3 (at least two racers), a round of golf 1, a
+  hole-in-one 3, a cheer given 1 (one that someone racing heard; at most one cheer every 10 s) - at
+  most 10 points a day each, so the youngest can keep up and nothing can be farmed. Every write is
+  once per event: a voided or test run never scores, and a re-shown result writes nothing. The Fame
+  board's fourth page, **Family week**, lists everyone ("1. Sam 14 pts - 3 wins"; "No points yet
+  this week - go play!" before anyone scores), and My stats says "This week: 9 pts, 2nd" (on the
+  wall, where it takes the row of the fourth personal best: the wall now shows three, the screen
+  still shows them all; and on the screen's new tile at slot 20). **The week is the wall boards'
+  week:** it turns at local midnight on `arcade.quests.week_starts`, NOT at the Weekly Cup's 04:00.
+  **The ceremony:** when the week turns, the first time at least two of last week's top three are in
+  the room (within the next 7 days, and not while the room is sending everyone home for a restart or
+  another Photo is waiting), they are placed on the podium, "Photo time!" with "Last week's top
+  three" shows for everyone in the room, the firework goes up over 1st and the room reads "Last
+  week: 1. Sam, 2. Lee, 3. Ana". Once a week, kept across restarts (`gen.clubhouse.week.done`,
+  written before the podium, so a crash never repeats it). It can run up to about 30 s after the
+  second of them walks in (it waits for a boards' read that carries the new week). Points never
+  become tokens or money.
 - **Locked in place.** Every board hangs flat on its wall like a sign, facing into the room, just off
   the wall, and big enough to read from anywhere in the room. They used to turn to face whoever
   looked at them, half into the wall from the side.
@@ -3833,7 +3941,7 @@ every race and round works exactly as before**.
 - **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
   party race or Race Night: **Take a rider (back seat)** on a boat course's screen, on the party screen
   of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
-  invite (key `rider`: [Accept] on Java, `/hcm play accept` on Bedrock; `/hcm play invites off` covers
+  invite (key `rider`: the Play? screen, [Accept] on Java, `/hcm play accept`; `/hcm play invites off` covers
   it). The rider hops in behind the driver at every start, grid and re-grid, holds the item "Riding
   with <driver> - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
   Their **Leave game** ends only their ride; when the driver finishes, stops, leaves or disconnects,
@@ -3890,7 +3998,9 @@ every race and round works exactly as before**.
   walls' boards the same way with `board fame` (this week's best), `board playing` (now playing) and
   `board stats` (my stats). They're optional: a wall with no board set shows nothing. `/hcm games
   clubhouse status` lists them. A results board set before 0.38.3 keeps the way you faced then, so if
-  it faces the wall, set it again. Nothing is built or guarded then. `/hcm games clubhouse generated`
+  it faces the wall, set it again. The trophy case and the jukebox (0.38.4) are set the same way:
+  `trophies` where the first frame goes (your back to the wall; the row runs to your right) and
+  `jukebox` standing on a real jukebox; both optional, and status lists them as "not set (optional)". Nothing is built or guarded then. `/hcm games clubhouse generated`
   goes back.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
@@ -3926,8 +4036,8 @@ revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONF
    in spectator mode, the racers can't see them, they can't leave the course's area, and the race's
    end brings them back to the Clubhouse in adventure mode. `/hcm play cheer` shows on the racers'
    action bar.
-5. On a boat course's screen tap **Take a rider (back seat)** and choose a friend; they accept (on
-   Bedrock: `/hcm play accept`). Start: they're in the back seat. Fall off at a checkpoint: they come
+5. On a boat course's screen tap **Take a rider (back seat)** and choose a friend; they accept (the
+   Play? screen, or `/hcm play accept`). Start: they're in the back seat. Fall off at a checkpoint: they come
    back with you. Their Leave game: you carry on. Your finish: they go home with their things.
 6. Start a Race Night with `/hcm games event start`, wait in the Clubhouse, race it out: everyone ends
    in the Clubhouse, the top three on the podium with "Photo time!".
@@ -3967,6 +4077,26 @@ revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONF
 19. Owner-built room: `/hcm games clubhouse board fame` with your back to a wall: the board hangs
     there, facing you.
 20. On **Bedrock** the boards show as name tags that face you, with the same words.
+21. On the tablet, send the daughter a party invite: the Play? screen opens (Not now / the asker /
+    Yes); Esc leaves the invite in chat and the screen never comes back; Yes joins. A Java player
+    gets the screen too, with the chat buttons under it. A `/trade` on Java opens the Trade? screen.
+22. From the kit's Challenge and from a course screen's Challenge someone: the course picker, the
+    people picker with grey reasons, "Challenge sent to ...", the other player's Yes brings them into
+    the Clubhouse, Start seats both, both come back.
+23. Set a record on a short course from the Clubhouse: NEW RECORD! for everyone in the room, the
+    burst over the podium, the chat line. With `solo_after` off: a burst where you finish.
+24. Run the same course twice: the second run shows +/- at each checkpoint and the sentence at the
+    line. Never in a party race.
+25. The trophy frames under My stats: one per record, the right item and line; a new record shows up
+    within half a minute of landing back in the room. On Bedrock the lines are name tags.
+26. Tap the jukebox: pick a record, hear it; pick another, "Next: ..."; Quiet. Leave the room empty
+    for a minute and check the block is empty again; `/hcm games clubhouse status` after a restart
+    shows the room built and checked.
+27. Finish a run, a personal best, a party race win and a cheer: the Fame board's Family week page and
+    My stats count them, never more than 10 a day. After the week turns, with two of last week's top
+    three in the room: the podium, "Photo time!", the firework over 1st and the "Last week:" line,
+    once.
+28. Owner-built room: `/hcm games clubhouse trophies` and `jukebox`; status lists both.
 <!-- ---- end the Clubhouse ---- -->
 
 ### Commands
@@ -3984,7 +4114,7 @@ entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 | `/hcm play <game\|course>` | `hcm.games.play` | Open a game (rules and odds first). A time trial first asks "Warm up (3:00) - then the timed run" or "Go straight to the timed run" (it starts straight away only with `games.trials.warmup_seconds: 0`, or on a Dropper); a golf course opens its course screen |
 | `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub. When nothing opens it says what the player was told, word for word (a refusal on the way in comes a moment later: "see the console"). Every refusal a player is told is also logged, `Games: <player> was told: <line>`, once a player and line a minute |
 | `/hcm play break` | `hcm.games.play` | The Take a break screen |
-| `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
+| `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite (the Play? screen's Yes / Not now do the same) |
 | `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings: Connect Four, Tic-Tac-Toe, party races, Ride along and golf together (an older `off` covers any added since; Connect Four's or Tic-Tac-Toe's own screen switch is just for that game). `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
 | `/hcm play news [on\|off]` | `hcm.games.play` | The one chat line that says new Fresh Courses are up ("New courses this week! ..."). On unless you turn it off |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
@@ -4681,8 +4811,8 @@ Dropper and Falling Floors have their own lists in their sections)
 68. With a restart a few minutes ahead (as in 61), warm up during the hold: "The server restarts at
     3:10 PM - so the warm-up is over and your timed run starts now." Choose Warm up, then log out
     before arriving: the next start asks again.
-69. On `cliffs`' screen, **Race with friends** (slot 20) opens a party; invite a friend (Bedrock:
-    `/hcm play accept`). The party screen shows the Cup's item at slot 44 when the course runs one.
+69. On `cliffs`' screen, **Race with friends** (slot 20) opens a party; invite a friend (the Play?
+    screen, or `/hcm play accept`). The party screen shows the Cup's item at slot 44 when the course runs one.
     The host starts: first a shared warm-up ("Warm up first: on (3:00)" at slot 42 is the default;
     it ends early once everyone taps Ready), then one shared 3-2-1 for everyone. Walk off your spot
     before Go: you're put back ("Stay on your grid spot until it says Go!"). On parkour and elytra
@@ -5669,6 +5799,102 @@ block without settings gets fresh ones.
 
 ---
 
+## The Copper Golem Brush
+
+<!-- ---- the Copper Golem Brush (0.38.4, golem/) ---- -->
+A **Copper Golem Brush** (0.38.4) tells a Copper Golem which chests are its. Vanilla golems take
+from a copper chest and put things into whichever chest is nearest; with the brush you pick the
+chests, so one golem feeds the ore room and another the farm chests. The owner asked for "a special
+tool - take something like the brush and make it a different colour and name it something different
+... lots of copper plus feathers and maybe a slime ball".
+
+- **Craft:** three feathers across the top, a slime ball in the middle, any copper block below
+  (plain, exposed, weathered or oxidized, waxed or not) - one brush. Admins:
+  `/hcm give golem_brush [player]`. It is a vanilla brush wearing a gold name, lore, the enchanted
+  glint and the UNCOMMON rarity colour: the brush texture itself cannot be tinted without a resource
+  pack (a copper texture through CraftBridge's pack is a later option, not built). It never wears out
+  and never brushes suspicious sand or gravel. It is never a token prize and never money: it is
+  crafted or given.
+- **Pick the chests:** hold it in your main hand and tap a Copper Golem (a plain tap or a shift-tap:
+  both open). Chat says "Rusty - pick its chests (60 s). Tap a chest to link it, tap again to
+  unlink." and the golem's name tag reads "Rusty -> no chests yet". Now tap each chest, trapped chest
+  or barrel it may use: the chest does not open, chat says "Chest #1 linked.", a "#1" floats over it
+  while you hold the brush, and the tag counts up. Both halves of a double chest link together
+  ("Chests #3 and #4 linked (both halves)."). Tap a linked chest again to unlink it. Tap the golem
+  again (no shift), put the brush away, swap hands, change world, log off or let the 60 s pass and
+  the session ends: "Rusty keeps 3 chests." A golem keeps at most 32 chest blocks.
+- **Clear:** shift-tap the golem twice within 2 seconds ("Shift-tap Rusty again (within 2 s) to
+  clear its chests.", then "Rusty has no chests of its own now - it uses any chest again."). A single
+  tap never clears anything.
+- **Outside a session the brush is just a brush:** chests open as usual, so a child holding it still
+  gets into chests. A plain brush, and CraftBridge's Golem Chest Marker, do nothing on a golem.
+- **What the golem does then:** it still takes from any copper chest (that is where it gets things)
+  and puts them only into its own chests, into a slot that already holds the same thing first, as
+  vanilla does. With none of its chests in reach, or all full, it keeps holding the item (vanilla's
+  own behaviour when no chest takes it) and its tag reads "Rusty - holding Cobblestone". Take the
+  item out of its hand with an empty hand, or give it a chest it can reach.
+- **Reach:** a golem only looks for chests within about **32 blocks** of where it walks, and uses one
+  no more than **one block above or two below** where it stands. The brush links a farther chest
+  anyway (the golem wanders) but says "That's a long way for Rusty". Put its chests near its copper
+  chest.
+- **Its name:** a golem with chests gets the name "Rusty" if it has none; a name you gave it with a
+  name tag is kept ("Bolt -> 2 chests"). Clearing its chests gives the name back as it was.
+- **It remembers:** the chests live in the golem's own data, so they survive restarts and chunk
+  unloads, move with the golem through a portal (and do nothing there: its chests are in the other
+  world) and die with the golem. A chest that is broken is forgotten the next time the golem is
+  loaded near it.
+- **CraftBridge:** linking a chest also marks it as a CraftBridge golem chest
+  (`craftbridge:golem_chest`), so CraftBridge's workbenches and the Combo Chest leave one of every
+  stack in it and the golem's sorting holds. Unlinking does **not** remove that mark (you may want to
+  keep it); CraftBridge's own marker toggles it. Nothing here needs CraftBridge installed.
+- **Bedrock:** every fact is in the golem's name tag, the "#N" labels over the chests (drawn as name
+  tags) and plain chat lines; no hover, no clickable text, no command to type, and the plain tap
+  opens the session so the sneak button is never needed.
+- **Nothing in a world game:** the brush does nothing while you are in a course, a party race, golf
+  or the Clubhouse.
+
+### How it works
+
+The filter is Paper's `ItemTransportingEntityValidateTargetEvent`: each time a golem considers a
+container, the plugin answers whether that block is one it may use. For a golem with chests of its
+own the answer is yes for every copper chest (where it takes from) and every chest it was given, and
+no for anything else; a "no" means the golem simply doesn't see that container in that search (it is
+asked again next time), so the filter can only remove targets, never add one. The handler is one map
+lookup, one tag test and one set lookup, never a log line. The chests are kept in the golem's own
+data (packed positions and the world's key), read into memory when the golem's chunk loads, and a
+position whose block is no longer a container is forgotten lazily. A golem with no chests of its own
+is never asked anything: vanilla behaviour, untouched.
+
+### Config: `golem`
+
+| Key | Default | What |
+|---|---|---|
+| `enabled` | `true` | `false`: the brush does nothing, there is no recipe and `/hcm give golem_brush` refuses; golems use any chest as before. Chests already picked stay in the golems' data, unread, until it is on again |
+| `recipe.enabled` | `true` | `false`: `/hcm give golem_brush` only |
+| `recipe.shape` | `["FFF", " S ", " C "]` | One to three rows of one to three characters, all the same width; a space is an empty slot |
+| `recipe.ingredients.<symbol>` | `F: FEATHER`, `S: SLIME_BALL`, `C: <the eight copper blocks>` | One material name, several separated by commas (any of them), or a list. An unknown name is skipped with a WARN; a symbol left with nothing takes its shipped list; a shape that can't be a recipe falls back to the shipped recipe whole |
+
+The section is new in 0.38.4 and is backfilled into an existing config.yml with its comments; the
+config revision stays 24.
+
+### Verify in game (and what to report)
+
+1. Craft the brush (three feathers, a slime ball, a copper block of any kind), or `/hcm give
+   golem_brush`. It glints and reads "Copper Golem Brush".
+2. Tap a Copper Golem with it, tap two chests: "#1" and "#2" float over them, the tag reads "Rusty ->
+   2 chests". Tap the golem again: "Rusty keeps 2 chests." Fill its copper chest: it fills only those
+   two. Break one: the tag counts down the next time the golem is loaded near it. Shift-tap it twice:
+   cleared, and it uses any chest again.
+3. On the tablet the same with a plain tap, and the "#N" labels show as name tags.
+4. **Report** what a golem looks like while none of its chests takes its item: its tag reads
+   "holding ..."; does it stand still, or wander and keep checking? (Vanilla says it keeps searching.)
+5. **Report** whether a shift-tap on a golem from the daughter's tablet arrives as a sneak. It does
+   not matter for picking chests (a plain tap opens the session too); it matters only for the
+   two-shift-tap clear, which the owner can always do from Java.
+6. **Report** how busy the server is near a copper chest with several golems: the filter never logs,
+   so nothing should show; say if TPS dips.
+<!-- ---- end the Copper Golem Brush ---- -->
+
 ## Permissions
 
 | Node | Default | Grants |
@@ -5729,6 +5955,10 @@ src/main/java/com/dierks/homecraft/
                                guard, recovery
   games/trial/                 time trials: parkour, elytra and boat courses
   games/golf/                  mini golf
+  games/clubhouse/             the Clubhouse: the room, its boards, the trophy case, the jukebox
+                               corner and the family week
+  golem/                       the Copper Golem Brush: the rules (pure), the brush and its recipe,
+                               the chest markers and the service (the Paper validate-target hook)
   gui/games/                   the Games screen, Take a break, high scores, the invite picker,
                                and each game's screens
   storage/                     SQLite datastore + DAOs

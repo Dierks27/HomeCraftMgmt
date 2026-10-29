@@ -338,11 +338,12 @@ class ClubhouseRoomTest {
         assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("fame board games;110")), r.statusLines().toString());
 
         ClubhouseRoom later = room();
-        assertEquals(new WallBoards.Wall(110, 72, -20, -90f, WallBoards.HAND_SCALE, WallBoards.LINE_WIDTH),
+        assertEquals(new WallBoards.Wall(110, 72, -20, -90f, WallBoards.HAND_SCALE, WallBoards.WALL_WIDTH),
                 later.wall(WallBoards.FAME), "read back after a restart, squared to east");
         assertEquals(0f, later.wall(WallBoards.PLAYING).yaw(), 0.001f, "south");
         assertEquals(90f, later.wall(WallBoards.STATS).yaw(), 0.001f, "west");
         assertEquals(180f, later.wall(WallBoards.RESULTS).yaw(), 0.001f, "the results board: north");
+        assertEquals(WallBoards.LINE_WIDTH, later.wall(WallBoards.RESULTS).lineWidth(), "as the generated room's");
         assertTrue(later.handSpots().stream().noneMatch(l -> l.startsWith("fame")), "the check's spots are as before");
 
         host.meta.put(ClubhouseRoom.BOARD_KEY + ".stats", "hub;1;2;3;0");

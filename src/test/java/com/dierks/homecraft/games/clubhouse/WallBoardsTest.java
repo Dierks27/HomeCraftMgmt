@@ -66,6 +66,8 @@ class WallBoardsTest {
             double[] f = facing(w.yaw());
             assertTrue(f[0] * (midX - w.x()) + f[1] * (midZ - w.z()) > 10, which + " faces the room's middle");
             assertEquals(WallBoards.SCALE, w.scale(), 0.001f, which + " is drawn big, to read across the room");
+            assertEquals(which.equals(WallBoards.RESULTS) ? WallBoards.LINE_WIDTH : WallBoards.WALL_WIDTH,
+                    w.lineWidth(), which + ": the results board fits its panel, the walls' wrap wider");
         }
         assertNull(WallBoards.generated("podium", BOX), "only the four boards");
         assertNull(WallBoards.generated(null, BOX), "no word, no board");
@@ -123,6 +125,8 @@ class WallBoardsTest {
         assertEquals(-3.25, w.z(), 0.0001, "where they stood");
         assertEquals(0f, w.yaw(), 0.001f, "44 is south");
         assertEquals(WallBoards.HAND_SCALE, w.scale(), 0.001f, "a size for a room of any size");
+        assertEquals(WallBoards.WALL_WIDTH, WallBoards.hand(WallBoards.FAME, new ClubhouseRoom.Place("games", 0, 0, 0,
+                0f)).lineWidth(), "a wall's board wraps as the generated room's");
         assertEquals(90f, WallBoards.snap(46f), 0.001f, "46 is west");
         assertEquals(180f, WallBoards.snap(-136f), 0.001f, "-136 is north");
         assertEquals(-90f, WallBoards.snap(-134f), 0.001f, "-134 is east");

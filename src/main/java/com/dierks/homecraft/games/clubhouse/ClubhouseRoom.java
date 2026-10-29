@@ -656,7 +656,7 @@ public final class ClubhouseRoom {
             return site == null ? null : WallBoards.generated(which, box);
         }
         Place at = WallBoards.RESULTS.equals(which) ? handBoard : handWalls.get(which);
-        return at == null || !at.world().equalsIgnoreCase(world()) ? null : WallBoards.hand(at);
+        return at == null || !at.world().equalsIgnoreCase(world()) ? null : WallBoards.hand(which, at);
     }
 
     /**

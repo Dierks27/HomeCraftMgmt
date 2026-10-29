@@ -13,7 +13,8 @@ import java.util.List;
  * drawn at {@value #SCALE}x so it reads from anywhere in the room. In the generated room the results board hangs on
  * the north wall facing south (in front of its black panel), this week's best on the east wall facing west, now
  * playing on the south wall facing north and my stats on the west wall facing east, all with their bottom edge
- * {@value #BOTTOM} blocks above the floor's block: over the windows (3-6) and under the trim (14). An owner-built
+ * {@value #BOTTOM} blocks above the floor's block: over the windows (3-6) and under the trim (14); the results board
+ * wraps at {@value #LINE_WIDTH} px to fit its panel, the walls' at {@value #WALL_WIDTH} px. An owner-built
  * room's board hangs where the admin stood, facing the way they faced, squared to north, east, south or west.
  *
  * <p><b>The facing.</b> A display's yaw is the way its text faces (0 south, 90 west, 180 north, -90 east): a FIXED
@@ -48,8 +49,10 @@ public final class WallBoards {
     /** The generated room's size (10 blocks wide at {@value #LINE_WIDTH} px), and an owner-built room's. */
     static final float SCALE = 2.0f;
     static final float HAND_SCALE = 1.5f;
-    /** Where a line wraps (px): about 32 plain characters. */
+    /** Where a line wraps (px): about 32 plain characters. The results board's, to fit its black panel. */
     static final int LINE_WIDTH = 200;
+    /** The walls' boards' (px): about 45 plain characters, 14 blocks wide at scale 2 on a 30-block wall. */
+    static final int WALL_WIDTH = 280;
     /** Every board shows this many lines (a title and 8 rows), padded, so its frame never jumps as it changes. */
     static final int LINES = ClubBoard.MAX_ROWS + 1;
     /** A text line's height on a display (px at scale 1, before the block's 1/40): 9 for the font and 1 between. */
@@ -99,9 +102,9 @@ public final class WallBoards {
         double y = box.minY() + BOTTOM;
         return switch (which) {
             case RESULTS -> new Wall(midX, y, box.minZ() + 1 + OFF_WALL, turn(0f), SCALE, LINE_WIDTH);
-            case FAME -> new Wall(box.maxX() - OFF_WALL, y, midZ, turn(90f), SCALE, LINE_WIDTH);
-            case PLAYING -> new Wall(midX, y, box.maxZ() - OFF_WALL, turn(180f), SCALE, LINE_WIDTH);
-            case STATS -> new Wall(box.minX() + 1 + OFF_WALL, y, midZ, turn(-90f), SCALE, LINE_WIDTH);
+            case FAME -> new Wall(box.maxX() - OFF_WALL, y, midZ, turn(90f), SCALE, WALL_WIDTH);
+            case PLAYING -> new Wall(midX, y, box.maxZ() - OFF_WALL, turn(180f), SCALE, WALL_WIDTH);
+            case STATS -> new Wall(box.minX() + 1 + OFF_WALL, y, midZ, turn(-90f), SCALE, WALL_WIDTH);
             default -> null;
         };
     }
@@ -111,7 +114,16 @@ public final class WallBoards {
      * squared to north, east, south or west.
      */
     public static Wall hand(ClubhouseRoom.Place at) {
-        return at == null ? null : new Wall(at.x(), at.y(), at.z(), turn(snap(at.yaw())), HAND_SCALE, LINE_WIDTH);
+        return hand(at, LINE_WIDTH);
+    }
+
+    /** {@link #hand(ClubhouseRoom.Place)} for board {@code which}: the walls' boards wrap wider. */
+    public static Wall hand(String which, ClubhouseRoom.Place at) {
+        return hand(at, WALLS.contains(which) ? WALL_WIDTH : LINE_WIDTH);
+    }
+
+    private static Wall hand(ClubhouseRoom.Place at, int lineWidth) {
+        return at == null ? null : new Wall(at.x(), at.y(), at.z(), turn(snap(at.yaw())), HAND_SCALE, lineWidth);
     }
 
     /** {@code yaw} to the nearest of 0, 90, 180 and -90 (a board hangs square to its wall). */

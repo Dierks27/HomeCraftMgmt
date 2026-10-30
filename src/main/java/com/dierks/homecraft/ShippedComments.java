@@ -33,9 +33,10 @@ import java.util.Set;
  * "launchers (1-3)", and it has no {@code remote}) and {@code arcade.launcher}'s (it said "(1-10, admins too)" and
  * named only the Mega show). The owner's file holds exactly 0.38.1's texts there: revision 23 refreshed the header to
  * 0.38.1's, and the backfill gave the new {@code arcade.launcher} 0.38.1's comment. Revision 25 (Sky Rings v3,
- * {@link com.dierks.homecraft.games.gen.GamesAreaMigration}) makes two of 0.37.2's stale again: the slots' (it named
- * only the v4 areas as grown and said nothing of Sky Rings' size) and {@code keep.area}'s (it said every Sky Rings
- * course fits a plot). 0.37.2 through 0.38.4 shipped one text on each.
+ * {@link com.dierks.homecraft.games.gen.GamesAreaMigration}, and the Long Drop,
+ * {@link com.dierks.homecraft.games.gen.DropperMixMigration}) makes two of 0.37.2's stale again: the slots' (it named
+ * only the v4 areas as grown, said nothing of Sky Rings' size and said "E easy, M medium, H hard" with no X) and
+ * {@code keep.area}'s (it said every Sky Rings course fits a plot). 0.37.2 through 0.38.4 shipped one text on each.
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
  * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's or 0.38.1's), told
@@ -68,7 +69,10 @@ final class ShippedComments {
     /** {@code GamesAreaMigration.V4}: the v4 areas (Golf v4 and the Mountain Run v2). */
     private static final int REV_AREAS = com.dierks.homecraft.games.gen.GamesAreaMigration.V4;
 
-    /** {@code GamesAreaMigration.REVISION}: Sky Rings v3's areas (512 x 176 x 512, the Classic moved west). */
+    /**
+     * {@code GamesAreaMigration.REVISION}, which is {@code DropperMixMigration.REVISION}: Sky Rings v3's areas
+     * (512 x 176 x 512, the Classic moved west) and the Long Drop (the Dropper's taller halves and its X level).
+     */
     private static final int REV_RINGS = com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION;
 
     /** {@code ShopMigration.REVISION}: the token shop. */
@@ -109,7 +113,8 @@ final class ShippedComments {
             new Stale("games.fresh.world", REV_AREAS, Set.of("cf98000938cc4089", "450d9f6b116ee1a1")),
             // the slots without the bigger halves, their new spots and the old areas emptied by themselves
             new Stale("games.fresh.slots", REV_AREAS, Set.of("d0f43fc28a015b8a", "b21c017d24e981a6")),
-            // the slots again: Sky Rings not among the grown areas, its 512 x 176 x 512 halves unsaid (0.37.2-0.38.4)
+            // the slots again: Sky Rings not among the grown areas, its 512 x 176 x 512 halves unsaid; "E easy,
+            // M medium, H hard" without the X, the droppers' halves without the Dropper's 144 (0.37.2-0.38.4)
             new Stale("games.fresh.slots", REV_RINGS, Set.of("da5555ee01b0e940")),
             // "well under 5 MB" (0.35) and "a Mountain Run about 50 KB ... about 6 MB" (0.36): now 0.4 MB, 25 MB
             new Stale("games.fresh.archive", REV_AREAS, Set.of("58fe358d73bbc064", "0081a1a17d71e8e9")),

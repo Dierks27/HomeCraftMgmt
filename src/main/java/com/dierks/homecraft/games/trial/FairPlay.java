@@ -269,7 +269,8 @@ public final class FairPlay {
     /**
      * Whether the leg ending at target {@code i} is the game's own teleport, never a player's move: a
      * Dropper's hop from a pool up to the next level's ledge (EVENTS-DROPPER-SPEC §B.1.7), some 30
-     * to 46 blocks in a quarter of a second. The legs that end at a pool are real falls, still checked.
+     * to 50 blocks in a quarter of a second. The legs that end at a pool are real falls, still checked
+     * (a Long Drop's 129-block fall averages about 36 blocks a second, under the kind's 80).
      */
     static boolean ownTeleport(Course course, int i) {
         return course.kind() == TrialKind.DROPPER && !DropperLayout.isPool(i);

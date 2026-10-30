@@ -71,8 +71,10 @@ class DropperEngineTest {
         assertEquals(176, KeepArea.PLOT_Y, "as tall");
         assertEquals(336, KeepArea.PLOT_Z, "as long: a dropper fits in the plot size that was already there");
         Box build = LegacyBoxes.keep().build(1, Slots.FRESH_DROPPER);
-        assertEquals(List.of(64, 64, 16), List.of(build.sizeX(), build.sizeY(), build.sizeZ()),
-                "a kept dropper stands in its plot at its own size");
+        assertEquals(List.of(64, 144, 16), List.of(build.sizeX(), build.sizeY(), build.sizeZ()),
+                "a kept Dropper stands in its plot at its own size (144 tall since the Long Drop, under the plot's 176)");
+        Box easy = LegacyBoxes.keep().build(1, Slots.EASY_DROPPER);
+        assertEquals(List.of(64, 64, 16), List.of(easy.sizeX(), easy.sizeY(), easy.sizeZ()), "a kept Easy Dropper at 64");
     }
 
     @Test
@@ -166,11 +168,12 @@ class DropperEngineTest {
     @Test
     void theWorkBudgetAndTheStarTierAreTheDroppers() {
         assertEquals(DropperPlanner.WORK_BUDGET, GenService.WORK.get(Slots.DROPPER), "counted pilot ticks, not time");
-        assertEquals(300_000L, GenService.WORK.get(Slots.DROPPER), "the spec's 300k");
+        assertEquals(600_000L, GenService.WORK.get(Slots.DROPPER), "600k since the Long Drop (300k before it)");
         assertEquals(ParkourPlanner.WORK_BUDGET, GenService.WORK.get(Slots.PARKOUR), "the others' are unchanged");
         assertEquals("easy", GenService.starTier(Slots.EASY_DROPPER, "EEE"), "EEE takes easy's star factors");
         assertEquals("medium", GenService.starTier(Slots.FRESH_DROPPER, "EEMMH"), "EEMMH medium's (the rounded mean)");
         assertEquals("hard", GenService.starTier(Slots.FRESH_DROPPER, "HHHHM"), "HHHHM hard's");
+        assertEquals("hard", GenService.starTier(Slots.FRESH_DROPPER, "EEMHX"), "EEMHX hard's: any mix with a Long Drop");
         assertEquals("hard", GenService.starTier(Slots.DAILY_PARKOUR_HARD, "hard"), "a parkour slot's tier is its own");
         assertEquals("EEEMMMMHH", GenService.starTier(Slots.DAILY_GOLF, "EEEMMMMHH"), "golf is untouched");
     }

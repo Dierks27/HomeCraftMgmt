@@ -22,7 +22,8 @@ import java.util.List;
  * </ul>
  * Signs are not in it: they don't stop anyone. Outside the half is air.
  *
- * <p>Mutable only while a planner fills it; a plain byte per block (a 64 x 64 x 16 half is 64 KiB).
+ * <p>Mutable only while a planner fills it; a plain byte per block (a 64 x 64 x 16 half is 64 KiB, the
+ * Dropper's 64 x 144 x 16 one 144 KiB).
  */
 public final class DropWorld {
 

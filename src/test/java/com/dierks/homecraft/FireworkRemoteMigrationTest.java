@@ -46,6 +46,16 @@ class FireworkRemoteMigrationTest {
             + " (firework_remote: tap launchers to pick them for your shows, 10 tokens) after the Ultimate Firework"
             + " Show.";
     /** The per_player INFO on 0.38.1's file. */
+    /** Revision 25's line for a file that still has Classic Sky Rings at its shipped 0.38 spot. */
+    static final String RINGS_MOVED = "Config migration: the bigger Sky Rings areas get their new spots (Classic Sky"
+            + " Rings [6080, 128, 4992] -> [1760, 128, 2880]). After the restart the old areas are emptied by themselves"
+            + " (ponds first, only Fresh Courses' own blocks); /hcm games check shows it.";
+
+    /** Revision 25's line for a file that still has the Dropper's shipped EEMMH. */
+    static final String MIX_MOVED = "Config migration: the Dropper's shipped mix EEMMH becomes EEMHX (level 5 is the"
+            + " Long Drop). Its halves are 64 x 144 x 16 now; after the restart its old area is emptied by itself (pools"
+            + " first) and the Dropper is built again, taller, at the same spot.";
+
     private static final String FIFTEEN = "Config migration: arcade.launcher - per_player 3 → 15 (each player may have"
             + " 15 Firework Launchers placed at once, enough for the Ultimate show's 10).";
     /** The ids revision 24 adds, in order. */
@@ -108,9 +118,9 @@ class FireworkRemoteMigrationTest {
         assertEquals(15, c.getInt(PER_PLAYER));
         assertEquals(bundled.getConfigurationSection("arcade.launcher").getValues(false),
                 c.getConfigurationSection("arcade.launcher").getValues(false), "the launcher section is the bundled one");
-        assertEquals(24, c.getInt("config_revision"));
-        assertEquals(List.of(ADDED_ALL, FIFTEEN, "Config migration: config_revision 23 → 24."), log,
-                "one INFO each, and the revision");
+        assertEquals(25, c.getInt("config_revision"), "on through revision 25 (Sky Rings and the Long Drop)");
+        assertEquals(List.of(ADDED_ALL, FIFTEEN, RINGS_MOVED, MIX_MOVED, "Config migration: config_revision 23 → 25."),
+                log, "one INFO each, revision 25's two, and the revision");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -124,7 +134,7 @@ class FireworkRemoteMigrationTest {
         assertFalse(c.contains(PER_PLAYER), "no launcher section yet: the backfill writes it");
         HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
         assertEquals(15, c.getInt(PER_PLAYER), "the backfill's 15");
-        assertEquals("Config migration: config_revision 22 → 24.", log.get(log.size() - 1));
+        assertEquals("Config migration: config_revision 22 → 25.", log.get(log.size() - 1));
     }
 
     @Test
@@ -139,9 +149,15 @@ class FireworkRemoteMigrationTest {
         }
         YamlConfiguration at24 = LayoutFixtures.v0381();
         at24.set("config_revision", 24);
-        String before = at24.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at24, "world"), "no step runs from 24");
-        assertEquals(before, at24.saveToString());
+        int launchers = at24.getInt(PER_PLAYER);
+        assertEquals(List.of(RINGS_MOVED, MIX_MOVED, "Config migration: config_revision 24 → 25."),
+                HomeCraftManagement.migrateConfig(at24, "world"), "no revision-24 step runs from 24, only 25's");
+        assertEquals(launchers, at24.getInt(PER_PLAYER), "the launchers are as they were");
+        YamlConfiguration at25 = LayoutFixtures.v0381();
+        at25.set("config_revision", 25);
+        String before = at25.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at25, "world"), "no step runs from 25");
+        assertEquals(before, at25.saveToString());
     }
 
     // ---- the owner's own rows and values -----------------------------------------------------------------
@@ -302,7 +318,8 @@ class FireworkRemoteMigrationTest {
         assertFalse(grand.contains("FireworkRemoteMigration"), "revision 23 is left as it is");
         assertEquals(23, GrandShowMigration.REVISION);
         assertEquals(24, FireworkRemoteMigration.REVISION);
-        assertEquals(HomeCraftManagement.CONFIG_REVISION, FireworkRemoteMigration.REVISION, "the newest revision");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, FireworkRemoteMigration.REVISION + 1,
+                "the revision before the newest (25: Sky Rings' areas and the Long Drop)");
     }
 
     /**
@@ -342,10 +359,11 @@ class FireworkRemoteMigrationTest {
         assertEquals("This config was written by a newer HomeCraft (revision 24); rows this version doesn't know are"
                 + " skipped.", HomeCraftManagement.newerConfigWarning(24, GrandShowMigration.REVISION), "0.38.1's WARN");
         assertNull(HomeCraftManagement.newerConfigWarning(23, GrandShowMigration.REVISION), "its own file: nothing");
-        assertNull(HomeCraftManagement.newerConfigWarning(24), "this build's own revision says nothing");
+        assertNull(HomeCraftManagement.newerConfigWarning(HomeCraftManagement.CONFIG_REVISION),
+                "this build's own revision says nothing");
         YamlConfiguration rolledBack = LayoutFixtures.bundled();
-        rolledBack.set("config_revision", 25);
+        rolledBack.set("config_revision", 26);
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(rolledBack, "world"), "no step runs");
-        assertEquals(25, rolledBack.getInt("config_revision"), "and the revision is never lowered");
+        assertEquals(26, rolledBack.getInt("config_revision"), "and the revision is never lowered");
     }
 }

@@ -92,9 +92,12 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 24 = the Firework Remote and the bigger Mega shows: the Super (4 launchers), Ultra (5) and Ultimate (10)
      * Firework Shows and the Firework Remote after the Mega Firework Show, and 15 Firework Launchers placed a player
      * instead of 3, wherever the owner hasn't changed them ({@link FireworkRemoteMigration}).
-     * 25 = Sky Rings v3: Sky Rings' halves grow to 512 x 176 x 512 in place and Classic Sky Rings', the same size,
-     * move west to 1760,128,2880, wherever the owner kept the shipped spot
-     * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the engine empties the old areas.
+     * 25 = Sky Rings v3 and the Long Drop: Sky Rings' halves grow to 512 x 176 x 512 in place and Classic Sky
+     * Rings', the same size, move west to 1760,128,2880, wherever the owner kept the shipped spot
+     * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the Dropper's shipped mix EEMMH becomes EEMHX (its
+     * level 5 is the Long Drop) wherever the owner hasn't changed it, and its halves and Classic Dropper's grow to
+     * 64 x 144 x 16 at the same spot ({@link com.dierks.homecraft.games.gen.DropperMixMigration}); the engine empties
+     * the old areas.
      * Each of 20, 21, 22, 23, 24 and 25 also refreshes the comments it makes stale, where they are still the plugin's
      * own words ({@link ShippedComments}).
      */
@@ -1334,6 +1337,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             // Classic moves west, wherever the shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
             com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c,
                     com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION, log);
+            // The Long Drop: the Dropper's shipped mix EEMMH becomes EEMHX wherever the owner hasn't changed it; the
+            // owner's own stays, with a WARN. The taller halves are the engine's job at the restart. See
+            // DropperMixMigration.
+            com.dierks.homecraft.games.gen.DropperMixMigration.apply(c, log);
+            // One refresh for both: the slots comment both features make stale is the same comment.
             ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {

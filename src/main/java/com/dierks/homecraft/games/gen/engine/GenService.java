@@ -3197,12 +3197,14 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /**
      * A planned trial as the course the flip makes of it: the slot's id and {@code name}, in
-     * {@code world}, with {@code tag} (the row's course, and WP-ADM's test run of a preview).
+     * {@code world}, with {@code tag} (the row's course, and WP-ADM's test run of a preview). Sky Rings'
+     * rocket budget goes with it, or a live run would hand out rockets the old way.
      */
     static Course trialCourse(Slots.Def def, String world, Course planned, GenTag tag, int rev, boolean pinned,
                               String name) {
         return new Course(def.id(), planned.kind(), name, planned.tier(), world, planned.start(),
-                planned.checkpoints(), planned.finish(), planned.fallY(), planned.minSeconds(), true, pinned, rev, tag);
+                planned.checkpoints(), planned.finish(), planned.fallY(), planned.minSeconds(), true, pinned, rev, tag,
+                planned.elytra());
     }
 
     /** The row for a new layout: the planned course with the slot's id and name, in the gen world. */

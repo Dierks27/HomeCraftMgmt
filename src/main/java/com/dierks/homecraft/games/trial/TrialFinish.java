@@ -49,8 +49,17 @@ import java.util.List;
  * original board (its old records are the ones to beat), and its first-finish refs are the
  * original's, so whoever cleared it back then isn't paid again; its stars are its own board's
  * ({@link GenBoards#stars(GenTag)}), so they count toward this week's chart.
+ *
+ * <p><b>The clean-run rule</b> ({@link #CLEAN_FOR_GOLD}): on a Hard dropper (the Dropper since the Long
+ * Drop, or any mix whose rounded tier is hard) the third star needs a run with no bonks. A gold time with
+ * a bonk is 2 stars, and the result says why ({@link Summary#bonkCapped}). Easy and medium droppers, and
+ * every other course, keep stars by time alone: a Long Drop has 9 s of slack inside its gold time, three
+ * deep bonks' worth, so without the rule a first visit could gold it through the plates.
  */
 final class TrialFinish {
+
+    /** The dropper tier whose third star needs a clean run (no bonks): hard. */
+    static final Tier CLEAN_FOR_GOLD = Tier.HARD;
 
     private TrialFinish() {
     }
@@ -160,15 +169,29 @@ final class TrialFinish {
      * @param weekBonus    {@code course_of_week_bonus}
      * @param featuredBonus {@code games.featured_bonus}
      * @param daily        what a Fresh course adds, or {@code null} for a hand-built course
+     * @param bonks        a dropper run's bonks in the timed run; -1 for any other course
+     * @param tier         the course's tier (a dropper's is its mix's rounded one), or {@code null}
      */
     record Run(String course, String name, long ms, long day, long weekKey, boolean courseOfWeek, boolean featured,
-               int firstClear, int weeklyBest, int weekBonus, int featuredBonus, Daily daily) {
+               int firstClear, int weeklyBest, int weekBonus, int featuredBonus, Daily daily, int bonks, Tier tier) {
+
+        /** A run that isn't a dropper's (no bonks, no clean-run rule). */
+        Run(String course, String name, long ms, long day, long weekKey, boolean courseOfWeek, boolean featured,
+            int firstClear, int weeklyBest, int weekBonus, int featuredBonus, Daily daily) {
+            this(course, name, ms, day, weekKey, courseOfWeek, featured, firstClear, weeklyBest, weekBonus,
+                    featuredBonus, daily, -1, null);
+        }
 
         /** A hand-built course's run. */
         Run(String course, String name, long ms, long day, long weekKey, boolean courseOfWeek, boolean featured,
             int firstClear, int weeklyBest, int weekBonus, int featuredBonus) {
             this(course, name, ms, day, weekKey, courseOfWeek, featured, firstClear, weeklyBest, weekBonus,
                     featuredBonus, null);
+        }
+
+        /** Whether the clean-run rule holds its third star back: a bonked run on a {@link #CLEAN_FOR_GOLD} dropper. */
+        boolean bonkCapped() {
+            return bonks > 0 && tier == CLEAN_FOR_GOLD;
         }
     }
 
@@ -182,11 +205,17 @@ final class TrialFinish {
      * @param stars     a Fresh course's stars (0 otherwise)
      * @param weekStars the Star Chart total after it, or -1 (not a Fresh course, or not recorded)
      * @param added     what recording the stars did, or {@code null} (not a Fresh course, or not recorded)
+     * @param bonkCapped whether a gold time earned 2 stars, not 3, because the run bonked on a Hard dropper
+     *                   ({@link #CLEAN_FOR_GOLD}); the result says so
      */
     record Summary(ScoreResult course, ScoreResult week, int earned, int stars, long weekStars,
-                   GamesDao.StarsAdded added) {
+                   GamesDao.StarsAdded added, boolean bonkCapped) {
 
-        static final Summary NONE = new Summary(ScoreResult.NONE, ScoreResult.NONE, 0, 0, -1, null);
+        static final Summary NONE = new Summary(ScoreResult.NONE, ScoreResult.NONE, 0, 0, -1, null, false);
+
+        Summary(ScoreResult course, ScoreResult week, int earned, int stars, long weekStars, GamesDao.StarsAdded added) {
+            this(course, week, earned, stars, weekStars, added, false);
+        }
 
         Summary(ScoreResult course, ScoreResult week, int earned) {
             this(course, week, earned, 0, -1, null);
@@ -229,6 +258,10 @@ final class TrialFinish {
         boolean firstFinish = run.firstClear() > 0 && !ledger.firstClearPaid();
         ledger.announce(set, ScoreResult.NONE, firstFinish);
         int stars = Stars.trial(run.ms(), tag.goldMs(), tag.silverMs());
+        boolean bonkCapped = run.bonkCapped() && stars == Stars.MAX;
+        if (run.bonkCapped()) {
+            stars = Math.min(stars, Stars.MAX - 1); // a Hard dropper's third star needs a clean run
+        }
         String weekBoard = GenBoards.week(daily.weekKey());
         GamesDao.StarsAdded added = ledger.addStars(GenBoards.stars(tag), weekBoard, stars);
         ledger.stars(stars, added);
@@ -239,7 +272,8 @@ final class TrialFinish {
         }
         earned += acrossGames(run, ledger);
         earned += goals(added, daily.goals(), weekBoard, ledger::payGoal);
-        return new Summary(set, ScoreResult.NONE, earned, stars, added == null ? -1 : added.weekTotal(), added);
+        return new Summary(set, ScoreResult.NONE, earned, stars, added == null ? -1 : added.weekTotal(), added,
+                bonkCapped);
     }
 
     /** Pays one goal: its ref, its tokens and its line; the tokens actually paid. */

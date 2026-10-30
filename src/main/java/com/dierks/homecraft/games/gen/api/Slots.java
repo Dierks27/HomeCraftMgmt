@@ -88,7 +88,7 @@ public final class Slots {
      * @param sizeZ       ...
      * @param plots       golf: how many holes fit (the longest mix); a dropper: how many levels; 0 for the others
      * @param enabled     shipped on
-     * @param tierOrMix   the shipped tier ({@code easy}), or golf or dropper mix ({@code EEEMMMMHH}, {@code EEMMH})
+     * @param tierOrMix   the shipped tier ({@code easy}), or golf or dropper mix ({@code EEEMMMMHH}, {@code EEMHX})
      * @param originX     the shipped origin: half A's min corner (multiples of 16)
      * @param originY     ...
      * @param originZ     ...
@@ -124,8 +124,8 @@ public final class Slots {
         }
 
         /**
-         * Whether its difficulty is a mix of E, M and H (golf's holes, a Dropper's levels) rather
-         * than one tier: the config key is {@code mix}, admins use {@code /hcm games gen mix}.
+         * Whether its difficulty is a mix of letters (golf's holes, E, M and H; a Dropper's levels, X
+         * too) rather than one tier: the config key is {@code mix}, admins use {@code /hcm games gen mix}.
          */
         public boolean mixed() {
             return golf() || dropper();
@@ -178,15 +178,20 @@ public final class Slots {
 
         /**
          * Why {@code tierOrMix} can't be this slot's difficulty, or {@code null} when it can: a
-         * tier is one of {@link #TIERS}; a golf mix is 1 to {@link #plots} of E, M and H, and so is
-         * a Dropper's (one letter a level, the Dropper's own {@code DropRules.mixProblem}).
+         * tier is one of {@link #TIERS}; a golf mix is 1 to {@link #plots} of E, M and H; a Dropper's
+         * is 1 to {@link #plots} of E, M, H and X, one letter a level, and every letter's shaft must fit
+         * the half's height (the Dropper's own {@code DropRules.mixProblem}: an X needs a 144-tall half,
+         * so it is refused on the 64-tall Easy Dropper at the command, not at build time). Golf keeps
+         * refusing an X.
          */
         public String tierProblem(String tierOrMix) {
             String t = normalise(tierOrMix);
+            if (dropper()) {
+                return com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(t, plots, sizeY);
+            }
             if (mixed()) {
                 return t.isEmpty() || t.length() > plots || !MIX.matcher(t).matches()
-                        ? "a " + (golf() ? "golf" : "dropper") + " mix is 1-" + plots + " of E, M and H (like "
-                        + this.tierOrMix + ")" : null;
+                        ? "a golf mix is 1-" + plots + " of E, M and H (like " + this.tierOrMix + ")" : null;
             }
             return TIERS.contains(t) ? null : "a tier is easy, medium or hard";
         }
@@ -201,6 +206,7 @@ public final class Slots {
         }
     }
 
+    /** A golf mix's letters; a Dropper's ({@code [EMHX]}) are {@code DropRules}' own. */
     private static final Pattern MIX = Pattern.compile("[EMH]+");
 
     /*
@@ -213,8 +219,10 @@ public final class Slots {
      *
      *   Col W, x 6080 (half B at x + size + 576): Sky Rings z 4096 (v5, 512 x 176 x 512 halves, x 6080..7679),
      *   Easy Parkour z 6592, Parkour z 7232, Hard Parkour z 7872.
-     *   Col E, x 7488: Tiny Golf z 5504, Classic Parkour z 6128, Easy Dropper z 6768, Dropper z 7360,
-     *   Classic Dropper z 7952.
+     *   Col E, x 7488: Tiny Golf z 5504, Classic Parkour z 6128, Easy Dropper z 6768 (64 x 64 x 16), Dropper
+     *   z 7360 and Classic Dropper z 7952 (both 64 x 144 x 16 since the Long Drop, y 160-303; they grew in
+     *   place, so an install that built at 0.35's spots keeps them, and the engine empties the old 64-tall
+     *   area first).
      *   Col G, x 8768 (v4, Golf v4's bigger halves): Golf of the Week z 4096, Classic Golf z 4896.
      *   North, z 2880 (v4, the Mountain Run v2): Ice Boat, x 6080..7615, y 96..271.
      *   West, z 2880: Classic Sky Rings x 1760..3359 (512 x 176 x 512; outside 4096..8191: a recalled plan is
@@ -267,18 +275,21 @@ public final class Slots {
 
     /*
      * The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a row of glass shafts, one per level of its mix (E, M,
-     * H), each 11 x 11 inside, so a half is 64 x 64 x 16 (4 x 1 chunks). Both stand in the east column,
-     * after Classic Parkour, 576 apart in z like every row. Both ship ON (the owner's decision: they run
-     * only while games.fresh.enabled is on, which the owner switches on).
+     * H, X), each 11 x 11 inside, so a half is 64 wide and 16 deep (4 x 1 chunks). Easy Dropper's half is
+     * 64 tall (an E, M or H shaft needs 61 rows); the Dropper's is 144 tall, because its last level is the
+     * Long Drop (X: 128 blocks down, a shaft of 141 rows), and Classic Dropper's is 144 too, so a recalled
+     * Dropper fits. Both stand in the east column, after Classic Parkour, 576 apart in z like every row.
+     * Both ship ON (the owner's decision: they run only while games.fresh.enabled is on, which the owner
+     * switches on).
      */
 
-    /** Easy Dropper: 3 easy levels, every hole ringed with light. */
+    /** Easy Dropper: 3 easy levels, every hole ringed with light. Unchanged by the Long Drop: 64 tall, EEE. */
     public static final Def EASY_DROPPER = new Def("fresh_dropper_easy", DROPPER, GAME_TRIALS, "dropper",
             "Easy Dropper", "&a", 64, 64, 16, 5, true, "EEE", 7488, 160, 6768,
             TokenBalance.FRESH_DROPPER_EASY_DAILY, TokenBalance.FRESH_DROPPER_EASY_WEEKLY);
-    /** Dropper: 5 levels, easy to hard. */
+    /** Dropper: 5 levels, easy to the Long Drop (EEMHX), in a 144-tall half. */
     public static final Def FRESH_DROPPER = new Def("fresh_dropper", DROPPER, GAME_TRIALS, "dropper", "Dropper",
-            "&9", 64, 64, 16, 5, true, "EEMMH", 7488, 160, 7360,
+            "&9", 64, 144, 16, 5, true, "EEMHX", 7488, 160, 7360,
             TokenBalance.FRESH_DROPPER_DAILY, TokenBalance.FRESH_DROPPER_WEEKLY);
 
     /** Every slot, in display and config order. */
@@ -316,9 +327,12 @@ public final class Slots {
     public static final Def CLASSIC_GOLF = new Def("fresh_classic_golf", GOLF, GAME_GOLF, "golf", "Classic Golf",
             "&6", 128, 16, 224, 9, true, "EEEMMMMHH", 8768, 160, 4896, 0, 0);
 
-    /** Classic Dropper: holds a recalled dropper of any mix. */
+    /**
+     * Classic Dropper: holds a recalled dropper of any mix, its half as tall as the Dropper's (144). An older
+     * 64-tall edition is recalled at its own size, in the half's corner.
+     */
     public static final Def CLASSIC_DROPPER = new Def("fresh_classic_dropper", DROPPER, GAME_TRIALS, "dropper",
-            "Classic Dropper", "&6", 64, 64, 16, 5, true, "EEMMH", 7488, 160, 7952, 0, 0);
+            "Classic Dropper", "&6", 64, 144, 16, 5, true, "EEMHX", 7488, 160, 7952, 0, 0);
 
     /** The Classics slots, in display and config order. */
     public static final List<Def> CLASSICS = List.of(CLASSIC_PARKOUR, CLASSIC_RINGS, CLASSIC_GOLF, CLASSIC_DROPPER);

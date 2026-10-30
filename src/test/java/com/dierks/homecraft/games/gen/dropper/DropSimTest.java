@@ -68,6 +68,7 @@ class DropSimTest {
         assertEquals(32, DropSim.fallTicks(32), "Easy's 32-block drop, walking off");
         assertEquals(37, DropSim.fallTicks(40), "Medium's 40");
         assertEquals(40, DropSim.fallTicks(48), "Hard's 48");
+        assertEquals(71, DropSim.fallTicks(128), "the Long Drop's 128");
     }
 
     @Test
@@ -75,6 +76,7 @@ class DropSimTest {
         assertEquals(38, DropSim.fallTicks(32, true), "a jump-off rises first: 32 blocks take 38 ticks");
         assertEquals(42, DropSim.fallTicks(40, true), "40 take 42");
         assertEquals(46, DropSim.fallTicks(48, true), "48 take 46");
+        assertEquals(77, DropSim.fallTicks(128, true), "128 take 77");
     }
 
     @Test
@@ -82,6 +84,23 @@ class DropSimTest {
         assertEquals(1.82, DropSim.speedAt(32), BLOCKS, "blocks a tick at Easy's water");
         assertEquals(2.03, DropSim.speedAt(40), BLOCKS, "at Medium's");
         assertEquals(2.14, DropSim.speedAt(48), BLOCKS, "at Hard's");
+        assertEquals(2.97, DropSim.speedAt(128), BLOCKS, "at the Long Drop's: still well under terminal speed");
+    }
+
+    @Test
+    void theDepthAfterSomeTicksIsTheFallTableReadTheOtherWay() {
+        assertEquals(10, DropSim.depthAfter(18), "18 walk-off ticks: 10 blocks down");
+        assertEquals(12, DropSim.depthAfter(19), "19: 12");
+        assertEquals(20, DropSim.depthAfter(25), "25: 20");
+        assertEquals(97, DropSim.depthAfter(60), "60: 97");
+        assertEquals(120, DropSim.depthAfter(68), "68: 120, the Long Drop's deepest draw");
+        assertTrue(DropSim.depthAfter(71) >= 128, "71: the Long Drop's water");
+        assertEquals(0, DropSim.depthAfter(0), "no ticks, no fall");
+        for (int t = 0; t <= 80; t++) {
+            int d = DropSim.depthAfter(t);
+            assertTrue(DropSim.fallTicks(d) <= t && DropSim.fallTicks(d + 1) > t, "after " + t + " ticks the feet "
+                    + "have passed " + d + " whole blocks and not the next: the two tables agree");
+        }
     }
 
     @Test

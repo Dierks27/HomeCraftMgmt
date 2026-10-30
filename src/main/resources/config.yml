@@ -2201,19 +2201,24 @@ games:
       # Sky Rings' own gold and silver on every tier (its expert time is a flown lap); 2.0 and 3.0 = easy's.
       rings: {gold: 1.4, silver: 2.0}
     # Each course: on or off, its difficulty (tier, or mix of golf holes or dropper levels: E easy,
-    # M medium, H hard) and where its area starts (origin: x y z, x and z a multiple of 16). A course
-    # has two halves along x, the one you play and a spare one for the next set, 576 blocks apart
-    # (half_gap: optional, 32-4096, a multiple of 16; a smaller gap lets players see the spare half).
+    # M medium, H hard, X the Long Drop: a dropper level 128 blocks down that needs a 144-tall half,
+    # the Dropper's, not Easy Dropper's) and where its area starts (origin: x y z, x and z a multiple
+    # of 16). A course has two halves along x, the one you play and a spare one for the next set, 576
+    # blocks apart (half_gap: optional, 32-4096, a multiple of 16; a smaller gap lets players see the
+    # spare half).
     # To move a course, empty it first (/hcm games gen clear <course> confirm), then change its origin.
     # A course whose area moved or grew with an update (Golf of the Week, Classic Golf, Ice Boat, Sky Rings
-    # and Classic Sky Rings) has its old area emptied by itself, ponds first and only the plugin's own blocks;
+    # and Classic Sky Rings; the Dropper and Classic Dropper, 64 x 144 x 16 now, with the Long Drop) has
+    # its old area emptied by itself, ponds and pools first and only the plugin's own blocks;
     # /hcm games gen tidy <course> confirm does it by hand. /hcm games gen on|off|tier|mix wins over these.
     # Golf of the Week's halves are 128 x 16 x 224 (nine holes, 40 x 64 each) at x 8768; Tiny Golf's
     # 64 x 16 x 48. Ice Boat's are 480 x 176 x 640 (a whole mountain) at z 2880, north of the others.
     # Sky Rings' halves are 512 x 176 x 512 at [6080, 128, 4096] (a loop of 20 rings, 8 rockets for the
     # whole run); Classic Sky Rings' the same at [1760, 128, 2880].
     # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
-    # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
+    # the bottom, one level per letter of their mix (at most 5). Easy Dropper's half is 64 x 64 x 16
+    # (E, M and H levels only); the Dropper's is 64 x 144 x 16, so its mix may hold an X (the Long
+    # Drop, a Hard course: 3 stars need a run with no bonks). A dropper switched on later is built
     # with the next set (or /hcm games gen reroll).
     # Golf of the Week is Golf v4: holes of four lengths, par 2 to 5 (the E holes of its mix are the
     # short ones, the H holes the longest), a job for every club, and par from a first-time player. Sand,
@@ -2232,7 +2237,7 @@ games:
       fresh_tiny_golf: {enabled: true, mix: EEE, origin: [7488, 160, 5504]}
       fresh_boat: {enabled: false, tier: medium, style: random, origin: [6080, 96, 2880]}
       fresh_dropper_easy: {enabled: true, mix: EEE, origin: [7488, 160, 6768]}
-      fresh_dropper: {enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}
+      fresh_dropper: {enabled: true, mix: EEMHX, origin: [7488, 160, 7360]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
     # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
     # A course is a few KB (a Mountain Run about 0.4 MB, stored compact): a year of weekly sets for every

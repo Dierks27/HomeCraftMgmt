@@ -4,18 +4,24 @@ import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Stars;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.CourseCodec;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Sky Rings' own star factors ({@code games.fresh.stars.rings}) in the tag a layout goes live with
  * ({@link GenService#tagFor}): its expert time is the autopilot's flown lap, so the shared easy factors would
  * give every clean run three stars. Set, they apply to Sky Rings on every tier and to Classic Sky Rings; missing,
- * Sky Rings takes its tier's like every other course; nothing else is ever touched by them.
+ * Sky Rings takes its tier's like every other course; nothing else is ever touched by them. The course the
+ * same flip makes ({@link GenService#trialCourse}) keeps the plan's rocket budget.
  */
 class RingsStarTimesTest {
 
@@ -48,5 +54,21 @@ class RingsStarTimesTest {
         GenTag parkour = tag(Slots.DAILY_PARKOUR_EASY, "easy", RINGS);
         assertEquals(Stars.threshold(30_000, 2.0), parkour.goldMs(), "Easy Parkour keeps easy's factors");
         assertEquals(Stars.threshold(30_000, 3.0), parkour.silverMs(), "both of them");
+    }
+
+    @Test
+    void theLiveCourseKeepsSkyRingsRocketBudget() {
+        Plan plan = GenKit.plan(Slots.SKY_RINGS, Slots.SKY_RINGS.half('A'), 7L, 1);
+        Course.Elytra budget = new Course.Elytra(8, List.of(6, 6, 5, 0), "GLG");
+        Course planned = ((PlannedTrial) plan.course()).course().withElytra(budget);
+        GenTag tag = tag(Slots.SKY_RINGS, "easy", RINGS);
+        Course live = GenService.trialCourse(Slots.SKY_RINGS, "sky", planned, tag, 1, false, "Sky Rings");
+        assertEquals(budget, live.elytra(), "the course a flip makes hands out the plan's rockets, not 3 a ring");
+        assertEquals(budget, CourseCodec.decode(live.id(), CourseCodec.encode(live)).course().elytra(),
+                "and its row reads back with them after a restart");
+        Course parkour = ((PlannedTrial) GenKit.plan(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_EASY.half('A'), 7L, 1)
+                .course()).course();
+        assertNull(GenService.trialCourse(Slots.DAILY_PARKOUR_EASY, "sky", parkour, tag, 1, false, "Easy Parkour")
+                .elytra(), "a course without a budget gets none");
     }
 }

@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the owner's 0.37.2 file ends with the token shop's three comments (the Prize Counter's header, the icon keys
  * and the collectors'); the owner's 0.38.0 file ends with revision 23's (the header's firework line); the owner's
  * 0.38.1 file ends with revision 24's (the header's launchers 1-10 and remote lines, and the launcher's 1-30 and the
- * Remote) and revision 25's (Sky Rings' bigger halves in the slots' and the keep area's); and every fingerprint is what
- * the versions before its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2 for 20-22, 0.38.0 for 23, 0.38.1
- * for 24 and 25).
+ * Remote) and revision 25's (Sky Rings' bigger halves in the slots' and the keep area's, and the slots' comment with
+ * the Long Drop); and every fingerprint is what the versions before its revision shipped on that key (0.35.0, 0.36.0
+ * or 0.37.2 for 20-22, 0.38.0 for 23, 0.38.1 for 24 and 25).
  */
 class ShippedCommentsTest {
 
@@ -133,9 +133,10 @@ class ShippedCommentsTest {
         String launcher = String.join("\n", after.getComments("arcade.launcher"));
         assertTrue(launcher.contains("(1-30, admins too)") && launcher.contains("Firework Remote")
                 && launcher.contains("Mega, Super, Ultra and Ultimate"), launcher);
+        String slots = String.join("\n", after.getComments("games.fresh.slots"));
+        assertTrue(slots.contains("X the Long Drop") && slots.contains("64 x 144 x 16"), "revision 25's: " + slots);
         assertEquals(bundled.getComments("arcade.holiday_shows"), after.getComments("arcade.holiday_shows"),
                 "the new holiday section comes with its comment (the backfill's)");
-        String slots = String.join("\n", after.getComments("games.fresh.slots"));
         assertTrue(slots.contains("Sky Rings' halves are 512 x 176 x 512") && slots.contains("Classic Golf, Ice Boat,"
                 + " Sky Rings"), "revision 25: the slots name Sky Rings' bigger halves: " + slots);
         String keep = String.join("\n", after.getComments("games.fresh.keep.area"));
@@ -229,9 +230,12 @@ class ShippedCommentsTest {
                 "games.race_night.max_race_minutes"),
                 ShippedComments.refresh(c, GamesAreaMigration.V4), "21: the areas' and the run's");
         assertEquals(List.of(), ShippedComments.refresh(c, GamesAreaMigration.V4), "and a second run has none left");
+        assertEquals(com.dierks.homecraft.games.gen.DropperMixMigration.REVISION, GamesAreaMigration.REVISION,
+                "Sky Rings' areas and the Long Drop are one revision, so one refresh");
         assertEquals(List.of("games.fresh.slots", "games.fresh.keep.area"),
                 ShippedComments.refresh(LayoutFixtures.v0381(), GamesAreaMigration.REVISION),
-                "25 on 0.38.1's file: Sky Rings' slots and keep comments");
+                "25 on 0.38.1's file (0.38.4's texts are the same): the slots' comment, for Sky Rings and the Long"
+                + " Drop, and the keep comment, for Sky Rings");
         assertEquals(List.of(), ShippedComments.refresh(LayoutFixtures.v036(), GamesAreaMigration.REVISION),
                 "and nothing on 0.36's, whose two are 21's to refresh");
     }

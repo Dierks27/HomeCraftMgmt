@@ -1672,7 +1672,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. They come with Fresh Courses: once the owner switches Fresh Courses on, they are there.
 - **Costs:** Free, like every Fresh Course.
-- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools. Both are new with every set.
+- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools; its last one is the Long Drop: 128 blocks straight down through 8 dark floors that come every third of a second, most with false holes beside the real one, and the holes keep sliding sideways: keep steering all the way to the water. Both are new with every set.
 
 **How to play**
 
@@ -1694,7 +1694,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 **Winning and scoring**
 
 - Your score is your time from Go to the last splash. The lowest time is best. Falling takes the same time for everyone, so fewer bonks and less waiting on ledges make a faster time.
-- Stars like any Fresh Course: 1 for finishing, 2 and 3 for good and great times.
+- Stars like any Fresh Course: 1 for finishing, 2 and 3 for good and great times. On a Hard dropper (the Dropper, with its Long Drop) the third star needs a run with no bonks: a great time with a bonk is 2 stars, and the result says "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run". Easy Dropper's stars are by time alone.
 - First finish in a set: Easy Dropper 10 tokens, Dropper 15 (weekly sets; 5 and 8 when the courses change every day).
 - A run with no bonks earns the achievement "Reach the bottom of a Dropper with no bonks" (20 tokens), once.
 - Slow falling (any potion), flying or a changed game mode means the run won't count.

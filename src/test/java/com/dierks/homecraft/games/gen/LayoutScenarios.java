@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -235,6 +236,11 @@ public final class LayoutScenarios {
      * <p>v4: the places whose size v4 changed ({@link LayoutGuard#RESIZED}: golf's two and the boat) can't
      * keep 0.35's shape, so they must be at their shipped spot, and a 0.35 claim of theirs must read as
      * resized: the engine records it as an old area and empties it (RETIRE), so nothing strands.
+     *
+     * <p>The Long Drop: the Dropper and Classic Dropper grew in place (64 to 144 tall, the same spot, no
+     * {@code RESIZED} entry), so a 0.35 claim of theirs reads as resized too, and is accepted when its
+     * origin and gap are exactly what config now gives: the engine records the old area and empties it
+     * first (F09: a region switched on but not yet claimed is no obstacle), then builds the taller one there.
      */
     public static String legacyProblem(FileConfiguration c, Install install) {
         try {
@@ -262,8 +268,13 @@ public final class LayoutScenarios {
                 }
                 continue;
             }
-            String now = Regions.claim(d, Regions.claimWorld(claim), new int[]{halves.get(0).minX(),
-                    halves.get(0).minY(), halves.get(0).minZ()}, halves.get(1).minX() - halves.get(0).maxX() - 1);
+            int[] corner = new int[]{halves.get(0).minX(), halves.get(0).minY(), halves.get(0).minZ()};
+            int gap = halves.get(1).minX() - halves.get(0).maxX() - 1;
+            String now = Regions.claim(d, Regions.claimWorld(claim), corner, gap);
+            if (Regions.resized(d, claim) && Arrays.equals(Regions.claimOrigin(claim), corner)
+                    && Integer.valueOf(gap).equals(Regions.claimGap(claim))) {
+                continue; // grows in place (the Dropper's 144): its old area is emptied first, then it is rebuilt there
+            }
             if (!now.equals(claim)) {
                 return d.id() + " was claimed as " + claim + " but config now gives " + now + ": it would be moved";
             }
@@ -286,12 +297,34 @@ public final class LayoutScenarios {
                 }
                 continue;
             }
-            if (!e.getValue().equals(places.get(e.getKey()))) {
+            if (!sameSpot(e.getValue(), places.get(e.getKey()))) {
                 return e.getKey() + " is at " + places.get(e.getKey()) + ", not where 0.35 built it (" + e.getValue()
                         + ")";
             }
         }
         return null;
+    }
+
+    /**
+     * Whether {@code now} stands where 0.35's {@code legacy} halves stood: the same boxes, or (a place that grew in
+     * place since, like the Dropper's 144-tall halves) the same min corners with the same width and depth, only taller.
+     */
+    private static boolean sameSpot(List<Box> legacy, List<Box> now) {
+        if (legacy.equals(now)) {
+            return true;
+        }
+        if (now == null || legacy.size() != now.size()) {
+            return false;
+        }
+        for (int i = 0; i < legacy.size(); i++) {
+            Box l = legacy.get(i);
+            Box n = now.get(i);
+            if (l.minX() != n.minX() || l.minY() != n.minY() || l.minZ() != n.minZ() || l.sizeX() != n.sizeX()
+                    || l.sizeZ() != n.sizeZ() || l.sizeY() > n.sizeY()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Why {@code c} isn't the new layout, or {@code null}. */

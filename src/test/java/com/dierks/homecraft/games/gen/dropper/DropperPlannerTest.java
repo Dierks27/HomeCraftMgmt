@@ -54,25 +54,37 @@ class DropperPlannerTest {
 
     @Test
     void twoThousandEasyDroppersAllPlanAndPassTheValidator() {
-        manySeeds("EEE");
+        manySeeds("EEE", SEEDS);
     }
 
     @Test
-    void twoThousandDroppersOfTheShippedMixAllPlanAndPassTheValidator() {
-        manySeeds("EEMMH");
+    void twoThousandDroppersOfTheOldShippedMixAllPlanAndPassTheValidator() {
+        manySeeds("EEMMH", SEEDS);
     }
 
     @Test
     void twoThousandAllHardDroppersAllPlanAndPassTheValidator() {
-        manySeeds("HHHHH");
+        manySeeds("HHHHH", SEEDS);
+    }
+
+    @Test
+    void twoThousandDroppersOfTheShippedMixWithTheLongDropAllPlanAndPassTheValidator() {
+        manySeeds("EEMHX", SEEDS);
+    }
+
+    @Test
+    void threeHundredAllLongDropDroppersAllPlanAndPassTheValidator() {
+        manySeeds("XXXXX", 300);
     }
 
     /**
-     * Plan {@value #SEEDS} seeds of {@code mix} (half A and B by turns, in parallel: plans are pure and
+     * Plan {@code seeds} seeds of {@code mix} (half A and B by turns, in parallel: plans are pure and
      * independent) and check every one: it plans (so its own validator passed), it places at most
-     * 20,000 blocks, all inside its half, within its work budget; and the layouts differ.
+     * 40,000 blocks, all inside its half, within its work budget (a typical plan well under it: 50k
+     * for E, M and H, 250k with a Long Drop); no level ever falls back to the straight drop; and the
+     * layouts differ.
      */
-    private static void manySeeds(String mix) {
+    private static void manySeeds(String mix, int seeds) {
         Map<Integer, String> failed = new ConcurrentHashMap<>();
         Set<String> hashes = ConcurrentHashMap.newKeySet();
         Map<LayerKit.Template, AtomicInteger> templates = new ConcurrentHashMap<>();
@@ -83,7 +95,7 @@ class DropperPlannerTest {
         AtomicInteger twins = new AtomicInteger();
         AtomicInteger decoys = new AtomicInteger();
         AtomicInteger straight = new AtomicInteger();
-        IntStream.range(0, SEEDS).parallel().forEach(n -> {
+        IntStream.range(0, seeds).parallel().forEach(n -> {
             char h = n % 2 == 0 ? 'A' : 'B';
             PlanInput in = DropperFixtures.input(mix, n, h);
             DropperPlanner.Build b;
@@ -108,19 +120,20 @@ class DropperPlannerTest {
                 twins.addAndGet(lp.twin() != null ? 1 : 0);
                 for (int j = 0; j < lp.shapes().length; j++) {
                     templates.computeIfAbsent(lp.shapes()[j].template(), t -> new AtomicInteger()).incrementAndGet();
-                    decoys.addAndGet(lp.decoys()[j] != null ? 1 : 0);
+                    decoys.addAndGet(lp.decoys()[j] == null ? 0 : lp.decoys()[j].length);
                 }
             }
         });
+        long typical = mix.contains("X") ? 250_000 : 50_000;
         assertTrue(failed.isEmpty(), mix + ": every seed plans and passes the validator; these didn't: "
                 + new TreeMap<>(failed).entrySet().stream().limit(5).toList());
-        assertTrue(hashes.size() >= SEEDS * 95 / 100, mix + ": at least 95% of the layouts are different: "
-                + hashes.size() + " of " + SEEDS);
-        assertTrue(maxOps.get() <= DropperValidator.MAX_OPS, mix + ": at most 20,000 blocks: " + maxOps.get());
+        assertTrue(hashes.size() >= seeds * 95 / 100, mix + ": at least 95% of the layouts are different: "
+                + hashes.size() + " of " + seeds);
+        assertTrue(maxOps.get() <= DropperValidator.MAX_OPS, mix + ": at most 40,000 blocks: " + maxOps.get());
         assertEquals(0, outside.get(), mix + ": every block inside its half");
         assertTrue(maxWork.get() <= DropperPlanner.WORK_BUDGET, mix + ": within the work budget: " + maxWork.get());
-        assertTrue(totalWork.get() / SEEDS < 50_000, mix + ": a typical plan flies under 50k ticks: "
-                + totalWork.get() / SEEDS);
+        assertTrue(totalWork.get() / seeds < typical, mix + ": a typical plan flies under " + typical / 1000
+                + "k ticks: " + totalWork.get() / seeds);
         assertEquals(0, straight.get(), mix + ": a real seed never needs the straight fallback");
         for (LayerKit.Template t : DropRules.levels(mix).get(DropRules.levels(mix).size() - 1).templates()) {
             assertTrue(templates.containsKey(t), mix + ": the " + t + " template is drawn: " + templates.keySet());
@@ -128,8 +141,8 @@ class DropperPlannerTest {
         if (mix.contains("M") || mix.contains("H")) {
             assertTrue(twins.get() > 0, mix + ": some levels offer a real choice of two openings");
         }
-        if (mix.contains("H")) {
-            assertTrue(decoys.get() > 0, mix + ": some Hard layers have a decoy");
+        if (mix.contains("H") || mix.contains("X")) {
+            assertTrue(decoys.get() > 0, mix + ": some Hard or Long Drop layers have a decoy");
         }
     }
 
@@ -138,11 +151,15 @@ class DropperPlannerTest {
     @Test
     void threeSeedsOfEachMixMakeExactlyThePinnedLayouts() {
         // Re-pinned in C1 for TrialKind.DROPPER (the kind is part of the plan hash); ALGO stays 1, since
-        // no dropper had been built with the stand-in kind (WIRING.md §1).
+        // no dropper had been built with the stand-in kind (WIRING.md §1). The Long Drop (X) added its own
+        // rows in the tall box (LegacyBoxes.tall) and changed nothing an E, M or H level draws, so the first
+        // nine stayed as they were and ALGO is still 1: the live editions stay re-derivable.
         Map<String, List<String>> golden = Map.of(
                 "EEE", List.of("ae04f1bbb4f0", "001bcd1cdc57", "32bc511dd1f2"),
                 "EEMMH", List.of("85276ccc6388", "2bf1c8ef5950", "6587e2722bd9"),
-                "HHHHH", List.of("38d96b8dac98", "fd9a863103f6", "b24172a9cb4a"));
+                "HHHHH", List.of("38d96b8dac98", "fd9a863103f6", "b24172a9cb4a"),
+                "EEMHX", List.of("a82b38e53152", "176900d2d88a", "f76aafefdb19"),
+                "XXXXX", List.of("20fcc59e9eb5", "aae307e1aec6", "03ecaeb85290"));
         Map<String, List<String>> made = new java.util.TreeMap<>();
         for (String mix : golden.keySet()) {
             made.put(mix, List.of(DropperFixtures.plan(mix, 0).hash(), DropperFixtures.plan(mix, 1).hash(),
@@ -154,7 +171,7 @@ class DropperPlannerTest {
 
     @Test
     void theSamePlanComesOutEveryTimeWithTheSameCountedWork() throws GenFailed {
-        for (String mix : List.of("EEE", "EEMMH", "HHHHH")) {
+        for (String mix : List.of("EEE", "EEMMH", "HHHHH", "EEMHX")) {
             Plan a = new DropperPlanner().plan(DropperFixtures.input(mix, 7, 'B'));
             Plan b = new DropperPlanner().plan(DropperFixtures.input(mix, 7, 'B'));
             assertEquals(a.hash(), b.hash(), mix + ": the same seed makes the same blocks");
@@ -206,7 +223,7 @@ class DropperPlannerTest {
         double[] exits = {-1.05, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.05};
         List<String> missed = new ArrayList<>();
         int flown = 0;
-        for (String mix : List.of("EEE", "EEMMH", "HHHHH")) {
+        for (String mix : List.of("EEE", "EEMMH", "HHHHH", "EEMHX")) {
             List<DropRules.Level> tiers = DropRules.levels(mix);
             for (int n = 0; n < 6; n++) {
                 Plan p = DropperFixtures.plan(mix, n);
@@ -258,7 +275,7 @@ class DropperPlannerTest {
 
     @Test
     void theStraightFallbackPassesEveryTiersPilots() throws GenFailed {
-        for (String mix : List.of("EEEEE", "MMMMM", "HHHHH")) {
+        for (String mix : List.of("EEEEE", "MMMMM", "HHHHH", "XXXXX")) {
             for (int n = 0; n < 24; n++) {
                 char h = n % 2 == 0 ? 'A' : 'B';
                 DropperPlanner.Build b = PLANNER.build(DropperFixtures.input(mix, n, h), true);
@@ -296,11 +313,12 @@ class DropperPlannerTest {
         assertEquals("dropper", PLANNER.id(), "generator id dropper");
         assertEquals(DropperSlots.DROPPER, PLANNER.id(), "the id its slots name");
         assertEquals(1, PLANNER.algo(), "version 1");
-        assertEquals(300_000, DropperPlanner.WORK_BUDGET, "the budget GenService.WORK gives it");
+        assertEquals(600_000, DropperPlanner.WORK_BUDGET, "the budget GenService.WORK gives it");
         for (Slots.Def d : DropperSlots.ALL) {
             assertEquals(PLANNER.id(), d.generator(), d.id() + " is made by it");
             assertEquals(Slots.GAME_TRIALS, d.game(), d.id() + "'s row is an ordinary trials row");
-            assertTrue(DropperGeometry.fits(d.half('A'), DropRules.MAX_LEVELS), d.id() + "'s half fits 5 shafts");
+            assertTrue(DropperGeometry.fits(d.half('A'), DropRules.levels(d.tierOrMix())),
+                    d.id() + "'s half fits a shaft per level of its mix");
         }
     }
 
@@ -309,10 +327,10 @@ class DropperPlannerTest {
         assertEquals(List.of("fresh_dropper_easy", "fresh_dropper", "fresh_classic_dropper"),
                 DropperSlots.ALL.stream().map(Slots.Def::id).toList(), "the three slots");
         assertEquals("EEE", DropperSlots.EASY.tierOrMix(), "Easy Dropper: 3 easy levels");
-        assertEquals("EEMMH", DropperSlots.DROPPER_SLOT.tierOrMix(), "Dropper: 5 levels, easy to hard");
-        assertEquals(new Box(7488, 160, 6768, 7551, 223, 6783), DropperSlots.EASY.half('A'), "Easy's half A");
-        assertEquals(new Box(8128, 160, 7360, 8191, 223, 7375), DropperSlots.DROPPER_SLOT.half('B'),
-                "the Dropper's half B, 576 past A");
+        assertEquals("EEMHX", DropperSlots.DROPPER_SLOT.tierOrMix(), "Dropper: 5 levels, easy to the Long Drop");
+        assertEquals(new Box(7488, 160, 6768, 7551, 223, 6783), DropperSlots.EASY.half('A'), "Easy's half A, 64 tall");
+        assertEquals(new Box(8128, 160, 7360, 8191, 303, 7375), DropperSlots.DROPPER_SLOT.half('B'),
+                "the Dropper's half B, 576 past A, 144 tall");
         assertEquals(7952, DropperSlots.CLASSIC.originZ(), "the Classic Dropper, a row further along z");
         assertTrue(DropperSlots.EASY.enabled() && DropperSlots.DROPPER_SLOT.enabled(),
                 "both ship on (inside games.fresh, which ships off)");
@@ -357,12 +375,15 @@ class DropperPlannerTest {
     @Test
     void everyFailureIsAGenFailed() {
         Slots.Def d = DropperSlots.DROPPER_SLOT;
-        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A', 1, 0, 1, "EXE",
+        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A', 1, 0, 1, "EQE",
                 6, 0, null)), "a bad mix");
         assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A', 1, 0, 1, "easy",
                 6, 0, null)), "a trial tier is not a mix");
         assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, Box.sized(0, 0, 0, 40, 64, 16), 'A', 1, 0,
                 1, "EEEEE", 6, 0, null)), "a half too narrow for five shafts");
+        GenFailed low = assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A',
+                1, 0, 1, "EXE", 6, 0, null)), "a 64-tall half is too short for a Long Drop");
+        assertTrue(low.getMessage().contains("too small"), "said plainly: " + low.getMessage());
         GenFailed stop = assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A',
                 1, 0, 1, "EEMMH", 6, 0, () -> true)), "a cancelled job");
         assertEquals("cancelled", stop.getMessage(), "gives up as cancelled");
@@ -372,25 +393,29 @@ class DropperPlannerTest {
 
     @Test
     void theCourseIsTheLedgesAndPoolsInOrderWithTheTimesOfItsMix() {
-        Plan p = DropperFixtures.plan("EEMMH", 5);
+        Plan p = DropperFixtures.plan("EEMHX", 5);
         Course c = DropperFixtures.course(p);
         PlannedTrial t = (PlannedTrial) p.course();
         assertEquals("fresh_dropper", c.id(), "the row is the slot");
         assertEquals(DropperPlanner.KIND, c.kind(), "the planner's kind");
         assertEquals(com.dierks.homecraft.games.trial.TrialKind.DROPPER, c.kind(),
                 "a dropper row (C1 added TrialKind.DROPPER, so the stand-in is gone)");
-        assertEquals(DropRules.tier("EEMMH"), c.tier(), "the mix's rounded mean: medium");
+        assertEquals(DropRules.tier("EEMHX"), c.tier(), "the mix's tier: hard, by the Long Drop");
+        assertEquals(com.dierks.homecraft.games.trial.Tier.HARD, c.tier(), "hard");
         assertEquals(8, c.checkpoints().size(), "pool, ledge four times: at most 8 for 5 levels");
         assertEquals(5, DropMarks.levels(c), "five levels");
-        assertEquals(DropRules.refMs("EEMMH"), t.refMs(), "the reference time, 17.4 s");
-        assertEquals(DropRules.minSeconds("EEMMH"), c.minSeconds().intValue(), "the shortest honest time");
+        assertEquals(19_100, t.refMs(), "the reference time, 19.1 s");
+        assertEquals(DropRules.minSeconds("EEMHX"), c.minSeconds().intValue(), "the shortest honest time");
         assertEquals(List.of(), DropMarks.problems(c), "a well-formed dropper");
         int lowest = Integer.MAX_VALUE;
         for (int i = 0; i < 5; i++) {
             lowest = Math.min(lowest, DropMarks.floorRow(DropMarks.poolOf(c, i)));
-            assertEquals(p.half().minY() + DropperGeometry.LEDGE_TOP, DropMarks.ledgeOf(c, i).y(), 1e-9,
-                    "level " + (i + 1) + "'s ledge top is at 56 in the half");
+            assertEquals(DropperGeometry.ledgeTop(p.half()), DropMarks.ledgeOf(c, i).y(), 1e-9,
+                    "level " + (i + 1) + "'s ledge top is 8 under the half's top (136 in the tall half)");
         }
+        assertEquals(p.half().minY() + 136, DropMarks.ledgeOf(c, 4).y(), 1e-9, "at 136 of 0-143");
+        assertEquals(p.half().minY() + 8, DropMarks.surface(DropMarks.poolOf(c, 4)), 1e-9, "the Long Drop's water at 8");
+        assertEquals(p.half().minY(), c.fallY(), 1e-9, "the fall line at the half's bottom, 4 under its floor");
         assertEquals(lowest - DropperGeometry.FALL_BELOW_FLOOR, c.fallY(), 1e-9,
                 "the fall line is 4 under the lowest floor");
         DropCheck.View v = DropperFixtures.view(p, 0, DropRules.Level.EASY);
@@ -428,7 +453,7 @@ class DropperPlannerTest {
 
     @Test
     void theWitnessSplashesAtLeastRPlusTheHalfBodyInsideThePool() {
-        for (String mix : List.of("EEMMH", "HHHHH")) {
+        for (String mix : List.of("EEMMH", "HHHHH", "EEMHX")) {
             for (int n = 0; n < 8; n++) {
                 Plan p = DropperFixtures.plan(mix, n);
                 for (int i = 0; i < mix.length(); i++) {
@@ -564,12 +589,13 @@ class DropperPlannerTest {
 
     @Test
     void eachLevelHasItsSignItsHeadroomAndItsProofInTheSummary() {
-        Plan p = DropperFixtures.plan("EEMMH", 6);
+        Plan p = DropperFixtures.plan("EEMHX", 6);
         assertEquals(5, p.signs().size(), "one sign a level");
         for (int i = 0; i < 5; i++) {
             SignText s = p.signs().get(i);
-            assertEquals(List.of("LEVEL " + (i + 1) + " of 5", "Step off and", "fall into the", "WATER!"), s.lines(),
-                    "level " + (i + 1) + "'s sign");
+            List<String> want = i == 4 ? List.of("LEVEL 5 of 5", "THE LONG DROP", "steer all the", "way down!")
+                    : List.of("LEVEL " + (i + 1) + " of 5", "Step off and", "fall into the", "WATER!");
+            assertEquals(want, s.lines(), "level " + (i + 1) + "'s sign" + (i == 4 ? ": the Long Drop's words" : ""));
             assertTrue(s.blockData().startsWith(Palette.WALL_SIGN), "on the wall");
             DropperGeometry.Shaft sh = DropperGeometry.shaft(p.half(), i);
             Box room = p.keepClear().get(i);
@@ -578,8 +604,15 @@ class DropperPlannerTest {
             assertTrue(p.half().contains(room), "inside the half");
             assertNotNull(DropperFixtures.witness(p, i), "level " + (i + 1) + "'s witness is in the summary, readable");
         }
-        assertTrue(p.summary().get(0).contains("(EEMMH)"), "the first line names the mix: " + p.summary().get(0));
-        assertEquals(List.of(), DropperValidator.problems(p, "EEMMH"), "and the whole plan is proven");
+        assertTrue(p.summary().get(0).contains("(EEMHX)"), "the first line names the mix: " + p.summary().get(0));
+        String five = p.summary().stream().filter(l -> l.startsWith("level 5 (")).findFirst().orElse("");
+        assertTrue(five.startsWith("level 5 (X, purple): ledge facing "), "the Long Drop's line: " + five);
+        assertTrue(five.endsWith(", pool 6x6"), "ends with its pool: " + five);
+        assertEquals(List.of(), DropperValidator.problems(p, "EEMHX"), "and the whole plan is proven");
+        Plan old = DropperFixtures.plan("EEMMH", 6);
+        for (SignText s : old.signs()) {
+            assertEquals("WATER!", s.lines().get(3), "an E, M or H level keeps its old sign");
+        }
     }
 
     @Test
@@ -588,6 +621,15 @@ class DropperPlannerTest {
         Plan recalled = PlanShift.to(p, LegacyBoxes.half(DropperSlots.CLASSIC, 'B'));
         assertEquals(List.of(), DropperValidator.problems(recalled),
                 "moved whole blocks away it is the same course, proven from its own pools' mix");
+        // an old 64-tall edition recalled into the Classic once it is 144 tall: placed at its own size in the corner
+        Box tall = LegacyBoxes.tall(DropperSlots.CLASSIC, 'B');
+        Box corner = Box.sized(tall.minX(), tall.minY(), tall.minZ(), p.half().sizeX(), p.half().sizeY(), p.half().sizeZ());
+        assertTrue(tall.contains(corner), "a 64-tall edition fits the tall Classic");
+        assertEquals(List.of(), DropperValidator.problems(PlanShift.to(p, corner)),
+                "and is still proven there, inside its own half, its ledges 56 up as they were");
+        Plan x = DropperFixtures.plan("EEMHX", 8);
+        assertEquals(List.of(), DropperValidator.problems(PlanShift.to(x, tall)),
+                "an edition with the Long Drop recalls into the tall Classic the same way");
         PlanCodec.Read back = PlanCodec.decode(PlanCodec.encode(p));
         assertTrue(back.ok(), "a dropper plan is archived: " + back.problem());
         assertEquals(p.hash(), back.plan().hash(), "and reads back the same layout");
@@ -597,7 +639,7 @@ class DropperPlannerTest {
 
     @Test
     void theWitnessTextIsItsShortestForm() {
-        for (String mix : List.of("EEE", "EEMMH", "HHHHH")) {
+        for (String mix : List.of("EEE", "EEMMH", "HHHHH", "EEMHX")) {
             for (int n = 0; n < 3; n++) {
                 Plan p = DropperFixtures.plan(mix, n);
                 for (int i = 0; i < mix.length(); i++) {
@@ -607,5 +649,70 @@ class DropperPlannerTest {
                 }
             }
         }
+    }
+
+    // ---- the Long Drop ------------------------------------------------------------------------------
+
+    /**
+     * What makes the Long Drop the Long Drop: its witness steers all the way to the water (the last key
+     * is held, never let go), turns 3 to 5 times, and every plate's hole is at least half a block from
+     * the one before, so the line keeps sliding; its plates come one beat apart (6-7 ticks of fall);
+     * its holes are unlit; and about half its plates carry false holes.
+     */
+    @Test
+    void theLongDropsWitnessSteersToTheWaterAndItsHolesKeepSliding() {
+        int levels = 0;
+        int decoyPlates = 0;
+        int twoHoled = 0;
+        for (int n = 0; n < 12; n++) {
+            Plan p = DropperFixtures.plan("EEMHX", n);
+            DropWorld w = DropperFixtures.world(p);
+            DropCheck.View v = DropperFixtures.view(p, 4, DropRules.Level.EXTREME);
+            DropProgram witness = DropperFixtures.witness(p, 4);
+            String where = "EEMHX seed " + n + " level 5";
+            DropProgram.Segment last = witness.segments().get(witness.segments().size() - 1);
+            assertTrue(last.dir() != DropProgram.Dir.NONE, where + ": the last key is held to the water: " + witness);
+            assertFalse(witness.encode().contains("-"), where + ": never let go: " + witness);
+            int changes = witness.changes(v.forward());
+            assertTrue(changes >= 3 && changes <= 5, where + ": 3 to 5 turns: " + witness);
+            for (DropProgram.Segment s : witness.segments()) {
+                assertTrue(List.of(DropProgram.Dir.N, DropProgram.Dir.E, DropProgram.Dir.S, DropProgram.Dir.W)
+                        .contains(s.dir()), where + ": quarter turns only, along the axes: " + witness);
+            }
+            DropCheck.Flight f = DropCheck.witness(w, v, witness, DropRules.Level.EXTREME.tube());
+            assertTrue(f.result().splashed(), where + ": the witness splashes");
+            assertEquals(8, f.crossings().size(), where + ": through all 8 plates");
+            for (int j = 1; j < 8; j++) {
+                double[] a = f.crossings().get(j - 1);
+                double[] b = f.crossings().get(j);
+                double offset = Math.hypot(b[0] - a[0], b[1] - a[1]);
+                assertTrue(offset >= 0.5 - 1e-9, where + ": plate " + (j + 1) + "'s crossing is " + offset
+                        + " from plate " + j + "'s, at least 0.5");
+                int gap = (int) Math.round(b[2] - a[2]);
+                assertTrue(gap >= 6 && gap <= 7, where + ": plates " + j + " and " + (j + 1) + " are " + gap
+                        + " ticks apart, one beat");
+            }
+            int depth = v.ledgeTop() - v.layerRows().get(0) - 1;
+            assertTrue(depth >= 10 && depth <= 12, where + ": the first plate " + depth + " down, like Hard's");
+            assertEquals(128, v.ledgeTop() - v.surfaceY(), where + ": 128 blocks to the water");
+            assertEquals(6, (int) Math.rint(2 * DropMarks.halfWidth(v.pool())), where + ": a 6-wide pool");
+            for (int row : v.layerRows()) {
+                for (int x = v.x1(); x <= v.x2(); x++) {
+                    for (int z = v.z1(); z <= v.z2(); z++) {
+                        assertFalse(DropBlocks.LIGHT.equals(DropperFixtures.blockAt(p, x, row, z)), where + ": unlit");
+                    }
+                }
+            }
+            for (String line : p.summary()) {
+                if (line.startsWith("level 5 (X")) {
+                    levels++;
+                    decoyPlates += line.split(" decoy", -1).length - 1;
+                    twoHoled += line.split(" 2 decoys", -1).length - 1;
+                }
+            }
+        }
+        assertEquals(12, levels, "every plan's Long Drop line was read");
+        assertTrue(decoyPlates > 0, "some plates carry a false hole");
+        assertTrue(twoHoled > 0, "some carry two");
     }
 }

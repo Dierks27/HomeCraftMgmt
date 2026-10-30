@@ -79,7 +79,7 @@ class DropperSlotsConfigTest {
                 "and for the Dropper");
         assertFalse(s.enabled(), "Fresh Courses itself ships off, so nothing is built until the owner switches it on");
         assertEquals("EEE", easy.tierOrMix(), "Easy Dropper: three easy levels");
-        assertEquals("EEMMH", drop.tierOrMix(), "the Dropper: five, easy to hard");
+        assertEquals("EEMHX", drop.tierOrMix(), "the Dropper: five, easy to the Long Drop");
         assertArrayEquals(new int[]{7488, 160, 6768}, easy.origin(), "Easy Dropper's area (the east column)");
         assertArrayEquals(new int[]{7488, 160, 7360}, drop.origin(), "the Dropper's, a row further along z");
         assertEquals(TokenBalance.FRESH_DROPPER_EASY_WEEKLY, s.dailyClear("fresh_dropper_easy", 7),
@@ -103,17 +103,27 @@ class DropperSlotsConfigTest {
         put(fresh, "slots.fresh_dropper.enabled", true);
         put(fresh, "slots.fresh_dropper.mix", "eemhh");
         put(fresh, "slots.fresh_dropper_easy.enabled", true);
-        put(fresh, "slots.fresh_dropper_easy.mix", "EEEEEE");
+        put(fresh, "slots.fresh_dropper_easy.mix", "EEX");
         List<String> warns = new ArrayList<>();
         DailySettings s = parse(fresh, warns);
         assertNotNull(s, "a bad dropper never closes Fresh Courses");
         assertEquals("EEMHH", s.slot("fresh_dropper").tierOrMix(), "a mix is upper-cased");
         assertTrue(s.slot("fresh_dropper").enabled(), "and the Dropper is on");
-        assertFalse(s.slot("fresh_dropper_easy").enabled(), "six levels don't fit: Easy Dropper is off");
+        assertFalse(s.slot("fresh_dropper_easy").enabled(), "an X doesn't fit its 64-tall half: Easy Dropper is off");
         assertEquals(1, warns.size(), "with one WARN: " + warns);
         assertTrue(warns.get(0).startsWith("games.fresh.slots.fresh_dropper_easy"), "naming it: " + warns);
-        assertTrue(warns.get(0).contains("dropper mix"), "and saying what a dropper mix is: " + warns);
+        assertTrue(warns.get(0).contains("141 tall") && warns.get(0).contains("X is for the Dropper"),
+                "and saying the height an X needs: " + warns);
         assertTrue(s.slot("fresh_parkour_easy").enabled(), "the rest keep working");
+
+        put(fresh, "slots.fresh_dropper_easy.mix", "EEEEEE");
+        put(fresh, "slots.fresh_dropper.mix", "eemhx");
+        warns.clear();
+        s = parse(fresh, warns);
+        assertEquals("EEMHX", s.slot("fresh_dropper").tierOrMix(), "the shipped mix, any case");
+        assertFalse(s.slot("fresh_dropper_easy").enabled(), "six levels don't fit: Easy Dropper is off");
+        assertEquals(1, warns.size(), "with one WARN: " + warns);
+        assertTrue(warns.get(0).contains("dropper mix"), "saying what a dropper mix is: " + warns);
     }
 
     @Test

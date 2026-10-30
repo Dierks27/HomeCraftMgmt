@@ -229,8 +229,13 @@ class LayoutGuardTest {
         for (String id : LayoutGuard.RESIZED) {
             want.put(id, LayoutFixtures.shippedPlaces().get(id));
         }
+        for (Slots.Def d : List.of(Slots.FRESH_DROPPER, Slots.CLASSIC_DROPPER)) {
+            // the Long Drop grew these in place: 0.35's spot and gap, 144 tall now (the engine empties the old area)
+            want.put(d.id(), List.of(LegacyBoxes.tall(d, 'A'), LegacyBoxes.tall(d, 'B')));
+        }
         assertEquals(want, LayoutFixtures.places(LayoutFixtures.reread(c)),
-                "every place reads back exactly where and as 0.35 built it, the five grown ones at their new spots");
+                "every place reads back exactly where and as 0.35 built it, the five grown ones at their new spots,"
+                + " the Dropper and Classic Dropper at their 0.35 spot but taller");
         String once = c.saveToString();
         assertFalse(LayoutGuard.apply(c, Decision.LEGACY, false, List.of(), null, new ArrayList<>()),
                 "a second run changes nothing");

@@ -1920,6 +1920,30 @@ class ConfigMigrationTest {
         return text.substring(0, a) + "\n      " + id + ": " + value + text.substring(b);
     }
 
+    /** Revision 25 in the ladder: the Dropper's shipped mix moves to EEMHX; the owner's own stays with one WARN. */
+    @Test
+    void revision25MovesTheDroppersShippedMixAndKeepsTheOwnersOwn() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 24);
+        onDisk.set("games.fresh.slots.fresh_dropper.mix", "EEMMH"); // what every version before shipped
+        onDisk.set("games.fresh.slots.fresh_dropper_easy.mix", "EEMMH"); // the owner's own Easy Dropper: never read
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+        assertEquals("EEMHX", onDisk.getString("games.fresh.slots.fresh_dropper.mix"), "the shipped mix moves: " + log);
+        assertEquals("EEMMH", onDisk.getString("games.fresh.slots.fresh_dropper_easy.mix"), "Easy Dropper's is untouched");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"), "and the revision is stamped");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith("Config migration: the Dropper's shipped mix EEMMH becomes"
+                + " EEMHX")), "one INFO line: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
+
+        YamlConfiguration theirs = bundled();
+        theirs.set("config_revision", 24);
+        theirs.set("games.fresh.slots.fresh_dropper.mix", "EEMHH");
+        List<String> warned = HomeCraftManagement.migrateConfig(theirs, "world");
+        assertEquals("EEMHH", theirs.getString("games.fresh.slots.fresh_dropper.mix"), "the owner's own mix stays");
+        assertTrue(warned.stream().anyMatch(l -> l.startsWith("WARN ") && l.contains("kept your own")
+                && l.contains("/hcm games gen mix fresh_dropper EEMHX")), "with one WARN naming the command: " + warned);
+    }
+
     @Test
     void aBareFreshCourseSwitchSurvivesMigrateAndBackfillAsItsEnabledKey() throws Exception {
         String text = bundledWithSlot("fresh_dropper", "false"); // the owner turns the dropper off

@@ -2295,7 +2295,7 @@ public final class TimeTrials implements Game {
             }
             case COUNTED -> summary = settleCounted(p, run, ms, verdict);
         }
-        drops.finished(p, run, ms, verdict.counts(), summary.stars()); // bonks, the splash, a clean drop
+        drops.finished(p, run, ms, verdict.counts(), summary.stars(), summary.bonkCapped()); // bonks, the splash, a clean drop
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
                 tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
@@ -2403,7 +2403,7 @@ public final class TimeTrials implements Game {
         }
         return new TrialFinish.Run(c.id(), c.name(), ms, today(), weekKey(), c.id().equals(courseOfWeek()),
                 featured(c.id()), s.firstClearFor(c.tier().id()), s.weeklyBestBonus(), s.courseOfWeekBonus(),
-                featuredBonus(), daily);
+                featuredBonus(), daily, run.drop == null ? -1 : run.drop.bonks(), c.tier());
     }
 
     /** Where a counted run is recorded and paid: the scores, the finish lines, the capped rewards. */

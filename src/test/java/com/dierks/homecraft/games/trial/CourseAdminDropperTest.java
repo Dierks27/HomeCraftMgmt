@@ -63,5 +63,10 @@ class CourseAdminDropperTest {
         assertEquals(GenCopy.MADE_BY_DAILY, refusal(fresh, "name"), "it points to /hcm games gen");
         assertEquals(GenCopy.MADE_BY_DAILY, refusal(fresh, "start"), "for geometry too");
         assertNull(refusal(fresh, "test"), "but can be tested");
+        GenTag longDrop = new GenTag("fresh_dropper", "dropper", 1, 20_724, 0, 7L, 'A', "abcabcabcabc", 19_100, 24_000,
+                35_000, List.of(), List.of(), 1L); // an EEMHX edition: its gold and silver are the tag's, as any
+        Course tall = DropperCourses.hand(longDrop);
+        assertEquals(GenCopy.MADE_BY_DAILY, refusal(tall, "tier"), "a Dropper with the Long Drop is Fresh Courses' too");
+        assertNull(refusal(tall, "tp"), "and can be visited");
     }
 }

@@ -2,11 +2,13 @@ package com.dierks.homecraft.games.gen.rings;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.SignText;
+import com.dierks.homecraft.games.gen.rings.RingsPlanner.LegKind;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TrialKind;
 
@@ -19,32 +21,48 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The independent check of a Sky Rings plan (GEN-SPEC §4.2), run before a single block is set: a
- * plan that fails it is a failed try, never a course.
+ * The independent check of a Sky Rings plan (GEN-SPEC §4.2, Sky Rings v3), run before a single
+ * block is set: a plan that fails it is a failed try, never a course.
  *
  * <p>It trusts nothing the planner kept for itself. The rings are read from the blocks round each
- * checkpoint's centre (a whole voxel circle of the right colour, facing x or z, its hole clear);
- * every other block must be the start tower (a 5 x 5 platform under the start, a 1 x 3 board off
- * one side, a pillar to the floor). Then, against the tier's table:
+ * checkpoint's centre (a whole voxel circle of the right colour, white for a climb's ring, facing x
+ * or z, its hole clear); every other block must be the start tower (a 5 x 5 platform under the
+ * start, a 1 x 3 board off one side, a pillar to the floor) with its two signs. The course's
+ * rocket budget ({@link Course#elytra}) names each leg's kind; the need list is worked out again
+ * from the kinds and the stack must be the need plus {@link RingsPlanner#MARGIN}. Then, against the
+ * tier's table:
  * <ul>
- *   <li>every leg is inside its length, turn and drop ranges, and descends;</li>
- *   <li>the glide-ratio bound holds: every drop is at least its length over the tier's slow ratio,
- *       and that ratio keeps at least a {@link RingsPlanner#GLIDE_MARGIN}x margin under 10:1;</li>
+ *   <li>the kinds follow the profile's rules: the first two legs and the last are glides, no two
+ *       rocket legs in a row, a level leg after two glides and before one, three glides between
+ *       climbs, the tier's counts;</li>
+ *   <li>every glide is inside its length and turn ranges and descends at least its length over the
+ *       tier's slow ratio (which keeps a {@link RingsPlanner#GLIDE_MARGIN}x margin under 10:1) and at
+ *       most over its fast one; every climb runs 90 to 120 across, rises its tier's 25 to 55 and turns
+ *       at most half the tier's turn; every level leg runs 90 to 100 and drops 0 to 3;</li>
  *   <li>every flight into and out of a ring is within the tier's angle of the ring's facing;</li>
- *   <li>rings are at least 16 apart, and no frame is within R + 2 of a leg that isn't its own;</li>
+ *   <li>rings are at least 48 apart, no frame is within R + 2 of a leg that isn't its own, and a
+ *       ring keeps a lane's width (80 across the ground) from every leg but the ones at it and
+ *       beside it;</li>
  *   <li>the tower is at least 8 from every leg but the first;</li>
  *   <li>every block is inside the half, every ring (and 8 round it) too, every ring over the floor + 16;</li>
- *   <li>the {@link ElytraSim} autopilot passes every ring, touching nothing: from every ring at
- *       0.8, 1.2 and 1.6 blocks a tick with the heading 3° either way, from a standstill at every
- *       ring with at most one rocket, and off the tower;</li>
- *   <li>the fall height is under every ring, and the times are believable.</li>
+ *   <li>the {@link ElytraSim} autopilot passes every ring, touching nothing: both flights off the
+ *       tower round the whole course with the rockets it needs, spending exactly those; the
+ *       reference lap never faster than 60 blocks a second; from every ring, at 0.8, 1.2 and 1.6
+ *       blocks a tick with the heading 3° either way, from a standstill, and after a climb or a
+ *       level leg three slow sinking exits, each with the rockets the rest of the course needs,
+ *       through every remaining ring; and on every level leg a fast pilot with no rockets through it
+ *       and the glide after it;</li>
+ *   <li>the fall height is under every ring, and the times fit the reference lap.</li>
  * </ul>
- * Pure: no Bukkit. Problems are admin words for {@code /hcm games gen status}.
+ * A plan an older planner made (algo below 3) is refused plainly before any of that: it stays in
+ * the archive. Pure: no Bukkit. Problems are admin words for {@code /hcm games gen status}.
  */
 public final class RingsValidator {
 
     /** The most blocks a Sky Rings plan may place. */
     public static final int MAX_OPS = 20_000;
+    /** The reference lap never flies faster than this, blocks a tick (60 a second: fair play's cap of 80 never trips). */
+    public static final double PEAK_SPEED = 3.0;
 
     private static final double EPS = 1e-6;
 
@@ -58,10 +76,19 @@ public final class RingsValidator {
 
     /** What is wrong with {@code plan} as a {@code tier} Sky Rings course; empty when nothing is. */
     public static List<String> problems(Plan plan, String tier) {
+        return problems(plan, tier, PEAK_SPEED);
+    }
+
+    /** {@link #problems(Plan, String)} with the reference lap's speed cap given, so a test can see it fire. */
+    static List<String> problems(Plan plan, String tier, double peakSpeed) {
         List<String> out = new ArrayList<>();
         RingsPlanner.Level level = RingsPlanner.Level.of(tier);
         if (level == null) {
             out.add("'" + tier + "' isn't a Sky Rings tier");
+            return out;
+        }
+        if (plan.algo() < RingsPlanner.ALGO) {
+            out.add("made by Sky Rings v2 (planner " + plan.algo() + "); it stays in the archive");
             return out;
         }
         if (!(plan.course() instanceof PlannedTrial trial) || trial.course().kind() != TrialKind.ELYTRA) {
@@ -115,11 +142,33 @@ public final class RingsValidator {
                 out.add("the ring at " + at(m.x(), m.y(), m.z()) + " isn't centred on a block");
             }
         }
+        // the rocket budget: a kind per leg after ring 1, the need list made again from them, the stack
+        Course.Elytra elytra = course.elytra();
+        LegKind[] kinds = null;
+        if (elytra == null) {
+            out.add("the course has no rocket budget");
+        } else {
+            kinds = RingsPlanner.kinds(elytra.legs());
+            if (kinds == null || kinds.length != course.checkpoints().size()) {
+                out.add("the legs '" + elytra.legs() + "' aren't one of G, L or F per ring after the first ("
+                        + course.checkpoints().size() + ")");
+                kinds = null;
+            } else {
+                List<Integer> need = RingsPlanner.needList(RingsPlanner.need(kinds));
+                if (!need.equals(elytra.need())) {
+                    out.add("the rockets still needed " + elytra.need() + " aren't what the legs say, " + need);
+                }
+                if (elytra.rockets() != need.get(0) + RingsPlanner.MARGIN) {
+                    out.add("rockets " + elytra.rockets() + ", not the " + need.get(0) + " needed plus "
+                            + RingsPlanner.MARGIN);
+                }
+            }
+        }
         if (!out.isEmpty()) {
             return out;
         }
 
-        // the rings, from the blocks round each mark
+        // the rings, from the blocks round each mark: white after a climb, gold last, else the rainbow
         List<RingsPlanner.Ring> rings = new ArrayList<>();
         Set<Long> ringBlocks = new HashSet<>();
         for (int k = 0; k < marks.size(); k++) {
@@ -127,7 +176,7 @@ public final class RingsValidator {
             int cx = (int) Math.floor(m.x());
             int cy = (int) Math.floor(m.y());
             int cz = (int) Math.floor(m.z());
-            String colour = k == marks.size() - 1 ? Palette.FINISH : Palette.RAINBOW.get(k % Palette.RAINBOW.size());
+            String colour = RingsPlanner.colour(k, marks.size(), kinds);
             List<RingShape.Normal> found = new ArrayList<>();
             for (RingShape.Normal n : RingShape.Normal.values()) {
                 if (complete(blocks, RingShape.voxels(cx, cy, cz, radius, n), colour)) {
@@ -205,10 +254,16 @@ public final class RingsValidator {
         if (towerBlocks != whole) {
             out.add("the start tower has " + towerBlocks + " of its " + whole + " blocks");
         }
+        List<List<String>> texts = new ArrayList<>();
         for (SignText s : plan.signs()) {
             if (!half.contains(s.x(), s.y(), s.z()) || !platform.contains(s.x(), s.y() - 1, s.z())) {
                 out.add("a sign at " + at(s.x(), s.y(), s.z()) + " isn't on the platform");
             }
+            texts.add(s.lines());
+        }
+        if (!texts.contains(GenCopy.ringsStart()) || !texts.contains(GenCopy.ringsHow(elytra.rockets()))) {
+            out.add("the tower's signs don't say how to start and that there are " + elytra.rockets()
+                    + " rockets for the whole run");
         }
         if (!out.isEmpty()) {
             return out;
@@ -220,7 +275,10 @@ public final class RingsValidator {
         }
         double[] launch = {tx + 0.5 + toward[0] * RingsPlanner.LAUNCH, top, tz + 0.5 + toward[1] * RingsPlanner.LAUNCH};
 
-        // the legs: lengths, drops, turns, facing
+        // the kinds follow the profile's rules
+        out.addAll(profileProblems(kinds, level));
+
+        // the legs: lengths, heights, turns, facing, by kind
         List<double[]> from = new ArrayList<>();
         List<double[]> to = new ArrayList<>();
         double[] prev = launch;
@@ -245,23 +303,53 @@ public final class RingsValidator {
                             + RingsPlanner.FIRST_BELOW + " below it");
                 }
             } else {
-                if (d < level.legMin() - EPS || d > level.legMax() + EPS) {
-                    out.add("leg " + (k + 1) + " is " + fmt(d) + " long; " + level.id() + " legs are "
-                            + level.legMin() + " to " + level.legMax());
-                }
-                if (drop <= 0) {
-                    out.add("leg " + (k + 1) + " doesn't descend");
-                } else if (drop < d / level.slow() - EPS) {
-                    out.add("leg " + (k + 1) + " drops " + fmt(drop) + " over " + fmt(d)
-                            + ": not far enough under the glide line (at least 1 in " + level.slow() + ")");
-                } else if (drop > d / level.fast() + EPS) {
-                    out.add("leg " + (k + 1) + " drops " + fmt(drop) + " over " + fmt(d) + ": steeper than 1 in "
-                            + level.fast());
-                }
+                String leg = "leg " + (k + 1);
+                LegKind kind = kinds[k - 1];
                 double turn = Math.abs(RingsPlanner.turn(prevYaw, yaw));
-                if (turn > level.maxTurn() + EPS) {
+                int maxTurn = kind == LegKind.LIFT ? level.maxTurn() / 2 : level.maxTurn();
+                switch (kind) {
+                    case LIFT -> {
+                        int lo = Math.max(level.legMin(), RingsPlanner.LIFT_LEG_MIN);
+                        int hi = Math.min(level.legMax(), RingsPlanner.LIFT_LEG_MAX);
+                        if (d < lo - EPS || d > hi + EPS) {
+                            out.add(leg + " is " + fmt(d) + " long; a climb is " + lo + " to " + hi);
+                        }
+                        double climb = -drop;
+                        if (climb < level.upMin() - EPS || climb > level.upMax() + EPS) {
+                            out.add(leg + " climbs " + fmt(climb) + " over " + fmt(d) + ": a climb is " + level.upMin()
+                                    + " to " + level.upMax());
+                        }
+                    }
+                    case FLAT -> {
+                        int lo = Math.max(level.legMin(), RingsPlanner.FLAT_MIN);
+                        int hi = Math.min(level.legMax(), RingsPlanner.FLAT_MAX);
+                        if (d < lo - EPS || d > hi + EPS) {
+                            out.add(leg + " is " + fmt(d) + " long; a level leg is " + lo + " to " + hi);
+                        }
+                        if (drop < -EPS || drop > RingsPlanner.FLAT_DROP + EPS) {
+                            out.add(leg + " drops " + fmt(drop) + " over " + fmt(d) + ": a level leg is 0 to "
+                                    + RingsPlanner.FLAT_DROP + " down");
+                        }
+                    }
+                    default -> {
+                        if (d < level.legMin() - EPS || d > level.legMax() + EPS) {
+                            out.add(leg + " is " + fmt(d) + " long; " + level.id() + " legs are " + level.legMin()
+                                    + " to " + level.legMax());
+                        }
+                        if (drop <= 0) {
+                            out.add(leg + " doesn't descend");
+                        } else if (drop < d / level.slow() - EPS) {
+                            out.add(leg + " drops " + fmt(drop) + " over " + fmt(d)
+                                    + ": not far enough under the glide line (at least 1 in " + level.slow() + ")");
+                        } else if (drop > d / level.fast() + EPS) {
+                            out.add(leg + " drops " + fmt(drop) + " over " + fmt(d) + ": steeper than 1 in "
+                                    + level.fast());
+                        }
+                    }
+                }
+                if (turn > maxTurn + EPS) {
                     out.add("the course turns " + Math.round(turn) + " degrees at ring " + k + " (" + level.id()
-                            + " turns at most " + level.maxTurn() + ")");
+                            + " turns at most " + maxTurn + (kind == LegKind.LIFT ? " into a climb" : "") + ")");
                 }
             }
             rings.set(k, new RingsPlanner.Ring(r.cx(), r.cy(), r.cz(), yaw, r.normal(), r.voxels()));
@@ -287,7 +375,7 @@ public final class RingsValidator {
             }
         }
 
-        // spacing, tubes, the tower, the floor
+        // spacing, tubes, lanes, the tower, the floor
         double tube = radius + RingsPlanner.TUBE;
         for (int a = 0; a < rings.size(); a++) {
             RingsPlanner.Ring r = rings.get(a);
@@ -315,6 +403,14 @@ public final class RingsValidator {
                         out.add("ring " + (a + 1) + "'s frame is within " + fmt(tube) + " of leg " + (leg + 1));
                         break;
                     }
+                }
+                if (leg >= a - 1 && leg <= a + 2) {
+                    continue; // the legs beside those end a leg's length away
+                }
+                double g = RingsPlanner.groundDistance(from.get(leg), to.get(leg), r.x(), r.z());
+                if (g < RingsPlanner.LANE_GAP - EPS) {
+                    out.add("ring " + (a + 1) + " is " + fmt(g) + " across the ground from leg " + (leg + 1)
+                            + " (lanes keep " + RingsPlanner.LANE_GAP + " apart)");
                 }
             }
         }
@@ -359,42 +455,102 @@ public final class RingsValidator {
         for (int k = 0; k < rings.size(); k++) {
             RingsPlanner.Ring r = rings.get(k);
             solid.ring(r.cx(), r.cy(), r.cz(), radius, r.voxels());
-            targets.add(RingsPlanner.target(r, k == rings.size() - 1, level));
+            targets.add(RingsPlanner.target(r, k == rings.size() - 1, level, k > 0 && kinds[k - 1].rocket()));
         }
-        List<ElytraSim.Pilot> off = RingsPlanner.offTheTower(launch, toward[0], toward[1]);
+        int[] need = RingsPlanner.need(kinds);
+        List<ElytraSim.Pilot> off = RingsPlanner.offTheTower(launch, toward[0], toward[1], need[0]);
         for (int i = 0; i < off.size(); i++) {
-            ElytraSim.Result res = off.get(i).fly(targets, solid);
+            ElytraSim.Pilot pilot = off.get(i);
+            ElytraSim.Result res = pilot.fly(targets, solid);
+            String who = "the autopilot off the tower (wings out after " + RingsPlanner.OPEN_AFTER[i] + " ticks) ";
             if (!res.passed()) {
-                out.add("the autopilot off the tower (wings out after " + RingsPlanner.OPEN_AFTER[i] + " ticks) "
-                        + res.why());
+                out.add(who + res.why());
+            } else if (pilot.rocketsUsed() != need[0]) {
+                out.add(who + "used " + pilot.rocketsUsed() + " rockets, not the " + need[0] + " the course needs");
+            }
+            if (i == 0) {
+                // the reference lap: its time and its speed
+                long lapMs = res.ticks() * 50L;
+                if (trial.refMs() < 0.5 * lapMs - EPS || trial.refMs() > lapMs + EPS) {
+                    out.add("the reference " + trial.refMs() + "ms isn't half to all of the autopilot's lap (" + lapMs
+                            + "ms)");
+                }
+                if (pilot.peakSpeed() > peakSpeed + EPS) {
+                    out.add("the autopilot's lap peaks at " + fmt(pilot.peakSpeed()) + " blocks a tick ("
+                            + Math.round(peakSpeed * 20) + " blocks a second is the most)");
+                }
             }
         }
-        String[] names = variantNames();
         for (int k = 0; k + 1 < rings.size(); k++) {
             RingsPlanner.Ring r = rings.get(k);
-            List<ElytraSim.Pilot> starts = RingsPlanner.startsAt(r.x(), r.y(), r.z(), r.yawIn());
+            LegKind kindIn = k == 0 ? LegKind.GLIDE : kinds[k - 1];
+            List<ElytraSim.Pilot> starts = RingsPlanner.startsAt(r.x(), r.y(), r.z(), r.yawIn(), need[k + 1], kindIn);
+            List<String> names = RingsPlanner.startNames(kindIn);
             List<ElytraSim.Target> rest = targets.subList(k + 1, targets.size());
             for (int i = 0; i < starts.size(); i++) {
                 ElytraSim.Result res = starts.get(i).fly(rest, solid);
                 if (!res.passed()) {
-                    out.add("the autopilot from ring " + (k + 1) + " " + names[i] + ": " + res.why() + " after it");
+                    out.add("the autopilot from ring " + (k + 1) + " " + names.get(i) + " with " + need[k + 1]
+                            + " rockets: " + res.why() + " after it");
+                }
+            }
+            if (kinds[k] == LegKind.FLAT) {
+                // the speed line: fast and with no rockets through the level ring and the glide after it
+                ElytraSim.Pilot fast = RingsPlanner.speedLine(r.x(), r.y(), r.z(), r.yawIn());
+                ElytraSim.Result res = fast.fly(targets.subList(k + 1, Math.min(k + 3, targets.size())), solid);
+                if (!res.passed()) {
+                    out.add("the autopilot from ring " + (k + 1) + " at " + RingsPlanner.EXPERT_SPEED
+                            + " b/t with no rockets: " + res.why() + " after it (a level leg is fast or rocket)");
                 }
             }
         }
         return out;
     }
 
-    /** The names of {@link RingsPlanner#startsAt}'s flights, in its order. */
-    private static String[] variantNames() {
-        List<String> names = new ArrayList<>();
-        for (double speed : RingsPlanner.SPEEDS) {
-            for (double error : RingsPlanner.ERRORS) {
-                names.add("at " + speed + " b/t, " + (error == 0 ? "on course" : (error > 0 ? "+" : "") + (int) error
-                        + " degrees off"));
+    /** What is wrong with the legs' kinds against the profile's rules, in admin words. */
+    static List<String> profileProblems(LegKind[] kinds, RingsPlanner.Level level) {
+        List<String> out = new ArrayList<>();
+        int n = kinds.length;
+        int glides = 0;
+        int lifts = 0;
+        int flats = 0;
+        for (LegKind k : kinds) {
+            switch (k) {
+                case GLIDE -> glides++;
+                case LIFT -> lifts++;
+                case FLAT -> flats++;
             }
         }
-        names.add("from a standstill (one rocket)");
-        return names.toArray(new String[0]);
+        if (glides != level.glides() || lifts != level.lifts() || flats != level.flats()) {
+            out.add("the legs are " + glides + " glides, " + lifts + " climbs and " + flats + " level legs; " + level.id()
+                    + " has " + level.glides() + ", " + level.lifts() + " and " + level.flats());
+        }
+        if (n < 3 || kinds[0] != LegKind.GLIDE || kinds[1] != LegKind.GLIDE || kinds[n - 1] != LegKind.GLIDE) {
+            out.add("the first two legs and the last must be glides");
+        }
+        int sinceLift = Integer.MAX_VALUE / 2;
+        int glidesInARow = 0;
+        for (int i = 0; i < n; i++) {
+            // leg i is the leg into ring i + 2 (1-based); words say that ring's number
+            String leg = "leg " + (i + 2);
+            LegKind k = kinds[i];
+            if (i > 0 && k.rocket() && kinds[i - 1].rocket()) {
+                out.add(leg + " is the second of two rocket legs in a row");
+            }
+            if (k == LegKind.FLAT && (glidesInARow < 2 || i + 1 >= n || kinds[i + 1] != LegKind.GLIDE)) {
+                out.add(leg + " is a level leg that isn't after two glides and before one");
+            }
+            if (k == LegKind.LIFT && sinceLift < 3) {
+                out.add(leg + " is a climb with fewer than three glides since the last");
+            }
+            if (k == LegKind.LIFT) {
+                sinceLift = 0;
+            } else if (k == LegKind.GLIDE) {
+                sinceLift++;
+            }
+            glidesInARow = k == LegKind.GLIDE ? glidesInARow + 1 : 0;
+        }
+        return out;
     }
 
     private static boolean complete(Map<Long, String> blocks, List<int[]> voxels, String colour) {

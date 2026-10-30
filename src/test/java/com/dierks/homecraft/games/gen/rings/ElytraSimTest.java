@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The elytra port every Sky Rings layout is proven with (GEN-SPEC §4.2): a level glide comes out
  * at vanilla's 10:1, a rocket climbs and carries as it does in game, and the autopilot flies a
- * ring below its glide line but not one above it.
+ * ring below its glide line but not one above it without a rocket: one rocket lifts it forty over a
+ * hundred, a level leg needs speed or a rocket, a glide never costs one, and a rocket leg costs
+ * exactly one.
  */
 class ElytraSimTest {
 
@@ -95,11 +97,87 @@ class ElytraSimTest {
         List<ElytraSim.Target> high = List.of(new ElytraSim.Target(0.5, 3.5, -39.5, 3.5, 0, -1, true));
         ElytraSim.Result r = ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, 0), high, 0, null);
         assertFalse(r.passed(), "a ring above can't be glided to: " + r);
-        // with speed some climb is possible (speed turns into height), but not twenty-five blocks
-        List<ElytraSim.Target> higher = List.of(new ElytraSim.Target(0.5, 25.5, -39.5, 3.5, 0, -1, true));
+        // with speed some climb is possible (speed turns into height), but not forty blocks
+        List<ElytraSim.Target> higher = List.of(new ElytraSim.Target(0.5, 40.5, -39.5, 3.5, 0, -1, true));
         assertFalse(ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -1.6), higher, 0, null).passed(),
-                "twenty-five blocks up is out of reach even at glide speed");
+                "forty blocks up is out of reach even at glide speed");
         assertTrue(r.why() != null && !r.why().isEmpty(), "and the flight says why");
+    }
+
+    @Test
+    void aRocketLiftsFortyOverAHundred() {
+        // a climb: a white ring 100 ahead and 40 up, passed within 6.5 (R 8), with the one rocket a climb costs
+        List<ElytraSim.Target> up40 = List.of(new ElytraSim.Target(0.5, 40.5, -99.5, 6.5, 0, -1, true, true));
+        List<ElytraSim.Target> up80 = List.of(new ElytraSim.Target(0.5, 80.5, -99.5, 6.5, 0, -1, true, true));
+        for (double speed : new double[]{1.51, 0.8, 0}) {
+            ElytraSim.Pilot p = new ElytraSim.Pilot(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -speed), 1);
+            ElytraSim.Result r = p.fly(up40, null);
+            assertTrue(r.passed(), "entering at " + speed + ", one rocket lifts 40 over 100: " + r);
+            assertEquals(1, p.rocketsUsed(), "and costs the one rocket");
+            assertFalse(ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -speed), up80, 1, null).passed(),
+                    "but not 80 over 100 at " + speed);
+        }
+    }
+
+    @Test
+    void aFlatLegNeedsSpeedOrARocket() {
+        // a level leg: a ring 100 ahead at the same height
+        List<ElytraSim.Target> level = List.of(new ElytraSim.Target(0.5, 0.5, -99.5, 6.5, 0, -1, true, true));
+        assertTrue(ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -1.6), level, 0, null).passed(),
+                "at 1.6 blocks a tick it is made with no rocket");
+        assertFalse(ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -0.8), level, 0, null).passed(),
+                "at 0.8 it falls short with none");
+        ElytraSim.Pilot slow = new ElytraSim.Pilot(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -0.8), 1);
+        assertTrue(slow.fly(level, null).passed(), "and makes it with one");
+        assertEquals(1, slow.rocketsUsed(), "spent");
+    }
+
+    @Test
+    void aGlideLegNeverFiresARocket() {
+        // a glide (not a rocket leg) 100 ahead and 20 down, with three rockets in the pocket
+        List<ElytraSim.Target> glide = List.of(new ElytraSim.Target(0.5, -19.5, -99.5, 6.5, 0, -1, true, false));
+        ElytraSim.Pilot p = new ElytraSim.Pilot(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, 0), 3);
+        ElytraSim.Result r = p.fly(glide, null);
+        assertTrue(r.passed(), "a glide from a standstill makes it with no rocket: " + r);
+        assertEquals(0, p.rocketsUsed(), "and none is fired");
+        assertEquals(3, p.rockets(), "all three are still there");
+    }
+
+    @Test
+    void oneRocketPerRocketLeg() {
+        // two level legs in a row, five rockets: exactly one goes on each
+        List<ElytraSim.Target> two = List.of(new ElytraSim.Target(0.5, 0.5, -99.5, 6.5, 0, -1, false, true),
+                new ElytraSim.Target(0.5, 0.5, -199.5, 6.5, 0, -1, true, true));
+        ElytraSim.Pilot p = new ElytraSim.Pilot(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -0.8), 5);
+        ElytraSim.Result r = p.fly(two, null);
+        assertTrue(r.passed(), "both made: " + r);
+        assertEquals(2, p.rocketsUsed(), "one a leg, never a second on the same leg");
+        assertEquals(3, p.rockets(), "three left");
+        assertTrue(p.peakSpeed() > 1.0 && p.peakSpeed() < 3.0, "the peak speed is kept: " + p.peakSpeed());
+    }
+
+    @Test
+    void lostIsMeasuredFromTheLegsLowerEnd() {
+        // a ring 40 up with no rocket: the flight sinks under its start, not under the ring, before it is lost
+        List<ElytraSim.Target> up = List.of(new ElytraSim.Target(0.5, 40.5, -99.5, 6.5, 0, -1, true, true));
+        ElytraSim.Result r = ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -1.6), up, 0, null);
+        assertFalse(r.passed(), "it can't climb 40 with no rocket");
+        assertTrue(r.ticks() > 20, "but it isn't given up at the first tick for being 24 under the ring: " + r);
+        // measured from the ring itself, a flight 25 under a ring it started level with is lost
+        List<ElytraSim.Target> far = List.of(new ElytraSim.Target(0.5, 0.5, -399.5, 6.5, 0, -1, true, false));
+        ElytraSim.Result sunk = ElytraSim.fly(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, -1.2), far, 0, null);
+        assertFalse(sunk.passed(), "a level ring 400 away can't be glided to");
+        assertTrue(sunk.why().startsWith("fell far below"), "and the flight is lost once 24 under: " + sunk);
+    }
+
+    @Test
+    void theOldTargetConstructorStillFires() {
+        ElytraSim.Target t = new ElytraSim.Target(0.5, -3.5, -29.5, 3.5, 0, -1, true);
+        assertTrue(t.rocketLeg(), "a target made the old way is a rocket leg");
+        assertTrue(new ElytraSim.Target(0.5, -3.5, -29.5, 3.5).rocketLeg(), "and so is a bare point");
+        ElytraSim.Pilot pilot = new ElytraSim.Pilot(new ElytraSim.Flyer(0.5, 0.5, 0.5, 0, 0, 0), 1);
+        assertTrue(pilot.fly(List.of(t), null).passed(), "so a standing start spends its rocket on a shallow leg");
+        assertEquals(1, pilot.rocketsUsed(), "one rocket used");
     }
 
     @Test

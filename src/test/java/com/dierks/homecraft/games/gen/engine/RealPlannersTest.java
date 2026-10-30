@@ -140,6 +140,10 @@ class RealPlannersTest {
                 assertNotNull(c, id + "'s row decodes as a course");
                 assertEquals(tag, c.gen(), id + "'s row carries the tag the gate vouches for");
                 assertTrue(tag.goldMs() > 0 && tag.silverMs() > tag.goldMs(), id + " has its star times");
+                if (id.equals("fresh_rings")) {
+                    assertTrue(tag.refMs() >= 40_000 && tag.refMs() <= 80_000, "Sky Rings' reference time is 0.8 of"
+                            + " the autopilot's lap round the loop, 40 to 80 s: " + tag.refMs());
+                }
             }
         }
         assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"

@@ -67,9 +67,9 @@ public final class GenCopy {
         return List.of("SKY RINGS", "Walk off, then", "press JUMP", "to fly!");
     }
 
-    /** Sky Rings' second tower sign: where to fly. */
-    public static List<String> ringsHow() {
-        return List.of("Fly through", "every ring,", "follow the", "rainbow!");
+    /** Sky Rings' second tower sign: the rockets for the whole run, and what a white ring means. */
+    public static List<String> ringsHow(int rockets) {
+        return List.of(rockets + " rockets for", "the whole run.", "White ring = up", "fire a rocket!");
     }
 
     /** A golf tee sign: "HOLE 3" / "Par 3" / "Hit the ball" / "to the flag!". */
@@ -749,7 +749,8 @@ public final class GenCopy {
     /** Every sign, with sample values, for the copy test. */
     public static List<List<String>> everySign() {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
-                parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
+                parkourStart("hard"), finish(), ringsStart(), ringsHow(8), ringsHow(11), boatStart(2), boatRun(),
+                boatHop(),
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(),
                 boatSnowyBend(), boatSnowDrift(), boatSplit(), boatIceCave(), boatForest(), boatRoadStart("easy"),
                 boatRoadStart("medium"), boatRoadStart("hard"),

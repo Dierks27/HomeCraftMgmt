@@ -5,6 +5,9 @@ import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.world.KitItems;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -26,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>And Sky Rings' rocket budget (RINGS-SPEC §5): the kit holds the whole run's rockets with lore that says
  * so; reaching a ring fills nothing; going back tops the stack up to what the rest of the course needs, only
  * when it holds fewer and never above; the clock line counts rings and rockets; a ring's title says what the
- * next leg is; and a hand-built elytra course hands out 3 and fills them back at every ring, as it always did.
+ * next leg is; every timed run starts on the whole budget, whatever a warm-up spent; and a hand-built elytra
+ * course hands out 3 and fills them back at every ring, as it always did.
  */
 class TimeTrialsTest {
 
@@ -246,6 +250,40 @@ class TimeTrialsTest {
         assertEquals("&eBack to the start", TimeTrials.backLine(c, -1, 2, 2), "the start");
         assertEquals("&eBack to checkpoint 1", TimeTrials.backLine(handBuiltElytra(), 0, -1, -1),
                 "a hand-built course: as before");
+    }
+
+    @Test
+    void aTimedRunStartsOnTheWholeBudgetWhateverTheWarmUpSpent() throws IOException {
+        Course c = skyRings();
+        assertEquals(4, TimeTrials.goRockets(c), "Sky Rings: the whole budget at the start of a timed run");
+        assertEquals(0, TimeTrials.goRockets(handBuiltElytra()), "a hand-built course fills at the rings: no rule");
+        assertEquals(0, TimeTrials.goRockets(course("cliffs", TrialKind.PARKOUR, Tier.EASY, "Cliffs", null)),
+                "parkour has no rockets");
+
+        Inv flown = new Inv();
+        flown.slots[TimeTrials.ROCKET_SLOT] = "kit:trials:firework x1"; // a warm-up lap, then a reset to need[0]
+        flown.topUp(TimeTrials.goRockets(c));
+        assertEquals("kit:trials:firework x4", flown.slots[TimeTrials.ROCKET_SLOT], "back to the whole 4, not need[0]");
+
+        Inv spent = new Inv();
+        spent.topUp(TimeTrials.goRockets(c));
+        assertEquals(4, spent.rockets(), "every rocket fired in the warm-up: a fresh stack of 4");
+
+        String code = Files.readString(Path.of("src/main/java/com/dierks/homecraft/games/trial/TimeTrials.java"));
+        assertTrue(body(code, "void toStart(Player p, TrialRun run)").contains("fullRockets(p, run.course);"),
+                "back at the start for the 3-2-1 (a solo warm-up's end): the whole budget");
+        String countdown = body(code, "private void countdown(Player p, TrialRun run, long now)");
+        int go = countdown.indexOf("run.phase = TrialRun.Phase.RUNNING;");
+        int full = countdown.lastIndexOf("fullRockets(p, run.course);");
+        assertTrue(go > 0 && full > 0 && full < go, "a solo Go: the whole budget as the clock starts");
+    }
+
+    /** The body of the method declared by {@code signature} in {@code code}, up to its closing brace. */
+    static String body(String code, String signature) {
+        int at = code.indexOf(signature);
+        assertTrue(at >= 0, "found: " + signature);
+        int end = code.indexOf("\n    }\n", at);
+        return code.substring(at, end);
     }
 
     @Test

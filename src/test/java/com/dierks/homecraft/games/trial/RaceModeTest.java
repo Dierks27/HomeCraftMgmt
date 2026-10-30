@@ -6,6 +6,9 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link RaceLink} the test drives, a clock the test turns): every racer released on the same tick
  * with the same start nanos; a late seat on the shared clock; staleness judged on the base course;
  * no course board or course reward on a race finish; park, re-grid and a second race; a link no
- * longer alive ends the run; a held course refuses solo runs; and a normal run is exactly as it
+ * longer alive ends the run; a held course refuses solo runs; a Sky Rings racer goes on the whole
+ * rocket budget, whatever the shared warm-up or the last race spent; and a normal run is exactly as it
  * always was.
  */
 class RaceModeTest {
@@ -323,5 +327,27 @@ class RaceModeTest {
         assertEquals(TrialRun.Phase.COUNTDOWN, run.phase, "still counting down");
         assertEquals(List.of(), said, "and nobody said anything to the player");
         assertTrue(run.timed(), "timed as ever");
+    }
+
+    /**
+     * Every race reaches its timed run through a re-grid or the grid's Go: a party race, a Clubhouse challenge
+     * (seated by {@code ClubRaces.seat} into the warm-up or onto the grid) and Race Night's next race. Both fill
+     * Sky Rings' rockets back to the whole budget, so a racer who flew the warm-up starts on what one who sat it
+     * out does.
+     */
+    @Test
+    void aSkyRingsRacerGoesOnTheWholeBudgetWhateverTheWarmUpSpent() throws IOException {
+        String code = Files.readString(Path.of("src/main/java/com/dierks/homecraft/games/trial/RaceMode.java"));
+        String regrid = TimeTrialsTest.body(code, "void regrid(Player p, Course raced, Course.Spot grid)");
+        assertTrue(regrid.indexOf("trials.fullRockets(p, raced);") > regrid.indexOf("trials.replaceRun(run);"),
+                "the warm-up's end (and the next race of a night): the whole budget on the new run");
+        String grid = TimeTrialsTest.body(code, "private void grid(Player p, TrialRun run, long now)");
+        int released = grid.indexOf("if (!r.go())");
+        int full = grid.indexOf("trials.fullRockets(p, run.course);");
+        assertTrue(released > 0 && full > released, "released at Go: the whole budget as the clock starts");
+        String clubRaces = Files.readString(Path.of("src/main/java/com/dierks/homecraft/games/trial/ClubRaces.java"));
+        String seat = TimeTrialsTest.body(clubRaces, "static Refusal seat(");
+        assertTrue(seat.contains("run.beginWarmup(until)") && seat.contains("rr.state = RaceRun.State.GRID;"),
+                "a Clubhouse challenge goes to the warm-up (ended by a re-grid) or the grid (ended by Go)");
     }
 }

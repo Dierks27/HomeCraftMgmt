@@ -1227,6 +1227,24 @@ public final class TimeTrials implements Game {
         return List.of("&7A boost while you glide.", "&7Back to " + ROCKETS + " at every ring.");
     }
 
+    /**
+     * The rockets every timed run starts on, whatever came before it: Sky Rings' whole budget; 0 elsewhere (a
+     * hand-built elytra course fills them back at every ring, and the other kinds have none).
+     */
+    static int goRockets(Course course) {
+        return course.kind() == TrialKind.ELYTRA && course.elytra() != null ? kitRockets(course) : 0;
+    }
+
+    /**
+     * Sky Rings: the stack back to the whole budget ({@link #goRockets}) as a timed run starts, so nothing spent
+     * before it carries in: a warm-up's flying and its resets' top-ups, a race's grid, the last race of a Race
+     * Night. Called back at the start for the 3-2-1 ({@link #toStart}), at a race's re-grid
+     * ({@code RaceMode.regrid}) and at every Go, solo or raced. Nothing on any other course.
+     */
+    void fullRockets(Player p, Course course) {
+        topUp(p, course, goRockets(course));
+    }
+
     /** Whether reaching a ring fills the rockets back: only on an elytra course without Sky Rings' budget. */
     static boolean refillsAtRings(Course course) {
         return course.kind() == TrialKind.ELYTRA && course.elytra() == null;
@@ -1404,6 +1422,7 @@ public final class TimeTrials implements Game {
             toStart(p, run);
             return;
         }
+        fullRockets(p, run.course); // Sky Rings: Go on the whole budget, whatever the 3-2-1 saw
         run.progress = new Progress(run.course, here, System.nanoTime());
         run.goNanos = run.progress.startNanos();
         run.phase = TrialRun.Phase.RUNNING;
@@ -2123,9 +2142,7 @@ public final class TimeTrials implements Game {
             run.lastReset = Bukkit.getCurrentTick();
             move(p, run, at);
         }
-        if (run.course.kind() == TrialKind.ELYTRA && run.course.elytra() != null) {
-            topUp(p, run.course, kitRockets(run.course));
-        }
+        fullRockets(p, run.course);
     }
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */

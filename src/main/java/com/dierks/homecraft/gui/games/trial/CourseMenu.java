@@ -33,7 +33,8 @@ import java.util.List;
  *
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
- * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4;
+ * first finish's amount, or that it's done, in the name); 19 Challenge someone (0.38.4: a party race of two
+ * with anyone online, never on a Dropper); 20 Race with friends (a party race, D4;
  * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one; 26 Take a rider,
  * on a boat course while ride along is on (WP-CH); 18 Admin tools, for an admin on a Fresh course
  * (WP-ADM). Start runs the
@@ -53,6 +54,8 @@ public final class CourseMenu extends GameMenu {
 
     /** "Race with friends" (a party race, D4): the bottom row, left of the way out. */
     public static final int PARTY_SLOT = 20;
+    /** "Challenge someone" (0.38.4): left of Race with friends. */
+    public static final int CHALLENGE_SLOT = 19;
     /** The slots every course screen fills whatever the course (the way out is 22). */
     public static final List<Integer> FIXED_SLOTS = List.of(4, 10, 11, 12, 13, 14, 15, 16, 22);
 
@@ -103,10 +106,22 @@ public final class CourseMenu extends GameMenu {
         set(16, rewards(week), null);
         if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
             set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+            challengeButton(); // 0.38.4
         }
         cupButton();
         riderButton(); // WP-CH
         exitTile();
+    }
+
+    /**
+     * 0.38.4: "Challenge someone - race anyone online": a party race of two, the other player picked from everyone.
+     * The lore says where their Yes takes them: the Clubhouse while it is running, else the party screen.
+     */
+    private void challengeButton() {
+        boolean club = com.dierks.homecraft.games.clubhouse.Clubhouse.offered(plugin.games());
+        set(CHALLENGE_SLOT, Menus.icon(Material.GOLDEN_BOOTS, "&6Challenge someone &7- race anyone online",
+                ChallengePickerMenu.challengeLore(club)),
+                e -> trials.party().challengeOn(viewer, course.id(), this::reopen));
     }
 
     /** WP-CH: "Take a rider (back seat)" on a boat course, while ride along is on. */
@@ -203,6 +218,7 @@ public final class CourseMenu extends GameMenu {
         set(16, dailyRewards(games, t, week), null);
         if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
             set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+            challengeButton(); // 0.38.4
         }
         cupButton();
         riderButton(); // WP-CH

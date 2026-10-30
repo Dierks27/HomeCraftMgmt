@@ -83,9 +83,42 @@ public final class Invites {
     /** The unordered pair → when they last had an invite. */
     private final Map<String, Long> lastPair = new HashMap<>();
     private long nextId = 1;
+    /**
+     * 0.38.4: invite id → the "Play?" screen's state: 1 while it couldn't open yet (tried again each second by
+     * {@link #retry}), {@link #SHOWN} once it opened (never opened again: an Esc is not an answer, and a screen
+     * re-opened on a 4-year-old every second would loop).
+     */
+    private final Map<Long, Integer> screenTries = new HashMap<>();
+    /** {@link #screenTries}: the screen opened once. */
+    static final int SHOWN = 2;
+    /** What cancels the armed retry ({@link #armRetry}), or {@code null} while none is armed. */
+    private Runnable retry;
 
-    /** A pending invite, the game that sent it, what to call when it is answered, and its expiry task. */
-    private record Pending(Invite invite, Game owner, BiConsumer<Invite, Boolean> answer, Runnable cancelExpiry) {
+    /**
+     * A pending invite, the game that sent it, what to call when it is answered, its expiry task, and the
+     * inviter's name (the "Play?" screen's tile says it, tried again later when it couldn't open at once).
+     */
+    private record Pending(Invite invite, Game owner, BiConsumer<Invite, Boolean> answer, Runnable cancelExpiry,
+                           String fromName) {
+    }
+
+    /**
+     * 0.38.4: the "Play?" screen an invite opens on the invitee ({@code gui/games/InviteAskMenu}), as the
+     * framework knows it: which invite it asks about, so it is closed only while it is still that one's.
+     */
+    public interface AskScreen {
+        long inviteId();
+    }
+
+    /**
+     * 0.38.4: whether the "Play?" screen may open for an invitee now: nothing but their own crafting grid open
+     * (so no chest closes and no carried stack drops), an empty cursor, and not in a world game - unless they
+     * are hanging out in the Clubhouse, where party and ride invites legitimately reach them
+     * ({@code PartyRaces.canInvite}). Otherwise the chat line stays and the screen is tried again each second.
+     */
+    public static boolean askScreenOpens(boolean noContainerOpen, boolean cursorEmpty, boolean inSession,
+                                         boolean hangingOutInClub) {
+        return noContainerOpen && cursorEmpty && (!inSession || hangingOutInClub);
     }
 
     public Invites(GamesService games) {
@@ -139,10 +172,12 @@ public final class Invites {
         Invite invite = new Invite(nextId++, a, b, key, summary == null ? title : summary, now,
                 now + secs * 1000L, title);
         Runnable cancel = games.host().later(secs * 20L + 1, () -> expire(invite));
-        pending.put(b, new Pending(invite, owner, answer, cancel == null ? () -> {
-        } : cancel));
+        Pending p = new Pending(invite, owner, answer, cancel == null ? () -> {
+        } : cancel, from.getName());
+        pending.put(b, p);
         lastPair.put(pair(a, b), now);
         offer(to, from.getName(), invite, secs);
+        ask(to, p, secs); // 0.38.4: the "Play?" screen, when it can open now
         // The game says "Invite sent" itself, with its own details (how long it lasts, what it is).
         return invite;
     }
@@ -185,6 +220,7 @@ public final class Invites {
             if (i.to().equals(player) || i.from().equals(player)) {
                 pending.remove(i.to());
                 p.cancelExpiry().run();
+                closeAsk(i);
                 if (i.from().equals(player)) {
                     tell(i.to(), "&7That invite was called off."); // the invitee; the game tells an inviter
                 }
@@ -207,6 +243,7 @@ public final class Invites {
             if (i.from().equals(from)) {
                 pending.remove(i.to());
                 p.cancelExpiry().run();
+                closeAsk(i);
                 tell(i.to(), "&7That invite was called off.");
                 return true;
             }
@@ -290,6 +327,7 @@ public final class Invites {
             if (p.invite().gameId().equals(gameId) || p.owner().id().equals(gameId)) {
                 pending.remove(p.invite().to());
                 p.cancelExpiry().run();
+                closeAsk(p.invite());
                 answer(p, false);
             }
         }
@@ -299,8 +337,14 @@ public final class Invites {
     void clear() {
         for (Pending p : pending.values()) {
             p.cancelExpiry().run();
+            closeAsk(p.invite());
         }
         pending.clear();
+        screenTries.clear();
+        if (retry != null) {
+            retry.run();
+            retry = null;
+        }
     }
 
     /**
@@ -322,8 +366,17 @@ public final class Invites {
         return lastPair.size();
     }
 
+    /**
+     * Whether {@code a} and {@code b} (either way round) had an invite within the last {@link #PAIR_COOLDOWN_MS},
+     * so {@link #send} would refuse another now: a picker greys the name instead of sending what is refused.
+     */
+    public boolean coolingDown(UUID a, UUID b) {
+        Long last = a == null || b == null ? null : lastPair.get(pair(a, b));
+        return last != null && now() - last < PAIR_COOLDOWN_MS;
+    }
+
     /** The invite {@code from} has out, or {@code null}. */
-    Invite outgoing(UUID from) {
+    public Invite outgoing(UUID from) {
         for (Pending p : pending.values()) {
             if (p.invite().from().equals(from)) {
                 return p.invite();
@@ -341,6 +394,7 @@ public final class Invites {
         }
         pending.remove(invite.to());
         p.cancelExpiry().run();
+        closeAsk(invite);
         tell(invite.to(), "&7That invite has run out."); // the game tells the inviter
         answer(p, false);
     }
@@ -350,8 +404,63 @@ public final class Invites {
         Pending p = pending.remove(to);
         if (p != null) {
             p.cancelExpiry().run();
+            closeAsk(p.invite()); // a chat click, the command, the Games screen's book or the screen's own tap
         }
         return p;
+    }
+
+    // ---- 0.38.4: the "Play?" screen --------------------------------------------------------------
+
+    /**
+     * Open the "Play?" screen for {@code p}'s invitee now if it can ({@link GamesScreens#askInvite}, inside the
+     * owning game's guard: a screen that throws fails that game, never the framework); else try again each
+     * second until it opens once ({@link #retry}).
+     */
+    private void ask(Player to, Pending p, int secs) {
+        boolean shown = games.guard(p.owner(),
+                () -> games.screens().askInvite(to, p.owner(), p.invite(), p.fromName(), secs), false);
+        screenTries.put(p.invite().id(), shown ? SHOWN : 1);
+        if (!shown) {
+            armRetry();
+        }
+    }
+
+    /** Arm one retry a second from now while any screen is still waiting to open (one chain for all of them). */
+    private void armRetry() {
+        if (retry != null || !screenTries.containsValue(1)) {
+            return;
+        }
+        retry = games.host().later(20, this::retry); // null: the plugin is disabling, nothing more to try
+    }
+
+    /** The chain's second: every screen that couldn't open yet is tried again; shown once, never again. */
+    private void retry() {
+        retry = null;
+        long now = now();
+        for (Pending p : new ArrayList<>(pending.values())) {
+            Invite i = p.invite();
+            if (!Integer.valueOf(1).equals(screenTries.get(i.id())) || i.expired(now)) {
+                continue;
+            }
+            Player to = games.host().online(i.to());
+            if (to == null) {
+                continue;
+            }
+            int secs = (int) Math.max(1, (i.expiresAt() - now + 999) / 1000);
+            if (games.guard(p.owner(), () -> games.screens().askInvite(to, p.owner(), i, p.fromName(), secs), false)) {
+                screenTries.put(i.id(), SHOWN);
+            }
+        }
+        armRetry();
+    }
+
+    /** The invite is over, however it ended: its screen closes if the invitee is still looking at it. */
+    private void closeAsk(Invite i) {
+        screenTries.remove(i.id());
+        Player to = games.host().online(i.to());
+        if (to != null) {
+            games.screens().closeAsk(to, i.id());
+        }
     }
 
     /**
@@ -368,7 +477,8 @@ public final class Invites {
 
     /**
      * The invite in chat: Java players get clickable [Accept] and [Deny]; Bedrock players can't
-     * click chat, so they read the command (R3.8).
+     * click chat, so they read the command (R3.8). The "Play?" screen (0.38.4) comes besides, for
+     * everyone, when it can open ({@link #ask}); the typed line stays right whenever it couldn't.
      */
     private void offer(Player to, String fromName, Invite invite, int seconds) {
         to.sendMessage(Text.of("&e" + fromName + " &7invites you: &f" + invite.summary() + " &8(" + seconds + " s)"));

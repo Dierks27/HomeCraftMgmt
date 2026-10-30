@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board [fame|playing|stats]|generated|rebuild confirm|off}
+ * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox|generated|rebuild confirm|off}
  * (CLUBHOUSE-SPEC §6), with tab completion.
  *
  * <ul>
@@ -27,6 +27,9 @@ import java.util.Locale;
  *   <li>{@code podium <n>} and {@code board}: the owner-built room's podium places and results board,
  *       where the admin stands; {@code board fame|playing|stats} (0.38.3) the walls' boards (this week's best,
  *       now playing, my stats). A board hangs facing the way the admin faces: their back to the wall.</li>
+ *   <li>{@code trophies} and {@code jukebox} (0.38.4): the owner-built room's trophy case (its first frame where
+ *       the admin stands, their back to the wall; the row runs to their right) and its jukebox (the real jukebox
+ *       the admin stands on). Both optional: without them there is no trophy case and no music.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -41,7 +44,8 @@ final class ClubhouseAdmin implements GameAdmin {
     /** The word after {@code /hcm games}. */
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
-    static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "generated", "rebuild", "off");
+    static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
+            "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -62,24 +66,41 @@ final class ClubhouseAdmin implements GameAdmin {
         switch (sub) {
             case "status" -> out.addAll(status(room, game.visits().size(), closedWhy()));
             case "tp" -> tp(sender, room);
-            case "here", "podium", "board" -> {
+            case "here", "podium", "board", "trophies", "jukebox" -> {
                 if (!(sender instanceof Player p)) {
                     out.add("&cOnly a player can do that - stand in the room first.");
                 } else if (room == null) {
                     out.add(notRunning(closedWhy()));
                 } else {
+                    if (sub.equals("here") || sub.equals("jukebox")) {
+                        game.quietMusic(); // the room's spots change: the disc out of the old jukebox first
+                    }
                     out.add(place(room, sub, args, p));
                 }
             }
-            case "generated" -> out.add(room == null ? notRunning(closedWhy()) : room.generated());
+            case "generated" -> {
+                if (room != null) {
+                    game.quietMusic();
+                }
+                out.add(room == null ? notRunning(closedWhy()) : room.generated());
+            }
             case "rebuild" -> {
                 if (room == null) {
                     out.add(notRunning(closedWhy()));
                 } else {
-                    out.addAll(room.rebuild(args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm")));
+                    boolean confirm = args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm");
+                    if (confirm) {
+                        game.quietMusic(); // while the room is still open: the disc out before the phase changes
+                    }
+                    out.addAll(room.rebuild(confirm));
                 }
             }
-            case "off" -> out.add(room == null ? notRunning(closedWhy()) : room.switchOff());
+            case "off" -> {
+                if (room != null) {
+                    game.quietMusic();
+                }
+                out.add(room == null ? notRunning(closedWhy()) : room.switchOff());
+            }
             default -> out.addAll(HELP);
         }
         for (String line : out) {
@@ -112,13 +133,15 @@ final class ClubhouseAdmin implements GameAdmin {
         return out;
     }
 
-    /** {@code here}, {@code podium <n>}, {@code board}: where the admin stands. */
+    /** {@code here}, {@code podium <n>}, {@code board}, {@code trophies}, {@code jukebox}: where the admin stands. */
     static String place(ClubhouseRoom room, String sub, String[] args, Player p) {
         Location l = p.getLocation();
         String world = l.getWorld() == null ? "" : l.getWorld().getName();
         ClubhouseRoom.Place at = new ClubhouseRoom.Place(world, l.getX(), l.getY(), l.getZ(), l.getYaw());
         return switch (sub) {
             case "here" -> room.here(at);
+            case "trophies" -> room.trophies(at);
+            case "jukebox" -> room.jukebox(at);
             case "board" -> args != null && args.length > 1 ? room.board(args[1].toLowerCase(Locale.ROOT), at)
                     : room.board(at);
             default -> {
@@ -214,8 +237,8 @@ final class ClubhouseAdmin implements GameAdmin {
     /** The usage lines. */
     static final List<String> HELP = List.of(
             "&e/hcm games clubhouse status|tp &7- the Clubhouse: how it is, go and look",
-            "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats] &7- use a room you built (stand"
-                    + " where it goes, facing into the room)",
+            "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox &7- use a room"
+                    + " you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse generated|rebuild confirm|off &7- the built room, build it again, switch it off");
 
     @Override

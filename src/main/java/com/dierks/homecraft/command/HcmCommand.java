@@ -1156,12 +1156,18 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
             case "muffler", "sound_muffler" -> item = plugin.items().soundMuffler();
+            case "golem_brush", "golembrush", "brush" -> item = plugin.golems() == null || !plugin.golems().enabled()
+                    ? null : plugin.golems().brush(); // off (golem.enabled): a brush that did nothing would only puzzle
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use printer, pc, card, filament, pack, prize, binder, vending, display, "
-                        + "mailbox [variant], pallet, arcade, or muffler."));
+                        + "mailbox [variant], pallet, arcade, muffler, or golem_brush."));
                 return;
             }
+        }
+        if (item == null) {
+            sender.sendMessage(Text.of("&cThe Copper Golem Brush isn't available right now (golem.enabled)."));
+            return;
         }
 
         Player target;
@@ -2356,7 +2362,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
             addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "prize", "vending", "display",
-                    "mailbox", "pallet", "arcade", "muffler");
+                    "mailbox", "pallet", "arcade", "muffler", "golem_brush");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("prize")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

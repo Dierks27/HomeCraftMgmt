@@ -251,3 +251,33 @@ and medal: about a token for every minute you spend on something new.
 You can win up to 60 tokens a day from all skill games together (the first time you finish a
 course pays extra). After that, your scores still count. Beating your own best doesn't pay, but
 it goes on the high scores.
+
+### The Clubhouse
+
+Courses and golf start and end in the Clubhouse, the room where everyone waits and hangs out.
+Every invite there (a race, golf together, a game against a friend, a ride, a challenge) opens a
+small **Play?** screen with Yes and Not now, so the youngest can say yes without clicking chat or
+typing; it opens once per invite, only when nothing else is open, and never in the middle of a
+run. **Challenge** in the Clubhouse kit (or Challenge someone on a course's screen) races anyone
+who's free: it is a race party of two, so the party screen's Start and the trip back work as
+they always did. Set a course's record and come back: NEW RECORD! for the whole room and a
+firework over the podium, and the record goes in the trophy case on the wall. On a run by
+yourself the checkpoints show how you're doing against your own best on that course, and the
+finish says where you gained or lost. The jukebox in the corner plays a record for the room.
+**Family week** gives points for playing (a run, a best, a record, a win, a round, a cheer: at
+most 10 a day) on the Fame board and My stats; the week turns at midnight on the weekly quests'
+day (Monday unless the owner changed it), not at 4 in the morning like the Weekly Cup, and when it
+turns, last week's top three get their Photo time on the podium. Points are never tokens.
+
+## The Copper Golem Brush
+
+A Copper Golem is a little sorter: it takes a stack out of a copper chest and walks it to a chest
+that already holds the same thing. Vanilla lets it pick any chest it finds. The brush lets you pick
+for it. Craft it from three feathers, a slime ball and any copper block. Tap the golem, tap its
+chests, tap the golem again; the golem's name tag counts them and a number floats over each one
+while you hold the brush. After that the golem still takes from any copper chest but only ever
+puts things into its own chests, and if none of them is in reach or has room it just stands there
+holding the item and its tag says so. The golem only looks about 32 blocks around where it walks
+and one block up or two down, so keep its chests close to its copper chest. Two shift-taps on the
+golem clear the list; one tap never does, so nobody loses a setup by accident. Chests you pick are
+also marked for CraftBridge, so a workbench pull never empties the slot the golem sorts by.

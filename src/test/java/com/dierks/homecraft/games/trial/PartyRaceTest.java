@@ -235,6 +235,29 @@ class PartyRaceTest {
         }
     }
 
+    // ---- 0.38.4: challenge anyone online ---------------------------------------------------------------
+
+    @Test
+    void thePickerSaysWhySomeoneCantBeChallengedInTheirName() {
+        assertNull(PartyRaces.challengeNote(false, false, false, false, false), "free: green, tap to challenge");
+        assertEquals("in a party", PartyRaces.challengeNote(false, true, false, false, false));
+        assertEquals("in a game", PartyRaces.challengeNote(false, false, true, false, false),
+                "mid-run (a session outside the Clubhouse): never reached");
+        assertEquals("invites off", PartyRaces.challengeNote(false, false, false, true, false));
+        assertEquals("busy", PartyRaces.challengeNote(false, false, false, false, true),
+                "an invite waiting for them or out from them");
+        assertEquals("in a party", PartyRaces.challengeNote(false, true, true, true, true), "the first reason wins");
+        assertEquals("busy", PartyRaces.challengeNote(true, false, false, false, false), "never yourself");
+    }
+
+    @Test
+    void aChallengesYesWalksThemIntoTheClubhouseWhenItIsOpenElseTheLobbyAsBefore() {
+        assertTrue(PartyRaces.yesToClubhouse(true, true, false), "a challenge, the Clubhouse open: in they go");
+        assertFalse(PartyRaces.yesToClubhouse(true, true, true), "already in it: their party screen");
+        assertFalse(PartyRaces.yesToClubhouse(true, false, false), "the Clubhouse off: the ordinary lobby flow");
+        assertFalse(PartyRaces.yesToClubhouse(false, true, false), "an ordinary party invite: the lobby, as before");
+    }
+
     @Test
     void partyInvitesFollowThePlayersInviteSwitch() {
         assertTrue(Invites.FRIEND_GAMES.contains(TimeTrials.SPEC.id()),

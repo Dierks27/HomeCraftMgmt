@@ -661,14 +661,18 @@ public final class GolfRounds {
 
     /**
      * A round alone is over: its lines and record, then home, and the final scorecard there; or (0.38.3,
-     * {@code solo_after}) back to the Clubhouse, with the scorecard there.
+     * {@code solo_after}) back to the Clubhouse, with the scorecard there (0.38.4: and NEW RECORD when it set the
+     * course's record; at home the burst goes up where they stand).
      */
     private void finish(Player p, LiveRound r) {
         r.state = LiveRound.State.DONE;
-        finishLines(p, r);
+        boolean record = finishLines(p, r);
         GolfCard card = r.card();
-        if (ClubGolf.soloBack(golf, this, p, r, card)) {
+        if (ClubGolf.soloBack(golf, this, p, r, card, record)) {
             return; // 0.38.3: back to the Clubhouse, the scorecard there
+        }
+        if (record) {
+            com.dierks.homecraft.util.Fireworks.spawn(p.getLocation(), 0); // 0.38.4: harmless, tagged
         }
         games().sessions().leave(p, EndReason.FINISH);
         showWhenHome(p.getUniqueId(), card, null, 0);
@@ -677,8 +681,10 @@ public final class GolfRounds {
     /**
      * A finished round's lines, then its score and rewards unless the course changed meanwhile: a
      * round alone's at its end, a group player's at their own last hole ({@link GolfGroups}).
+     *
+     * @return whether the round set the course's all-time record (0.38.4; false when it wasn't recorded)
      */
-    private void finishLines(Player p, LiveRound r) {
+    private boolean finishLines(Player p, LiveRound r) {
         GolfRun run = r.run;
         GolfCourse c = r.course;
         p.sendMessage(Text.of("&d" + c.name() + " &7done: &f" + GolfRun.strokesText(run.total()) + " &7("
@@ -690,9 +696,9 @@ public final class GolfRounds {
         p.sendMessage(Text.of(r.card().line()));
         if (changed(c)) {
             p.sendMessage(Text.of("&7This course was changed while you played, so this round isn't recorded."));
-        } else {
-            record(p, r);
+            return false;
         }
+        return record(p, r);
     }
 
     /** Whether an admin changed (or closed) the course since the round began, and its layout no longer stands. */
@@ -732,8 +738,10 @@ public final class GolfRounds {
     /**
      * The score on the board, then the rewards — while the player is still in the game, where they
      * earn ({@link GolfFinish}). A Fresh course's part comes from the layout the round began on.
+     *
+     * @return whether it set the board's record (0.38.4)
      */
-    private void record(Player p, LiveRound r) {
+    private boolean record(Player p, LiveRound r) {
         GolfRun run = r.run;
         GolfCourse c = r.course;
         MiniGolfSettings s = golf.settings();
@@ -747,10 +755,11 @@ public final class GolfRounds {
             long week = DailyLookup.weekKey(games());
             daily = new GolfFinish.Daily(t, week, g.dailyClear(t.slot(), t.cadence()), g.goals(week));
         }
-        GolfFinish.settle(new GolfFinish.Round(c.id(), golf.name() + ": " + c.name(),
+        GolfFinish.Summary summary = GolfFinish.settle(new GolfFinish.Round(c.id(), golf.name() + ": " + c.name(),
                 run.total(), c.par(), c.holes().size(), run.parOrBetter(), run.holesInOne(), day, featured,
                 s.firstClear(), s.parReward(), s.holeInOneReward(), games().config().common().featuredBonus(), daily),
                 ledger(p, c));
+        return summary.result().record();
     }
 
     /**
@@ -764,6 +773,7 @@ public final class GolfRounds {
         int par = r.par();
         int holesInOne = r.holesInOne().size();
         boolean record = summary.result().record();
+        com.dierks.homecraft.games.clubhouse.FamilyWeek.scored(games(), p.getUniqueId(), com.dierks.homecraft.games.clubhouse.FamilyWeekRules.golfPoints(summary.result().personalBest(), record, holesInOne)); // 0.38.4
         games().tellProgress(g -> g.golfFinished(p, c.id(), strokes, par, holesInOne, c.generated(), record));
         GolfFinish.Daily daily = r.daily();
         if (daily != null && daily.tag() != null) {

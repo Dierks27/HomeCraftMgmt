@@ -67,6 +67,7 @@ public final class AccountMoveDao {
         m.put("game_rounds", "games of chance: history");
         m.put("game_breaks", "Take a break: set it again for the new account");
         m.put("game_scores", "high scores: history");
+        m.put("game_splits", "checkpoint splits of a best run: history, with its score");
         m.put("game_rewards", "game rewards paid: history");
         m.put("game_saved_state", "a world game in progress (the move is refused while either player is in one)");
         m.put("cup_entries", "the Weekly Cup: history");

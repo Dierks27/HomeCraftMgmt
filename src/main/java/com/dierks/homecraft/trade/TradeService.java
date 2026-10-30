@@ -955,17 +955,20 @@ public final class TradeService implements TradeListener.Trades {
         offer(target, r, secs);
     }
 
-    /** The request in the target's chat (and on the Bedrock "Trade?" screen when it can open now). */
+    /**
+     * The request in the target's chat, and on the "Trade?" screen when it can open now (0.38.4: for Java too, as
+     * every invite's "Play?" screen; the chat buttons stay below it). A Bedrock player it couldn't open for reads
+     * the command.
+     */
     private void offer(Player to, TradeRequests.Request r, int secs) {
         to.sendMessage(Text.of("&e" + r.fromName() + " &7wants to trade with you. &8(" + secs + " s)"));
-        if (Bedrock.is(to)) {
-            if (screenOpens(to)) {
-                showScreen(to, r);
-            } else {
-                String typed = typed();
-                to.sendMessage(Text.of("&7Type &e" + typed + " accept &7to trade, or &e" + typed + " deny&7."));
-            }
-        } else {
+        if (screenOpens(to)) {
+            showScreen(to, r);
+        } else if (Bedrock.is(to)) {
+            String typed = typed();
+            to.sendMessage(Text.of("&7Type &e" + typed + " accept &7to trade, or &e" + typed + " deny&7."));
+        }
+        if (!Bedrock.is(to)) {
             String name = r.fromName();
             String typed = typed();
             to.sendMessage(Text.of("&a[Trade]").clickEvent(ClickEvent.runCommand(TradeRules.click("accept", name)))
@@ -1199,7 +1202,7 @@ public final class TradeService implements TradeListener.Trades {
             } catch (RuntimeException ignored) {
                 // cosmetic
             }
-            if (Bedrock.is(to) && !screenShown.contains(r.id()) && screenOpens(to)) {
+            if (!screenShown.contains(r.id()) && screenOpens(to)) { // 0.38.4: Java too
                 showScreen(to, r);
                 continue;
             }

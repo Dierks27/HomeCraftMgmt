@@ -107,12 +107,21 @@ public final class ClubSolo {
         return null;
     }
 
-    /** A solo finish: back to the Clubhouse with the result screen there; false = home, as before. */
+    /**
+     * A solo finish: back to the Clubhouse with the result screen there (and, 0.38.4, the NEW RECORD line when the
+     * run set the course's all-time record); false = home, as before.
+     */
     static boolean back(TimeTrials t, Player p, TrialRun run, TimeTrials.Result result) {
         UUID id = p.getUniqueId();
         return back(Clubhouse.door(t.games()), p, p.getWorld().getName(), run.test, t.riders().ofDriver(id) != null,
                 () -> t.end(p), ClubhouseText.backSolo(result.courseName(), TrialText.time(result.ms())),
-                q -> new ResultMenu(t.plugin(), t, result, q).open(q));
+                q -> new ResultMenu(t.plugin(), t, result, q).open(q), recordLine(p, result));
+    }
+
+    /** 0.38.4: the Clubhouse's "<name> set a new record on <course>: <time>" for a counted record, else null. */
+    static String recordLine(Player p, TimeTrials.Result result) {
+        return result.record() && result.counted()
+                ? ClubhouseText.newRecordLine(p.getName(), result.courseName(), TrialText.time(result.ms())) : null;
     }
 
     /**
@@ -122,6 +131,12 @@ public final class ClubSolo {
      */
     static boolean back(ClubDoor club, Player p, String world, boolean test, boolean rider, Runnable forget,
                         String line, Consumer<Player> opener) {
+        return back(club, p, world, test, rider, forget, line, opener, null);
+    }
+
+    /** {@link #back(ClubDoor, Player, String, boolean, boolean, Runnable, String, Consumer)} with the record line (0.38.4). */
+    static boolean back(ClubDoor club, Player p, String world, boolean test, boolean rider, Runnable forget,
+                        String line, Consumer<Player> opener, String recordLine) {
         if (!ClubRoute.after(club, world, test, rider)) {
             return false;
         }
@@ -133,7 +148,7 @@ public final class ClubSolo {
         if (!club.takeIn(p, ClubVisits.Kind.VISIT, line)) {
             return false;
         }
-        club.soloResult(p, opener);
+        club.soloResult(p, opener, recordLine);
         return true;
     }
 

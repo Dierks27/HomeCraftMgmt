@@ -5,7 +5,10 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invite;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.clubhouse.ClubDoor;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.gui.games.trial.ChallengeMenu;
+import com.dierks.homecraft.gui.games.trial.ChallengePickerMenu;
 import com.dierks.homecraft.gui.games.trial.PartyMenu;
 import com.dierks.homecraft.gui.games.trial.PartyResultsMenu;
 import com.dierks.homecraft.util.Sounds;
@@ -52,6 +55,13 @@ import java.util.UUID;
  * on its track ({@link #callOff}), its racers home with a clear line and nothing counted. The Dropper
  * has no party races (its only extra is its own practice drop).
  *
+ * <p><b>A challenge</b> (0.38.4, the owner's "challenge anyone online to a race"): "Challenge" in the Clubhouse
+ * kit or "Challenge someone" on a course screen picks a course, then anyone online (grey names say why they
+ * can't be asked), and IS a party race of two: the same lobby, the same invite under the {@code trials} key
+ * (so the invite switch covers it), the invitee's Yes walks them into the Clubhouse as a party member, the
+ * host's Start seats both from there and {@code party_after} brings both back ({@link #challenge}). With the
+ * Clubhouse off it is the ordinary lobby flow. Nobody mid-run is ever reached ({@link #canInvite}).
+ *
  * <p>Everything runs inside Time Trials' guard; a party is memory only, and every party race ends
  * with Time Trials.
  */
@@ -76,6 +86,8 @@ public final class PartyRaces {
     private final Map<Long, PartyRace> races = new HashMap<>();
     /** Invite id → the lobby it asks to. */
     private final Map<Long, Long> invites = new HashMap<>();
+    /** 0.38.4: the invite ids that are challenges (the invitee's Yes goes to the Clubhouse, not the lobby screen). */
+    private final java.util.Set<Long> challenges = new java.util.HashSet<>();
     /** Lobby id → its last race's results (for "Race again" and the screen). */
     private final Map<Long, List<PartyRace.Line>> results = new HashMap<>();
     /** Racer → their position bar. */
@@ -115,6 +127,7 @@ public final class PartyRaces {
         }
         warmups.clear();
         invites.clear();
+        challenges.clear();
         results.clear();
         laps.clear();
         loading.clear();
@@ -171,14 +184,158 @@ public final class PartyRaces {
             g.tell(player, Refusal.of(no));
             return;
         }
-        PartyLobby lobby = g.parties().create(PartyLobby.Kind.RACE, c.id(), id, trials.settings().partyMax());
+        PartyLobby lobby = createLobby(player, c);
         if (lobby == null) {
             g.tell(player, Refusal.of(PartyLobby.Why.IN_ANOTHER.message()));
             return;
         }
-        warmups.put(lobby.id(), trials.settings().warmupsOn());
         player.sendMessage(Text.of("&dYour party for " + c.name() + " is open! &7Invite friends, then Start the race."));
         openLobby(player, back);
+    }
+
+    /** A new party for {@code c}, hosted by {@code player}, with the server's warm-up choice; null when they're in one. */
+    private PartyLobby createLobby(Player player, Course c) {
+        PartyLobby lobby = games().parties().create(PartyLobby.Kind.RACE, c.id(), player.getUniqueId(),
+                trials.settings().partyMax());
+        if (lobby != null) {
+            warmups.put(lobby.id(), trials.settings().warmupsOn());
+        }
+        return lobby;
+    }
+
+    // ---- 0.38.4: challenge anyone online -----------------------------------------------------------
+
+    /**
+     * The Clubhouse kit's "Challenge - race anyone online": a course picker ({@link ChallengeMenu}), then
+     * {@link #challengeOn}. A player already in a party sees their party's screen instead; a restart due
+     * soon refuses, as a Start would.
+     */
+    public void challenge(Player from, Runnable back) {
+        GamesService g = games();
+        Refusal hold = g.restartRefusal();
+        if (hold != null) {
+            g.tell(from, hold);
+            return;
+        }
+        if (g.parties().of(from.getUniqueId()) != null) {
+            if (lobby(from.getUniqueId()) == null) {
+                g.tell(from, Refusal.of(PartyLobby.Why.IN_ANOTHER.message()));
+                return;
+            }
+            from.sendMessage(Text.of("&7You're in a party already - here it is."));
+            openLobby(from, back);
+            return;
+        }
+        new ChallengeMenu(trials.plugin(), trials, from, back).open(from);
+    }
+
+    /**
+     * "Challenge someone" on {@code courseId} (the course screen's tile, or the picker's choice): a party of
+     * their own on it, then the everyone-online picker ({@link ChallengePickerMenu}). One already in a party
+     * race sees that party's screen (its Invite asks the same people).
+     */
+    public void challengeOn(Player from, String courseId, Runnable back) {
+        GamesService g = games();
+        UUID id = from.getUniqueId();
+        PartyLobby mine = g.parties().of(id);
+        if (mine != null) {
+            if (mine.kind() != PartyLobby.Kind.RACE) {
+                g.tell(from, Refusal.of(PartyLobby.Why.IN_ANOTHER.message()));
+                return;
+            }
+            from.sendMessage(Text.of("&7You're in a party for " + courseName(mine) + " already - here it is."));
+            openLobby(from, back);
+            return;
+        }
+        Course c = trials.openCourse(courseId);
+        String no = courseProblem(c);
+        if (no != null) {
+            g.tell(from, Refusal.of(no));
+            return;
+        }
+        Refusal r = inClub(from) ? null : g.canOpen(from, trials); // WP-CH: from the Clubhouse too
+        if (r != null) {
+            g.tell(from, r);
+            return;
+        }
+        PartyLobby lobby = createLobby(from, c);
+        if (lobby == null) {
+            g.tell(from, Refusal.of(PartyLobby.Why.IN_ANOTHER.message()));
+            return;
+        }
+        new ChallengePickerMenu(trials.plugin(), trials, from, back).open(from);
+    }
+
+    /**
+     * Why {@code other} can't be challenged now, in the picker's words, or {@code null} when they can (pure):
+     * "in a party", "in a game" (a session outside the Clubhouse: nobody is reached mid-run), "invites off"
+     * (their {@code trials} invite switch), "busy" (an invite waiting for them or out from them, the pair's
+     * 30 s invite cooldown still running, or they can't open the races now). The viewer themselves is never
+     * listed.
+     */
+    public static String challengeNote(boolean self, boolean inParty, boolean inGame, boolean invitesOff,
+                                       boolean busy) {
+        if (self) {
+            return "busy";
+        }
+        if (inParty) {
+            return "in a party";
+        }
+        if (inGame) {
+            return "in a game";
+        }
+        if (invitesOff) {
+            return "invites off";
+        }
+        return busy ? "busy" : null;
+    }
+
+    /** {@link #challengeNote(boolean, boolean, boolean, boolean, boolean)} for {@code other}, as {@code from} sees them. */
+    public String challengeNote(Player from, Player other) {
+        GamesService g = games();
+        UUID id = other.getUniqueId();
+        boolean club = inClub(other);
+        boolean busy = g.invites().pending(id) != null || g.invites().outgoing(id) != null
+                || g.invites().coolingDown(from.getUniqueId(), id) // asked just now: Invites.send would refuse
+                || (!club && g.canOpen(other, trials) != null);
+        return challengeNote(id.equals(from.getUniqueId()), g.parties().of(id) != null,
+                !club && trials.sessions().session(other) != null, !g.invites().accepts(id, trials.id()), busy);
+    }
+
+    /**
+     * The picker's tap: the challenge, as a party invite under the {@code trials} key named "Race challenge"
+     * (the Games screen's book reads "Race challenge invite from ..."; {@code /hcm play invites off} covers
+     * it). The host stays in the Clubhouse (its kit shows Party now), or sees the lobby as before. False when
+     * nothing was sent (the host hears why, and keeps their party of one): the picker shows itself again.
+     */
+    public boolean sendChallenge(Player from, Player to, Runnable back) {
+        PartyLobby lobby = lobby(from.getUniqueId());
+        if (lobby == null || !canInvite(from, to)) {
+            couldNotSend(from);
+            return false;
+        }
+        Invite sent = games().invites().send(from, to, trials, trials.id(), "Race challenge",
+                "a race challenge on " + courseName(lobby) + " - free, just for fun", INVITE_SECONDS,
+                (invite, yes) -> games().guard(trials, () -> answered(invite, yes)));
+        if (sent == null) {
+            couldNotSend(from);
+            return false;
+        }
+        invites.put(sent.id(), lobby.id());
+        challenges.add(sent.id());
+        from.sendMessage(Text.of("&aChallenge sent to " + to.getName() + ". &7Waiting for an answer..."));
+        if (!inClub(from)) {
+            openLobby(from, back); // the ordinary lobby flow (its "Go to the Clubhouse" is there when it is open)
+        }
+        return true;
+    }
+
+    /** The Clubhouse kit's Challenge (slot 1), inside Time Trials' guard. */
+    public static void challengeFromClub(GamesService games, Player p) {
+        TimeTrials t = trials(games);
+        if (t != null) {
+            games.guard(t, () -> t.party().challenge(p, null));
+        }
     }
 
     /** The player's party screen (nothing when they aren't in a party race). */
@@ -238,14 +395,16 @@ public final class PartyRaces {
     }
 
     private static void couldNotSend(Player from) {
-        from.sendMessage(Text.of("&cThat invite couldn't be sent right now. &7(One invite at a time.)"));
+        from.sendMessage(Text.of("&cThat invite couldn't be sent right now. &7(One invite at a time, and the same"
+                + " two players wait 30 seconds between invites.)"));
         Sounds.refused(from);
     }
 
     private void answered(Invite invite, boolean yes) {
         Long lobbyId = invites.remove(invite.id());
-        Player from = Bukkit.getPlayer(invite.from());
-        Player to = Bukkit.getPlayer(invite.to());
+        boolean challenge = challenges.remove(invite.id()); // 0.38.4
+        Player from = online(invite.from());
+        Player to = online(invite.to());
         if (!yes) {
             if (from != null) {
                 from.sendMessage(Text.of("&7" + (to != null ? to.getName() : "Your friend") + " didn't join the party."));
@@ -271,7 +430,20 @@ public final class PartyRaces {
             return;
         }
         say(lobby, "&a" + to.getName() + " joined the party! &7(" + lobby.size() + " of " + lobby.max() + ")");
-        openLobby(to, null);
+        if (yesToClubhouse(challenge, Clubhouse.offered(games()), inClub(to))) {
+            Clubhouse.go(games(), to); // 0.38.4: a challenge's Yes walks them into the Clubhouse as a party member
+        } else {
+            openLobby(to, null);
+        }
+    }
+
+    /**
+     * 0.38.4: where an invitee's Yes takes them (pure): into the Clubhouse as a party member for a challenge while
+     * the Clubhouse is open and they aren't in it already (never a menu during the async entry); else their party
+     * screen, as every party invite's Yes (a challenge with the Clubhouse off is the ordinary lobby flow).
+     */
+    static boolean yesToClubhouse(boolean challenge, boolean clubOffered, boolean inClub) {
+        return challenge && clubOffered && !inClub;
     }
 
     // ---- in the lobby ----------------------------------------------------------------------------
@@ -665,6 +837,7 @@ public final class PartyRaces {
         List<PartyRace.Line> lines = race.results();
         if (line == null) {
             results.put(race.lobbyId(), lines);
+            com.dierks.homecraft.games.clubhouse.FamilyWeek.partyWon(games(), lines, race.racers().size()); // 0.38.4: the family week's win
         }
         for (UUID id : race.racers()) {
             hideBar(id);
@@ -791,6 +964,15 @@ public final class PartyRaces {
     public String courseName(PartyLobby lobby) {
         Course c = trials.course(lobby.course());
         return c == null ? lobby.course() : c.name();
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return id == null ? null : Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
     }
 
     /** A player's name, or "someone". */

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.Invite;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.clubhouse.ClubBoard;
@@ -305,6 +306,42 @@ class ClubhouseRacesTest {
         int ben2 = bench.balance(id(ben)) - before[1];
         int cal2 = bench.balance(id(cal)) - before[2];
         assertEquals(ben2, cal2, "the same normal rewards whether you waited in the Clubhouse or not");
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    // ---- 0.38.4: a challenge is a party race of two ---------------------------------------------------
+
+    @Test
+    void aChallengeIsAPartyRaceOfTwoSentFromTheClubhouseAndNeverReachesSomeoneWhoIsntFree() {
+        clubOn();
+        door.in.put(id(ava), ClubVisits.Kind.VISIT); // hanging out, tapped Challenge in the kit, picked the course
+        PartyLobby lobby = games.parties().create(PartyLobby.Kind.RACE, loop.id(), id(ava), 8);
+        assertNotNull(lobby, "the challenge's own party, hosted by Ava");
+        PartyRaces party = trials.party();
+        assertNull(party.challengeNote(ava, ben), "Ben is free: green");
+        games.parties().create(PartyLobby.Kind.RACE, loop.id(), id(cal), 8);
+        assertEquals("in a party", party.challengeNote(ava, cal), "Cal has a party of their own: grey, and why");
+        assertFalse(party.canInvite(ava, cal), "and can't be asked");
+
+        assertTrue(party.sendChallenge(ava, ben, null), "sent: the picker closes");
+        Invite sent = games.invites().pending(id(ben));
+        assertNotNull(sent, "Ben has the challenge waiting (the Play? screen, or [Accept] in chat)");
+        assertEquals("Race challenge", sent.name(), "named for what it is: the Games screen's book says so");
+        assertEquals("trials", sent.gameId(), "under the party races' key: /hcm play invites off covers it");
+        assertTrue(sent.summary().contains("a race challenge on " + loop.name()), sent.summary());
+        assertTrue(bench.heard(id(ava)).contains("Challenge sent to Ben"), bench.heard(id(ava)));
+        assertTrue(bench.heard(id(ben)).contains("Ava invites you: a race challenge on " + loop.name()),
+                bench.heard(id(ben)));
+        assertEquals(ClubVisits.Kind.VISIT, door.in.get(id(ava)), "Ava stays in the Clubhouse (the kit shows Party)");
+        assertEquals("busy", party.challengeNote(cal, ben), "an invite waiting for Ben: busy for anyone else");
+        assertEquals("in a party", party.challengeNote(cal, ava), "Ava hosts the challenge's party: the first reason");
+
+        assertTrue(games.invites().deny(ben), "Not now");
+        assertNull(games.invites().pending(id(ben)), "the challenge went (the game tells Ava in its own words)");
+        assertEquals(1, lobby.size(), "still Ava's party of one");
+        assertEquals("busy", party.challengeNote(ava, ben),
+                "asked just now: the pair's 30 s cooldown greys Ben for Ava, so the picker never sends what is refused");
+        assertNull(party.challengeNote(cal, ben), "Ben is free again (for anyone else)");
         assertEquals(0, bench.severe(), "nothing threw");
     }
 

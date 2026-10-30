@@ -5,7 +5,8 @@ import com.dierks.homecraft.games.trial.TrialText;
 /**
  * Everything the Clubhouse's walls say (0.38.3; the owner: "display the top runs of the week and such ... Maybe
  * some stats or something? Have to make it a reason to be there after all"): this week's best, now playing and my
- * stats, and the My stats item and screen. Kid-safe like the rest of the Clubhouse's copy (the scan,
+ * stats, and the My stats item and screen; 0.38.4: the family week, the trophy case and the jukebox corner's
+ * Songs. Kid-safe like the rest of the Clubhouse's copy (the scan,
  * {@code ClubhouseCopyTest}, reads this file), no emoji, and short plain lines: Bedrock shows a board as a floating
  * name tag, one line each, so a name is cut to {@value #NAME_MAX} characters and a course to {@value #COURSE_MAX}.
  */
@@ -144,6 +145,77 @@ public final class ClubBoardText {
 
     /** "&amp;7No course times yet - go set one!". */
     public static final String NO_BESTS = "&7No course times yet - go set one!";
+
+    // ---- the family week (0.38.4) ------------------------------------------------------------------
+
+    public static final String FAMILY_TITLE = "&6&lFamily week";
+    public static final String NO_FAMILY = "&7No points yet this week - go play!";
+    /** The Photo's small line when the podium is last week's top three (Race Night's says its own). */
+    public static final String PHOTO_FAMILY = "&7Last week's top three";
+    /** The My stats screen's week tile, and its lore. */
+    public static final String[] WEEK_LORE = {"&7Runs, bests, records, race wins,", "&7golf, holes-in-one and cheers.",
+            "&7At most 10 points a day."};
+
+    /** "&amp;f1. Sam &amp;e14 pts &amp;7- 3 wins": a row of the Family week page ("- N wins" only with wins). */
+    public static String familyRow(int n, String name, long points, long wins) {
+        return "&f" + n + ". " + name(name) + " &e" + pts(points) + (wins > 0 ? " &7- " + wins + (wins == 1 ? " win"
+                : " wins") : "");
+    }
+
+    /** "&amp;7This week: &amp;f9 pts, 2nd", or "This week: no points yet": the My stats line. */
+    public static String statsWeek(long points, int rank) {
+        return "&7This week: &f" + (points <= 0 && rank <= 0 ? "no points yet" : pts(points)
+                + (rank > 0 ? ", " + ordinal(rank) : ""));
+    }
+
+    /** "9 pts" ("1 pt"). */
+    public static String pts(long points) {
+        return points + (points == 1 ? " pt" : " pts");
+    }
+
+    /** "1st", "2nd", "3rd", "4th", ..., "11th", "12th", "13th", "21st". */
+    public static String ordinal(int n) {
+        int tens = Math.abs(n) % 100;
+        int ones = Math.abs(n) % 10;
+        String end = tens >= 11 && tens <= 13 ? "th" : ones == 1 ? "st" : ones == 2 ? "nd" : ones == 3 ? "rd" : "th";
+        return n + end;
+    }
+
+    // ---- the trophy case and the jukebox (0.38.4) --------------------------------------------------
+
+    /** "&amp;6Sky Rings &amp;f1:02.4 &amp;7- Sam": the line over a course trophy. */
+    public static String trophyLine(String course, String score, String name) {
+        return "&6" + course(course) + " &f" + score + " &7- " + name(name);
+    }
+
+    /** The Songs tile on the Games screen's Together tab, and the screen's title and header. */
+    public static final String SONGS_TILE = "&dSongs &7- pick a record for the room";
+    public static final String SONGS_TITLE = "&dSongs";
+    public static final String SONGS_HEADER = "&dPick a record &7- it plays for the room";
+    public static final String QUIET = "&cQuiet &7- stop the music";
+    public static final String NOTHING_PLAYING = "&7Nothing playing";
+    public static final String SONGS_ELSEWHERE = "&7Songs play in the Clubhouse - come in.";
+    public static final String NO_JUKEBOX = "&7There's no jukebox in the room now.";
+
+    /** "&amp;dSam picked Pigstep": the room's line when a record starts. */
+    public static String picked(String name, String title) {
+        return "&d" + name(name) + " picked " + title;
+    }
+
+    /** "&amp;7Next: Pigstep": a record queued behind the one playing. */
+    public static String next(String title) {
+        return "&7Next: " + title;
+    }
+
+    /** "&amp;7Sam turned the music off." */
+    public static String quiet(String name) {
+        return "&7" + name(name) + " turned the music off.";
+    }
+
+    /** "&amp;7Now playing: Pigstep" (the Songs screen's header lore). */
+    public static String nowPlaying(String title) {
+        return "&7Now playing: " + title;
+    }
 
     /** Strokes against par as the results board says it: "par", "+3", "-2". */
     public static String vs(int vsPar) {

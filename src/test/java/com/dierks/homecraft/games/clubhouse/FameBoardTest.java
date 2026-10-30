@@ -55,7 +55,7 @@ class FameBoardTest {
         assertEquals(new FameBoard.GolfRound("Tiny Golf", "Lee", 22, -4), f.golfRecords().get(0), "golf's record");
 
         List<String> pages = FameBoard.pages(f);
-        assertEquals(3, pages.size(), "this week's best, this week, the records: " + pages);
+        assertEquals(3, pages.size(), "this week's best, this week, the records (no family week): " + pages);
         assertEquals("&6&lThis week's best\n&fSky Rings &7- &eSam 1:02.4\n&fIce Boat &7- &eLee 1:35.0", pages.get(0));
         assertTrue(pages.get(1).startsWith(ClubBoardText.WEEK_TITLE), pages.get(1));
         assertTrue(pages.get(1).contains("&dGolf: &fSam &7- Tiny Golf 24 (-2)"), pages.get(1));
@@ -115,5 +115,40 @@ class FameBoardTest {
         assertEquals(0, FameBoard.page(7 * 8_000, 7), "round and round");
         assertEquals(0, FameBoard.page(123_456, 1), "one page stays");
         assertEquals(pages.get(1), FameBoard.text(f, 8_000), "the page up at a time");
+    }
+
+    /**
+     * 0.38.4: with the family week on (the snapshot carries the week's key) a fourth page lists each player's
+     * points and race wins, most points first, cut to the board's rows, or says there are no points yet; last
+     * week's top three come through with their names; without the week there is no page at all.
+     */
+    @Test
+    void theFamilyWeekPage() {
+        ClubData.Snapshot s = new ClubData.Snapshot(List.of(), List.of(), 1_000L, -1, null, 0, Set.of(), 20_700, 20_693);
+        List<GamesDao.ScoreRow> family = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            family.add(new GamesDao.ScoreRow(i == 0 ? SAM : i == 1 ? LEE : UUID.randomUUID(), 20 - i, i));
+        }
+        ClubData.Raw raw = new ClubData.Raw(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), family,
+                Map.of(SAM, 3L), List.of(new GamesDao.ScoreRow(LEE, 30, 1), new GamesDao.ScoreRow(SAM, 25, 2)));
+        FameBoard.Fame f = FameBoard.fame(s, raw, id -> NAMES.getOrDefault(id, "Ana"));
+        assertEquals(20_700, f.weekKey(), "the week the rows are for");
+        assertEquals(new FameBoard.FamilyRow(SAM, "Sam", 20, 3), f.family().get(0), "most points first, with the wins");
+        assertEquals(new FameBoard.FamilyRow(LEE, "Lee", 19, 0), f.family().get(1), "no wins: 0");
+        assertEquals(List.of(new FameBoard.FamilyRow(LEE, "Lee", 30, 0), new FameBoard.FamilyRow(SAM, "Sam", 25, 0)),
+                f.lastWeek(), "last week's top, named");
+        List<String> pages = FameBoard.pages(f);
+        assertEquals(4, pages.size(), "...and the family week: " + pages);
+        String page = pages.get(3);
+        assertTrue(page.startsWith(ClubBoardText.FAMILY_TITLE + "\n&f1. Sam &e20 pts &7- 3 wins\n&f2. Lee &e19 pts\n"),
+                page);
+        assertEquals(1 + ClubBoard.MAX_ROWS, page.split("\n").length, "cut to the board's rows");
+
+        FameBoard.Fame none = new FameBoard.Fame(List.of(), null, null, 0, List.of(), List.of(), List.of(), List.of(),
+                List.of(), 20_700);
+        assertTrue(FameBoard.pages(none).get(3).endsWith(ClubBoardText.NO_FAMILY), "no points yet");
+        FameBoard.Fame off = new FameBoard.Fame(List.of(), null, null, 0, List.of(), List.of(), List.of());
+        assertEquals(3, FameBoard.pages(off).size(), "no week key: no family page");
+        assertEquals(-1, off.weekKey());
     }
 }

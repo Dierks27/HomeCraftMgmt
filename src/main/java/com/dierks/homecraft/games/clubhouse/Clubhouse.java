@@ -121,6 +121,8 @@ public final class Clubhouse implements Game, ClubDoor {
     static final String GO_NOW = "go_now";
     static final String STAY = "stay";
     static final String GAMES = "games";
+    /** 0.38.4: "Challenge - race anyone online" (slot 1, while not in a party). */
+    static final String CHALLENGE = "challenge";
     static final String LEAVE = "leave";
     /**
      * A solo player's own results open once they are seen in the room: looked for this often (ticks), this many
@@ -148,6 +150,9 @@ public final class Clubhouse implements Game, ClubDoor {
     private Results last;
     private Photo photo;
     private WatchLive watch;
+    /** 0.38.4: the jukebox corner and the family week; null with no server. */
+    private JukeboxCorner jukebox;
+    private FamilyWeek familyWeek;
     private final Cheers cheers = new Cheers();
     private final Map<UUID, Boolean> cheersOn = new HashMap<>();
     /** 0.38.3: who is on their way to a course or a round from here, and their countdowns. */
@@ -156,6 +161,8 @@ public final class Clubhouse implements Game, ClubDoor {
     private final Map<UUID, Mine> mine = new HashMap<>();
     /** When {@link #last} was set (the clock's ms), so the newer of a player's own and the shared one opens. */
     private long lastAt;
+    /** Whether the room was open at the last second (0.38.4: the jukebox is swept when it opens). */
+    private boolean wasOpen;
 
     /**
      * Someone on their way into the Clubhouse's own session: why they come, whether to watch live at once,
@@ -176,8 +183,14 @@ public final class Clubhouse implements Game, ClubDoor {
     private record Results(ClubBoard.Sheet sheet, Consumer<Player> opener) {
     }
 
-    /** A solo player's own last results (0.38.3): their results screen, and when it came. */
-    private record Mine(Consumer<Player> opener, long at) {
+    /**
+     * A solo player's own last results (0.38.3): their results screen, and when it came; and (0.38.4) the chat line
+     * for a run or round that set the course's all-time record, or {@code null} for none.
+     */
+    private record Mine(Consumer<Player> opener, long at, String recordLine) {
+        Mine(Consumer<Player> opener, long at) {
+            this(opener, at, null);
+        }
     }
 
     /** Race Night's podium, waiting for its three to arrive. */
@@ -253,7 +266,42 @@ public final class Clubhouse implements Game, ClubDoor {
     @Override
     public List<GameTile> tiles(Player viewer) {
         ClubhouseRoom r = room;
-        return r != null && r.open() ? List.of(new GameTile(Tab.TOGETHER, tile(viewer), id(), 0)) : List.of();
+        if (r == null || !r.open()) {
+            return List.of();
+        }
+        List<GameTile> out = new ArrayList<>();
+        out.add(new GameTile(Tab.TOGETHER, tile(viewer), id(), 0));
+        if (viewer != null && visits.in(viewer.getUniqueId()) && jukebox != null && jukebox.block() != null) {
+            out.add(new GameTile(Tab.TOGETHER, songsTile(), SONGS, 1)); // 0.38.4: Songs, while inside
+        }
+        return out;
+    }
+
+    /** 0.38.4: the Songs playable ({@code /hcm play club_songs}, the Together tab's tile while inside). */
+    static final String SONGS = "club_songs";
+
+    private static ItemStack songsTile() {
+        return Menus.icon(Material.JUKEBOX, ClubBoardText.SONGS_TILE, "&7Tap a record: it plays", "&7for everyone in"
+                + " the room.");
+    }
+
+    @Override
+    public Collection<Playable> playables() {
+        return List.of(new Playable(SONGS, "Songs", this, source(), ""));
+    }
+
+    /** Songs: the jukebox corner's screen, for a visitor; anyone else is told to come in first. */
+    @Override
+    public boolean play(Player player, String playableId, Runnable back) {
+        if (!SONGS.equals(playableId)) {
+            return false;
+        }
+        if (jukebox == null || !visits.in(player.getUniqueId())) {
+            refuse(player, ClubBoardText.SONGS_ELSEWHERE);
+        } else {
+            jukebox.openSongs(player);
+        }
+        return true;
     }
 
     /** {@code /hcm play clubhouse}: come in (or, from Watch live, come back). */
@@ -298,6 +346,8 @@ public final class Clubhouse implements Game, ClubDoor {
         host = new LiveRoomHost(this);
         display = new BoardDisplay(this);
         boards = new ClubBoards(this);
+        jukebox = new JukeboxCorner(this);
+        familyWeek = new FamilyWeek(this);
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -314,6 +364,8 @@ public final class Clubhouse implements Game, ClubDoor {
                 true, e -> watch.spectating(e));
         g.on(this, org.bukkit.event.player.PlayerChangedWorldEvent.class, EventPriority.MONITOR, false,
                 e -> watch.arrived(e.getPlayer()));
+        g.on(this, org.bukkit.event.player.PlayerInteractEvent.class, EventPriority.LOWEST, false,
+                e -> jukebox.tapped(e)); // 0.38.4: a tap on the jukebox opens Songs, and never pops the disc
         g.every(this, 1, 1, this::tick);
         g.every(this, 20, 20, this::second);
         room.start();
@@ -332,6 +384,9 @@ public final class Clubhouse implements Game, ClubDoor {
     }
 
     private void stopRoom() {
+        if (jukebox != null) {
+            jukebox.stop(); // the music off and our disc cleared while the world is up, before the room goes
+        }
         if (room != null) {
             room.stop();
             room = null;
@@ -411,6 +466,7 @@ public final class Clubhouse implements Game, ClubDoor {
             case GO_NOW -> goNext(player);
             case STAY -> stay(player);
             case GAMES -> games().openGamesScreen(player, null);
+            case CHALLENGE -> com.dierks.homecraft.games.trial.PartyRaces.challengeFromClub(games(), player); // 0.38.4
             default -> {
                 // "leave" is the kit guard's
             }
@@ -666,8 +722,16 @@ public final class Clubhouse implements Game, ClubDoor {
             if (boards != null) {
                 boards.clear();
             }
+            if (jukebox != null) {
+                jukebox.stop();
+            }
+            wasOpen = false;
             return;
         }
+        if (!wasOpen && jukebox != null) {
+            jukebox.sweep(); // the room just opened: a disc left by a crash comes out
+        }
+        wasOpen = true;
         watch.refresh(liveRaces());
         for (ClubVisits.Visit v : visits.all()) {
             Player p = online(v.id());
@@ -708,6 +772,12 @@ public final class Clubhouse implements Game, ClubDoor {
         if (boards != null) {
             boards.second(now);
         }
+        if (jukebox != null) {
+            jukebox.second(now);
+        }
+        if (familyWeek != null) {
+            familyWeek.second(now);
+        }
     }
 
     /**
@@ -731,6 +801,9 @@ public final class Clubhouse implements Game, ClubDoor {
         board.forget();
         if (boards != null) {
             boards.clear();
+        }
+        if (jukebox != null) {
+            jukebox.stop();
         }
         room = newRoom();
         room.start();
@@ -794,7 +867,7 @@ public final class Clubhouse implements Game, ClubDoor {
         LiveRace live = followed();
         ClubNext next = lobby.next(id);
         boolean own = ownNewer(id);
-        String sig = (party ? "P" : "") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
+        String sig = (party ? "P" : "C") + (own ? "M" : "R") + (live != null ? "W" + live.key() : "")
                 + (next != null ? "N" + next.gameId() + ":" + next.ref() : "") + "G"
                 + (settings().boards() ? "S" : "");
         if (sig.equals(kits.get(id)) || !inOurSession(p)) {
@@ -806,6 +879,10 @@ public final class Clubhouse implements Game, ClubDoor {
         if (party) {
             KitItems.put(inv, 0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
                     "&7Who's in, who's ready,", "&7and the host's Start."));
+        }
+        if (!party) { // 0.38.4: a challenge is a party race of two with anyone online
+            KitItems.put(inv, 1, KitItems.item(this, CHALLENGE, Material.GOLDEN_BOOTS, ClubhouseText.KIT_CHALLENGE,
+                    "&7Pick a course, then anyone", "&7who's free. They meet you here."));
         }
         KitItems.put(inv, 2, own
                 ? KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS_MINE, "&7Your time, and Play again.")
@@ -1046,6 +1123,9 @@ public final class Clubhouse implements Game, ClubDoor {
                 heard++;
             }
         }
+        if (heard > 0 && familyWeek != null) {
+            familyWeek.scored(id, FamilyWeekRules.CHEER); // 0.38.4: the family week
+        }
         p.sendMessage(Text.of(heard > 0 ? "&dYou cheered for the racers!" : "&7Nobody racing has cheers on."));
     }
 
@@ -1135,7 +1215,8 @@ public final class Clubhouse implements Game, ClubDoor {
             Player p = online(v.id());
             if (p != null) {
                 try {
-                    p.showTitle(Title.title(Text.of(ClubhouseText.PHOTO), Text.of(ClubhouseText.PHOTO_SMALL),
+                    p.showTitle(Title.title(Text.of(ClubhouseText.PHOTO), Text.of(familyWeek != null
+                                    && familyWeek.showing() ? ClubBoardText.PHOTO_FAMILY : ClubhouseText.PHOTO_SMALL),
                             Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(PHOTO_TICKS * 50L),
                                     Duration.ofMillis(400))));
                 } catch (RuntimeException | LinkageError ignored) {
@@ -1250,6 +1331,11 @@ public final class Clubhouse implements Game, ClubDoor {
             @Override
             public void soloResult(Player p, Consumer<Player> opener) {
                 g.guard(self, () -> self.soloResult(p, opener));
+            }
+
+            @Override
+            public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
+                g.guard(self, () -> self.soloResult(p, opener, recordLine));
             }
 
             @Override
@@ -1402,11 +1488,21 @@ public final class Clubhouse implements Game, ClubDoor {
      */
     @Override
     public void soloResult(Player p, Consumer<Player> opener) {
+        soloResult(p, opener, null);
+    }
+
+    /**
+     * {@link #soloResult(Player, Consumer)} with (0.38.4) the record line for a run or round that set the course's
+     * all-time record: once they have landed, "NEW RECORD!" for everyone in the room, the burst over the podium and
+     * the line in chat ({@link #newRecord}); {@code null} for no record.
+     */
+    @Override
+    public void soloResult(Player p, Consumer<Player> opener, String recordLine) {
         if (p == null || opener == null) {
             return;
         }
         UUID id = p.getUniqueId();
-        Mine m = new Mine(opener, now());
+        Mine m = new Mine(opener, now(), recordLine);
         mine.put(id, m);
         if (ctx.plugin() == null) {
             return; // the framework's own tests: no server to open a screen on
@@ -1431,9 +1527,36 @@ public final class Clubhouse implements Game, ClubDoor {
             return; // not landed yet
         }
         visits.seen(id); // the arrival check's, done
+        if (m.recordLine() != null) {
+            newRecord(m.recordLine()); // 0.38.4
+        }
         InventoryType open = q.getOpenInventory().getType();
         if (open == InventoryType.CRAFTING || open == InventoryType.CREATIVE) {
             m.opener().accept(q);
+        }
+    }
+
+    /**
+     * 0.38.4: a solo run or a round alone that set the course's all-time record has landed here: "NEW RECORD!" for
+     * everyone in the room (the podium title's shape), {@code line} in chat, and the kid-safe burst over the podium.
+     */
+    private void newRecord(String line) {
+        for (ClubVisits.Visit v : visits.all()) {
+            Player p = online(v.id());
+            if (p == null) {
+                continue;
+            }
+            try {
+                p.showTitle(Title.title(Text.of(ClubhouseText.NEW_RECORD), Text.of(ClubhouseText.newRecordSmall(line)),
+                        Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(PHOTO_TICKS * 50L),
+                                Duration.ofMillis(400))));
+            } catch (RuntimeException | LinkageError ignored) {
+                // a title is decoration
+            }
+            p.sendMessage(Text.of(line));
+        }
+        if (room != null && room.podium(1) != null) {
+            display.firework(room.world(), room.podium(1), 3.0);
         }
     }
 
@@ -1585,6 +1708,17 @@ public final class Clubhouse implements Game, ClubDoor {
         return g instanceof TimeTrials t && games().enabled(t) ? t : null;
     }
 
+    /**
+     * The music off and the disc out (0.38.4), before an admin command changes the room's phase or its spots
+     * ({@code off}, {@code rebuild confirm}, {@code generated}, {@code here}, {@code jukebox}): the corner
+     * remembers where its disc is either way, but the music shouldn't play on past the switch.
+     */
+    void quietMusic() {
+        if (jukebox != null) {
+            jukebox.stop();
+        }
+    }
+
     long now() {
         return games().clock().nowMillis();
     }
@@ -1614,6 +1748,21 @@ public final class Clubhouse implements Game, ClubDoor {
     /** The visitors (for the admin tool and the tests). */
     ClubVisits visits() {
         return visits;
+    }
+
+    /** Whether a podium photo is waiting (the family week's ceremony waits for it). */
+    boolean photoPending() {
+        return photo != null;
+    }
+
+    /** 0.38.4: the family week, or {@code null} with no server. */
+    FamilyWeek familyWeek() {
+        return familyWeek;
+    }
+
+    /** The walls' boards, or {@code null} with no server. */
+    ClubBoards boards() {
+        return boards;
     }
 
     // ---- for the party and Race Night screens (their buttons show only while this is open) --------

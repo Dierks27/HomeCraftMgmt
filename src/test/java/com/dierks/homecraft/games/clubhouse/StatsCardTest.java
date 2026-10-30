@@ -88,15 +88,30 @@ class StatsCardTest {
         assertEquals("&d&lMy stats &7- Sam", lines[0]);
         assertEquals("&7Runs this week: &f12", lines[1]);
         assertEquals("&7Tokens from games this week: &f45", lines[2]);
-        assertEquals("&7Best golf: &fTiny Golf 24 (-2)", lines[3]);
-        assertEquals("&fRiver Run &71:10.0 &e#1", lines[4], "best place first");
+        assertEquals(ClubBoardText.statsWeek(0, 0), lines[3], "0.38.4: the family week's line");
+        assertEquals("&7Best golf: &fTiny Golf 24 (-2)", lines[4]);
+        assertEquals("&fRiver Run &71:10.0 &e#1", lines[5], "best place first");
         assertEquals(ClubBoardText.ONLY_YOU, lines[8], "only they see it");
-        assertFalse(card.contains("&fC "), "four bests on the wall (the screen has them all)");
+        assertFalse(card.contains("&fB ") || card.contains("&fC "), "three bests on the wall (the screen has them all)");
         String none = StatsCard.board("Sam", new StatsCard.Mine(List.of(), 0, null, 0));
         assertTrue(none.contains("&7Best golf: &fnone yet") && none.contains(ClubBoardText.NO_BESTS), none);
         String counting = StatsCard.board("Sam", null);
         assertEquals("&d&lMy stats &7- Sam\n" + ClubBoardText.COUNTING + "\n" + ClubBoardText.ONLY_YOU, counting,
                 "not read yet");
         assertNull(StatsCard.build(null, null), "nothing read: nothing");
+    }
+
+    /** 0.38.4: the family week's points and place come through to the card and its wall line. */
+    @Test
+    void theFamilyWeeksPointsAndPlace() {
+        ClubData.Snapshot snap = new ClubData.Snapshot(List.of(), List.of(), 0, -1, null, 0, Set.of(ME), 20_700, 20_693);
+        ClubData.Personal p = new ClubData.Personal(List.of(), List.of(), Map.of(), List.of(), 9, 2);
+        StatsCard.Mine m = StatsCard.build(snap, p);
+        assertEquals(9, m.weekPoints());
+        assertEquals(2, m.weekRank());
+        assertTrue(StatsCard.board("Sam", m).contains("\n" + ClubBoardText.statsWeek(9, 2) + "\n"), "on the wall");
+        StatsCard.Mine old = new StatsCard.Mine(List.of(), 0, null, 0);
+        assertEquals(0, old.weekPoints(), "0.38.3's shape: no points");
+        assertTrue(StatsCard.board("Sam", old).contains(ClubBoardText.statsWeek(0, 0)), "says none yet");
     }
 }

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.Warmup;
+import com.dierks.homecraft.util.Text;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
@@ -38,6 +39,8 @@ class CourseMenuLayoutTest {
     @Test
     void raceWithFriendsTheCupAndTakeARiderEachHaveTheirOwnSlotOnTheBottomRow() {
         assertEquals(20, CourseMenu.PARTY_SLOT, "Race with friends: left of the way out");
+        assertEquals(19, CourseMenu.CHALLENGE_SLOT, "Challenge someone (0.38.4): left of Race with friends");
+        assertFalse(CourseMenu.FIXED_SLOTS.contains(CourseMenu.CHALLENGE_SLOT), "on a slot of its own");
         assertEquals(24, CupLink.SLOT, "the Cup: right of the way out");
         assertEquals(26, CourseMenu.RIDER_SLOT, "Take a rider (a boat course): the bottom row's right end");
         assertEquals(List.of(4, 10, 11, 12, 13, 14, 15, 16, 22), CourseMenu.FIXED_SLOTS, "the fixed tiles");
@@ -48,6 +51,20 @@ class CourseMenuLayoutTest {
             assertTrue(taken.add(slot), slot + " is nobody else's");
         }
         assertEquals(CourseMenu.FIXED_SLOTS.size() + 3, taken.size(), "twelve items, twelve slots");
+    }
+
+    @Test
+    void theChallengeTileSaysWhereTheirYesTakesThem() {
+        String[] on = ChallengePickerMenu.challengeLore(true);
+        String[] off = ChallengePickerMenu.challengeLore(false);
+        assertEquals(3, on.length);
+        assertEquals(3, off.length);
+        assertEquals(on[0], off[0], "the first line is the same: pick a player who's free");
+        assertTrue(Text.plain(String.join(" ", on)).contains("meet you in the Clubhouse"),
+                "the Clubhouse running: they meet you there");
+        assertTrue(Text.plain(String.join(" ", off)).contains("join your party screen"),
+                "the Clubhouse off: their Yes opens the party screen, as any party invite");
+        assertFalse(String.join(" ", off).contains("Clubhouse"), "and no Clubhouse is promised");
     }
 
     @Test
@@ -130,9 +147,9 @@ class CourseMenuLayoutTest {
         // Weekly Cup (when it runs one), Take a rider (a boat course, the Clubhouse open) and Admin tools
         // (an admin on a Fresh course); a Fresh boat course seen by an admin can show all four at once
         List<Integer> extras = List.of(CourseMenu.PARTY_SLOT, CupLink.SLOT, CourseMenu.RIDER_SLOT,
-                com.dierks.homecraft.gui.games.daily.FreshAdmin.SLOT);
-        assertEquals(List.of(20, 24, 26, 18), extras, "the final bottom-row map: 18 admin, 20 party, 22 out, 24 Cup,"
-                + " 26 rider");
+                com.dierks.homecraft.gui.games.daily.FreshAdmin.SLOT, CourseMenu.CHALLENGE_SLOT);
+        assertEquals(List.of(20, 24, 26, 18, 19), extras, "the final bottom-row map: 18 admin, 19 challenge, 20 party,"
+                + " 22 out, 24 Cup, 26 rider");
         for (int mask = 0; mask < 1 << extras.size(); mask++) {
             Set<Integer> taken = new HashSet<>(CourseMenu.FIXED_SLOTS);
             for (int b = 0; b < extras.size(); b++) {

@@ -716,6 +716,84 @@ public final class GamesDao {
         }
     }
 
+    // ---- 0.38.4: checkpoint splits ----------------------------------------------------------------
+
+    /** The most checkpoint times a splits row keeps (a Mountain Run v2 has up to 128 targets). */
+    public static final int SPLITS_MAX = 128;
+
+    /**
+     * A player's checkpoint times (ms from the start at each checkpoint, then the finish) on their best run of
+     * {@code course} on {@code layout} (its layout hash: a Fresh course's next edition is another row), or
+     * {@code null} when none is stored.
+     */
+    public long[] splits(UUID player, String course, int layout) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT times FROM game_splits WHERE player = ? AND course = ? AND layout = ?")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, course);
+                ps.setInt(3, layout);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? decodeSplits(rs.getString(1)) : null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Keep {@code ms} as the player's splits on {@code course}'s {@code layout} (a personal best: it replaces what
+     * was there); more than {@link #SPLITS_MAX} values are cut.
+     */
+    public void saveSplits(UUID player, String course, int layout, long[] ms, long now) throws SQLException {
+        if (ms == null || ms.length == 0) {
+            return;
+        }
+        String times = encodeSplits(ms);
+        database.transaction(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO game_splits (player, course, layout, times, at) VALUES (?, ?, ?, ?, ?)"
+                            + " ON CONFLICT(player, course, layout) DO UPDATE SET times = excluded.times, at = excluded.at")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, course);
+                ps.setInt(3, layout);
+                ps.setString(4, times);
+                ps.setLong(5, now);
+                ps.executeUpdate();
+            }
+            return null;
+        });
+    }
+
+    /** The row's text: the ms comma-separated, at most {@link #SPLITS_MAX} of them. */
+    static String encodeSplits(long[] ms) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ms.length && i < SPLITS_MAX; i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(ms[i]);
+        }
+        return sb.toString();
+    }
+
+    /** The ms a row's text holds, or {@code null} for an empty or unreadable one (a split is decoration). */
+    static long[] decodeSplits(String times) {
+        if (times == null || times.isBlank()) {
+            return null;
+        }
+        String[] parts = times.split(",");
+        long[] out = new long[Math.min(parts.length, SPLITS_MAX)];
+        try {
+            for (int i = 0; i < out.length; i++) {
+                out[i] = Long.parseLong(parts[i].trim());
+            }
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return out;
+    }
+
     /** The boards this game has scores on. */
     public List<String> boards(String game) throws SQLException {
         Connection c = database.connection();
@@ -855,6 +933,37 @@ public final class GamesDao {
             long next = (total == null ? 0L : total) + delta;
             writeScore(c, player, game, board, total, next, now);
             return next;
+        });
+    }
+
+    /**
+     * {@link #addPoints} under a daily cap (the Clubhouse's family week, 0.38.4): {@code delta} points on
+     * {@code board}, but never more than {@code cap} a day on {@code dayBoard} (the day's own points board), both
+     * in one transaction, so the week's total and the day's count never disagree. As {@link #addPoints}, it is
+     * not idempotent by itself: every caller is a once-per-event place.
+     *
+     * @return the points actually added (0 when the day is full)
+     */
+    public long addPointsCapped(UUID player, String game, String board, String dayBoard, long delta, long cap,
+                                long now) throws SQLException {
+        if (delta < 0 || cap < 0) {
+            throw new IllegalArgumentException("a points board only rises: " + delta + " under " + cap);
+        }
+        if (player == null || game == null || game.isBlank() || board == null || board.isBlank() || dayBoard == null
+                || dayBoard.isBlank()) {
+            throw new IllegalArgumentException("points need a player, a game and two boards");
+        }
+        return database.transaction(c -> {
+            Long today = best(c, player, game, dayBoard);
+            long had = today == null ? 0L : today;
+            long add = Math.max(0, Math.min(delta, cap - had));
+            if (add == 0) {
+                return 0L;
+            }
+            writeScore(c, player, game, dayBoard, today, had + add, now);
+            Long total = best(c, player, game, board);
+            writeScore(c, player, game, board, total, (total == null ? 0L : total) + add, now);
+            return add;
         });
     }
 

@@ -21,10 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The number-range rule for Sky Rings, relaxed with proof (the golf probe's precedent): the live
  * course stands in x, z 4096..8191, the binade of a double the elytra sim was always run in, while
- * Classic Sky Rings stands west of it at x 1760..3359, z 2880..3391. The sim works in absolute
+ * Classic Sky Rings stands west of it at x 1760..3359, z 3328..3839. The sim works in absolute
  * {@link StrictMath} doubles, so a whole-block shift across a binade can change the low bits of a
- * flight; a recalled plan is therefore proven again where it stands ({@code PlanCheck} runs
- * {@link RingsValidator} on the moved plan), and these tests measure how often that proof holds.
+ * flight; a recalled plan is therefore proven again where it stands ({@code PlanCheck.movedProblems}
+ * runs {@link RingsValidator} on the moved plan, on the planner thread, before the recall builds a block;
+ * a plan that fails there stays in the archive), and these tests measure how often that proof holds.
  * Fast: 10 easy plans moved onto the Classic's box pass the validator there. Slow ({@code -Phcm.slow}):
  * 120 plans, at least 99% of them.
  */

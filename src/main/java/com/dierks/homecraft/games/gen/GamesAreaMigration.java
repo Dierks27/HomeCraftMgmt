@@ -15,7 +15,7 @@ import java.util.List;
  * 480 x 176 x 640 and moves them north, to x 6080..7615, z 2880..3519 (GOLF-V4-SPEC §4.3, §5.2 step 1;
  * MOUNTAIN-V2-SPEC §10.1, §11.1). Revision 25 is Sky Rings v3: its halves are 512 x 176 x 512, grown in place
  * at 6080,128,4096 (only 0.35's spot moves), and Classic Sky Rings', the same size, move west to
- * 1760,128,2880, because grown in their old row they would reach Tiny Golf. Each step moves only its own
+ * 1760,128,3328, because grown in their old row they would reach Tiny Golf. Each step moves only its own
  * areas ({@link Move#revision}), so a file from before 21 gets both and one from 21-24 only the second.
  *
  * <p><b>Only untouched shipped values move.</b> An origin still exactly at a value this plugin shipped

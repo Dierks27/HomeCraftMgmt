@@ -93,7 +93,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * Firework Shows and the Firework Remote after the Mega Firework Show, and 15 Firework Launchers placed a player
      * instead of 3, wherever the owner hasn't changed them ({@link FireworkRemoteMigration}).
      * 25 = Sky Rings v3 and the Long Drop: Sky Rings' halves grow to 512 x 176 x 512 in place and Classic Sky
-     * Rings', the same size, move west to 1760,128,2880, wherever the owner kept the shipped spot
+     * Rings', the same size, move west to 1760,128,3328, wherever the owner kept the shipped spot
      * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the Dropper's shipped mix EEMMH becomes EEMHX (its
      * level 5 is the Long Drop) wherever the owner hasn't changed it, and its halves and Classic Dropper's grow to
      * 64 x 144 x 16 at the same spot ({@link com.dierks.homecraft.games.gen.DropperMixMigration}); the engine empties

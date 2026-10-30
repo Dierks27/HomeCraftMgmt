@@ -363,7 +363,7 @@ class LayoutGuardTest {
         String rings = area("fresh_classic_rings").entry();
         grown.set(rings, List.of(4608, 128, 4736));
         LayoutGuard.apply(grown, Decision.LEGACY, true, List.of("x"), null, new ArrayList<>());
-        assertEquals(List.of(1760, 128, 2880), list(grown.get(rings)), "a grown Classic in a bare list takes its new"
+        assertEquals(List.of(1760, 128, 3328), list(grown.get(rings)), "a grown Classic in a bare list takes its new"
                 + " spot even on a legacy server, still a bare list");
     }
 

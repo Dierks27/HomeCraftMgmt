@@ -18,7 +18,7 @@ import java.util.function.Function;
  *
  * <pre>
  *   Now playing
- *   Sam - Sky Rings - checkpoint 3 - 0:41
+ *   Sam - Sky Rings - ring 3 - 0:41
  *   Lee - Tiny Golf - hole 4
  *   Ana - Snake
  *   Max - in the Clubhouse
@@ -111,7 +111,7 @@ public final class NowBoard {
         return b.toString();
     }
 
-    /** One row: "Sam - Sky Rings - checkpoint 3 - 0:41". */
+    /** One row: "Sam - Sky Rings - ring 3 - 0:41". */
     static String row(Playing p) {
         return ClubBoardText.playing(p.name(), p.what(), p.where(), p.ms());
     }

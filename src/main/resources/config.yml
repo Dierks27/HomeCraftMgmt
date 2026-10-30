@@ -2214,7 +2214,7 @@ games:
     # Golf of the Week's halves are 128 x 16 x 224 (nine holes, 40 x 64 each) at x 8768; Tiny Golf's
     # 64 x 16 x 48. Ice Boat's are 480 x 176 x 640 (a whole mountain) at z 2880, north of the others.
     # Sky Rings' halves are 512 x 176 x 512 at [6080, 128, 4096] (a loop of 20 rings, 8 rockets for the
-    # whole run); Classic Sky Rings' the same at [1760, 128, 2880].
+    # whole run); Classic Sky Rings' the same at [1760, 128, 3328].
     # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
     # the bottom, one level per letter of their mix (at most 5). Easy Dropper's half is 64 x 64 x 16
     # (E, M and H levels only); the Dropper's is 64 x 144 x 16, so its mix may hold an X (the Long
@@ -2258,7 +2258,7 @@ games:
       # to be built at all; 576 keeps it out of sight.
       slots:
         fresh_classic_parkour: {origin: [7488, 160, 6128]}
-        fresh_classic_rings: {origin: [1760, 128, 2880]}
+        fresh_classic_rings: {origin: [1760, 128, 3328]}
         fresh_classic_golf: {origin: [8768, 160, 4896]}
         fresh_classic_dropper: {origin: [7488, 160, 7952]}
     # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in

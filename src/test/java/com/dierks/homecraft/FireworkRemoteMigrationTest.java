@@ -48,13 +48,15 @@ class FireworkRemoteMigrationTest {
     /** The per_player INFO on 0.38.1's file. */
     /** Revision 25's line for a file that still has Classic Sky Rings at its shipped 0.38 spot. */
     static final String RINGS_MOVED = "Config migration: the bigger Sky Rings areas get their new spots (Classic Sky"
-            + " Rings [6080, 128, 4992] -> [1760, 128, 2880]). After the restart the old areas are emptied by themselves"
+            + " Rings [6080, 128, 4992] -> [1760, 128, 3328]). After the restart the old areas are emptied by themselves"
             + " (ponds first, only Fresh Courses' own blocks); /hcm games check shows it.";
 
     /** Revision 25's line for a file that still has the Dropper's shipped EEMMH. */
     static final String MIX_MOVED = "Config migration: the Dropper's shipped mix EEMMH becomes EEMHX (level 5 is the"
             + " Long Drop). Its halves are 64 x 144 x 16 now; after the restart its old area is emptied by itself (pools"
-            + " first) and the Dropper is built again, taller, at the same spot.";
+            + " first) and the Dropper is built again, taller, at the same spot. A mix set with the mix command still"
+            + " wins over the file: /hcm games gen status shows the one in use, and /hcm games gen mix fresh_dropper"
+            + " EEMHX sets the shipped one, from the next build.";
 
     private static final String FIFTEEN = "Config migration: arcade.launcher - per_player 3 → 15 (each player may have"
             + " 15 Firework Launchers placed at once, enough for the Ultimate show's 10).";

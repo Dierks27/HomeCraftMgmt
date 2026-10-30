@@ -1881,7 +1881,7 @@ class ConfigMigrationTest {
         onDisk.set("config_revision", 24);
         onDisk.set("games.fresh.classics.slots.fresh_classic_rings.origin", List.of(6080, 128, 4992)); // 0.36-0.38's
         List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
-        assertEquals(List.of(1760, 128, 2880), onDisk.getIntegerList("games.fresh.classics.slots.fresh_classic_rings"
+        assertEquals(List.of(1760, 128, 3328), onDisk.getIntegerList("games.fresh.classics.slots.fresh_classic_rings"
                 + ".origin"), "the Classic's shipped spot moves: " + log);
         assertEquals(List.of(6080, 128, 4096), onDisk.getIntegerList("games.fresh.slots.fresh_rings.origin"),
                 "Sky Rings keeps its spot (it grows in place)");

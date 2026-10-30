@@ -1241,6 +1241,12 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.override = GenAdminKeys.bool(meta.get(GenAdminKeys.enabled(id)));
                 String tier = meta.get(GenAdminKeys.tier(id));
                 s.mix = tier != null && s.def.tierProblem(tier) == null ? s.def.normalise(tier) : c.tierOrMix();
+                if (tier != null && s.mix.equals(s.def.normalise(tier)) && lostLongDrop(s.def, s.mix)) {
+                    // revision 25 moves config.yml's mix, never this one: said once a start, not only in its INFO line
+                    warnOnce(s, "Fresh Courses: " + id + " uses the mix " + s.mix + " you set with the mix command,"
+                            + " not the shipped " + s.def.tierOrMix() + ", so it has no Long Drop: /hcm games gen mix "
+                            + id + " " + s.def.tierOrMix() + " sets the shipped one, from the next build.");
+                }
                 s.pin = GenScheduler.Pin.parse(meta.get(GenAdminKeys.pin(id)));
                 s.chosen = GenScheduler.Choice.parse(meta.get(GenAdminKeys.choose(id)));
                 s.pickDropped = SlotState.DroppedPick.parse(meta.get(GenAdminKeys.dropped(id))); // round 2, G2 #3
@@ -5332,20 +5338,27 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
         }
-        if (!orig.mayHoldWater()) {
+        boolean rings = Slots.RINGS.equals(orig.generator());
+        if (!orig.mayHoldWater() && !rings) {
             recallProven(j, moved, List.of(), null);
             return;
         }
-        // A moved plan that may hold water (a dropper, golf) is proven again where it stands
-        // (PlanCheck.movedProblems: its sealed pools or ponds, its solvability or witness lines), on the
-        // planner thread (like PlanCheck.generator), the answer back through the inbox.
+        String tier = j.mix;
+        if (PlanCheck.refusedForGood(moved, orig)) {
+            // an older Sky Rings edition: the validator's own plain line, at once, and the want forgotten
+            dropWant(j, String.join("; ", PlanCheck.movedProblems(moved, orig, tier)));
+            return;
+        }
+        // A moved plan that may hold water (a dropper, golf) or flies (Sky Rings) is proven again where it
+        // stands (PlanCheck.movedProblems: its sealed pools or ponds, its solvability or witness lines, its
+        // lap flown again), on the planner thread (like PlanCheck.generator), the answer back through the inbox.
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         host.planner().execute(() -> {
             List<String> refused = List.of();
             Throwable error = null;
             try {
-                refused = PlanCheck.movedProblems(moved, orig);
+                refused = PlanCheck.movedProblems(moved, orig, tier);
             } catch (Throwable e) {
                 error = e;
             }
@@ -6117,6 +6130,15 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     // ---- helpers ------------------------------------------------------------------------------------
+
+    /**
+     * Whether {@code mix}, set with the mix command, keeps a dropper from the Long Drop its shipped mix has
+     * (the Dropper's EEMHX against an EEMMH kept from before 0.38.5): no X where the shipped mix has one.
+     */
+    static boolean lostLongDrop(Slots.Def def, String mix) {
+        return def.dropper() && def.tierOrMix().indexOf('X') >= 0 && mix != null && !mix.isEmpty()
+                && mix.indexOf('X') < 0;
+    }
 
     private void warnOnce(SlotState s, String line) {
         if (said.add(s.def.id() + "|" + line)) {

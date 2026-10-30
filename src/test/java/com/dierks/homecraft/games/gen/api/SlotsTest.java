@@ -73,7 +73,7 @@ class SlotsTest {
                 new Row("fresh_dropper_easy", 7488, 8128, 6768, 6783, 160, 223),
                 new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 303),
                 // Sky Rings v3: a 512 x 512 square, and its Classic the same size in the west
-                new Row("fresh_classic_rings", 1760, 2848, 2880, 3391, 128, 303));
+                new Row("fresh_classic_rings", 1760, 2848, 3328, 3839, 128, 303));
         for (Row row : table) {
             Slots.Def s = Slots.any(row.id());
             Box a = s.half('A');

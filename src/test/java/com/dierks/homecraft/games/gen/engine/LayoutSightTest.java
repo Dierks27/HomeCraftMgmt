@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>v4 (V4-DECISIONS "The merged layout", ONE table): Golf of the Week and Classic Golf are 128 x 16 x 224
  * in Col G at x 8768, the Mountain Run v2 is 480 x 176 x 640 north at z 2880; everything else as 0.36.
  * Sky Rings v3: Sky Rings' halves are 512 x 176 x 512 at the same spot, and Classic Sky Rings', the same size,
- * stand in the west at x 1760, z 2880.
+ * stand in the west at x 1760, z 3328.
  *
  * <p>The new spots are the spec's table, written out here, so this pins the table itself
  * ({@code ShippedLayoutTest} proves the shipped defaults are this table). The 0.35 layout, measured
@@ -43,7 +43,7 @@ class LayoutSightTest {
         int e = 7488;
         int g = 8768;
         NEW.put(Slots.SKY_RINGS, new int[]{w, 128, 4096});
-        NEW.put(Slots.CLASSIC_RINGS, new int[]{1760, 128, 2880});
+        NEW.put(Slots.CLASSIC_RINGS, new int[]{1760, 128, 3328});
         NEW.put(Slots.ICE_BOAT, new int[]{w, 96, 2880});
         NEW.put(Slots.DAILY_PARKOUR_EASY, new int[]{w, 160, 6592});
         NEW.put(Slots.DAILY_PARKOUR_MEDIUM, new int[]{w, 160, 7232});
@@ -84,7 +84,7 @@ class LayoutSightTest {
      * again where it stands, and the probe of 857k putts moved across x 8192 found no behaviour change), the
      * boat's, whose plan is translation-exact (half-local integers; MOUNTAIN-V2-SPEC §10.2), and Classic Sky
      * Rings', which only ever holds a recalled plan: that is flown again by the validator where it stands
-     * before it opens (PlanCheck, RingsValidator), and RingsBinadeProbeTest measures plans moved there.
+     * before it opens (PlanCheck.movedProblems, RingsValidator), and RingsBinadeProbeTest measures plans moved there.
      */
     static String rangeProblem(String name, Box b) {
         String id = name.substring(0, name.indexOf(':'));
@@ -302,8 +302,8 @@ class LayoutSightTest {
         Map<String, Box> l = newLayout();
         assertEquals(Box.sized(6080, 128, 4096, 512, 176, 512), l.get("fresh_rings:A"), "Sky Rings v3, half A");
         assertEquals(Box.sized(7168, 128, 4096, 512, 176, 512), l.get("fresh_rings:B"), "half B, 576 along x");
-        assertEquals(Box.sized(1760, 128, 2880, 512, 176, 512), l.get("fresh_classic_rings:A"), "its Classic, west");
-        assertEquals(Box.sized(2848, 128, 2880, 512, 176, 512), l.get("fresh_classic_rings:B"), "and its half B");
+        assertEquals(Box.sized(1760, 128, 3328, 512, 176, 512), l.get("fresh_classic_rings:A"), "its Classic, west");
+        assertEquals(Box.sized(2848, 128, 3328, 512, 176, 512), l.get("fresh_classic_rings:B"), "and its half B");
         assertEquals(896, l.get("fresh_tiny_golf:A").minZ() - l.get("fresh_rings:B").maxZ() - 1,
                 "Tiny Golf is 896 south of Sky Rings' half B");
         assertEquals(1088, l.get("fresh_golf:A").minX() - l.get("fresh_rings:B").maxX() - 1,

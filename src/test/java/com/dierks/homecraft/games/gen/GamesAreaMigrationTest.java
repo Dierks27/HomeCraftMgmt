@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * shipped (0.36's, or 0.35's that the legacy guard wrote back, with its {@code half_gap: 32}); an owner's own spot
  * stays, with a WARN, and so does an owner's {@code half_gap: 32} beside 0.36's spot; nothing else is touched; and
  * a second run changes nothing. Revision 25 (Sky Rings v3): Sky Rings grows in place at its 0.36-0.38 spot (only
- * 0.35's moves), Classic Sky Rings moves west to 1760,128,2880 from either earlier spot, by the same rules; each
+ * 0.35's moves), Classic Sky Rings moves west to 1760,128,3328 from either earlier spot, by the same rules; each
  * revision moves only its own areas.
  */
 class GamesAreaMigrationTest {
@@ -167,12 +167,12 @@ class GamesAreaMigrationTest {
         assertTrue(GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, log), "the file changes");
         assertEquals(List.of(6080, 128, 4096), list(c.get(SLOTS + "fresh_rings.origin")), "Sky Rings stays: it grows"
                 + " in place there");
-        assertEquals(List.of(1760, 128, 2880), list(c.get(CLASSICS + "fresh_classic_rings.origin")),
+        assertEquals(List.of(1760, 128, 3328), list(c.get(CLASSICS + "fresh_classic_rings.origin")),
                 "Classic Sky Rings moves west");
         assertEquals(LayoutFixtures.bundled().saveToString(), c.saveToString(), "now exactly the bundled file");
         assertEquals(1, log.size(), "one line: " + log);
         assertTrue(!log.get(0).startsWith(LayoutGuard.WARN) && log.get(0).contains("Sky Rings areas")
-                && log.get(0).contains("Classic Sky Rings [6080, 128, 4992] -> [1760, 128, 2880]")
+                && log.get(0).contains("Classic Sky Rings [6080, 128, 4992] -> [1760, 128, 3328]")
                 && log.get(0).contains("emptied by themselves"), "an INFO saying what moved: " + log);
         assertFalse(GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, new ArrayList<>()),
                 "a second run changes nothing");
@@ -187,7 +187,7 @@ class GamesAreaMigrationTest {
         assertEquals(List.of(6080, 128, 4096), list(c.get(SLOTS + "fresh_rings.origin")),
                 "0.35's rings spot is ours: at x 4096 a 512-wide half would grow onto Classic Parkour's");
         assertNull(c.get(SLOTS + "fresh_rings.half_gap"), "and its 0.35 gap goes");
-        assertEquals(List.of(1760, 128, 2880), list(c.get(CLASSICS + "fresh_classic_rings")),
+        assertEquals(List.of(1760, 128, 3328), list(c.get(CLASSICS + "fresh_classic_rings")),
                 "a bare Classic list stays a bare list, at its new spot");
         assertEquals(List.of(4864, 160, 4096), list(c.get(SLOTS + "fresh_golf.origin")),
                 "revision 25 leaves golf to revision 21");
@@ -208,7 +208,7 @@ class GamesAreaMigrationTest {
                 + " games.fresh.slots.fresh_rings.origin [6400, 128, 4096]") && l.contains("512 x 176 x 512")
                 && l.contains("[6080, 128, 4096]")), "one WARN: theirs, the new size, the shipped spot: " + log);
         assertTrue(log.stream().anyMatch(l -> l.startsWith(LayoutGuard.WARN) && l.contains("fresh_classic_rings.origin")
-                && l.contains("[1760, 128, 2880]")), "and one for the Classic: " + log);
+                && l.contains("[1760, 128, 3328]")), "and one for the Classic: " + log);
         assertTrue(log.stream().noneMatch(l -> !l.startsWith(LayoutGuard.WARN)), "nothing moved, so no INFO: " + log);
 
         YamlConfiguration gap = v038();
@@ -232,7 +232,7 @@ class GamesAreaMigrationTest {
         d.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));
         GamesAreaMigration.apply(d, GamesAreaMigration.REVISION, new ArrayList<>());
         assertEquals(List.of(7488, 160, 4096), list(d.get(SLOTS + "fresh_golf.origin")), "25 leaves golf");
-        assertEquals(List.of(1760, 128, 2880), list(d.get(CLASSICS + "fresh_classic_rings.origin")),
+        assertEquals(List.of(1760, 128, 3328), list(d.get(CLASSICS + "fresh_classic_rings.origin")),
                 "and moves Classic Sky Rings");
         YamlConfiguration both = v036();
         both.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));

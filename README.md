@@ -244,7 +244,7 @@ alone (0.38.4 reads revision 25 and runs nothing, with one WARN; 0.38.5 changes 
 more WARN that `stars.rings` is not a games setting, which it ignores. 0.38.4 sees the 512 x 176 x 512
 Sky Rings halves and the 144-tall halves of the Dropper and Classic Dropper as areas whose size changed:
 it empties them by itself (pools drained first, only the plugin's own blocks) and builds each again at
-its old size. Classic Sky Rings stays at `[1760, 128, 2880]`, read as a spot you set yourself, at the
+its old size. Classic Sky Rings stays at `[1760, 128, 3328]`, read as a spot you set yourself, at the
 old 128 x 176 x 320 size: leave it there, because that is where 0.38.5 wants it again (moved back to
 `[6080, 128, 4992]` it would be too close to the big Sky Rings after the upgrade, and switched off).
 Sky Rings courses archived by 0.38.5 can't be recalled there (0.38.4 can't read how they are stored)
@@ -2646,7 +2646,7 @@ z 4096-7967), Sky Rings' loop of sky at the top of the first (x 6080-7679, z 409
 each half a 512 x 176 x 512 square), Golf of the Week and Classic Golf in a column of their own
 (x 8768-9599, z 4096-5119, their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north
 of everything (x 6080-7615, z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640),
-Classic Sky Rings to the west (x 1760-3359, z 2880-3391, the same size as Sky Rings'), the Clubhouse
+Classic Sky Rings to the west (x 1760-3359, z 3328-3839, the same size as Sky Rings'), the Clubhouse
 and Falling Floors south of them (z 8544), and the kept courses' plots to the west (from x 1760,
 z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
 course's own spare half included, so from any course players see only that course, whatever view
@@ -2753,7 +2753,7 @@ above).
 **When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
 224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
 2880; Sky Rings v3: Sky Rings grows to 512 x 176 x 512 where it stands, at x 6080, z 4096, and Classic
-Sky Rings, the same size, moves west to x 1760, z 2880; the Long Drop: the Dropper and Classic Dropper
+Sky Rings, the same size, moves west to x 1760, z 3328; the Long Drop: the Dropper and Classic Dropper
 grow to 64 x 144 x 16 at the same spot), nothing is asked of you. Config revisions 21 and 25 move each
 shipped spot you never changed (the console: "Config migration: the bigger Golf v4 and Mountain Run v2
 areas get their new spots (Golf of the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)", and "...
@@ -2763,7 +2763,8 @@ is built over it, in 2-3 minutes after the restart ("fresh_rings's area changed 
 emptied by itself"). Config revision 25 also changes the Dropper's mix you never changed ("Config
 migration: the Dropper's shipped mix EEMMH becomes EEMHX (level 5 is the Long Drop)"; a mix of your own
 stays, with one WARN naming `/hcm games gen mix fresh_dropper EEMHX`; a mix set by that command wins
-over the file as always, so run it again if you want the Long Drop there), and the taller halves need
+over the file as always, and one with no X gets a WARN at each start naming the same command, so run it
+again if you want the Long Drop there), and the taller halves need
 no spot change: the Dropper is rebuilt where it stands, its old 64-tall area emptied first, pools
 before walls. An origin you set yourself stays, with one
 WARN naming it and the shipped spot, and the course grows in place there if it fits (`/hcm games
@@ -3622,8 +3623,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 4. On Java, walk off aiming at the holes and keep steering: you get wet eventually; expect bonks; each
    bonk returns you to the top of level 5 with the clock running.
 5. The Dropper tile reads Hard, "★★ under 0:35 · ★★★ under 0:24"; a finish with any bonk inside 24 s
-   shows two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"; a
-   clean finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25
+   shows two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run", and
+   its next-star line reads "Next star: a run with no bonks under 0:24."; a clean finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25
    once, to an account that has never cleared the Dropper (one paid before 0.38.5 is not paid again).
 6. `/hcm games gen mix fresh_dropper_easy EEX` is refused ("an X level needs a half at least 141 tall
    (this one is 64)"); `/hcm games gen mix fresh_dropper XXXXX` is accepted and the reroll builds five

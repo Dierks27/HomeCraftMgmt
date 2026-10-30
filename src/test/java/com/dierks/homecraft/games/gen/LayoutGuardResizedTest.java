@@ -45,7 +45,7 @@ class LayoutGuardResizedTest {
         assertEquals(List.of(6080, 96, 2880), area("fresh_boat").shipped(), "the boat's is north");
         assertEquals(List.of(4864, 160, 4096), area("fresh_golf").legacy(), "0.35's table is frozen as it was");
         assertEquals(List.of(6080, 128, 4096), area("fresh_rings").shipped(), "Sky Rings' is where it was: it grew there");
-        assertEquals(List.of(1760, 128, 2880), area("fresh_classic_rings").shipped(), "Classic Sky Rings' is west");
+        assertEquals(List.of(1760, 128, 3328), area("fresh_classic_rings").shipped(), "Classic Sky Rings' is west");
         assertEquals(List.of(4096, 128, 4352), area("fresh_rings").legacy(), "and 0.35's rings spot is still 0.35's");
     }
 

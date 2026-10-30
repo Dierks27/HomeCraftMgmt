@@ -90,6 +90,20 @@ public final class LegacyBoxes {
         return Box.sized(o[0] + dx, o[1], o[2], s[0], s[1], s[2]);
     }
 
+    /** The height of a dropper half that holds the Long Drop (the Dropper's and the Classic's since the X letter). */
+    public static final int TALL_Y = 144;
+
+    /**
+     * {@code def}'s half {@code which} at its 0.35 origin and gap, but 64 x {@value #TALL_Y} x 16: the box
+     * the X goldens stand at. The 0.35 sizes in {@link #half} stay for the old goldens, which never move
+     * (the golf v4 precedent); a plan with a Long Drop needs the taller box, so its goldens get one of
+     * their own.
+     */
+    public static Box tall(Slots.Def def, char which) {
+        Box h = half(def, which);
+        return Box.sized(h.minX(), h.minY(), h.minZ(), h.sizeX(), TALL_Y, h.sizeZ());
+    }
+
     /** {@code def}'s two halves and the gap between them where 0.35.0 stood them, at its 0.35 size. */
     public static Box region(Slots.Def def) {
         int[] o = origin(def);

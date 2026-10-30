@@ -300,7 +300,18 @@ public final class GenCopy {
      * / "Step off and" / "fall into the" / "WATER!".
      */
     public static List<String> dropperLevel(int level, int levels) {
-        return List.of("LEVEL " + level + " of " + levels, "Step off and", "fall into the", "WATER!");
+        return dropperLevel(level, levels, false);
+    }
+
+    /**
+     * A Dropper level's sign; for the Long Drop (an X level, 128 blocks down through plates whose
+     * holes keep sliding sideways) it says what to do instead: "LEVEL 5 of 5" / "THE LONG DROP" /
+     * "steer all the" / "way down!".
+     */
+    public static List<String> dropperLevel(int level, int levels, boolean longDrop) {
+        String head = "LEVEL " + level + " of " + levels;
+        return longDrop ? List.of(head, "THE LONG DROP", "steer all the", "way down!")
+                : List.of(head, "Step off and", "fall into the", "WATER!");
     }
 
     // ---- chat, titles and tiles ----------------------------------------------------------------
@@ -766,6 +777,7 @@ public final class GenCopy {
         for (int levels = 1; levels <= 5; levels++) {
             for (int level = 1; level <= levels; level++) {
                 out.add(dropperLevel(level, levels));
+                out.add(dropperLevel(level, levels, true));
             }
         }
         return out;

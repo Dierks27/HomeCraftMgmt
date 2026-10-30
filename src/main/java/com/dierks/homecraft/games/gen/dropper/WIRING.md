@@ -194,3 +194,24 @@ only: the pure package already has every piece it needs.
   pilot's hitbox grown by r/4 touches a block. A few graze the r/2 clearance between the sampled
   starts (about 3% of Medium and Hard levels). The robustness proof is still a sampled one, as
   §B.1.6 says.
+
+## 8. The Long Drop (the letter X)
+
+- **The row** (`DropRules.Level.EXTREME`): 128 down, 8 plates, pool 6 (the letter's identity for recall:
+  `DropMarks.POOL_SIZES` is 5, 6, 7, 11), everything else Hard's proof strength (opening 2, r 0.25,
+  delays {0, 1, 2}, aim 5), up to 5 input changes, no lights, no TWIN. Four columns came with it:
+  `tickGaps` (its first/gap are walk-off ticks, 18-19 then 6-7, mapped by `DropSim.depthAfter`, so the
+  plates come 0.3-0.35 s apart at every depth), `decoys` 2, `decoyChance` 0.5, `minOffset` 0.5.
+  E, M and H carry the values that change nothing. Fall times: 71 walking off, 77 jumping, 2.97 blocks a
+  tick at the water. Any mix with an X is `Tier.HARD` (`Tier.EXTREME` has no star factors).
+- **The half**: the ledge is derived, `LEDGE_BELOW_TOP` (8) under the half's top, so a 64-tall half is
+  byte-identical to before (ledge 56) and a 144-tall one puts every ledge at 136 with the Long Drop's
+  water at 8. `DropperGeometry.fits(half, tiers)` needs 141 rows for an X (61 for H), and
+  `DropRules.mixProblem(mix, plots, halfSizeY)` refuses an X at the command on a short half.
+- **The planner**: the X witness is 3-5 quarter turns (`Dir.left()/right()`), the last key held to the
+  water, and a drawn program is kept only if consecutive crossings are at least `minOffset` apart
+  (`Path.fits`, planner-only; the straight fallback's coast and the validator are untouched). Decoy
+  plates get up to two false holes. The work budget is 600,000, shared as "what is left, split over the
+  levels still to plan", so the Long Drop, last in EEMHX, inherits most of it; `MAX_OPS` is 40,000.
+- **Goldens**: the nine E/M/H hashes did not move and **`ALGO` is still 1**; the X goldens stand in
+  `LegacyBoxes.tall` (64 × 144 × 16 at the 0.35 spot).

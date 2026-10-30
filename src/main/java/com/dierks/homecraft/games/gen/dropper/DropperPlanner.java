@@ -33,10 +33,13 @@ import java.util.Set;
  * <p><b>A level</b> ({@code fork("level:" + i)}, so redrawing level 2 never changes level 3):
  * <ol>
  *   <li>the ledge goes on a seeded wall, the layer depths and templates are drawn from the tier's
- *       table ({@link DropRules});</li>
+ *       table ({@link DropRules}; the Long Drop's depths are drawn in ticks and turned into rows, so
+ *       its plates keep one beat all the way down);</li>
  *   <li>the <b>witness</b> is drawn first: a walk-off with at most the tier's input changes, flown
  *       through the empty shaft, redrawn until it stays clear of the walls by the hitbox plus its
- *       clearance r, passes layer 1 in front of the ledge and can land in a pool;</li>
+ *       clearance r, passes layer 1 in front of the ledge and can land in a pool (and, on the Long
+ *       Drop, keeps sliding: consecutive crossings at least the tier's {@code minOffset} apart, a
+ *       rule of this planner only, so the straight fallback below stays provable);</li>
  *   <li>each layer's path opening is centred where the witness crosses it (the tier's size at least,
  *       and all of the witness's tube); the template fills the rest, but only outside the tube, so
  *       the witness is clear by construction. Easy lights every opening, Medium the first; TWIN adds
@@ -47,7 +50,9 @@ import java.util.Set;
  *       a walking step, walking or jumping off, at each reaction delay, and the sloppy runs). A
  *       pilot that bonks on a layer widens that layer's opening by 1 (twice at most); after that
  *       the level is redrawn ({@code fork("level:i:try:t")}), up to 20 times; after that, or once
- *       the level has used its share of the work budget, it is <b>SAFE_STRAIGHT</b>:
+ *       the level has used its share of the work budget (what the levels before it left, split
+ *       over the levels still to plan, so a Long Drop planned last inherits most of it), it is
+ *       <b>SAFE_STRAIGHT</b>:
  *       the tier's shallowest layers, every opening the tier's minimum + 2, stacked under a plain
  *       walk-off. So a course is never missing a level.</li>
  * </ol>
@@ -55,7 +60,8 @@ import java.util.Set;
  * {@link DropperValidator}.
  *
  * <p><b>Work</b> is counted in simulated ticks (witnesses and pilots), never time, so every host makes
- * the same plan. A typical plan needs under 50k; the engine's budget is {@value #WORK_BUDGET}.
+ * the same plan. A typical E/M/H plan needs under 50k and one with a Long Drop well under 250k; the
+ * engine's budget is {@value #WORK_BUDGET}.
  *
  * <p><b>The course kind.</b> The row is a {@code dropper} trial ({@link TrialKind#DROPPER}, added by
  * the C1 contracts, which re-pinned the golden hashes). {@link #KIND} still falls back to
@@ -68,7 +74,7 @@ public final class DropperPlanner implements Planner {
     /** Its version: bump it whenever what it makes for a seed changes (golden hashes pin three seeds a mix). */
     public static final int ALGO = 1;
     /** The most counted work (simulated ticks) a plan takes when the engine gives no budget. */
-    public static final long WORK_BUDGET = 300_000;
+    public static final long WORK_BUDGET = 600_000;
     /** Redraws of a level after its first draw. */
     public static final int REDRAWS = 20;
     /** How many times one layer's opening may be widened by a failing pilot. */
@@ -150,14 +156,14 @@ public final class DropperPlanner implements Planner {
         throw new GenFailed("seed " + GenSeed.shortHex(tag.seed()) + " no longer makes layout " + tag.planHash());
     }
 
-    /** Every mix, shortest first, then in E, M, H order. */
+    /** Every mix, shortest first, then in E, M, H, X order. */
     static List<String> allMixes() {
         List<String> out = new ArrayList<>();
         List<String> layer = List.of("");
         for (int n = 1; n <= DropRules.MAX_LEVELS; n++) {
             List<String> next = new ArrayList<>();
             for (String p : layer) {
-                for (char c : new char[]{'E', 'M', 'H'}) {
+                for (char c : new char[]{'E', 'M', 'H', 'X'}) {
                     next.add(p + c);
                 }
             }
@@ -221,7 +227,7 @@ public final class DropperPlanner implements Planner {
      * @param shapes   each layer's template
      * @param open     each layer's path opening
      * @param twinOpen each layer's second opening (TWIN), or nulls
-     * @param decoys   each layer's decoy hole, or nulls
+     * @param decoys   each layer's decoy holes (one on Hard, up to two on the Long Drop), or nulls
      * @param pool     the pool's water
      * @param witness  the witness
      * @param twin     the TWIN witness, or null
@@ -230,7 +236,7 @@ public final class DropperPlanner implements Planner {
      * @param widened  openings widened for it
      */
     record LevelPlan(int index, DropRules.Level tier, DropperGeometry.Shaft shaft, DropProgram.Dir forward, Rect ledge,
-                     int[] rows, LayerKit.Shape[] shapes, Rect[] open, Rect[] twinOpen, Rect[] decoys, Rect pool,
+                     int[] rows, LayerKit.Shape[] shapes, Rect[] open, Rect[] twinOpen, Rect[][] decoys, Rect pool,
                      DropProgram witness, DropProgram twin, boolean safe, int redraws, int widened) {
 
         Course.Mark ledgeMark() {
@@ -250,12 +256,11 @@ public final class DropperPlanner implements Planner {
         }
         List<DropRules.Level> tiers = DropRules.levels(mix);
         Box half = in.half();
-        if (!DropperGeometry.fits(half, tiers.size())) {
+        if (!DropperGeometry.fits(half, tiers)) {
             throw new GenFailed("the half " + half.describe() + " is too small for " + tiers.size()
-                    + " dropper levels");
+                    + " dropper levels of " + mix);
         }
         long budget = in.workBudget() > 0 ? in.workBudget() : WORK_BUDGET;
-        long share = budget / tiers.size();
         int n = tiers.size();
         Canvas canvas = new Canvas(half);
         GenRandom root = new GenRandom(in.seed());
@@ -270,6 +275,8 @@ public final class DropperPlanner implements Planner {
                 DropRules.Level tier = tiers.get(i);
                 canvas.walls(shaft, tier, i, n);
                 LevelPlan done = null;
+                // the budget left, split over the levels still to plan: what an easy level leaves, a hard one gets
+                long share = (budget - work) / (n - i);
                 long used = 0;
                 int thrown = 0;
                 for (int t = 0; !safeOnly && t <= REDRAWS && done == null && used < share; t++) {
@@ -325,25 +332,34 @@ public final class DropperPlanner implements Planner {
         int[] depths = new int[layers];
         LayerKit.Shape[] shapes = new LayerKit.Shape[layers];
         for (int j = 0; j < layers; j++) {
+            // in blocks, or in walk-off ticks for a tier that keeps one beat between its plates
             depths[j] = j == 0 ? (safe ? tier.firstMin() : rng.nextInt(tier.firstMin(), tier.firstMax()))
                     : depths[j - 1] + (safe ? tier.gapMin() : rng.nextInt(tier.gapMin(), tier.gapMax()));
+        }
+        if (tier.tickGaps()) {
+            for (int j = 0; j < layers; j++) {
+                depths[j] = DropSim.depthAfter(depths[j]);
+            }
         }
         for (int j = 0; j < layers; j++) {
             if (safe) {
                 shapes[j] = new LayerKit.Shape(LayerKit.Template.PLATE, 0, 0);
                 continue;
             }
+            // a tier with a decoy chance draws DECOY by that chance first (never on the last layer); else, or
+            // for a tier without one, a template is picked from the rest as it always was
+            boolean decoy = tier.decoyChance() > 0 && j < layers - 1 && rng.chance(tier.decoyChance());
             List<LayerKit.Template> can = new ArrayList<>();
             for (LayerKit.Template t : tier.templates()) {
                 if (t == LayerKit.Template.TWIN && j != 0) {
                     continue;
                 }
-                if (t == LayerKit.Template.DECOY && j == layers - 1) {
+                if (t == LayerKit.Template.DECOY && (j == layers - 1 || tier.decoyChance() > 0)) {
                     continue;
                 }
                 can.add(t);
             }
-            shapes[j] = LayerKit.shape(rng.pick(can), rng);
+            shapes[j] = decoy ? new LayerKit.Shape(LayerKit.Template.DECOY, 0, 0) : LayerKit.shape(rng.pick(can), rng);
         }
         int[] rows = new int[layers];
         for (int j = 0; j < layers; j++) {
@@ -366,7 +382,7 @@ public final class DropperPlanner implements Planner {
         for (int k = 0; k < PROGRAM_DRAWS && main == null; k++) {
             DropProgram p = safe ? DropProgram.coast(fwd, 0) : drawProgram(rng, tier, fwd);
             Path path = fly(canvas.world, frame, p, r, work);
-            if (path != null && path.fits(frame, tier)) {
+            if (path != null && path.fits(frame, tier, safe)) {
                 main = path;
                 witness = p;
             }
@@ -396,7 +412,7 @@ public final class DropperPlanner implements Planner {
                 // first the witness's mirror image (the same line on the other side), then fresh draws
                 DropProgram q = k == 0 ? witness.mirrored(fwd) : drawProgram(rng, tier, fwd);
                 Path path = fly(canvas.world, frame, q, r, work);
-                if (path == null || !path.fits(frame, tier)) {
+                if (path == null || !path.fits(frame, tier, safe)) {
                     continue;
                 }
                 Rect first = opening(shaft, path, 0, k0);
@@ -419,24 +435,35 @@ public final class DropperPlanner implements Planner {
             return null;
         }
 
-        // decoys: a hole whose column the next layer blocks
-        Rect[] decoys = new Rect[layers];
+        // decoys: holes whose columns the next layer blocks (one on Hard, the Long Drop tries for two), each
+        // clear of the real opening, the next layer's, the tube at both rows and the holes before it
+        Rect[][] decoys = new Rect[layers][];
         for (int j = 0; j < layers - 1; j++) {
             if (shapes[j].template() != LayerKit.Template.DECOY) {
                 continue;
             }
-            for (int k = 0; k < DECOY_DRAWS && decoys[j] == null; k++) {
-                int dx = rng.nextInt(shaft.x1(), shaft.x2() - k0 + 1);
-                int dz = rng.nextInt(shaft.z1(), shaft.z2() - k0 + 1);
-                Rect d = new Rect(dx, dz, dx + k0 - 1, dz + k0 - 1);
-                if (d.overlaps(open[j].grow(2)) || d.overlaps(open[j + 1].grow(1))
-                        || main.tubeTouches(rows[j], d) || main.tubeTouches(rows[j + 1], d)) {
-                    continue;
+            List<Rect> holes = new ArrayList<>();
+            for (int h = 0; h < tier.decoys(); h++) {
+                Rect hole = null;
+                for (int k = 0; k < DECOY_DRAWS && hole == null; k++) {
+                    int dx = rng.nextInt(shaft.x1(), shaft.x2() - k0 + 1);
+                    int dz = rng.nextInt(shaft.z1(), shaft.z2() - k0 + 1);
+                    Rect d = new Rect(dx, dz, dx + k0 - 1, dz + k0 - 1);
+                    if (d.overlaps(open[j].grow(2)) || d.overlaps(open[j + 1].grow(1))
+                            || main.tubeTouches(rows[j], d) || main.tubeTouches(rows[j + 1], d)
+                            || holes.stream().anyMatch(e -> d.overlaps(e.grow(1)))) {
+                        continue;
+                    }
+                    hole = d;
                 }
-                decoys[j] = d;
+                if (hole != null) {
+                    holes.add(hole);
+                }
             }
-            if (decoys[j] == null) {
+            if (holes.isEmpty()) {
                 shapes[j] = new LayerKit.Shape(LayerKit.Template.PLATE, 0, 0);
+            } else {
+                decoys[j] = holes.toArray(new Rect[0]);
             }
         }
 
@@ -557,7 +584,10 @@ public final class DropperPlanner implements Planner {
      * <ul>
      *   <li>Easy: let go, or turn once;</li>
      *   <li>Medium: turn, then let go (or turn once more);</li>
-     *   <li>Hard: up to three turns (often back the way it came, to stop over a hole), then let go.</li>
+     *   <li>Hard: up to three turns (often back the way it came, to stop over a hole), then let go;</li>
+     *   <li>the Long Drop: three to five quarter turns, left or right of the last key, the last one held
+     *       all the way to the water, so the line never stops sliding sideways (a quarter turn keeps
+     *       the most sideways speed through the turn; letting go would stack the deep holes).</li>
      * </ul>
      */
     static DropProgram drawProgram(GenRandom rng, DropRules.Level tier, DropProgram.Dir fwd) {
@@ -581,6 +611,15 @@ public final class DropperPlanner implements Planner {
                     prev = d;
                 }
                 segs.add(new DropProgram.Segment(DropProgram.Dir.NONE, 0));
+            }
+            case EXTREME -> {
+                int turns = rng.nextInt(3, 5);
+                DropProgram.Dir prev = fwd;
+                for (int k = 0; k < turns; k++) {
+                    DropProgram.Dir d = rng.chance(0.5) ? prev.left() : prev.right();
+                    segs.add(new DropProgram.Segment(d, k < turns - 1 ? rng.nextInt(6, 14) : 0));
+                    prev = d;
+                }
             }
         }
         return new DropProgram(segs);
@@ -686,9 +725,12 @@ public final class DropperPlanner implements Planner {
 
         /**
          * Whether it is a witness this level can use: clear of the walls by the hitbox plus r all the
-         * way down, crossing every layer, its input changes within the tier's, and able to land.
+         * way down, crossing every layer, its input changes within the tier's, and able to land. A
+         * drawn (not {@code safe}) program of a tier with a {@code minOffset} must also keep sliding:
+         * each crossing at least that far from the one before. The straight fallback's coast is let
+         * off that rule, and the validator never applies it.
          */
-        boolean fits(DropCheck.View frame, DropRules.Level tier) {
+        boolean fits(DropCheck.View frame, DropRules.Level tier, boolean safe) {
             for (double[] b : tube) {
                 if (b[0] < frame.x1() || b[3] > frame.x2() + 1 || b[2] < frame.z1() || b[5] > frame.z2() + 1) {
                     return false;
@@ -699,6 +741,15 @@ public final class DropperPlanner implements Planner {
             }
             if (program.changes(frame.forward()) > tier.maxChanges()) {
                 return false;
+            }
+            if (!safe && tier.minOffset() > 0) {
+                for (int j = 1; j < crossings.size(); j++) {
+                    double[] a = crossings.get(j - 1);
+                    double[] b = crossings.get(j);
+                    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < tier.minOffset()) {
+                        return false;
+                    }
+                }
             }
             return tier.changesBefore() <= 0
                     || program.lastChange(frame.forward()) < crossings.get(tier.changesBefore() - 1)[2] - 1;
@@ -784,12 +835,12 @@ public final class DropperPlanner implements Planner {
 
     /**
      * Write level {@code i}'s inside: the ledge, the floor, the pool and the layers. A decoy whose
-     * column the next layer doesn't block is filled back in. False when a layer would be left with
-     * almost nothing solid.
+     * column the next layer doesn't block is filled back in (a layer left with no decoy is a plain
+     * plate). False when a layer would be left with almost nothing solid.
      */
     private static boolean writeLevel(Canvas c, DropperGeometry.Shaft s, DropRules.Level tier, int i, int n,
                                       Rect ledge, int[] rows, LayerKit.Shape[] shapes, Rect[] open, Rect[] twinOpen,
-                                      Rect[] decoys, Rect pool, Path main, Path second) {
+                                      Rect[][] decoys, Rect pool, Path main, Path second) {
         int layers = rows.length;
         boolean[][][] solid = new boolean[layers][][];
         boolean[][][] light = new boolean[layers][][];
@@ -810,11 +861,11 @@ public final class DropperPlanner implements Planner {
                             on = true;
                             light[j][a][b] = true;
                         }
-                        if (j > 0 && decoys[j - 1] != null && decoys[j - 1].contains(x, z)) {
+                        if (j > 0 && holeAt(decoys[j - 1], x, z)) {
                             on = true;
                         }
                         if (open[j].contains(x, z) || (twinOpen[j] != null && twinOpen[j].contains(x, z))
-                                || (decoys[j] != null && decoys[j].contains(x, z)) || main.tubeHas(rows[j], x, z)
+                                || holeAt(decoys[j], x, z) || main.tubeHas(rows[j], x, z)
                                 || (second != null && second.tubeHas(rows[j], x, z))) {
                             on = false;
                         }
@@ -824,19 +875,26 @@ public final class DropperPlanner implements Planner {
                 }
             }
             for (int j = 0; j < layers - 1; j++) {
-                Rect d = decoys[j];
-                if (d == null) {
+                if (decoys[j] == null) {
                     continue;
                 }
-                boolean blocked = true;
-                for (int x = d.x1(); x <= d.x2() && blocked; x++) {
-                    for (int z = d.z1(); z <= d.z2() && blocked; z++) {
-                        blocked = solid[j + 1][x - s.x1()][z - s.z1()];
+                List<Rect> kept = new ArrayList<>();
+                for (Rect d : decoys[j]) {
+                    boolean blocked = true;
+                    for (int x = d.x1(); x <= d.x2() && blocked; x++) {
+                        for (int z = d.z1(); z <= d.z2() && blocked; z++) {
+                            blocked = solid[j + 1][x - s.x1()][z - s.z1()];
+                        }
+                    }
+                    if (blocked) {
+                        kept.add(d);
                     }
                 }
-                if (!blocked) {
-                    decoys[j] = null;
-                    shapes[j] = new LayerKit.Shape(LayerKit.Template.PLATE, 0, 0);
+                if (kept.size() != decoys[j].length) {
+                    decoys[j] = kept.isEmpty() ? null : kept.toArray(new Rect[0]);
+                    if (kept.isEmpty()) {
+                        shapes[j] = new LayerKit.Shape(LayerKit.Template.PLATE, 0, 0);
+                    }
                     changed = true;
                 }
             }
@@ -879,6 +937,19 @@ public final class DropperPlanner implements Planner {
             }
         }
         return true;
+    }
+
+    /** Whether block (x, z) is in one of a layer's decoy holes ({@code null}: it has none). */
+    private static boolean holeAt(Rect[] holes, int x, int z) {
+        if (holes == null) {
+            return false;
+        }
+        for (Rect d : holes) {
+            if (d.contains(x, z)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1054,7 +1125,7 @@ public final class DropperPlanner implements Planner {
                 new PlannedTrial(course, refMs), summary, work);
     }
 
-    /** One layer for the admin line: depth, template and opening. */
+    /** One layer for the admin line: depth, template and opening ("10 DECOY 2 2 decoys"). */
     private static String s(LevelPlan lp, int j) {
         int depth = lp.shaft().ledgeTop() - lp.rows()[j] - 1;
         String out = depth + " " + lp.shapes()[j].describe() + " " + lp.open()[j].size();
@@ -1062,7 +1133,8 @@ public final class DropperPlanner implements Planner {
             out += "+" + lp.twinOpen()[j].size();
         }
         if (lp.decoys()[j] != null) {
-            out += " decoy";
+            int holes = lp.decoys()[j].length;
+            out += holes == 1 ? " decoy" : " " + holes + " decoys";
         }
         return out;
     }
@@ -1081,7 +1153,8 @@ public final class DropperPlanner implements Planner {
             case W -> new int[]{s.x2(), mz};
             default -> throw new IllegalStateException("a ledge faces along an axis");
         };
-        return new SignText(at[0], y, at[1], Palette.wallSign(facing(lp.forward())), signLines(lp.index() + 1, n));
+        return new SignText(at[0], y, at[1], Palette.wallSign(facing(lp.forward())),
+                signLines(lp.index() + 1, n, lp.tier()));
     }
 
     /** The word a wall sign's {@code facing} state takes for a direction. */
@@ -1098,5 +1171,10 @@ public final class DropperPlanner implements Planner {
     /** A level's sign: "LEVEL 2 of 5" / "Step off and" / "fall into the" / "WATER!". */
     public static List<String> signLines(int level, int levels) {
         return GenCopy.dropperLevel(level, levels);
+    }
+
+    /** A level's sign for its tier: the plain words, or the Long Drop's ("THE LONG DROP / steer all the / way down!") on an X. */
+    public static List<String> signLines(int level, int levels, DropRules.Level tier) {
+        return GenCopy.dropperLevel(level, levels, tier == DropRules.Level.EXTREME);
     }
 }

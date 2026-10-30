@@ -209,8 +209,11 @@ class DropMarksTest {
 
     @Test
     void theMixReadsBackFromThePools() {
+        assertEquals(List.of(5, 6, 7, 11), DropMarks.POOL_SIZES, "Hard 5, the Long Drop 6, Medium 7, Easy 11");
         assertEquals("EEMMH", DropMarks.mix(DropperFixtures.course(DropperFixtures.plan("EEMMH", 1))),
                 "11, 11, 7, 7 and 5 a side: EEMMH");
+        assertEquals("EEMHX", DropMarks.mix(DropperFixtures.course(DropperFixtures.plan("EEMHX", 1))),
+                "11, 11, 7, 5 and 6 a side: EEMHX");
         assertEquals("ME", DropMarks.mix(twoLevels()), "the hand-written one: a 7 then an 11");
         Course odd = twoLevels().withFinish(DropMarks.pool(22.5, 184, 7.5, 9));
         assertNull(DropMarks.mix(odd), "a 9 x 9 pool names no tier");

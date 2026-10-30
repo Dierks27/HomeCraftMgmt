@@ -236,6 +236,25 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**Back to 0.38.4 from 0.38.5:** **first set `games.fresh.slots.fresh_dropper.mix` back to `EEMMH`** in
+config.yml: 0.38.4 refuses a mix with an X ("a dropper mix is 1-5 of E, M and H") and would switch the
+Dropper off with a WARN until the file is fixed by hand (the Easy Dropper is not affected; a mix set with
+`/hcm games gen mix` that holds an X is simply not used there, and the file's mix is). Then the jar
+alone (0.38.4 reads revision 25 and runs nothing, with one WARN; 0.38.5 changes no schema), with one
+more WARN that `stars.rings` is not a games setting, which it ignores. 0.38.4 sees the 512 x 176 x 512
+Sky Rings halves and the 144-tall halves of the Dropper and Classic Dropper as areas whose size changed:
+it empties them by itself (pools drained first, only the plugin's own blocks) and builds each again at
+its old size. Classic Sky Rings stays at `[1760, 128, 2880]`, read as a spot you set yourself, at the
+old 128 x 176 x 320 size: leave it there, because that is where 0.38.5 wants it again (moved back to
+`[6080, 128, 4992]` it would be too close to the big Sky Rings after the upgrade, and switched off).
+Sky Rings courses archived by 0.38.5 can't be recalled there (0.38.4 can't read how they are stored)
+and Long Drop Droppers don't fit its Classic Dropper: both are refused and stay in the archive. **When
+you upgrade again, set the mix back to `EEMHX`** (in the file before the start, or `/hcm games gen mix
+fresh_dropper EEMHX` and a reroll after it): revision 25 has already run on this file and doesn't run
+twice, so otherwise the Dropper stays EEMMH, with no Long Drop and no WARN. The big areas come back by
+themselves. Each way, the rebuilt Sky Rings and Dropper are new courses with fresh boards; nothing is
+deleted.
+
 **Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it; 0.38.3 has no
 unknown-section check at the top level, so the new `golem` section is simply ignored there, without
 a WARN) and WARNS once that the database was
@@ -2580,8 +2599,8 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 Right after the 04:00 restart, the plugin builds a new set of courses by itself: **Easy Parkour,
 Parkour and Hard Parkour** (three courses, each with its own board), **Sky Rings** (an elytra course:
 a 1-2 minute loop round a huge square of sky through 20 rings with 8 rockets to spend; a white ring
-means climb, a rainbow ring is a glide), **Golf of the Week** (9 holes of four lengths,
-par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
+means climb; a rainbow ring is a glide or a level leg, fast or one rocket), **Golf of the Week** (9
+holes of four lengths, par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
 (see "Golf v4" below), and two droppers, **Easy Dropper** and **Dropper** (see "The Dropper" below).
 **Ice Boat**, a 2-3 minute run down a whole mountain, the Winding Road or the Slalom (see "Ice Boat:
 the Mountain Run" below), ships switched off. By default a new set goes up **every Monday** and stays all week;
@@ -3495,9 +3514,9 @@ ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through th
 coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
 ringed with glowing sea lanterns ("follow the light") and the whole floor is water. The Dropper's
 levels 1-4 are E, E, M and H as before; its level 5 is **the Long Drop** (the letter X): 128 blocks
-straight down (2.7 times a Hard level's 48) through 8 unlit plates that arrive every 0.3 s, most of
-them with two false holes beside the real one, and a hole line that keeps sliding sideways all the
-way to a 6-wide pool. Its sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the / way down!": keep
+straight down (2.7 times a Hard level's 48) through 8 unlit plates that arrive every 0.3 s, about half
+of them with one or two false holes beside the real one, and a hole line that keeps sliding sideways
+all the way to a 6-wide pool. Its sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the / way down!": keep
 steering to the water, because stopping over a hole you have just found usually puts you on the next
 plate. Expect bonks on a first visit; a clean run is a second- or third-visit thing. A splash clears
 the level ("Level 2! of 5 - keep going!") and a quarter of a second later you are on the next ledge;
@@ -3521,7 +3540,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   stars and the result says "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"
   (Easy and medium droppers keep stars by time alone). First finish in a set: Easy Dropper 10 tokens
   a week (5 a day), Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the
-  first clear once ever by tier (the Dropper's is hard's 25); the Star Chart counts its stars. A clean
+  first clear once ever by tier (the Dropper's is hard's 25, to an account that has never cleared the
+  Dropper: one paid before 0.38.5 is not paid again); the Star Chart counts its stars. A clean
   counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
@@ -3601,9 +3621,10 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
    way down!", the water is 128 blocks down, the plates are unlit, some with extra holes.
 4. On Java, walk off aiming at the holes and keep steering: you get wet eventually; expect bonks; each
    bonk returns you to the top of level 5 with the clock running.
-5. The Dropper tile reads Hard, "3 stars 24 s, 2 stars 35 s"; a finish with any bonk inside 24 s shows
-   two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"; a clean
-   finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25 once.
+5. The Dropper tile reads Hard, "★★ under 0:35 · ★★★ under 0:24"; a finish with any bonk inside 24 s
+   shows two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"; a
+   clean finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25
+   once, to an account that has never cleared the Dropper (one paid before 0.38.5 is not paid again).
 6. `/hcm games gen mix fresh_dropper_easy EEX` is refused ("an X level needs a half at least 141 tall
    (this one is 64)"); `/hcm games gen mix fresh_dropper XXXXX` is accepted and the reroll builds five
    Long Drops.
@@ -3915,7 +3936,7 @@ every race and round works exactly as before**.
     at 04:00. A Fresh course or a golf course keeps each player's best, so it counts on this week's
     page only if that best was set this week.
   - **Now playing** is on the south wall. It shows who is in which game right now and how far along,
-    for example "Sam - Sky Rings - checkpoint 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
+    for example "Sam - Sky Rings - ring 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
     "Max - in the Clubhouse". Games come first, then cabinets, then the Clubhouse. It shows up to
     seven rows ("and 3 more"), with "Cheer them on: /hcm play cheer" while anyone is in a game.
     Cheers reach the racers of a party race, Race Night or golf together, and with no race going,

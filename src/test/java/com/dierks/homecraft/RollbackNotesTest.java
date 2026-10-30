@@ -196,4 +196,34 @@ class RollbackNotesTest {
             assertFalse(code.contains("fourth place") || code.contains("A fourth is refused"), src);
         }
     }
+
+    /**
+     * Review layout-migration F2: the way back to 0.38.4 (0.38.5). 0.38.4 refuses a dropper mix with an X and
+     * switches the Dropper off, so the note says to set the shipped mix back to {@code EEMMH} before the jar is
+     * swapped; it keeps the Classic Sky Rings at its new spot, says what happens to the bigger areas and the
+     * archive, and says to put the mix back on the way up again, because revision 25 doesn't run twice.
+     */
+    @Test
+    void theDropperMixGoesBackBeforeARollbackTo0384() throws Exception {
+        String readme = Files.readString(Path.of("README.md"), StandardCharsets.UTF_8);
+        int at = readme.indexOf("**Back to 0.38.4 from 0.38.5:**");
+        assertTrue(at >= 0, "the short note where the releases are listed");
+        assertTrue(at < readme.indexOf("**Back to 0.38.3 from 0.38.4:**"), "above the 0.38.4 note");
+        String note = readme.substring(at, readme.indexOf("\n\n", at)).replaceAll("\\s+", " ");
+        YamlConfiguration c = new YamlConfiguration();
+        try (var r = new InputStreamReader(RollbackNotesTest.class.getResourceAsStream("/config.yml"),
+                StandardCharsets.UTF_8)) {
+            c.load(r);
+        }
+        String mix = c.getString("games.fresh.slots.fresh_dropper.mix");
+        assertTrue(note.contains("**first set `games.fresh.slots.fresh_dropper.mix` back to `EEMMH`**"), note);
+        assertTrue(note.contains("switch the Dropper off"), "the reason is named: " + note);
+        assertTrue(note.contains("set the mix back to `" + mix + "`"), "the way up again: " + note);
+        assertTrue(note.contains("doesn't run twice"), note);
+        List<Integer> classic = c.getIntegerList("games.fresh.classics.slots.fresh_classic_rings.origin");
+        assertTrue(note.contains("Classic Sky Rings stays at `[" + classic.get(0) + ", " + classic.get(1) + ", "
+                + classic.get(2) + "]`"), note);
+        assertTrue(note.contains("leave it there"), note);
+        assertTrue(note.contains("stay in the archive"), note);
+    }
 }

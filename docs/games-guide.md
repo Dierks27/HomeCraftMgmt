@@ -1336,7 +1336,7 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tips**
 
-- Save your rockets for the white rings: a white ring is above you, so fire one as you leave the ring before it and pull up. A level leg is free if you arrive fast; slow, it takes one. A rainbow ring is a glide and never needs one.
+- Save your rockets for the white rings: a white ring is above you, so fire one as you leave the ring before it and pull up. Rainbow rings are glides or level legs; the title at the ring before tells you which. A glide never needs a rocket. A level leg ("level: fast or rocket") is free if you arrive fast; slow, it takes one.
 - On a hand-built elytra course you get back to 3 rockets at every ring.
 - Landing is safe within 2 blocks of the start, inside a ring and at the finish. Anywhere else sends you back.
 - Water sends you back too, even a quick touch, unless you are inside a ring or near the start.
@@ -1672,7 +1672,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. They come with Fresh Courses: once the owner switches Fresh Courses on, they are there.
 - **Costs:** Free, like every Fresh Course.
-- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools; its last one is the Long Drop: 128 blocks straight down through 8 dark floors that come every third of a second, most with false holes beside the real one, and the holes keep sliding sideways: keep steering all the way to the water. Both are new with every set.
+- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools; its last one is the Long Drop: 128 blocks straight down through 8 dark floors that come every third of a second, about half with false holes beside the real one, and the holes keep sliding sideways: keep steering all the way to the water. Both are new with every set.
 
 **How to play**
 
@@ -1742,7 +1742,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **The boards:** four boards hang flat on the walls like signs and don't turn as you walk.
   - The **results** board (north) shows the race positions while a race or golf group is going, then the final result.
   - **This week's best** (east) shows the fastest run on each course this week and who ran it, the best golf round, Today's pick and the Weekly Cup leaders. It turns its page every 8 seconds and ends with the all-time records.
-  - **Now playing** (south) shows who's in which game right now and how far they've got, like "Sam - Sky Rings - checkpoint 3 - 0:41". Cheer them on with `/hcm play cheer`: it reaches the racers of a race, or with no race going, everyone on a solo run or in a round alone.
+  - **Now playing** (south) shows who's in which game right now and how far they've got, like "Sam - Sky Rings - ring 3 - 0:41". Cheer them on with `/hcm play cheer`: it reaches the racers of a race, or with no race going, everyone on a solo run or in a round alone.
   - **My stats** (west) is only for you: your runs this week, tokens you won from games this week, your best golf round, and your best times with your place on each course. Nobody else can see yours. Tap the **My stats** item to see them on a screen.
   - On Bedrock the boards show as floating name tags that turn to face you.
 - **New record!** Set a course's all-time record and land back in the Clubhouse: everyone in the room sees NEW RECORD!, a firework goes up over the podium, and chat says who set it and the time.

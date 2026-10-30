@@ -26,8 +26,8 @@ import java.util.Set;
 
 /**
  * The planner for Sky Rings, the elytra course (GEN-SPEC §4.2, Sky Rings v3 "Sky Loop"): a start
- * tower at the south end of a 512-wide square of sky, then a sweeping loop of 20 to 26 rings, 80
- * to 130 blocks apart, that spirals inward to a gold ring, with a fixed stack of rockets for the
+ * tower at the south end of a 512-wide square of sky, then a loop of 20 to 26 rings, 80 to 120
+ * blocks apart, that spirals inward to a gold ring, with a fixed stack of rockets for the
  * whole run and none at the rings.
  *
  * <p><b>Three kinds of leg.</b> After ring 1 every leg is a <em>glide</em> (a rainbow ring well
@@ -49,16 +49,21 @@ import java.util.Set;
  *
  * <p><b>The floor.</b> A glide's drop leaves room under it for the rest of the course: every later
  * glide's least drop and level leg's most, less every later climb's least rise ({@code reserve}),
- * so rings always stay above the half's floor + 16 whatever the dice; a glide's length is drawn
- * short enough for that too, so the altitude never refuses a try.
+ * so rings always stay above the half's floor + 16 whatever the dice; a route is only kept when
+ * ring 1 stands high enough for its legs' reserve, so the altitude never refuses a try.
  *
- * <p><b>The oval.</b> The course runs in lanes along x or z and corners the way it winds when the
- * room ahead runs short of what a corner needs (and the course still has further to go than that):
- * at 30 degrees a ring with the 45-degree facing snap an easy corner is 180, 210, 225 (a diagonal
- * leg, so the facing swaps), 255, 270: four rings and some 300 blocks of sideways swing, so the
- * course is a sweeping oval that spirals inward, not a square. {@link Search#room} stops within
- * {@link #LANE_GAP} of any older leg, so each lane runs at least 80 from the last; near the end the
- * finale runs straight, so the gold ring lands on an inner lane in sight of the platform.
+ * <p><b>The route.</b> The ground plan is drawn whole before any height ({@link Route}): a square
+ * spiral of lanes. Lane 0 runs north from the tower; the next three run round the outside of the
+ * square near its edges, and every later lane runs 82 to 100 inside the one four before it, so the
+ * course loops round the square and curls inward, each lane at least {@link #LANE_GAP} from the loop
+ * outside it, and ends on one of the inner lanes. Along a lane the legs run straight;
+ * at its end the course corners through a diagonal leg (the facing rule below), its first leg 10 to
+ * 45 degrees off the lane as the dice say, its lengths shifted together so the corner lands on the
+ * next lane's line. The lanes are searched depth first ({@link #ROUTE_NODES}), so a lane that can't
+ * reach a next one is tried again with other dice. Every tier turns up to 45 degrees at a ring
+ * (half that into a climb) and runs its legs 80 to 120 across: with legs this long, a gentler turn
+ * makes every corner three legs and some 200 blocks each way, and longer legs, more of the 2,200
+ * blocks of lanes a 512-wide square holds than a course of 24 or 26 rings can spare.
  *
  * <p><b>Why it is flyable.</b> Vanilla's best glide is about 10:1 and every glide drops at least
  * 1 in 7. The proof is the {@link ElytraSim} autopilot: a candidate ring is flown by the pilots that
@@ -69,13 +74,13 @@ import java.util.Set;
  * every pilot through the whole remaining course before a plan is returned.
  *
  * <p><b>How a layout grows.</b> Ring 1 is 20 blocks ahead of the tower's diving board and 8
- * below it. Each further leg ({@code fork("leg:" + k + ":" + n)}) draws a turn, a length and a
- * height from its kind's ranges, steering by the room ahead. A candidate is refused if its ring
- * plus R + 8 doesn't fit the half, it is within 48 of another ring, a flight through a ring would
- * be more than 45 degrees off the ring's facing, a keep-clear tube of R + 2 round a leg that isn't
- * its own meets a frame, it comes within 8 of the tower, within 80 across the ground of an older
- * lane, or the autopilot can't fly it: 20 tries a leg, then a fresh start
- * ({@code fork("restart:" + n)}), up to 20.
+ * below it. Each further ring stands where the route put it, at a height drawn from its kind's
+ * range ({@code fork("leg:" + k + ":" + n)}). A candidate is refused if its ring plus R + 8 doesn't
+ * fit the half, it is within 48 of another ring, a flight through a ring would be more than 45
+ * degrees off the ring's facing, a keep-clear tube of R + 2 round a leg that isn't its own meets a
+ * frame, it comes within 8 of the tower, within 80 across the ground of an older lane, or the
+ * autopilot can't fly it: 20 heights a ring, then a fresh start ({@code fork("restart:" + n)}, a new
+ * profile and route), up to 20.
  *
  * <p><b>Facing.</b> Every ring faces x or z, whichever is nearer the flight (a pixel circle on a
  * diagonal looks broken), so a course can only swing from running north-south to running
@@ -128,8 +133,8 @@ public final class RingsPlanner implements Planner {
     /** The three tiers (the table in §4.2, Sky Rings v3). */
     public enum Level {
         EASY("easy", 20, 8, 80, 120, 45, 7, 4.5, 45, 4, 2, 25, 45),
-        MEDIUM("medium", 24, 7, 90, 130, 45, 7, 4.5, 45, 5, 2, 30, 50),
-        HARD("hard", 26, 6, 96, 128, 45, 7, 4.5, 45, 5, 4, 35, 55);
+        MEDIUM("medium", 24, 7, 80, 120, 45, 7, 4.5, 45, 5, 2, 30, 50),
+        HARD("hard", 26, 6, 80, 120, 45, 7, 4.5, 45, 5, 4, 35, 55);
 
         private final String id;
         private final int rings;
@@ -274,9 +279,8 @@ public final class RingsPlanner implements Planner {
     /** The platform's top is this far under the half's roof. */
     public static final int TOWER_TOP = 16;
     /**
-     * The tower stands this far in from the side of the half it is on (R + 8 + {@link #SIDE}, so the first
-     * lane sits exactly {@link #SIDE} inside the ring-centre inset and the side nudge never fires), and 8 from
-     * the south end.
+     * The tower stands this far in from the side of the half it is on, and 8 from the south end: lane 0 runs
+     * north from it.
      */
     public static final int TOWER_INSET = 40;
     public static final int TOWER_SOUTH = 8;
@@ -294,16 +298,28 @@ public final class RingsPlanner implements Planner {
     public static final double TOWER_GAP = 8;
     /** Rings stay this far above the half's floor. */
     public static final int FLOOR = 16;
-    /** Within this of a side of the half, a course leans back toward the middle. */
-    public static final double SIDE = 24;
     /** Lanes keep this far apart across the ground: a ring and an older leg, or a leg and an older ring. */
     public static final double LANE_GAP = 80;
-    /** How far {@link Search#room} looks ahead. */
-    public static final double ROOM_WALK = 600;
-    /** A corner's legs run the tier's shortest length, plus up to this: a 90-degree swing then fits the square. */
-    public static final int CORNER_SLACK = 4;
-    /** Turns are whole multiples of this, in degrees. */
+    /** The outer lanes run at most this far inside the ring-centre inset. */
+    public static final int OUTER_SLACK = 20;
+    /** An inner lane runs {@link #LANE_GAP} + 2 to {@link #LANE_GAP} + this inside the lane round it. */
+    public static final int LANE_SLACK = 20;
+    /** A corner's first leg turns a whole multiple of this, in degrees. */
     public static final int HEADING_STEP = 5;
+    /**
+     * The ground a course's legs aim to fill (the square holds some 2,200): they average this over their
+     * number, kept inside their band.
+     */
+    public static final double ROUTE_LENGTH = 1_900;
+    /** Lanes the route's search may try before a fresh start. */
+    public static final int ROUTE_NODES = 1_000;
+    /**
+     * Ways round a lane's corner tried, the nearest the aimed length first; the dice drawn for each; and how
+     * loosely "nearest" is read, in blocks.
+     */
+    static final int WAYS_TRIED = 6;
+    static final int ROUTE_SAMPLES = 3;
+    static final double WAY_NOISE = 10;
     /** Tries per leg, and fresh starts. */
     public static final int TRIES_PER_LEG = 20;
     public static final int RESTARTS = 20;
@@ -784,7 +800,6 @@ public final class RingsPlanner implements Planner {
         }
     }
 
-    static final java.util.concurrent.ConcurrentHashMap<String, Integer> DIAG = new java.util.concurrent.ConcurrentHashMap<>();
     private static final class Search {
         final Level level;
         final Box half;
@@ -795,17 +810,17 @@ public final class RingsPlanner implements Planner {
         LegKind[] kinds;
         /** Rockets the rest of the course needs from the tower and from each ring ({@link RingsPlanner#need}). */
         int[] need;
-        /** Height to keep in hand under ring k for the legs after it. */
+        /** Height to keep in hand under ring k for the legs after it ({@link RingsPlanner#reserve}). */
         int[] reserveAfter;
         /** The highest and lowest a ring's centre block may be. */
         int roofC;
         int floorC;
-        /** The way the course turns when it must turn round: +1 is toward growing yaw. */
+        /** Whether the tower stands on the half's west side (the route is drawn that way and mirrored if not). */
+        boolean west;
+        /** The way the course turns: +1 is toward growing yaw (a tower on the west side), −1 the other way. */
         int winding;
-        /** The lane the course runs along now, and a point on its line. */
-        double laneYaw = 180;
-        double laneX;
-        double laneZ;
+        /** The ground plan: where every ring stands across the ground, drawn before any height. */
+        Route route;
         Obstacles obstacles;
         final List<Group> groups = new ArrayList<>();
         long work;
@@ -818,20 +833,10 @@ public final class RingsPlanner implements Planner {
 
         boolean run() {
             GenRandom t = rng.fork("tower");
-            boolean west = t.nextBoolean();
+            west = t.nextBoolean();
             // the profile first: it decides every leg's kind before any geometry is drawn
             kinds = profile(level, rng.fork("profile"));
             need = need(kinds);
-            // the height to keep in hand under each ring: every later glide's least drop and level leg's most,
-            // less every later climb's least rise, never below 0 (a climb ahead pays for the drops after it)
-            reserveAfter = new int[level.rings()];
-            for (int k = level.rings() - 2; k >= 0; k--) {
-                reserveAfter[k] = Math.max(0, reserveAfter[k + 1] + switch (kinds[k]) {
-                    case GLIDE -> (int) Math.ceil(level.legMin() / level.slow() - 1e-9);
-                    case FLAT -> FLAT_DROP;
-                    case LIFT -> -level.upMin();
-                });
-            }
             roofC = half.maxY() - (level.radius() + EDGE);
             floorC = half.minY() + FLOOR;
             int tx = west ? half.minX() + TOWER_INSET : half.maxX() - TOWER_INSET;
@@ -839,19 +844,26 @@ public final class RingsPlanner implements Planner {
             tower = new Tower(tx, tz, half.maxY() - TOWER_TOP, half.minY());
             // north is yaw 180; east is 270: a tower on the west side turns round toward the east
             winding = west ? 1 : -1;
-            laneX = tx + 0.5;
-            laneZ = tz + 0.5;
+            int firstY = tower.top() - FIRST_BELOW - 1;
+            // the ground plan next, whole: then every leg's length is known, and so is the height to keep in hand
+            route = new Route(level, kinds, half.sizeX(), half.sizeZ(), firstY - floorC, rng.fork("route"));
+            boolean planned = route.plan();
+            work += route.work;
+            if (!planned) {
+                return false;
+            }
+            reserveAfter = reserve(level, kinds, route.lengths());
             obstacles = new Obstacles();
             obstacles.box(tower.platform());
             obstacles.box(tower.board());
             obstacles.box(tower.pillar());
-            Ring first = ring(tx, tower.top() - FIRST_BELOW - 1, tz - 5 - FIRST_AHEAD, 180);
+            Ring first = ring(x(0), firstY, z(0), 180);
             rings.add(first);
             obstacles.ring(first.cx(), first.cy(), first.cz(), level.radius(), first.voxels());
             Group off = new Group(offTheTower(tower.launch(), 0, -1, need[0]), 0, Integer.MAX_VALUE);
             groups.add(off);
             if (!advance(off.pilots, first, obstacles, false)) {
-                DIAG.merge("first", 1, Integer::sum); return false;
+                return false;
             }
             startFrom(0, first, LegKind.GLIDE);
             for (int k = 1; k < level.rings(); k++) {
@@ -861,10 +873,19 @@ public final class RingsPlanner implements Planner {
                     placed = candidate(k, rng.fork("leg:" + k + ":" + n));
                 }
                 if (placed == null) {
-                    DIAG.merge("leg" + k, 1, Integer::sum); return false;
+                    return false;
                 }
             }
             return true;
+        }
+
+        /** Ring k's centre block across the ground, from the route (mirrored for a tower on the east side). */
+        int x(int k) {
+            return west ? half.minX() + route.u[k] : half.maxX() - route.u[k];
+        }
+
+        int z(int k) {
+            return half.minZ() + route.v[k];
         }
 
         /** The pilots that start at ring {@code k} (0-based), and the speed-line pilot when the leg out of it is level. */
@@ -880,12 +901,7 @@ public final class RingsPlanner implements Planner {
 
         /** A ring at (cx, cy, cz) entered along {@code yawIn}, facing the axis nearer that way (a tie: the way it winds). */
         Ring ring(int cx, int cy, int cz, double yawIn) {
-            double[] d = dir(yawIn);
-            RingShape.Normal normal = RingShape.normalFor(d[0], d[1]);
-            if (Math.abs(Math.abs(d[0]) - Math.abs(d[1])) < 1e-9) {
-                double[] next = dir(yawIn + winding * 45.0);
-                normal = RingShape.normalFor(next[0], next[1]);
-            }
+            RingShape.Normal normal = facing(yawIn, winding);
             return new Ring(cx, cy, cz, yawIn, normal, RingShape.voxels(cx, cy, cz, level.radius(), normal));
         }
 
@@ -906,79 +922,45 @@ public final class RingsPlanner implements Planner {
             return true;
         }
 
-        /** One try at ring k (0-based, k ≥ 1): placed and kept, or {@code null}. */
+        /**
+         * One try at ring k (0-based, k ≥ 1) where the route put it across the ground: a height drawn
+         * from its kind's range, then every rule checked again in three dimensions and the pilots in the
+         * window flown through it. Placed and kept, or {@code null}.
+         */
         Ring candidate(int k, GenRandom r) {
             Ring prev = rings.get(k - 1);
             LegKind kind = kinds[k - 1];
             // a climb is flown straight: half the tier's turn into it
             int max = kind == LegKind.LIFT ? level.maxTurn() / 2 : level.maxTurn();
-            Heading heading = chooseTurn(prev, r, max, k);
-            double intended = heading.yaw();
-            // the leg's length band by kind; a glide's is cut so its least drop fits the room under it; a
-            // corner's legs are the shortest, so the swing fits the square
-            int available = prev.cy() - floorC - reserveAfter[k];
-            double lo;
-            double hi;
-            switch (kind) {
-                case LIFT -> {
-                    lo = Math.max(level.legMin(), LIFT_LEG_MIN);
-                    hi = Math.min(level.legMax(), LIFT_LEG_MAX);
-                }
-                case FLAT -> {
-                    lo = Math.max(level.legMin(), FLAT_MIN);
-                    hi = Math.min(level.legMax(), FLAT_MAX);
-                }
-                default -> {
-                    lo = level.legMin();
-                    hi = Math.min(level.legMax(), Math.floor(available * level.slow() + 1e-9));
-                }
-            }
-            hi = Math.min(hi, heading.swing() ? lo + CORNER_SLACK : heading.most());
-            if (hi < lo) {
-                { DIAG.merge("c1", 1, Integer::sum); return null; }
-            }
-            double d = r.nextDouble(lo, hi);
-            double[] u = dir(intended);
-            int dx = (int) Math.round(u[0] * d);
-            int dz = (int) Math.round(u[1] * d);
-            double off = Math.abs(((intended % 90) + 90) % 90 - 45);
-            if (off < HEADING_STEP / 2.0) {
-                // a diagonal leg runs exactly diagonally, so the next ring may face the other way
-                int g = (int) Math.round(d / Math.sqrt(2));
-                dx = (int) Math.signum(u[0]) * g;
-                dz = (int) Math.signum(u[1]) * g;
-            }
-            int cx = prev.cx() + dx;
-            int cz = prev.cz() + dz;
+            int cx = x(k);
+            int cz = z(k);
+            int dx = cx - prev.cx();
+            int dz = cz - prev.cz();
             double actual = Math.hypot(dx, dz);
-            double bandLo = kind == LegKind.GLIDE ? level.legMin() : lo;
-            double bandHi = kind == LegKind.GLIDE ? level.legMax() : hi;
-            if (actual < bandLo - 1e-9 || actual > bandHi + 1e-9) {
-                { DIAG.merge("c2", 1, Integer::sum); return null; }
-            }
             double yaw = yaw(dx, dz);
             double[] ua = dir(yaw);
-            if (Math.abs(turn(prev.yawIn(), yaw)) > max + 1e-9
+            if (actual < legLo(level, kind) - 1e-9 || actual > legHi(level, kind) + 1e-9
+                    || Math.abs(turn(prev.yawIn(), yaw)) > max + 1e-9
                     || RingShape.offNormal(ua[0], ua[1], prev.normal()) > level.maxOffNormal() + 1e-9) {
-                { DIAG.merge("c3", 1, Integer::sum); return null; }
+                return null;
             }
-            // the height by kind
+            // the height by kind: a glide's drop leaves room under it for every leg still to come
+            int available = prev.cy() - floorC - reserveAfter[k];
             int cy;
             switch (kind) {
                 case LIFT -> {
                     int upHi = Math.min(level.upMax(), roofC - prev.cy());
                     if (upHi < level.upMin()) {
-                        { DIAG.merge("c4", 1, Integer::sum); return null; }
+                        return null;
                     }
                     cy = prev.cy() + r.nextInt(level.upMin(), upHi);
                 }
                 case FLAT -> cy = prev.cy() - r.nextInt(0, FLAT_DROP);
                 default -> {
-                    // the drop: inside the tier's range, leaving room under it for every leg still to come
                     int minDrop = (int) Math.ceil(actual / level.slow() - 1e-9);
                     int maxDrop = (int) Math.floor(Math.min(actual / level.fast(), available) + 1e-9);
                     if (minDrop > maxDrop) {
-                        { DIAG.merge("c5", 1, Integer::sum); return null; }
+                        return null;
                     }
                     cy = prev.cy() - r.nextInt(minDrop, maxDrop);
                 }
@@ -986,12 +968,12 @@ public final class RingsPlanner implements Planner {
             Ring ring = ring(cx, cy, cz, yaw);
             // it faces the way it is flown into
             if (RingShape.offNormal(ua[0], ua[1], ring.normal()) > level.maxOffNormal() + 1e-9) {
-                { DIAG.merge("c6", 1, Integer::sum); return null; }
+                return null;
             }
             // the ring with R + 8 all round fits the half
             int m = level.radius() + EDGE;
             if (!half.contains(new Box(cx - m, cy - m, cz - m, cx + m, cy + m, cz + m))) {
-                { DIAG.merge("c7 k=" + k + " at " + (cx - half.minX()) + "," + (cz - half.minZ()) + " y" + cy + " yaw " + Math.round(yaw) + " lane " + Math.round(laneYaw) + " prev " + (prev.cx() - half.minX()) + "," + (prev.cz() - half.minZ()) + " kind " + kind, 1, Integer::sum); return null; }
+                return null;
             }
             double[] a = prev.centre();
             double[] b = ring.centre();
@@ -1000,19 +982,19 @@ public final class RingsPlanner implements Planner {
                 Ring o = rings.get(j);
                 double gap = Math.sqrt(Math.pow(o.x() - b[0], 2) + Math.pow(o.y() - b[1], 2) + Math.pow(o.z() - b[2], 2));
                 if (gap < RING_GAP) {
-                    { DIAG.merge("c8", 1, Integer::sum); return null; }
+                    return null;
                 }
                 // the new leg clears every ring but the one it leaves
                 if (j < k - 1) {
                     for (int[] v : o.voxels()) {
                         if (segmentDistance(a, b, v[0] + 0.5, v[1] + 0.5, v[2] + 0.5) < tube) {
-                            { DIAG.merge("c9", 1, Integer::sum); return null; }
+                            return null;
                         }
                     }
                 }
                 // and keeps a lane's width from every ring but the two at its ends
                 if (j < k - 2 && groundDistance(a, b, o.x(), o.z()) < LANE_GAP) {
-                    { DIAG.merge("c10 k=" + k + " leg " + (prev.cx() - half.minX()) + "," + (prev.cz() - half.minZ()) + "->" + (cx - half.minX()) + "," + (cz - half.minZ()) + " yaw " + Math.round(yaw) + " vs ring " + j + " at " + (o.cx() - half.minX()) + "," + (o.cz() - half.minZ()) + " d " + Math.round(groundDistance(a, b, o.x(), o.z())) + " " + kind, 1, Integer::sum); return null; }
+                    return null;
                 }
             }
             // the new ring clears every older leg, the one off the tower too, and keeps a lane's width from
@@ -1022,17 +1004,17 @@ public final class RingsPlanner implements Planner {
                 double[] lb = rings.get(j).centre();
                 for (int[] v : ring.voxels()) {
                     if (segmentDistance(la, lb, v[0] + 0.5, v[1] + 0.5, v[2] + 0.5) < tube) {
-                        { DIAG.merge("c11", 1, Integer::sum); return null; }
+                        return null;
                     }
                 }
                 if (j < k - 1 && groundDistance(la, lb, b[0], b[2]) < LANE_GAP) {
-                    { DIAG.merge("c12 k=" + k + " ring " + (cx - half.minX()) + "," + (cz - half.minZ()) + " yaw " + Math.round(yaw) + " prev " + (prev.cx() - half.minX()) + "," + (prev.cz() - half.minZ()) + " vs leg " + j + " " + Math.round(la[0] - half.minX()) + "," + Math.round(la[2] - half.minZ()) + "->" + Math.round(lb[0] - half.minX()) + "," + Math.round(lb[2] - half.minZ()) + " d " + Math.round(groundDistance(la, lb, b[0], b[2])) + " " + kind, 1, Integer::sum); return null; }
+                    return null;
                 }
             }
             // and keeps clear of the tower
             if (boxDistance(a, b, tower.platform()) < TOWER_GAP || boxDistance(a, b, tower.board()) < TOWER_GAP
                     || boxDistance(a, b, tower.pillar()) < TOWER_GAP) {
-                { DIAG.merge("c13", 1, Integer::sum); return null; }
+                return null;
             }
             // the autopilot: the pilots in the window fly on through it
             Obstacles solid = obstacles.copy();
@@ -1049,7 +1031,7 @@ public final class RingsPlanner implements Planner {
                     copies.add(p.copy());
                 }
                 if (!advance(copies, ring, solid, k == level.rings() - 1, kind.rocket())) {
-                    { DIAG.merge("c14", 1, Integer::sum); return null; }
+                    return null;
                 }
                 active.add(g);
                 tried.add(copies);
@@ -1061,168 +1043,6 @@ public final class RingsPlanner implements Planner {
             }
             startFrom(k, ring, kind);
             return ring;
-        }
-
-        /** A leg's heading, the most it may run across the ground, and whether it is a corner's (then it runs its kind's shortest). */
-        record Heading(double yaw, double most, boolean swing) {
-        }
-
-        /** The shortest leg of a kind: a climb's and a level leg's never run under 90. */
-        int shortest(LegKind kind) {
-            return switch (kind) {
-                case LIFT -> Math.max(level.legMin(), LIFT_LEG_MIN);
-                case FLAT -> Math.max(level.legMin(), FLAT_MIN);
-                default -> level.legMin();
-            };
-        }
-
-        /**
-         * What a corner starting with ring {@code k}'s leg takes: {@code [forward, sideways, legs]}
-         * across the ground, the swing's legs at their kinds' shortest length (none when the course ends
-         * first). The swing's headings follow the facing rule: up to 45° off the lane until the diagonal
-         * leg swaps the facing, then up to 90°, each leg turning the tier's most, or half that into a
-         * climb; the leg that reaches 90° runs along the new lane, so it counts sideways.
-         */
-        double[] corner(int k) {
-            double forward = 0;
-            double sideways = 0;
-            int legs = 0;
-            double a = 0;
-            for (int j = k; j < level.rings() && a < 90 - 1e-9; j++) {
-                int step = kinds[j - 1] == LegKind.LIFT ? level.maxTurn() / 2 : level.maxTurn();
-                a = a < 45 - 1e-9 ? Math.min(45, a + step) : Math.min(90, a + step);
-                forward += shortest(kinds[j - 1]) * StrictMath.cos(StrictMath.toRadians(a));
-                sideways += shortest(kinds[j - 1]) * StrictMath.sin(StrictMath.toRadians(a));
-                legs++;
-            }
-            return new double[]{forward, sideways, legs};
-        }
-
-        /**
-         * The heading of the next leg (ring {@code k}'s), a whole multiple of {@link #HEADING_STEP}
-         * within {@code max} degrees of the last, and the most it may run. The course runs in lanes
-         * along x or z: along a lane it wanders a little either side of the lane's line and leans away
-         * from a side of the half that is near, running no further than leaves the room a corner takes
-         * ({@link #corner}); once a straight leg no longer fits in front of that, and the course still
-         * has further to go than the room ahead, it swings round 90° the {@link #winding} way, as
-         * sharply as the tier and the ring's facing allow, if the room that way holds the swing and the
-         * next corner too. Near the end the course runs straight to the finish. Of the headings the
-         * ring's facing allows, the one nearest the wanted one is taken.
-         */
-        Heading chooseTurn(Ring prev, GenRandom r, int max, int k) {
-            double lane = lane(prev);
-            double leg = (level.legMin() + level.legMax()) / 2.0;
-            double[] corner = corner(k);
-            // a new lane starts where the course swung into it
-            if (lane != laneYaw) {
-                laneYaw = lane;
-                laneX = prev.x();
-                laneZ = prev.z();
-            }
-            double ahead = room(prev, dir(lane));
-            double still = (level.rings() - rings.size()) * leg;
-            boolean finale = still <= ahead;
-            // a straight leg runs no further than leaves room for a corner starting with the leg after it
-            double[] next = k + 1 < level.rings() ? corner(k + 1) : new double[]{0, 0, 0};
-            double most = finale ? ahead - EDGE : ahead - next[0] - EDGE;
-            boolean swing = !finale && most < shortest(kinds[k - 1]);
-            if (swing) {
-                // the swing must fit ahead, and leave its new lane the room for the corner after it
-                int after = k + (int) corner[2];
-                double then = after < level.rings() ? corner(after)[0] : 0;
-                if (corner[0] + EDGE > ahead
-                        || room(prev, dir(lane + winding * 90)) < corner[1] + then + EDGE) {
-                    // boxed in: run on and let the checks decide
-                    swing = false;
-                    most = ahead - EDGE;
-                }
-            }
-            double target;
-            if (swing) {
-                target = lane + winding * 90;
-            } else {
-                // along the lane: a little wander, pulled back toward the lane's line, away from a side that is near
-                double[] left = dir(lane + 90);
-                double offset = (prev.x() - laneX) * left[0] + (prev.z() - laneZ) * left[1];
-                target = lane + r.nextDouble(-max / 3.0, max / 3.0) - Math.max(-max / 2.0, Math.min(max / 2.0, offset));
-                double toLeft = room(prev, left);
-                double toRight = room(prev, dir(lane - 90));
-                if (toLeft < SIDE && toLeft < toRight) {
-                    target -= max / 2.0;
-                } else if (toRight < SIDE && toRight < toLeft) {
-                    target += max / 2.0;
-                }
-            }
-            double want = turn(prev.yawIn(), target);
-            // the allowed heading (a whole multiple of 5 degrees, within the turn and the ring's
-            // facing) nearest the wanted one; a tie goes the winding way
-            double best = Double.MAX_VALUE;
-            double chosen = Math.round(prev.yawIn() / HEADING_STEP) * (double) HEADING_STEP;
-            double lo = Math.ceil((prev.yawIn() - max) / HEADING_STEP - 1e-9) * HEADING_STEP;
-            for (double yaw = lo; yaw <= prev.yawIn() + max + 1e-9; yaw += HEADING_STEP) {
-                double[] u = dir(yaw);
-                if (RingShape.offNormal(u[0], u[1], prev.normal()) > level.maxOffNormal() + 1e-9) {
-                    continue;
-                }
-                double turn = turn(prev.yawIn(), yaw);
-                double miss = Math.abs(turn - want) - (Math.signum(turn) == winding ? 1e-6 : 0);
-                if (miss < best) {
-                    best = miss;
-                    chosen = yaw;
-                }
-            }
-            return new Heading(chosen, most, swing);
-        }
-
-        /** The way the course is running at a ring: along its facing, the way it is flown (a yaw of 0, 90, 180 or 270). */
-        double lane(Ring r) {
-            double[] u = dir(r.yawIn());
-            if (r.normal() == RingShape.Normal.Z) {
-                return u[1] < 0 ? 180 : 0;
-            }
-            return u[0] > 0 ? 270 : 90;
-        }
-
-        /**
-         * How far a leg could run from ring {@code from} along {@code u}: to the half's inner edge, near
-         * another ring, within {@link #LANE_GAP} of an older ring or leg (not the one into {@code from}
-         * nor the one before it) or within {@link #TOWER_GAP} of the tower, up to {@link #ROOM_WALK}.
-         */
-        double room(Ring from, double[] u) {
-            int m = level.radius() + EDGE;
-            double x0 = half.minX() + m;
-            double x1 = half.maxX() + 1 - m;
-            double z0 = half.minZ() + m;
-            double z1 = half.maxZ() + 1 - m;
-            double keep = RING_GAP + level.radius() + 2;
-            int older = rings.size() - 2;
-            for (double s = 0; s < ROOM_WALK; s += 2) {
-                double px = from.x() + u[0] * s;
-                double pz = from.z() + u[1] * s;
-                if (px < x0 || px > x1 || pz < z0 || pz > z1) {
-                    return s;
-                }
-                for (int j = 0; j < rings.size(); j++) {
-                    Ring o = rings.get(j);
-                    double ox = o.x() - px;
-                    double oz = o.z() - pz;
-                    double near = j < older ? LANE_GAP : keep;
-                    if (o != from && ox * ox + oz * oz < near * near) {
-                        return s;
-                    }
-                }
-                for (int j = 0; j < older; j++) {
-                    double[] la = j == 0 ? tower.launch() : rings.get(j - 1).centre();
-                    if (groundDistance(la, rings.get(j).centre(), px, pz) < LANE_GAP) {
-                        return s;
-                    }
-                }
-                if (groundBoxDistance(px, pz, tower.platform()) < TOWER_GAP
-                        || groundBoxDistance(px, pz, tower.board()) < TOWER_GAP) {
-                    return s;
-                }
-            }
-            return ROOM_WALK;
         }
 
         // ---- from rings to a plan ---------------------------------------------------------------
@@ -1333,6 +1153,446 @@ public final class RingsPlanner implements Planner {
             summary.add("seed " + GenSeed.shortHex(in.seed()) + ", " + (restarts + 1) + " start(s), " + work + " work");
             return Plan.of(slot.id(), ALGO, in.seed(), in.half(), palette, ops, signs, keepClear,
                     new PlannedTrial(course, refMs), summary, work);
+        }
+    }
+
+    // ---- the route: the ground plan, before any height -------------------------------------------
+
+    /**
+     * The ring's facing for a flight along {@code yawIn}: the nearer axis, and on an exact diagonal the way the
+     * course winds.
+     */
+    static RingShape.Normal facing(double yawIn, int winding) {
+        double[] d = dir(yawIn);
+        if (Math.abs(Math.abs(d[0]) - Math.abs(d[1])) < 1e-9) {
+            double[] next = dir(yawIn + winding * 45.0);
+            return RingShape.normalFor(next[0], next[1]);
+        }
+        return RingShape.normalFor(d[0], d[1]);
+    }
+
+    /** The shortest a leg of this kind runs across the ground: a climb's and a level leg's never under 90. */
+    static int legLo(Level level, LegKind kind) {
+        return switch (kind) {
+            case LIFT -> Math.max(level.legMin(), LIFT_LEG_MIN);
+            case FLAT -> Math.max(level.legMin(), FLAT_MIN);
+            default -> level.legMin();
+        };
+    }
+
+    /** The longest a leg of this kind runs across the ground. */
+    static int legHi(Level level, LegKind kind) {
+        return switch (kind) {
+            case LIFT -> Math.min(level.legMax(), LIFT_LEG_MAX);
+            case FLAT -> Math.min(level.legMax(), FLAT_MAX);
+            default -> level.legMax();
+        };
+    }
+
+    /**
+     * The height to keep in hand under each ring for the legs after it: every later glide's least
+     * drop (its length over the tier's slow ratio) and level leg's most, less every later climb's
+     * least rise, never below 0 (a climb ahead pays for the drops after it). {@code lengths[k]} is
+     * the leg out of ring k across the ground. A course whose ring 1 stands this high over the floor
+     * + 16 can always be given heights.
+     */
+    static int[] reserve(Level level, LegKind[] kinds, double[] lengths) {
+        int[] out = new int[level.rings()];
+        for (int k = level.rings() - 2; k >= 0; k--) {
+            out[k] = Math.max(0, out[k + 1] + switch (kinds[k]) {
+                case GLIDE -> (int) Math.ceil(lengths[k] / level.slow() - 1e-9);
+                case FLAT -> FLAT_DROP;
+                case LIFT -> -level.upMin();
+            });
+        }
+        return out;
+    }
+
+    /**
+     * A course's ground plan, drawn whole before any height from {@code fork("route")}: a square
+     * spiral of lanes, worked out as if the tower stood on the half's west side ({@code u} east from
+     * the half's west edge, {@code v} south from its north edge, so the course turns right) and
+     * mirrored by the search for a tower on the east side.
+     *
+     * <p>Lane 0 runs north from ring 1 along the tower's line. Lanes 1 to 3 run east, south and west
+     * at most {@link #OUTER_SLACK} inside the ring-centre inset, and every later lane between
+     * {@link #LANE_GAP} + 2 and {@link #LANE_GAP} + {@link #LANE_SLACK} inside the lane four before
+     * it, so the course spirals inward and every lane keeps a lane's width from the loop outside it.
+     * Along a lane the legs run straight. Where it meets the next lane's line the course corners: a
+     * first leg 10 to 45 degrees off the lane (the dice pick how sharp, which decides how far the
+     * corner reaches), then as sharp as the tier allows, through a leg that runs exactly diagonally
+     * (where the ring's facing swaps) on to 90, half the tier's turn into a climb. Every leg's length
+     * is drawn in its kind's band, then all of a lane's lengths are shifted together so the corner
+     * lands on the next lane's line; of the ways to get there, the ones whose legs average nearest
+     * {@link #ROUTE_LENGTH} over the course's legs are tried first, so the spiral holds them all.
+     *
+     * <p>Lanes are searched depth first: a lane with no way on to a next one sends the search back to
+     * try the lane before it with other dice, up to {@link #ROUTE_NODES} lanes. When the legs run out
+     * the course ends on whatever lane it has reached, in the spiral's inner part.
+     * Every ring keeps the rules across the ground the search checks again in three dimensions: its
+     * kind's length, the turn, the facing, inside the half with R + 8 round it, 48 from every ring and
+     * a lane's width from every leg but its own and their neighbours, every leg 8 from the tower; and
+     * the course is only kept when ring 1 stands high enough for the {@link RingsPlanner#reserve}.
+     * Pure, like the planner.
+     */
+    static final class Route {
+        private final Level level;
+        private final LegKind[] kinds;
+        private final GenRandom rng;
+        private final int sizeU;
+        private final int sizeV;
+        private final int rings;
+        /** R + EDGE: the least a ring's centre stands in from a side. */
+        private final int edge;
+        /** How far ring 1 stands over the floor + 16: what the heights may spend. */
+        private final int budget;
+        /** The leg length the search steers toward. */
+        private final double target;
+        private final double[] launch;
+        private final Box platform;
+        private final Box board;
+        /** Ring k's centre block across the ground, the yaw of the leg into it and its facing, for the rings so far. */
+        final int[] u;
+        final int[] v;
+        final double[] yaw;
+        final RingShape.Normal[] normal;
+        int count;
+        /** Lanes tried and rings placed, the planner's work. */
+        long work;
+        private int lanes;
+
+        Route(Level level, LegKind[] kinds, int sizeU, int sizeV, int budget, GenRandom rng) {
+            this.level = level;
+            this.kinds = kinds;
+            this.rng = rng;
+            this.sizeU = sizeU;
+            this.sizeV = sizeV;
+            this.budget = budget;
+            rings = level.rings();
+            edge = level.radius() + EDGE;
+            target = Math.max(level.legMin() + 8, Math.min(level.legMax(), ROUTE_LENGTH / (rings - 1.0)));
+            int tu = TOWER_INSET;
+            int tv = sizeV - 1 - TOWER_SOUTH;
+            platform = new Box(tu - 2, 0, tv - 2, tu + 2, 0, tv + 2);
+            board = new Box(tu, 0, tv - 5, tu, 0, tv - 3);
+            launch = new double[]{tu + 0.5, 0, tv + 0.5 - LAUNCH};
+            u = new int[rings];
+            v = new int[rings];
+            yaw = new double[rings];
+            normal = new RingShape.Normal[rings];
+            u[0] = tu;
+            v[0] = tv - 5 - FIRST_AHEAD;
+            yaw[0] = 180;
+            normal[0] = RingShape.Normal.Z;
+            count = 1;
+        }
+
+        /** Draws the whole route; false when the search ran out of lanes to try. */
+        boolean plan() {
+            List<Integer> insets = new ArrayList<>();
+            insets.add(TOWER_INSET);
+            return lane(0, 0, false, insets);
+        }
+
+        /** Every leg's length across the ground: {@code lengths()[k]} is the leg out of ring k. */
+        double[] lengths() {
+            double[] out = new double[rings - 1];
+            for (int k = 0; k + 1 < rings; k++) {
+                out[k] = Math.hypot(u[k + 1] - u[k], v[k + 1] - v[k]);
+            }
+            return out;
+        }
+
+        /** A way along a lane and round its corner: straight legs, then the corner's angles, lo..hi ahead. */
+        private record Way(int straight, double[] turns, double lo, double hi, double key) {
+        }
+
+        /**
+         * Lane {@code i} from ring {@code k} on its line (just after a corner when {@code cornered}),
+         * every later lane too; {@code insets} holds every lane's line so far, as an inset from its side.
+         */
+        private boolean lane(int i, int k, boolean cornered, List<Integer> insets) {
+            lanes++;
+            work++;
+            if (lanes > ROUTE_NODES) {
+                return false;
+            }
+            if (k >= rings - 1) {
+                return reserve(level, kinds, lengths())[0] <= budget;
+            }
+            double heading = (180 + 90 * i) % 360;
+            int side = (i + 1) % 4;
+            int insetLo;
+            int insetHi;
+            if (i < 3) {
+                insetLo = edge + 1;
+                insetHi = edge + OUTER_SLACK;
+            } else {
+                int base = insets.get(i - 3);
+                insetLo = base + (int) LANE_GAP + 2;
+                insetHi = base + (int) LANE_GAP + LANE_SLACK;
+            }
+            double aheadLo = ahead(side, k, insetHi);
+            double aheadHi = ahead(side, k, insetLo);
+            List<Way> ways = new ArrayList<>();
+            double straightLo = 0;
+            double straightHi = 0;
+            for (int straight = 0; k + straight < rings - 1 && straightLo <= aheadHi; straight++) {
+                int j = k + straight;
+                // just round a corner, the first leg runs along the new lane
+                if (straight > 0 || !cornered) {
+                    for (int first = 2 * HEADING_STEP; first <= 45; first += HEADING_STEP) {
+                        double[] turns = corner(j, first);
+                        if (turns == null) {
+                            continue;
+                        }
+                        double lo = straightLo;
+                        double hi = straightHi;
+                        double legs = straight;
+                        for (int t = 0; t < turns.length; t++) {
+                            double c = StrictMath.cos(StrictMath.toRadians(turns[t]));
+                            lo += legLo(level, kinds[j + t]) * c;
+                            hi += legHi(level, kinds[j + t]) * c;
+                            legs += c;
+                        }
+                        double from = Math.max(aheadLo, lo);
+                        double to = Math.min(aheadHi, hi);
+                        if (from <= to) {
+                            double key = Math.abs((from + to) / 2 / legs - target) + rng.nextDouble(0, WAY_NOISE);
+                            ways.add(new Way(straight, turns, from, to, key));
+                        }
+                    }
+                }
+                straightLo += legLo(level, kinds[j]);
+                straightHi += legHi(level, kinds[j]);
+            }
+            ways.sort(java.util.Comparator.comparingDouble(Way::key));
+            int mark = count;
+            for (int w = 0; w < Math.min(WAYS_TRIED, ways.size()); w++) {
+                Way way = ways.get(w);
+                for (int n = 0; n < ROUTE_SAMPLES; n++) {
+                    if (lay(k, heading, way.straight(), way.turns(), rng.nextDouble(way.lo(), way.hi()))) {
+                        int got = inset(side, count - 1);
+                        if (got >= insetLo - 3 && got <= insetHi + 3) {
+                            insets.add(got);
+                            if (lane(i + 1, count - 1, true, insets)) {
+                                return true;
+                            }
+                            insets.remove(insets.size() - 1);
+                        }
+                    }
+                    count = mark;
+                    if (lanes > ROUTE_NODES) {
+                        return false;
+                    }
+                }
+            }
+            // the ending: when every leg left fits straight on, the course runs out along this lane
+            double left = 0;
+            for (int j = k; j < rings - 1; j++) {
+                left += legLo(level, kinds[j]);
+            }
+            if (left <= ahead(side, k, edge)) {
+                for (int n = 0; n < ROUTE_SAMPLES; n++) {
+                    if (lay(k, heading, rings - 1 - k, new double[0], Double.NaN)
+                            && reserve(level, kinds, lengths())[0] <= budget) {
+                        return true;
+                    }
+                    count = mark;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * A corner's angles off the lane, from the leg out of ring {@code j}: the first {@code first}
+         * degrees, then each as sharp as the tier allows (half that into a climb), stopping at 45
+         * until a leg runs exactly diagonally, then on to 90; the leg that reaches 90 runs along the
+         * next lane and isn't the corner's. {@code null} when the first is too sharp for its leg or
+         * the course ends before the corner does.
+         */
+        private double[] corner(int j, double first) {
+            List<Double> out = new ArrayList<>();
+            double a = 0;
+            for (int i = j; i < rings - 1; i++) {
+                int step = step(kinds[i]);
+                if (i == j) {
+                    if (first > step) {
+                        return null;
+                    }
+                    a = first;
+                } else {
+                    a = a < 45 - 1e-9 ? Math.min(45, a + step) : Math.min(90, a + step);
+                }
+                if (a >= 90 - 1e-9) {
+                    double[] turns = new double[out.size()];
+                    for (int t = 0; t < turns.length; t++) {
+                        turns[t] = out.get(t);
+                    }
+                    return turns;
+                }
+                out.add(a);
+            }
+            return null;
+        }
+
+        /** The most a leg of this kind may turn at the ring it leaves. */
+        private int step(LegKind kind) {
+            return kind == LegKind.LIFT ? level.maxTurn() / 2 : level.maxTurn();
+        }
+
+        /**
+         * Lays the legs out of ring {@code k}: {@code straight} along the lane, then the corner's;
+         * lengths drawn in their bands and shifted together so they reach {@code ahead} along the lane
+         * (any length when it is NaN). False as soon as a ring breaks a rule.
+         */
+        private boolean lay(int k, double heading, int straight, double[] turns, double ahead) {
+            int legs = straight + turns.length;
+            double[] f = new double[legs];
+            for (int s = 0; s < legs; s++) {
+                f[s] = rng.nextDouble();
+            }
+            double shift = 0;
+            if (!Double.isNaN(ahead)) {
+                double lo = -1;
+                double hi = 1;
+                for (int it = 0; it < 40; it++) {
+                    double mid = (lo + hi) / 2;
+                    if (forward(k, straight, turns, f, mid) < ahead) {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                shift = lo;
+            }
+            for (int s = 0; s < legs; s++) {
+                double off = s < straight ? 0 : turns[s - straight];
+                if (!place(kinds[k + s], heading + off, length(kinds[k + s], f[s] + shift))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** How far along the lane the legs out of ring k reach with these draws and this shift. */
+        private double forward(int k, int straight, double[] turns, double[] f, double shift) {
+            double sum = 0;
+            for (int s = 0; s < f.length; s++) {
+                double off = s < straight ? 0 : turns[s - straight];
+                sum += length(kinds[k + s], f[s] + shift) * StrictMath.cos(StrictMath.toRadians(off));
+            }
+            return sum;
+        }
+
+        private double length(LegKind kind, double at) {
+            int lo = legLo(level, kind);
+            return lo + Math.max(0, Math.min(1, at)) * (legHi(level, kind) - lo);
+        }
+
+        /**
+         * The next ring, {@code length} along {@code want} from the last, on the nearest whole block
+         * that keeps the leg in its band, its turn and its facing (an exact diagonal stays exact);
+         * false when none does or the ring breaks a rule across the ground.
+         */
+        private boolean place(LegKind kind, double want, double length) {
+            work++;
+            int lo = legLo(level, kind);
+            int hi = legHi(level, kind);
+            double d = Math.max(lo + 0.6, Math.min(hi - 0.6, length));
+            int p = count - 1;
+            double[] w = dir(want);
+            List<int[]> offsets = new ArrayList<>();
+            if (Math.abs(((want % 90) + 90) % 90 - 45) < 1e-9) {
+                int g = (int) Math.round(d / Math.sqrt(2));
+                for (int dg : new int[]{0, -1, 1}) {
+                    offsets.add(new int[]{(int) Math.signum(w[0]) * (g + dg), (int) Math.signum(w[1]) * (g + dg)});
+                }
+            } else {
+                double ix = w[0] * d;
+                double iz = w[1] * d;
+                int bx = (int) Math.round(ix);
+                int bz = (int) Math.round(iz);
+                for (int a = -2; a <= 2; a++) {
+                    for (int b = -2; b <= 2; b++) {
+                        offsets.add(new int[]{bx + a, bz + b});
+                    }
+                }
+                offsets.sort(java.util.Comparator.comparingDouble(o -> Math.hypot(o[0] - ix, o[1] - iz)));
+            }
+            for (int[] o : offsets) {
+                double len = Math.hypot(o[0], o[1]);
+                if (len < lo - 1e-9 || len > hi + 1e-9) {
+                    continue;
+                }
+                double y = RingsPlanner.yaw(o[0], o[1]);
+                if (Math.abs(turn(yaw[p], y)) > step(kind) + 1e-9) {
+                    continue;
+                }
+                double[] uy = dir(y);
+                if (RingShape.offNormal(uy[0], uy[1], normal[p]) > level.maxOffNormal() + 1e-9) {
+                    continue;
+                }
+                u[count] = u[p] + o[0];
+                v[count] = v[p] + o[1];
+                yaw[count] = y;
+                normal[count] = facing(y, 1);
+                count++;
+                return fits(count - 1);
+            }
+            return false;
+        }
+
+        /**
+         * Ring k across the ground: inside the half, 48 from every ring, a lane's width from older legs and
+         * rings, its leg clear of the tower.
+         */
+        private boolean fits(int k) {
+            if (u[k] < edge || u[k] > sizeU - 1 - edge || v[k] < edge || v[k] > sizeV - 1 - edge) {
+                return false;
+            }
+            double[] a = centre(k - 1);
+            double[] b = centre(k);
+            for (int j = 0; j < k; j++) {
+                double[] o = centre(j);
+                if (Math.hypot(o[0] - b[0], o[2] - b[2]) < RING_GAP) {
+                    return false;
+                }
+                if (j < k - 2 && groundDistance(a, b, o[0], o[2]) < LANE_GAP) {
+                    return false;
+                }
+            }
+            for (int j = 0; j < k - 1; j++) {
+                double[] la = j == 0 ? launch : centre(j - 1);
+                if (groundDistance(la, centre(j), b[0], b[2]) < LANE_GAP) {
+                    return false;
+                }
+            }
+            return boxDistance(a, b, platform) >= TOWER_GAP && boxDistance(a, b, board) >= TOWER_GAP;
+        }
+
+        private double[] centre(int k) {
+            return new double[]{u[k] + 0.5, 0, v[k] + 0.5};
+        }
+
+        /** Ring k's inset from side {@code side} (0 west, 1 north, 2 east, 3 south). */
+        private int inset(int side, int k) {
+            return switch (side) {
+                case 0 -> u[k];
+                case 1 -> v[k];
+                case 2 -> sizeU - 1 - u[k];
+                default -> sizeV - 1 - v[k];
+            };
+        }
+
+        /** How far ahead of ring k, toward side {@code side}, the line {@code inset} in from it is. */
+        private double ahead(int side, int k, int inset) {
+            return switch (side) {
+                case 0 -> u[k] - inset;
+                case 1 -> v[k] - inset;
+                case 2 -> sizeU - 1 - inset - u[k];
+                default -> sizeV - 1 - inset - v[k];
+            };
         }
     }
 

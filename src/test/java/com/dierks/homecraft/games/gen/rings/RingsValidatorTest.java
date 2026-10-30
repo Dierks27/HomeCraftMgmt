@@ -1,10 +1,12 @@
 package com.dierks.homecraft.games.gen.rings;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
+import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.trial.Course;
 import org.junit.jupiter.api.Test;
 
@@ -85,11 +87,21 @@ class RingsValidatorTest {
                 p.summary(), p.work());
     }
 
-    /** The plan with the legs' kinds {@code legs}, the need made again from them and {@code rockets}. */
+    /**
+     * The plan with the legs' kinds {@code legs}, the need made again from them and {@code rockets},
+     * the tower's sign saying that many, so only the legs themselves are wrong.
+     */
     private static Plan withLegs(Plan p, String legs, int rockets) {
         Course c = course(p);
         List<Integer> need = RingsPlanner.needList(RingsPlanner.need(RingsPlanner.kinds(legs)));
-        return withCourse(p, c.withElytra(new Course.Elytra(rockets, need, legs)), p.ops());
+        Plan relegged = withCourse(p, c.withElytra(new Course.Elytra(rockets, need, legs)), p.ops());
+        List<SignText> signs = new ArrayList<>();
+        for (SignText t : p.signs()) {
+            signs.add(t.lines().equals(GenCopy.ringsHow(c.elytra().rockets()))
+                    ? new SignText(t.x(), t.y(), t.z(), t.blockData(), GenCopy.ringsHow(rockets)) : t);
+        }
+        return Plan.of(p.slot(), p.algo(), p.seed(), p.half(), p.palette(), p.ops(), signs, p.keepClear(),
+                relegged.course(), p.summary(), p.work());
     }
 
     private static Plan withOps(Plan p, List<BlockOp> ops) {
@@ -113,10 +125,15 @@ class RingsValidatorTest {
     @Test
     void aRingLiftedAboveTheGlideLineIsRefused() throws GenFailed {
         Plan p = real("easy", 5);
-        // ring 5 ends leg 5, a glide on every profile (the first three legs and the fourth, a glide after any level leg)
-        Plan bad = moveRing(p, 4, 0, 5, 0, 8);
+        // ring 3 ends leg 3, a glide on every profile: lift it just over the 1-in-7 line from ring 2
+        List<Course.Mark> marks = new ArrayList<>(course(p).checkpoints());
+        Course.Mark from = marks.get(1);
+        Course.Mark ring = marks.get(2);
+        double across = Math.hypot(ring.x() - from.x(), ring.z() - from.z());
+        int up = (int) Math.ceil(from.y() - ring.y() - across / RingsPlanner.Level.EASY.slow()) + 1;
+        Plan bad = moveRing(p, 2, 0, up, 0, 8);
         List<String> problems = RingsValidator.problems(bad, "easy");
-        assertTrue(says(problems, "leg 5") && (says(problems, "under the glide line") || says(problems,
+        assertTrue(says(problems, "leg 3") && (says(problems, "under the glide line") || says(problems,
                 "doesn't descend")), "the leg into it no longer drops enough: " + problems);
     }
 
@@ -151,7 +168,7 @@ class RingsValidatorTest {
         Plan p = real("medium", 6);
         int k = firstLift(p);
         List<String> problems = RingsValidator.problems(recolour(p, k, Palette.RAINBOW.get(0)), "medium");
-        assertTrue(says(problems, "ring " + (k + 1)) && says(problems, "isn't one whole white"),
+        assertTrue(says(problems, "ring " + (k + 1)) && says(problems, "isn't one whole " + Palette.id(Palette.TOWER)),
                 "a climb's ring is white: " + problems);
     }
 

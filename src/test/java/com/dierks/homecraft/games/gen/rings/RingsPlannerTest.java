@@ -275,6 +275,93 @@ class RingsPlannerTest {
         }
     }
 
+    /**
+     * The ground plan on its own: most single searches find a route (a fresh start draws another), and
+     * every route found keeps its kinds' lengths, the turns (half into a climb) and the facing rule,
+     * stands inside the half, keeps 48 between rings and a lane's width between a ring and every leg
+     * but its own and their neighbours, sweeps round at least 300 x 300 of the square, and leaves
+     * ring 1 high enough for the heights to come.
+     */
+    @Test
+    void theRouteSpiralsInwardInsideItsRules() {
+        for (RingsPlanner.Level level : RingsPlanner.Level.values()) {
+            int found = 0;
+            int tries = 40;
+            int budget = 134;
+            for (long seed = 1; seed <= tries; seed++) {
+                com.dierks.homecraft.games.gen.api.GenRandom rng = new com.dierks.homecraft.games.gen.api.GenRandom(seed);
+                LegKind[] kinds = RingsPlanner.profile(level, rng.fork("profile"));
+                RingsPlanner.Route route = new RingsPlanner.Route(level, kinds, 512, 512, budget, rng.fork("route"));
+                if (!route.plan()) {
+                    continue;
+                }
+                found++;
+                String at = level + " seed " + seed + ": ";
+                assertEquals(level.rings(), route.count, at + "a ring for every ring");
+                int edge = level.radius() + RingsPlanner.EDGE;
+                double[][] c = new double[level.rings()][];
+                for (int k = 0; k < level.rings(); k++) {
+                    c[k] = new double[]{route.u[k] + 0.5, 0, route.v[k] + 0.5};
+                    assertTrue(route.u[k] >= edge && route.u[k] <= 511 - edge && route.v[k] >= edge
+                            && route.v[k] <= 511 - edge, at + "ring " + (k + 1) + " and R + 8 round it inside the half");
+                }
+                double minU = 512;
+                double maxU = 0;
+                double minV = 512;
+                double maxV = 0;
+                for (int k = 1; k < level.rings(); k++) {
+                    LegKind kind = kinds[k - 1];
+                    double d = Math.hypot(route.u[k] - route.u[k - 1], route.v[k] - route.v[k - 1]);
+                    assertTrue(d >= RingsPlanner.legLo(level, kind) - 1e-9 && d <= RingsPlanner.legHi(level, kind) + 1e-9,
+                            at + "leg " + (k + 1) + " (" + kind + ") is " + d + " across");
+                    int max = kind == LegKind.LIFT ? level.maxTurn() / 2 : level.maxTurn();
+                    assertTrue(Math.abs(RingsPlanner.turn(route.yaw[k - 1], route.yaw[k])) <= max + 1e-9,
+                            at + "the turn into leg " + (k + 1));
+                    double[] u = RingsPlanner.dir(route.yaw[k]);
+                    assertTrue(RingShape.offNormal(u[0], u[1], route.normal[k - 1]) <= level.maxOffNormal() + 1e-9,
+                            at + "leg " + (k + 1) + " leaves its ring within 45 of its facing");
+                    for (int j = 0; j < k; j++) {
+                        assertTrue(Math.hypot(c[j][0] - c[k][0], c[j][2] - c[k][2]) >= RingsPlanner.RING_GAP,
+                                at + "rings " + (j + 1) + " and " + (k + 1) + " are 48 apart");
+                    }
+                    for (int j = 1; j < k - 1; j++) {
+                        assertTrue(RingsPlanner.groundDistance(c[j - 1], c[j], c[k][0], c[k][2]) >= RingsPlanner.LANE_GAP,
+                                at + "ring " + (k + 1) + " keeps a lane's width from leg " + (j + 1));
+                    }
+                }
+                for (int k = 0; k < level.rings(); k++) {
+                    minU = Math.min(minU, route.u[k]);
+                    maxU = Math.max(maxU, route.u[k]);
+                    minV = Math.min(minV, route.v[k]);
+                    maxV = Math.max(maxV, route.v[k]);
+                }
+                assertTrue(maxU - minU >= 300 && maxV - minV >= 300, at + "it sweeps round the square: "
+                        + (maxU - minU) + " x " + (maxV - minV));
+                assertTrue(RingsPlanner.reserve(level, kinds, route.lengths())[0] <= budget,
+                        at + "ring 1 stands high enough for every leg's least drop");
+            }
+            assertTrue(found >= tries / 2, level + ": most searches find a route, " + found + " of " + tries);
+        }
+    }
+
+    /** The height kept in hand: nothing under the last ring, every glide's least drop, a climb's least rise back, never below 0. */
+    @Test
+    void theReserveKeepsRoomForEveryLegStillToCome() {
+        RingsPlanner.Level level = RingsPlanner.Level.EASY;
+        LegKind[] kinds = RingsPlanner.kinds("GGFGLGGGLGGFGLGGGLG");
+        double[] lengths = new double[kinds.length];
+        java.util.Arrays.fill(lengths, 100);
+        int[] reserve = RingsPlanner.reserve(level, kinds, lengths);
+        assertEquals(level.rings(), reserve.length, "a reserve under every ring");
+        assertEquals(0, reserve[level.rings() - 1], "nothing under the gold ring");
+        assertEquals(15, reserve[level.rings() - 2], "the last glide's least drop: 100 over 7, rounded up");
+        assertEquals(0, reserve[level.rings() - 3], "a climb ahead pays for it: 25 up, never below 0");
+        // from the tower: every glide's 15 and level leg's 3 less every climb's 25, up to the last climb
+        // (which pays for the last glide)
+        assertEquals(15 * 3 + 3 - 25 + 15 * 3 - 25 + 15 * 3 + 3 - 25 + 15 * 3, reserve[0],
+                "ring 1 keeps the most in hand");
+    }
+
     // ---- the same seed, the same layout -------------------------------------------------------
 
     @Test
@@ -292,9 +379,9 @@ class RingsPlannerTest {
     void goldenHashesPinThreeSeedsPerTier() throws GenFailed {
         // A change here means the planner makes different layouts: bump RingsPlanner.ALGO.
         String[][] golden = {
-                {"easy", "000000000000", "000000000000", "000000000000"},
-                {"medium", "000000000000", "000000000000", "000000000000"},
-                {"hard", "000000000000", "000000000000", "000000000000"},
+                {"easy", "2c11d71d504b", "40b83d4cab2b", "18a6a8a038c7"},
+                {"medium", "83f33d026c8c", "6ae15d778ad2", "cbaa4f92c3c4"},
+                {"hard", "4fecba54fbef", "be42de4eaa4e", "1451e9ffb469"},
         };
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
         for (String[] tier : golden) {
@@ -454,7 +541,11 @@ class RingsPlannerTest {
                 RingsPlanner.Level.HARD);
         assertEquals(List.of(20, 24, 26), tiers.stream().map(RingsPlanner.Level::rings).toList(), "rings per tier");
         assertEquals(List.of(8, 7, 6), tiers.stream().map(RingsPlanner.Level::radius).toList(), "ring radii");
-        assertEquals(List.of(30, 40, 45), tiers.stream().map(RingsPlanner.Level::maxTurn).toList(), "turns");
+        assertEquals(List.of(45, 45, 45), tiers.stream().map(RingsPlanner.Level::maxTurn).toList(),
+                "turns: the most the facing rule allows, so a corner fits the square");
+        assertEquals(List.of(80, 80, 80), tiers.stream().map(RingsPlanner.Level::legMin).toList(), "shortest legs");
+        assertEquals(List.of(120, 120, 120), tiers.stream().map(RingsPlanner.Level::legMax).toList(),
+                "longest legs: the square holds about 2,200 blocks of lanes");
         assertEquals(List.of(4, 5, 5), tiers.stream().map(RingsPlanner.Level::lifts).toList(), "climbs");
         assertEquals(List.of(2, 2, 4), tiers.stream().map(RingsPlanner.Level::flats).toList(), "level legs");
         assertEquals(List.of(6, 7, 9), tiers.stream().map(RingsPlanner.Level::need).toList(), "rockets needed");

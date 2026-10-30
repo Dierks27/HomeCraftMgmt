@@ -113,7 +113,7 @@ class PlanCodecTest {
     @Test
     void junkIsReportedAsUnreadableAndNeverThrows() throws Exception {
         assertUnreadable(null, "nothing stored");
-        for (int version : new int[]{PlanCodec.V1, PlanCodec.VERSION}) {
+        for (int version : new int[]{PlanCodec.V1, PlanCodec.VERSION, PlanCodec.V3}) {
             junkOf(version);
         }
     }
@@ -129,10 +129,10 @@ class PlanCodecTest {
         wrongMagic[0] = 'X';
         assertUnreadable(gzip(wrongMagic), "the wrong magic");
         byte[] newer = payload.clone();
-        newer[4] = PlanCodec.VERSION + 1;
-        PlanCodec.Read v3 = PlanCodec.decode(gzip(newer));
-        assertFalse(v3.ok(), "a newer format is never guessed at");
-        assertTrue(v3.problem().contains("format " + (PlanCodec.VERSION + 1)), "and says which: " + v3.problem());
+        newer[4] = PlanCodec.V3 + 1;
+        PlanCodec.Read v4 = PlanCodec.decode(gzip(newer));
+        assertFalse(v4.ok(), "a newer format is never guessed at");
+        assertTrue(v4.problem().contains("format " + (PlanCodec.V3 + 1)), "and says which: " + v4.problem());
         byte[] older = payload.clone();
         older[4] = 0;
         assertUnreadable(gzip(older), "a format before the first");

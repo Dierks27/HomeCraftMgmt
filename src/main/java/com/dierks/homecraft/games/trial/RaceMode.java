@@ -260,7 +260,7 @@ final class RaceMode {
         TrialRun run = new TrialRun(p.getUniqueId(), warm ? rr.base : raced, false, 0);
         run.race = rr;
         trials.replaceRun(run);
-        trials.giveKit(p, run.course.kind(), run.fromClub);
+        trials.giveKit(p, run.course, run.fromClub);
         p.setFallDistance(0f);
         inRace(p, rr);
         if (run.course.kind() == TrialKind.BOAT) {
@@ -346,7 +346,10 @@ final class RaceMode {
         }
     }
 
-    /** On the grid: held still until the shared go tick, 3-2-1, then every clock starts at one instant. */
+    /**
+     * On the grid: held still until the shared go tick, 3-2-1, then every clock starts at one instant, every Sky
+     * Rings racer on the whole rocket budget.
+     */
     private void grid(Player p, TrialRun run, long now) {
         RaceRun rr = run.race;
         boolean boat = run.course.kind() == TrialKind.BOAT;
@@ -378,6 +381,7 @@ final class RaceMode {
         run.goNanos = System.nanoTime(); // their own Go: later than the shared one for a racer released late
         run.phase = TrialRun.Phase.RUNNING;
         rr.started();
+        trials.fullRockets(p, run.course); // Sky Rings: every racer goes on the whole budget
         TimeTrials.title(p, "&aGo!", "", 15);
         TimeTrials.ping(p, 2.0f);
         trials.watch(p, run);
@@ -563,7 +567,10 @@ final class RaceMode {
         }
     }
 
-    /** {@code TimeTrials.regrid}: the next race (or the end of the shared warm-up), a new boat on the spot. */
+    /**
+     * {@code TimeTrials.regrid}: the next race (or the end of the shared warm-up), a new boat on the spot, and on
+     * Sky Rings the whole rocket budget again.
+     */
     void regrid(Player p, Course raced, Course.Spot grid) {
         TrialRun old = p == null ? null : trials.run(p.getUniqueId());
         if (old == null || old.race == null || old.race.ended || raced == null) {
@@ -587,6 +594,7 @@ final class RaceMode {
         run.warmupUsed = old.warmupUsed;
         trials.replaceRun(run);
         trials.move(p, run, new Location(w, spot.x(), spot.y(), spot.z(), spot.yaw(), spot.pitch()));
+        trials.fullRockets(p, raced); // Sky Rings: the warm-up's (or the last race's) flying never carries
     }
 
     /** {@code TimeTrials.endRace}: home with their things, reading {@code line}, on the next trial tick. */

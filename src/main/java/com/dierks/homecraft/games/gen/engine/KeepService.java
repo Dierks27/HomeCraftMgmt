@@ -877,11 +877,15 @@ final class KeepService {
     /**
      * Why a course whose half is {@code half} can't be kept: it doesn't fit a plot (pinned at 144 x 176 x
      * 336, {@link KeepArea#fits}). A Mountain Run v2 (an ice boat course bigger than a plot) says so in the
-     * owner's words: it stays in the archive and on its boards (MOUNTAIN-V2-SPEC D6).
+     * owner's words: it stays in the archive and on its boards (MOUNTAIN-V2-SPEC D6). So does a Sky Rings v3
+     * course (a 512 x 176 x 512 loop); an older Sky Rings course still fits, so it never gets here.
      */
     static String tooBig(Slots.Def def, Box half) {
         if (def != null && Slots.BOAT.equals(def.generator())) {
             return "Mountain Run v2 courses are too big to keep; they stay in the archive";
+        }
+        if (def != null && Slots.RINGS.equals(def.generator())) {
+            return "Sky Rings courses are too big to keep; they stay in the archive";
         }
         return "it doesn't fit a plot (its area is " + (half == null ? "?" : half.sizeX() + " x " + half.sizeY() + " x "
                 + half.sizeZ()) + "; a plot holds " + (KeepArea.PLOT_X - 2 * KeepArea.MARGIN) + " x " + KeepArea.PLOT_Y

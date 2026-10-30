@@ -116,6 +116,9 @@ public final class DropperText {
         return bonks <= 0 ? "&aNo bonks - perfect drop!" : "&eBonks: " + bonks;
     }
 
+    /** After the bonk line when a gold time earned 2 stars: on a Hard dropper the third star needs a clean run. */
+    public static final String GOLD_BUT_BONK = "&7Gold time, but a bonk: 3 stars on a Hard dropper need a clean run.";
+
     /** "1 bonk", "2 bonks". */
     public static String bonkCount(int n) {
         return n + (n == 1 ? " bonk" : " bonks");
@@ -138,7 +141,7 @@ public final class DropperText {
         java.util.List<String> out = new java.util.ArrayList<>(List.of(OFFER_TITLE, OFFER_SUBTITLE, OFFER, OFFER_BAR,
                 PRACTICE_ITEM, STRAIGHT_ITEM, TIMED_ITEM, PRACTICE_TITLE, PRACTICE_SUBTITLE, PRACTICE_BAR,
                 PRACTICE_SPLASH, PRACTICE_BONK, PRACTICE_SKIPPED, BACK_ITEM, TIP, CLOCK_RULE, PRACTICE_ON_START,
-                START_WITH_PRACTICE, BONK_TITLE, SPLASH_TITLE, DropperLayout.GEOMETRY_REFUSED));
+                START_WITH_PRACTICE, BONK_TITLE, SPLASH_TITLE, GOLD_BUT_BONK, DropperLayout.GEOMETRY_REFUSED));
         out.addAll(PRACTICE_LORE);
         out.addAll(STRAIGHT_LORE);
         out.addAll(TIMED_LORE);

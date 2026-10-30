@@ -33,10 +33,12 @@ import java.util.Objects;
  * @param rev         the layout version: every geometry edit bumps it (R2.15)
  * @param gen         Fresh Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
  *                    for a hand-built one, which behaves exactly as it always did
+ * @param elytra      Sky Rings' rocket budget, or {@code null} for an elytra course that hands out
+ *                    rockets the old way (3, back to 3 at every ring) and for every other kind
  */
 public record Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start,
                      List<Mark> checkpoints, Mark finish, Double fallY, Integer minSeconds, boolean enabled,
-                     boolean pinned, int rev, GenTag gen) {
+                     boolean pinned, int rev, GenTag gen, Elytra elytra) {
 
     /** Radii are kept in this range whatever the builder types. */
     public static final double MIN_RADIUS = 0.5;
@@ -70,6 +72,22 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         }
     }
 
+    /**
+     * Sky Rings' rocket budget: {@code rockets} handed out for the whole run and none at the rings;
+     * {@code need} is how many the rest of the course still needs, from the tower ({@code need.get(0)})
+     * and from each ring ({@code need.get(k)} from ring k, 1-based; the finish's 0 is left out), so a
+     * reset tops a player up to that and never above it; {@code legs} is one letter per checkpoint,
+     * the kind of the leg into it after ring 1 and on: {@code G} a glide, {@code L} a climb (a white
+     * ring: one rocket, nose up), {@code F} a level leg (fast or one rocket).
+     */
+    public record Elytra(int rockets, List<Integer> need, String legs) {
+
+        public Elytra {
+            need = List.copyOf(need == null ? List.of() : need);
+            legs = legs == null ? "" : legs;
+        }
+    }
+
     public Course {
         name = name == null ? "" : name;
         world = world == null ? "" : world;
@@ -78,10 +96,17 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         rev = Math.max(1, rev);
     }
 
+    /** A generated course without a rocket budget: the constructor every course had before Sky Rings v3. */
+    public Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start, List<Mark> checkpoints,
+                  Mark finish, Double fallY, Integer minSeconds, boolean enabled, boolean pinned, int rev, GenTag gen) {
+        this(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned, rev, gen, null);
+    }
+
     /** A hand-built course (no {@code gen} tag): the constructor every course had before Fresh Courses. */
     public Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start, List<Mark> checkpoints,
                   Mark finish, Double fallY, Integer minSeconds, boolean enabled, boolean pinned, int rev) {
-        this(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned, rev, null);
+        this(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned, rev, null,
+                null);
     }
 
     /** A brand-new course: a name from its id, nothing placed yet, closed. */
@@ -183,27 +208,27 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
 
     public Course withName(String n) {
         return new Course(id, kind, n, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withTier(Tier t) {
         return new Course(id, kind, name, t, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withWorld(String w) {
         return new Course(id, kind, name, tier, w, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withStart(Spot s) {
         return new Course(id, kind, name, tier, world, s, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withCheckpoints(List<Mark> list) {
         return new Course(id, kind, name, tier, world, start, list, finish, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     /** One more checkpoint at the end. */
@@ -225,37 +250,43 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
 
     public Course withFinish(Mark f) {
         return new Course(id, kind, name, tier, world, start, checkpoints, f, fallY, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withFallY(Double y) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, y, minSeconds, enabled, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withMinSeconds(Integer s) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, s, enabled, pinned, rev, gen);
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, s, enabled, pinned, rev, gen, elytra);
     }
 
     public Course withEnabled(boolean on) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, on, pinned,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withPinned(boolean on) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, on,
-                rev, gen);
+                rev, gen, elytra);
     }
 
     public Course withRev(int r) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                r, gen);
+                r, gen, elytra);
     }
 
     /** The same course with Fresh Courses' tag ({@code null}: hand-built). */
     public Course withGen(GenTag g) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev, g);
+                rev, g, elytra);
+    }
+
+    /** The same course with Sky Rings' rocket budget ({@code null}: rockets the old way). */
+    public Course withElytra(Elytra e) {
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
+                rev, gen, e);
     }
 
     private static boolean listed(Collection<String> worlds, String world) {

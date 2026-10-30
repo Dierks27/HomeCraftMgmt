@@ -11,13 +11,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A ring's blocks (GEN-SPEC §4.2): a one-block-thick voxel circle round its centre, upright and
- * square to x or z, with a clear hole 2R − 1 wide, facing whichever axis is nearer the flight.
+ * square to x or z, with a clear hole 2R − 1 wide, facing whichever axis is nearer the flight; at
+ * every radius a tier uses, 4 to 8.
  */
 class RingShapeTest {
 
     @Test
     void aRingIsAVoxelCircleInOnePlane() {
-        for (int r = 4; r <= 6; r++) {
+        for (int r = 4; r <= 8; r++) {
             for (RingShape.Normal n : RingShape.Normal.values()) {
                 List<int[]> v = RingShape.voxels(100, 200, 300, r, n);
                 Set<String> seen = new HashSet<>();
@@ -55,7 +56,7 @@ class RingShapeTest {
 
     @Test
     void theHoleIsTwoRMinusOneWide() {
-        for (int r = 4; r <= 6; r++) {
+        for (int r = 4; r <= 8; r++) {
             int open = 0;
             for (int u = -r; u <= r; u++) {
                 if (!RingShape.inFrame(u, 0, r) && Math.abs(u) < r) {

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.4-golem-and-clubhouse`
+- **Version:** `0.38.5-sky-loop-and-long-drop`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -235,6 +235,25 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.4 from 0.38.5:** **first set `games.fresh.slots.fresh_dropper.mix` back to `EEMMH`** in
+config.yml: 0.38.4 refuses a mix with an X ("a dropper mix is 1-5 of E, M and H") and would switch the
+Dropper off with a WARN until the file is fixed by hand (the Easy Dropper is not affected; a mix set with
+`/hcm games gen mix` that holds an X is simply not used there, and the file's mix is). Then the jar
+alone (0.38.4 reads revision 25 and runs nothing, with one WARN; 0.38.5 changes no schema), with one
+more WARN that `stars.rings` is not a games setting, which it ignores. 0.38.4 sees the 512 x 176 x 512
+Sky Rings halves and the 144-tall halves of the Dropper and Classic Dropper as areas whose size changed:
+it empties them by itself (pools drained first, only the plugin's own blocks) and builds each again at
+its old size. Classic Sky Rings stays at `[1760, 128, 3328]`, read as a spot you set yourself, at the
+old 128 x 176 x 320 size: leave it there, because that is where 0.38.5 wants it again (moved back to
+`[6080, 128, 4992]` it would be too close to the big Sky Rings after the upgrade, and switched off).
+Sky Rings courses archived by 0.38.5 can't be recalled there (0.38.4 can't read how they are stored)
+and Long Drop Droppers don't fit its Classic Dropper: both are refused and stay in the archive. **When
+you upgrade again, set the mix back to `EEMHX`** (in the file before the start, or `/hcm games gen mix
+fresh_dropper EEMHX` and a reroll after it): revision 25 has already run on this file and doesn't run
+twice, so otherwise the Dropper stays EEMMH, with no Long Drop and no WARN. The big areas come back by
+themselves. Each way, the rebuilt Sky Rings and Dropper are new courses with fresh boards; nothing is
+deleted.
 
 **Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it; 0.38.3 has no
 unknown-section check at the top level, so the new `golem` section is simply ignored there, without
@@ -2238,8 +2257,9 @@ Easy, Medium, Hard and "Why did we build this?".
   your best, this week's best, the record and who holds it, what it pays, and Start.
 - **A run.** You arrive at the start line (from 0.38.3 by way of the Clubhouse first, see [The
   Clubhouse](#the-clubhouse)) with only the course kit: Back to checkpoint and Leave
-  game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
-  ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
+  game (click twice), plus a worn elytra and the course's rockets on an elytra course (Sky Rings: 8
+  for the whole run, none at the rings; a hand-built course: 3, back to 3 at every ring), or a boat
+  of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
   finish. On a Fresh Courses parkour course a checkpoint counts with your feet up on its pad, not
   while falling past it or under it (0.37.1). From 0.37.3 the feet must be over the pad itself too:
@@ -2578,8 +2598,9 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 
 Right after the 04:00 restart, the plugin builds a new set of courses by itself: **Easy Parkour,
 Parkour and Hard Parkour** (three courses, each with its own board), **Sky Rings** (an elytra course:
-fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes of four lengths,
-par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
+a 1-2 minute loop round a huge square of sky through 20 rings with 8 rockets to spend; a white ring
+means climb; a rainbow ring is a glide or a level leg, fast or one rocket), **Golf of the Week** (9
+holes of four lengths, par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
 (see "Golf v4" below), and two droppers, **Easy Dropper** and **Dropper** (see "The Dropper" below).
 **Ice Boat**, a 2-3 minute run down a whole mountain, the Winding Road or the Slalom (see "Ice Boat:
 the Mountain Run" below), ships switched off. By default a new set goes up **every Monday** and stays all week;
@@ -2621,10 +2642,13 @@ next. That's all.
 **Where they are.** In your existing Games world (`games.fresh.world: ""` means the first of
 `games.worlds`), far from spawn and high in the sky. Everything the games build stands in x
 1760-9599, z 2880-10367, y 96-303: the courses and the Classics in two columns (x 6080 and x 7488,
-z 4096-7967), Golf of the Week and Classic Golf in a column of their own (x 8768-9599, z 4096-5119,
-their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north of everything (x 6080-7615,
-z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640), the Clubhouse and Falling Floors
-south of them (z 8544), and the kept courses' plots to the west (from x 1760, z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
+z 4096-7967), Sky Rings' loop of sky at the top of the first (x 6080-7679, z 4096-4607, y 128-303:
+each half a 512 x 176 x 512 square), Golf of the Week and Classic Golf in a column of their own
+(x 8768-9599, z 4096-5119, their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north
+of everything (x 6080-7615, z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640),
+Classic Sky Rings to the west (x 1760-3359, z 3328-3839, the same size as Sky Rings'), the Clubhouse
+and Falling Floors south of them (z 8544), and the kept courses' plots to the west (from x 1760,
+z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
 course's own spare half included, so from any course players see only that course, whatever view
 distance the server uses (the server sends chunks up to its view distance plus one; 576 blocks is
 clear up to view distance 34, and Paper's largest is 32). Each course owns two halves 576 blocks
@@ -2728,9 +2752,21 @@ above).
 
 **When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
 224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
-2880), nothing is asked of you. Config revision 21 moves each shipped spot you never changed (the
-console: "Config migration: the bigger Golf v4 and Mountain Run v2 areas get their new spots (Golf of
-the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)"). An origin you set yourself stays, with one
+2880; Sky Rings v3: Sky Rings grows to 512 x 176 x 512 where it stands, at x 6080, z 4096, and Classic
+Sky Rings, the same size, moves west to x 1760, z 3328; the Long Drop: the Dropper and Classic Dropper
+grow to 64 x 144 x 16 at the same spot), nothing is asked of you. Config revisions 21 and 25 move each
+shipped spot you never changed (the console: "Config migration: the bigger Golf v4 and Mountain Run v2
+areas get their new spots (Golf of the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)", and "...
+the bigger Sky Rings areas get their new spots (Classic Sky Rings [6080, 128, 4992] -> [1760, 128,
+2880])"). Sky Rings itself keeps its spot: its old 128 x 176 x 320 course is emptied and the big loop
+is built over it, in 2-3 minutes after the restart ("fresh_rings's area changed with this version ...
+emptied by itself"). Config revision 25 also changes the Dropper's mix you never changed ("Config
+migration: the Dropper's shipped mix EEMMH becomes EEMHX (level 5 is the Long Drop)"; a mix of your own
+stays, with one WARN naming `/hcm games gen mix fresh_dropper EEMHX`; a mix set by that command wins
+over the file as always, and one with no X gets a WARN at each start naming the same command, so run it
+again if you want the Long Drop there), and the taller halves need
+no spot change: the Dropper is rebuilt where it stands, its old 64-tall area emptied first, pools
+before walls. An origin you set yourself stays, with one
 WARN naming it and the shipped spot, and the course grows in place there if it fits (`/hcm games
 check` says if it doesn't). A `half_gap: 32` that 0.35's layout wrote goes with its old spot; one beside
 0.36's spot is yours and stays, with one WARN (its spare half is then in sight: take `half_gap` out for
@@ -2756,7 +2792,7 @@ area is empty") and what is in the way of one; `/hcm games gen tidy <course> con
 guarded until the world has been saved twice (Paper's autosave, every 5 minutes by default) or the next
 start finds it still empty; only then is it let go. If the server is killed before that save, the old
 blocks come back with the world, and the next start empties them again (a WARN says so). If config.yml
-can't be written at the update (a read-only file, a full disk), those three areas stay where they were
+can't be written at the update (a read-only file, a full disk), the areas that update moves stay where they were
 built, closed, and nothing is built or emptied for them until it can: the console says why (SEVERE),
 and `/hcm games check` has a FAIL for each ("…: config.yml couldn't be saved at this update …", fix: "make
 config.yml writable (the SEVERE at the start says why it couldn't be saved), then restart; nothing is
@@ -2775,7 +2811,8 @@ status says "drain first").
   (and take out its `half_gap`, or set it to 576), `/hcm reload` and `/hcm games gen on <course>`: the
   new area is checked empty and the next course is built there.
 - **A Classic:** `/hcm games gen unrecall <classic> confirm` (it empties both halves once nobody is on
-  them) and wait for the console's "<classic>'s halves are empty" (status says "empty"). Then change
+  them) and wait for the console's "<classic>'s halves are empty" (status says "empty"). (Classic Sky
+  Rings' move west with Sky Rings v3 was the update's, not yours: nothing to do.) Then change
   `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm reload`: the console
   says "Its old halves were emptied first", and the next recall checks the new spot empty and is
   built there. Changed before its halves are empty, it WARNs and leaves the old halves as they are (a
@@ -2833,7 +2870,9 @@ every `origin`, `half_gap`, `keep.area`, `keep.plot_gap` and the Games worlds as
 lists them as kept).
 
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
-(both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
+(both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Sky Rings'
+expert time is 0.8 x the autopilot's own flown lap, and it has star factors of its own (`stars.rings`:
+gold 1.4, silver 2.0, so about 1:22 and 1:57 on easy). Golf: 3 at
 par or better, 2 within one stroke per three holes over par, 1 for finishing. Only a counted run
 earns stars. The first counted finish of each course in each set pays from `rewards`, about a token a
 minute of first-time play: weekly Easy 10, Parkour 15, Hard 20, Sky Rings 15, Golf of the Week 25,
@@ -2907,6 +2946,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[5, 10]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |
+| `fresh.stars.rings.gold` / `.silver` | 1.4 / 2.0 | Sky Rings' and Classic Sky Rings' own factors on every tier (their expert time is a flown lap, so easy's 2.0 / 3.0 gave every clean run three stars). Set them to 2.0 / 3.0 for easy's |
 | `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16). Move one by hand only (see "Moving an area by hand") |
 | `fresh.slots.<course>.half_gap` | not set (576) | Optional: blocks between a course's two halves along x (32-4096, a multiple of 16). 576 keeps the spare half, where the next course is built, out of sight; a server that built in 0.35 has `32` written |
 | `fresh.slots.fresh_boat.style` | `random` | Which Mountain Run v2 the Ice Boat makes: `random` (each week's own, the Winding Road or the Slalom, about half and half; the Winding Road every week while Race Night is on), `road` (always the Winding Road) or `slalom` (always the Slalom; Race Night then holds no night on it, and `/hcm games check` says so). Anything else: one WARN, random. A week already built keeps its style: a change counts from the next build (`/hcm games gen reroll fresh_boat confirm` makes one now) |
@@ -2979,7 +3019,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
 | `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts). A change drops a waiting pick: choose again |
-| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`). A change drops a waiting pick: choose again |
+| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHX`; a dropper may hold an X, the Long Drop, where its half is 144 tall: the Dropper's, not Easy Dropper's). A change drops a waiting pick: choose again |
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so). `pin <course> live` is refused, and nothing is pinned, when the course up now was made by an older planner (after an update: "... so it can't be made again after the update"); it stays until its set ends, and `/hcm games gen keep <course> current <new-id> confirm` keeps it for good. A typed seed that an archived set of an older planner was made from is pinned, with a warning: the pin makes a new course from that seed, and the reply says how to have the old one back as it was (`recall <code>`, or `keep`) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
@@ -3470,10 +3510,16 @@ and ride it instead.
 
 Two more Fresh Courses, new with every set and **shipped on** (like the others, they are built only once
 `games.fresh.enabled` is on): **Easy Dropper** (3 easy levels) and
-**Dropper** (5 levels, easy to hard). A level is a glass shaft in its own colour: step off a lime
+**Dropper** (5 levels, easy to the Long Drop). A level is a glass shaft in its own colour: step off a lime
 ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through the holes in the
 coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
-ringed with glowing sea lanterns ("follow the light") and the whole floor is water. A splash clears
+ringed with glowing sea lanterns ("follow the light") and the whole floor is water. The Dropper's
+levels 1-4 are E, E, M and H as before; its level 5 is **the Long Drop** (the letter X): 128 blocks
+straight down (2.7 times a Hard level's 48) through 8 unlit plates that arrive every 0.3 s, about half
+of them with one or two false holes beside the real one, and a hole line that keeps sliding sideways
+all the way to a 6-wide pool. Its sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the / way down!": keep
+steering to the water, because stopping over a hole you have just found usually puts you on the next
+plate. Expect bonks on a first visit; a clean run is a second- or third-visit thing. A splash clears
 the level ("Level 2! of 5 - keep going!") and a quarter of a second later you are on the next ledge;
 the last splash is the finish ("Splash! 0:21.4 · ★★★"). Landing on anything but water (the rim of a
 pool too, even with half of you over the water: only a body wholly over the water splashes) is a **bonk**:
@@ -3489,10 +3535,15 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   counted for the Weekly Cup, and its bonks don't count. One per run; `games.trials.warmup_seconds: 0`
   turns it off with the other warm-ups.
 - **Score and rewards:** the time from Go to the last splash, lower is better, on the set's board.
-  Stars use the mix's rounded tier (EEE is easy, EEMMH medium): 3-star times of about 20 s on Easy
-  Dropper and 27 s on the Dropper. First finish in a set: Easy Dropper 10 tokens a week (5 a day),
-  Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the first clear once ever
-  by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
+  Stars use the mix's rounded tier (EEE is easy; any mix with an X is hard, so the Dropper is a
+  **Hard** course): 3-star times of about 20 s on Easy Dropper and 24 s on the Dropper (2 stars at
+  35 s), and **3 stars on a Hard dropper need a run with no bonks**: a gold time with a bonk is 2
+  stars and the result says "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"
+  (Easy and medium droppers keep stars by time alone). First finish in a set: Easy Dropper 10 tokens
+  a week (5 a day), Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the
+  first clear once ever by tier (the Dropper's is hard's 25, to an account that has never cleared the
+  Dropper: one paid before 0.38.5 is not paid again); the Star Chart counts its stars. A clean
+  counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
 - **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or a
@@ -3508,19 +3559,27 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   even while Fresh Courses is off; a kept Dropper's plot keeps its water in; and a Dropper whose
   `origin` is moved without a `clear` keeps its old area guarded ("drain first": `/hcm games gen tidy
   <course> confirm` empties it, pools first; status lists it) (see "Moving an area by hand").
-- **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, y 160-223, z 6768-6783
-  (Easy Dropper) and 7360-7375 (Dropper); Classic Dropper (recalls of either) at z 7952-7967. Each
-  half is 64 x 64 x 16. The keep plot size is unchanged.
+- **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, z 6768-6783 (Easy
+  Dropper, y 160-223, 64 x 64 x 16, unchanged by the Long Drop) and z 7360-7375 (Dropper, y 160-303,
+  64 x 144 x 16); Classic Dropper (recalls of either) at z 7952-7967, 64 x 144 x 16 too, so every
+  past Dropper you archived, 64-tall or 144-tall, still recalls into it (an older 64-tall edition
+  stands at its own size in the half's corner). The keep plot size is unchanged (144 fits its 176).
 - **Admin:** `/hcm games gen on fresh_dropper` (or `slots.fresh_dropper.enabled: true`) and it is built
   with the next set, or at once with `/hcm games gen reroll fresh_dropper confirm`. `/hcm games gen mix
-  fresh_dropper EMHHH` changes the levels (1-5 of E, M and H) from the next build. Droppers can't be
+  fresh_dropper EMHHX` changes the levels (1-5 of E, M, H and X; an X only where the half is 144 tall:
+  `/hcm games gen mix fresh_dropper_easy EEX` is refused with "an X level needs a half at least 141
+  tall (this one is 64): X is for the Dropper", and a `mix: EEX` in the Easy Dropper's config row
+  switches it off with that WARN) from the next build; `XXXXX` is allowed (five Long Drops). To have
+  the old Dropper back without a deploy: `/hcm games gen mix fresh_dropper EEMMH` and a reroll (the
+  old shape, 80 blocks higher in the taller half; it is then a medium course again, no clean-run
+  rule). Droppers can't be
   made by hand (`/hcm games course create <id> dropper` is refused); keep one instead. A kept dropper
   can be renamed, re-tiered, enabled, tested and featured, but not re-shaped.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper |
-| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels) |
+| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper (64 x 64 x 16: E, M and H levels only) |
+| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMHX, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels; 64 x 144 x 16, so an X fits; EEMMH before the Long Drop, moved by config revision 25) |
 | `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `10` / `15` | First finish in a weekly set |
 | `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `5` / `8` | First finish in a daily set |
 | `fresh.classics.slots.fresh_classic_dropper.origin` | `[7488, 160, 7952]` | Where Classic Dropper is built |
@@ -3538,6 +3597,7 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
    Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
 3. Finish Easy Dropper on a tablet without sprinting, following the lights.
 4. Finish the Dropper on Java cleanly: 3 stars (under the gold time) and "No bonks - perfect drop!".
+   (The proof is Java physics; keep Bedrock on the Easy Dropper.)
 5. Land on a coloured floor on purpose: "Bonk!", back on that level's ledge, the clock still running,
    and the result says "Bonks: 1".
 6. Stand on the light-blue floor beside a Medium pool: bonk. Land on the rim of a Hard pool with half
@@ -3548,6 +3608,30 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 9. `/hcm games gen reroll fresh_dropper confirm` while someone is mid-run: their run finishes and
    counts on the old board.
 10. Set `games.trials.warmup_seconds: 0` and `/hcm reload`: the practice drop is no longer offered.
+
+**Verify the Long Drop** (after the update that brings it):
+
+1. The console shows "Config migration: the Dropper's shipped mix EEMMH becomes EEMHX" and, at the
+   restart, "Fresh Courses: fresh_dropper's area changed with this version: its halves are 64 x 144 x
+   16 now ..., the pools drained first"; `/hcm games gen status` shows the old area emptied, then the
+   Dropper rebuilt (a new course code, `r1` on its set key); the Easy Dropper is untouched, still at
+   y 160-223 with its old blocks and code.
+2. `/hcm games gen plan fresh_dropper` shows "level 5 (X, purple) ... pool 6x6", a witness line ending
+   in a held direction (like `S4 W9 S12 E8 N*`), "... ticks flown, 0 straight".
+3. Stand on level 5's ledge (y 296): the sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the /
+   way down!", the water is 128 blocks down, the plates are unlit, some with extra holes.
+4. On Java, walk off aiming at the holes and keep steering: you get wet eventually; expect bonks; each
+   bonk returns you to the top of level 5 with the clock running.
+5. The Dropper tile reads Hard, "★★ under 0:35 · ★★★ under 0:24"; a finish with any bonk inside 24 s
+   shows two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run", and
+   its next-star line reads "Next star: a run with no bonks under 0:24."; a clean finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25
+   once, to an account that has never cleared the Dropper (one paid before 0.38.5 is not paid again).
+6. `/hcm games gen mix fresh_dropper_easy EEX` is refused ("an X level needs a half at least 141 tall
+   (this one is 64)"); `/hcm games gen mix fresh_dropper XXXXX` is accepted and the reroll builds five
+   Long Drops.
+7. `/hcm games gen recall fresh_dropper <an old DROP code>` places the old 64-tall EEMMH edition in
+   Classic Dropper and it plays as before.
+8. A child plays the Easy Dropper exactly as last week (Bedrock included).
 <!-- ---- end dropper ---- -->
 
 #### Bring back or keep a course
@@ -3574,8 +3658,11 @@ every Fresh course's tile, on its screen and in the finish line, so they can ask
 - A course up now can't be recalled (by `current`, its code, its number or its date): recall an older one.
 - A set is kept once: a second keep of it is refused and names the course it was kept as (clear
   that plot to keep it again). A course whose half doesn't fit a plot (144 x 176 x 336) can't be kept:
-  a Mountain Run v2 says "Mountain Run v2 courses are too big to keep; they stay in the archive". Golf
-  v4 (128 x 16 x 224) fits. `keep <course> last` without an id is refused ("Give the new course
+  a Mountain Run v2 says "Mountain Run v2 courses are too big to keep; they stay in the archive", and
+  Sky Rings can't be kept, like the Ice Boat ("Sky Rings courses are too big to keep; they stay in the
+  archive": a v3 loop is 512 x 176 x 512). Golf v4 (128 x 16 x 224) fits. A Sky Rings course from
+  before v3 isn't recalled into the new Classic either ("made by Sky Rings v2 ... it stays in the
+  archive"). `keep <course> last` without an id is refused ("Give the new course
   an id too").
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
@@ -3616,7 +3703,8 @@ every Fresh course's tile, on its screen and in the finish line, so they can ask
    3-day grid, and the courses change on that day.
 4. Finish Easy Parkour on a tablet without sprinting, and every other parkour tier on Java (Hard's
    tightest jump is the one to watch on Bedrock).
-5. Fly Sky Rings with no rockets. Miss a ring on purpose, then fly on from the checkpoint.
+5. Fly Sky Rings: spend a rocket on each white ring, try a level leg at speed with none, miss a ring on
+   purpose and fly on from it.
 6. Play Tiny Golf at par, then play one hole badly on purpose: it finishes by par + 1 without the
    ball being picked up.
 7. `/hcm games gen reroll fresh_golf confirm` while someone plays the big golf course: their round
@@ -3849,7 +3937,7 @@ every race and round works exactly as before**.
     at 04:00. A Fresh course or a golf course keeps each player's best, so it counts on this week's
     page only if that best was set this week.
   - **Now playing** is on the south wall. It shows who is in which game right now and how far along,
-    for example "Sam - Sky Rings - checkpoint 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
+    for example "Sam - Sky Rings - ring 3 - 0:41", "Lee - Tiny Golf - hole 4", "Ana - Snake" or
     "Max - in the Clubhouse". Games come first, then cabinets, then the Clubhouse. It shows up to
     seven rows ("and 3 more"), with "Cheer them on: /hcm play cheer" while anyone is in a game.
     Cheers reach the racers of a party race, Race Night or golf together, and with no race going,
@@ -4673,7 +4761,8 @@ the backfill never replaces a single value you wrote where a section belongs, it
     cleared. A run going at the time finishes with "the course changed during your run". Your
     next finish reads "★ New best!", not "Your first finish", and the course screen's tokens item
     says the first finish is done.
-35. An elytra course: a worn elytra and 3 rockets, back to 3 at each ring; landing outside a ring
+35. Sky Rings hands out 8 rockets and none at the rings; a reset gives back only what the course still
+    needs; a hand-built elytra course: 3, back to 3 at each ring. Landing outside a ring
     sends you back to the last one, even a landing within half a second of a Back to checkpoint.
     A boat course: getting out sends you back to the last checkpoint, and after `/hcm leave` the
     boat is gone.

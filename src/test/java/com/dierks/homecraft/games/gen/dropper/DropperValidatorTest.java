@@ -45,7 +45,7 @@ class DropperValidatorTest {
 
     @Test
     void realPlansOfEveryTierPass() {
-        for (String mix : List.of("E", "M", "H", "EM", "EEMMH", "HHHHH")) {
+        for (String mix : List.of("E", "M", "H", "X", "EM", "EEMMH", "HHHHH", "EEMHX")) {
             Plan p = DropperFixtures.plan(mix, 3);
             assertEquals(List.of(), problems(p, mix), mix + ": the planner's own plan is proven");
             assertEquals(List.of(), DropperValidator.problems(p), mix + ": and so from the mix its pools name");
@@ -59,7 +59,10 @@ class DropperValidatorTest {
         List<String> hard = problems(medium(), "H");
         assertFlags(hard, "drops 40 to its water; a hard level drops 48", "a medium level isn't a hard one");
         assertFlags(hard, "a hard pool is 5", "nor is its pool");
-        assertFlags(problems(easy(), "X"), "a dropper mix is", "a mix that isn't one");
+        List<String> extreme = problems(easy(), "X");
+        assertFlags(extreme, "drops 32 to its water; an extreme level drops 128", "an easy level isn't the Long Drop");
+        assertFlags(extreme, "an extreme pool is 6", "nor is its pool");
+        assertFlags(problems(easy(), "Q"), "a dropper mix is", "a mix that isn't one");
         assertFlags(DropperValidator.problems(null, "E"), "no plan", "no plan at all");
     }
 
@@ -396,8 +399,9 @@ class DropperValidatorTest {
     }
 
     @Test
-    void moreThanTwentyThousandBlocksIsTooMany() {
-        Plan p = DropperFixtures.plan("EEMMH", 3);
+    void moreThanFortyThousandBlocksIsTooMany() {
+        // the Dropper's plan in its 144-tall half, plus its three unused rows of z filled solid: over 40,000
+        Plan p = DropperFixtures.plan("EEMHX", 3);
         Box h = p.half();
         List<int[]> filler = new ArrayList<>();
         for (int z : new int[]{h.minZ(), h.maxZ() - 1, h.maxZ()}) {
@@ -409,7 +413,7 @@ class DropperValidatorTest {
         }
         Plan big = DropperFixtures.withAll(p, filler, "minecraft:glass");
         assertTrue(big.ops().size() > DropperValidator.MAX_OPS, "the spoiled plan has " + big.ops().size());
-        assertFlags(problems(big, "EEMMH"), "a dropper places at most 20000", "the block budget");
+        assertFlags(problems(big, "EEMHX"), "a dropper places at most 40000", "the block budget");
     }
 
     // ---- rule 8: the palette ------------------------------------------------------------------------

@@ -173,14 +173,49 @@ public final class PlanCheck {
      * ({@link DropperValidator#problems(Plan)}, which reads its mix back from its own pools, so it is
      * proven sealed and solvable there), golf by its quick check
      * ({@link GolfValidator#quickProblems}: its ponds sealed and every witness line replayed where it
-     * now stands). The other generators' shared checks ({@link #problems}) are enough for a plan that
-     * is only translated. Pure; run on the planner thread.
+     * now stands). Sky Rings is flown again where it will stand by its whole validator
+     * ({@link RingsValidator#problems(Plan, String)}, at the tier its course names): the elytra sim works
+     * in absolute doubles, so a lap moved out of the range it was made in may fly differently, and an
+     * edition made by an older planner is refused plainly. The other generators' shared checks
+     * ({@link #problems}) are enough for a plan that is only translated. Pure; run on the planner thread.
      */
     public static List<String> movedProblems(Plan plan, Slots.Def def) {
-        if (plan == null || def == null || !def.mayHoldWater()) {
+        return movedProblems(plan, def, null);
+    }
+
+    /**
+     * {@link #movedProblems(Plan, Slots.Def)}, told the tier its archive row names ({@code tierOrMix},
+     * for Sky Rings; {@code null} reads it from the plan's own course). Pure; run on the planner thread.
+     */
+    public static List<String> movedProblems(Plan plan, Slots.Def def, String tierOrMix) {
+        if (plan == null || def == null) {
+            return List.of();
+        }
+        if (Slots.RINGS.equals(def.generator())) {
+            return RingsValidator.problems(plan, ringsTier(plan, def, tierOrMix));
+        }
+        if (!def.mayHoldWater()) {
             return List.of();
         }
         return def.dropper() ? DropperValidator.problems(plan) : GolfValidator.quickProblems(plan);
+    }
+
+    /**
+     * Whether a moved plan for {@code def} can never be proven where it stands, whatever is tried again:
+     * a Sky Rings edition made by an older planner (the validator refuses it before it flies a tick), so
+     * a recall of it is dropped, not counted as a failed try.
+     */
+    public static boolean refusedForGood(Plan plan, Slots.Def def) {
+        return plan != null && def != null && Slots.RINGS.equals(def.generator()) && plan.algo() < RingsPlanner.ALGO;
+    }
+
+    /** The tier a moved Sky Rings plan is proven at: the row's, else its course's, else none. */
+    private static String ringsTier(Plan plan, Slots.Def def, String tierOrMix) {
+        String tier = def.normalise(tierOrMix);
+        if (tier.isEmpty() && plan.course() instanceof PlannedTrial trial && trial.course().tier() != null) {
+            tier = trial.course().tier().id();
+        }
+        return tier;
     }
 
     /**

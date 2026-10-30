@@ -26,7 +26,7 @@ public enum TrialKind {
                     "Fall and you go back to your last checkpoint.")),
     ELYTRA("elytra", "Elytra", 80, 4.0, TokenService.Source.GAMES_ELYTRA,
             List.of("Glide through every ring in order.",
-                    "Rockets give a boost: 3 more at every ring.",
+                    "Rockets give a boost: back to 3 at every ring.",
                     "Landing or water sends you back to your last ring.")),
     BOAT("boat", "Boat", 75, 3.0, TokenService.Source.GAMES_BOAT,
             List.of("Row from the start to the finish.",

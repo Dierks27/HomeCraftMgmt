@@ -92,10 +92,16 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 24 = the Firework Remote and the bigger Mega shows: the Super (4 launchers), Ultra (5) and Ultimate (10)
      * Firework Shows and the Firework Remote after the Mega Firework Show, and 15 Firework Launchers placed a player
      * instead of 3, wherever the owner hasn't changed them ({@link FireworkRemoteMigration}).
-     * Each of 20, 21, 22, 23 and 24 also refreshes the comments it makes stale, where they are still the plugin's own
-     * words ({@link ShippedComments}).
+     * 25 = Sky Rings v3 and the Long Drop: Sky Rings' halves grow to 512 x 176 x 512 in place and Classic Sky
+     * Rings', the same size, move west to 1760,128,3328, wherever the owner kept the shipped spot
+     * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the Dropper's shipped mix EEMMH becomes EEMHX (its
+     * level 5 is the Long Drop) wherever the owner hasn't changed it, and its halves and Classic Dropper's grow to
+     * 64 x 144 x 16 at the same spot ({@link com.dierks.homecraft.games.gen.DropperMixMigration}); the engine empties
+     * the old areas.
+     * Each of 20, 21, 22, 23, 24 and 25 also refreshes the comments it makes stale, where they are still the plugin's
+     * own words ({@link ShippedComments}).
      */
-    static final int CONFIG_REVISION = 24;
+    static final int CONFIG_REVISION = 25;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -1302,8 +1308,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (from < 21) {
             // The v4 areas: the bigger golf halves and the Mountain Run v2 move to their new spots, wherever the
             // shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
-            com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c, log);
-            ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
+            com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c,
+                    com.dierks.homecraft.games.gen.GamesAreaMigration.V4, log);
+            ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.V4);
         }
         if (from < 22) {
             // The token shop: the changed rows, the new rows and the crate, wherever the owner hasn't changed them;
@@ -1324,6 +1331,18 @@ public final class HomeCraftManagement extends JavaPlugin {
             // See FireworkRemoteMigration.
             FireworkRemoteMigration.apply(c, log);
             ShippedComments.refresh(c, FireworkRemoteMigration.REVISION);
+        }
+        if (from < 25) {
+            // Sky Rings v3: its halves and Classic Sky Rings' grow to 512 x 176 x 512; Sky Rings grows in place, the
+            // Classic moves west, wherever the shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
+            com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c,
+                    com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION, log);
+            // The Long Drop: the Dropper's shipped mix EEMMH becomes EEMHX wherever the owner hasn't changed it; the
+            // owner's own stays, with a WARN. The taller halves are the engine's job at the restart. See
+            // DropperMixMigration.
+            com.dierks.homecraft.games.gen.DropperMixMigration.apply(c, log);
+            // One refresh for both: the slots comment both features make stale is the same comment.
+            ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

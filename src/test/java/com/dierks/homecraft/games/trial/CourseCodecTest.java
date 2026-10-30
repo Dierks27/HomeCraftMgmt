@@ -109,6 +109,25 @@ class CourseCodecTest {
     }
 
     @Test
+    void aRocketBudgetRoundTripsAndIsOptional() {
+        Course.Elytra budget = new Course.Elytra(8, List.of(6, 6, 6, 5, 5, 4, 3, 3, 2, 1, 0), "GGFGLGGGLGG");
+        Course rings = new Course("fresh_rings", TrialKind.ELYTRA, "Sky Rings", Tier.EASY, "games",
+                new Course.Spot(10.5, 287, 4.5, 180f, 0f), List.of(new Course.Mark(10.5, 278.5, -20.5, 7)),
+                new Course.Mark(60.5, 240.5, -90.5, 7), 220.0, 32, true, false, 1, null, budget);
+        CourseCodec.Decoded d = CourseCodec.decode("fresh_rings", CourseCodec.encode(rings));
+        assertEquals(rings, d.course(), "the budget comes back with the course");
+        assertEquals(budget, d.course().elytra(), "rockets, need and legs");
+        assertEquals(List.of(), d.problems(), "and nothing was wrong");
+        assertNull(CourseCodec.decode("x", "kind: elytra\n").course().elytra(),
+                "a course without one hands out rockets the old way");
+        CourseCodec.Decoded garbled = CourseCodec.decode("x", "kind: elytra\nelytra: {rockets: nope, need: [1], legs: G}\n");
+        assertNull(garbled.course().elytra(), "a garbled budget is left out");
+        assertEquals(1, garbled.problems().size(), "and said once: " + garbled.problems());
+        assertTrue(garbled.problems().get(0).contains("elytra"), "naming the block");
+        assertNull(CourseCodec.decode("x", "kind: elytra\nelytra: 8\n").course().elytra(), "so is a bare number");
+    }
+
+    @Test
     void theFallHeightAndShortestTimeAreOptional() {
         Course c = CourseCodec.decode("x", "kind: parkour\n").course();
         assertNull(c.fallY(), "no fall_y: the default applies");

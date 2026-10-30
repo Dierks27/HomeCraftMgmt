@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where the shafts stand in a half (EVENTS-DROPPER-SPEC §B.1.2, §B.1.3): side by side along x with
- * shared walls, 11 x 11 inside, every ledge top at 56, walls to 60, and each tier's water and floor
+ * shared walls, 11 x 11 inside, every ledge top 8 under the half's top (56 in the 64-tall half, 136
+ * in the 144-tall one that holds the Long Drop), walls 4 above it, and each tier's water and floor
  * at the heights the spec gives.
  */
 class DropperGeometryTest {
@@ -44,6 +45,28 @@ class DropperGeometryTest {
         assertEquals(HALF.minY() + 56, s.ledgeTop(), "the feet stand at 56");
         assertEquals(HALF.minY() + 55, s.ledgeRow(), "on the row below");
         assertEquals(HALF.minY() + 60, s.wallTop() + 1, "the walls' top face is at 60, 4 above");
+        assertEquals(8, DropperGeometry.LEDGE_BELOW_TOP, "the ledge hangs 8 under the half's top: 4 of wall, 4 spare");
+        assertEquals(HALF.minY() + 56, DropperGeometry.ledgeTop(HALF), "so a 64-tall half's ledges are at 56");
+    }
+
+    @Test
+    void aTallHalfLiftsEveryLedgeTo136AndHoldsTheLongDrop() {
+        Box tall = LegacyBoxes.tall(DropperSlots.DROPPER_SLOT, 'A');
+        int y0 = tall.minY();
+        assertEquals(144, tall.sizeY(), "the Dropper's half is 144 tall");
+        for (int i = 0; i < 5; i++) {
+            DropperGeometry.Shaft s = DropperGeometry.shaft(tall, i);
+            assertEquals(y0 + 136, s.ledgeTop(), "shaft " + i + "'s ledge top is at 136: every shaft shares one height");
+            assertEquals(y0 + 140, s.wallTop() + 1, "walls to 140, 4 spare rows of air above");
+        }
+        DropperGeometry.Shaft s = DropperGeometry.shaft(tall, 4);
+        assertEquals(List.of(104, 96, 88, 8), List.of(DropperGeometry.surface(s, DropRules.Level.EASY) - y0,
+                DropperGeometry.surface(s, DropRules.Level.MEDIUM) - y0,
+                DropperGeometry.surface(s, DropRules.Level.HARD) - y0,
+                DropperGeometry.surface(s, DropRules.Level.EXTREME) - y0),
+                "the water at 136 less the drop: E, M and H hang in the top 56 rows, the Long Drop's is at 8");
+        assertEquals(4, DropperGeometry.floorRow(s, DropRules.Level.EXTREME) - y0, "the Long Drop's floor at 4");
+        assertTrue(DropperGeometry.floorRow(s, DropRules.Level.EXTREME) > tall.minY(), "strictly above the bottom");
     }
 
     @Test
@@ -59,10 +82,23 @@ class DropperGeometryTest {
 
     @Test
     void aHalfFitsItsShaftsOrSaysSo() {
-        assertTrue(DropperGeometry.fits(HALF, 5), "a 64 x 64 x 16 half fits five");
-        assertFalse(DropperGeometry.fits(Box.sized(0, 0, 0, 60, 64, 16), 5), "60 blocks along x don't");
-        assertTrue(DropperGeometry.fits(Box.sized(0, 0, 0, 16, 64, 16), 1), "one shaft needs 15 x 60 x 15");
-        assertFalse(DropperGeometry.fits(Box.sized(0, 0, 0, 64, 59, 16), 1),
-                "a half under 60 tall has no room for the walls");
+        List<DropRules.Level> eemmh = DropRules.levels("EEMMH");
+        assertTrue(DropperGeometry.fits(HALF, eemmh), "a 64 x 64 x 16 half fits five of E, M and H");
+        assertFalse(DropperGeometry.fits(HALF, DropRules.levels("EEX")), "but not a Long Drop");
+        assertFalse(DropperGeometry.fits(Box.sized(0, 0, 0, 60, 64, 16), eemmh), "60 blocks along x don't fit five");
+        assertTrue(DropperGeometry.fits(Box.sized(0, 0, 0, 16, 64, 16), DropRules.levels("H")),
+                "one Hard shaft needs 15 x 61 x 15");
+        assertFalse(DropperGeometry.fits(Box.sized(0, 0, 0, 16, 60, 16), DropRules.levels("H")),
+                "a half 60 tall has no row under a Hard floor");
+        assertEquals(List.of(45, 53, 61, 141), List.of(DropperGeometry.minSizeY(DropRules.Level.EASY),
+                DropperGeometry.minSizeY(DropRules.Level.MEDIUM), DropperGeometry.minSizeY(DropRules.Level.HARD),
+                DropperGeometry.minSizeY(DropRules.Level.EXTREME)),
+                "a level needs 8 over its ledge, its drop, 3 of pool, a floor and a row under it");
+        assertFalse(DropperGeometry.fits(Box.sized(0, 0, 0, 64, 140, 16), DropRules.levels("EEMHX")),
+                "64 x 140 x 16 refuses the Long Drop");
+        assertTrue(DropperGeometry.fits(Box.sized(0, 0, 0, 64, 141, 16), DropRules.levels("EEMHX")),
+                "64 x 141 x 16 takes it");
+        assertTrue(DropperGeometry.fits(LegacyBoxes.tall(DropperSlots.DROPPER_SLOT, 'B'), DropRules.levels("XXXXX")),
+                "and the 144-tall half holds five of them");
     }
 }

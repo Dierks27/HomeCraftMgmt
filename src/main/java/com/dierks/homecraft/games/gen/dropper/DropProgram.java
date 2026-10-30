@@ -59,6 +59,16 @@ public record DropProgram(List<Segment> segments) {
             return this == NONE ? NONE : values()[(ordinal() - 1 + 4) % 8 + 1];
         }
 
+        /** The direction a quarter turn to the left (anticlockwise on the map): N's is W. */
+        public Dir left() {
+            return this == NONE ? NONE : values()[(ordinal() - 1 + 6) % 8 + 1];
+        }
+
+        /** The direction a quarter turn to the right (clockwise on the map): N's is E. */
+        public Dir right() {
+            return this == NONE ? NONE : values()[(ordinal() - 1 + 2) % 8 + 1];
+        }
+
         /** The eight directions, clockwise from north. */
         public static List<Dir> compass() {
             return List.of(N, NE, E, SE, S, SW, W, NW);

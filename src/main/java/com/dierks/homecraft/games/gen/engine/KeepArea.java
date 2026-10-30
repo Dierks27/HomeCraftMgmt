@@ -11,7 +11,7 @@ import java.util.List;
  * Where kept courses stand (GEN-SPEC-KEEP §4): a grid of plots in the Games world, well apart from
  * every generator region, as pure geometry.
  *
- * <p>Every plot is the same size, 144 x 176 x 336 (Sky Rings' 128 x 176 x 320 half plus 16 blocks along
+ * <p>Every plot is the same size, 144 x 176 x 336 (Sky Rings' old 128 x 176 x 320 half plus 16 blocks along
  * x and z), pinned, so a kept course never moves when a generator grows; a course whose half fits a plot
  * fits any plot ({@link #fits}), and two kept courses side by side are at least 16 blocks apart. A course is built at its plot's corner plus {@value #MARGIN} along x and
  * z. Plots run {@value #COLUMNS} to a row along +x, rows along +z, from {@code keep.area}, with
@@ -54,7 +54,7 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
      * One plot's size: 144 x 176 x 336, pinned (GOLF-V4-SPEC §4.1, MOUNTAIN-V2-SPEC §10.3 item 3). It was
      * the largest half of any generator plus 16 along x and z (Sky Rings' 128 x 176 x 320), and it stays
      * that as literals: every kept plot's corner is worked out from it, so a generator that grows (the
-     * Mountain Run v2's 480 x 176 x 640 half) must never move a kept course. A course whose half doesn't
+     * Mountain Run v2's 480 x 176 x 640 half, Sky Rings v3's 512 x 176 x 512) must never move a kept course. A course whose half doesn't
      * fit a plot can't be kept ({@link #fits}); it stays in the archive and on its boards.
      */
     public static final int PLOT_X = 144;
@@ -100,7 +100,8 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
     /**
      * Whether a course whose half is {@code sx} x {@code sy} x {@code sz} fits a plot, {@value #MARGIN} in
      * from its edges along x and z: at most 128 x 176 x 320. Golf of the Week's 128 x 16 x 224 does; the
-     * Mountain Run v2's 480 x 176 x 640 doesn't (those courses stay in the archive).
+     * Mountain Run v2's 480 x 176 x 640 and Sky Rings v3's 512 x 176 x 512 don't (those courses stay in the
+     * archive).
      */
     public static boolean fits(int sx, int sy, int sz) {
         return sx > 0 && sy > 0 && sz > 0 && sx <= PLOT_X - 2 * MARGIN && sy <= PLOT_Y && sz <= PLOT_Z - 2 * MARGIN;

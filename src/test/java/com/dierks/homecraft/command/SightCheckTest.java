@@ -84,8 +84,8 @@ class SightCheckTest {
                 + " now)"), out.get(0), "where the view distance came from");
         assertEquals(Line.ok("Nothing else built by the games can be seen from any course, the Clubhouse or the arena"
                         + " (view distance 10; the closest two places are 36 chunks apart, clear up to view distance 34)"),
-                out.get(1), "all clear, and by how much");
-        assertEquals(2, out.size(), "nothing else: " + out);
+                out.get(2), "all clear, and by how much (after Sky Rings' view line)");
+        assertEquals(3, out.size(), "nothing else: " + out);
     }
 
     @Test
@@ -189,7 +189,7 @@ class SightCheckTest {
         places.add(spawn);
         assertEquals(Line.ok("Nothing else built by the games can be seen from any course, the Clubhouse or the arena"
                         + " (view distance 10; the closest two places are 36 chunks apart, clear up to view distance 34)"),
-                rows(facts(places, List.of())).get(1), "the closest two places are the courses' halves, not the two"
+                rows(facts(places, List.of())).get(2), "the closest two places are the courses' halves, not the two"
                         + " points 0 chunks apart");
     }
 
@@ -219,7 +219,7 @@ class SightCheckTest {
         List<Place> places = new ArrayList<>(halves(Kind.SLOT, rings, a, rings.half(6080, 128, 4096, 'B', Sight.GAP)));
         places.add(stand);
         List<Line> out = rows(new SightCheck.Facts("games", 32, "why", places, List.of()));
-        Line l = out.get(1);
+        Line l = out.get(2); // after the view distance and Sky Rings' view line
         assertEquals(Status.WARN, l.status(), "spectators on the stand see a course: " + out);
         assertEquals("From the Race Night stand of \"Cool Jumps\", players can see Sky Rings (19 chunks away; view"
                 + " distance 32)", l.what(), "in the spec's words: the stand is the one that sees");
@@ -277,7 +277,7 @@ class SightCheckTest {
             places.addAll(halves(Kind.SLOT, d, LegacyBoxes.half(d, 'A'), LegacyBoxes.half(d, 'B')));
         }
         List<Line> out = rows(facts(places, List.of()));
-        List<Line> pairs = out.subList(1, out.size());
+        List<Line> pairs = out.subList(2, out.size()); // after the view distance and Sky Rings' view line
         assertEquals(SightCheck.MAX_PAIRS + 1, pairs.size(), "eight lines and one more: " + out.size());
         assertTrue(pairs.stream().allMatch(l -> l.status() == Status.WARN), "each a WARN");
         int last = -1;
@@ -416,5 +416,23 @@ class SightCheckTest {
         public GamesCheck.Web web() {
             return null;
         }
+    }
+
+    @Test
+    void skyRingsSaysTheViewDistanceItsLegsNeed() {
+        assertEquals(Line.ok("Sky Rings legs up to 120 need view distance 8 or more (you have 16); 10 recommended"),
+                SightCheck.ringsView(16), "the owner's games world");
+        assertEquals(Status.OK, SightCheck.ringsView(8).status(), "8 sends 9 chunks, 144 blocks: enough");
+        Line low = SightCheck.ringsView(6);
+        assertEquals(Status.WARN, low.status(), "under 8 the next ring can be out of sight");
+        assertTrue(low.fix().contains("view-distance=10"), "with the fix: " + low.fix());
+        Slots.Def rings = Slots.SKY_RINGS;
+        List<Line> with = rows(facts(halves(Kind.SLOT, rings, rings.half(6080, 128, 4096, 'A', Sight.GAP),
+                rings.half(6080, 128, 4096, 'B', Sight.GAP)), List.of()));
+        assertEquals(SightCheck.ringsView(VIEW), with.get(1), "said right after the view distance used: " + with);
+        List<Line> without = rows(facts(List.of(new Place(Kind.CLUBHOUSE, "clubhouse", "the Clubhouse",
+                Box.sized(6080, 160, 8544, 32, 16, 32))), List.of()));
+        assertTrue(without.stream().noneMatch(l -> l.what().startsWith("Sky Rings legs")),
+                "no Sky Rings: no line: " + without);
     }
 }

@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * read the file 0.36 left, at revision 19. Rather than build Golf v4 at 0.36's spot at its new size (half B
  * straddling x 8192) and move it again once the file is saved, the three areas revision 21 moves are held
  * where they were built: off, with the reason, and nothing done there; everything else reads as usual.
+ * Revision 25 (Sky Rings v3) the same for Sky Rings' two areas: a file at 21-24 holds only those.
  */
 class AreaRevisionHoldTest {
 
@@ -55,8 +56,14 @@ class AreaRevisionHoldTest {
         }
         assertArrayEquals(new int[]{7488, 160, 4096}, d.slot(Slots.DAILY_GOLF.id()).origin(),
                 "the spot it read is kept for the record (it isn't used)");
+        for (DailySettings.SlotConfig s : List.of(d.slot(Slots.SKY_RINGS.id()),
+                d.archive().classic(Slots.CLASSIC_RINGS.id()))) {
+            assertFalse(s.placed() || s.enabled(), s.id() + ": Sky Rings' two are held as well");
+            assertTrue(s.held().contains("still at config revision 19") && s.held().contains("revision 25 moves this"
+                    + " area"), s.id() + ": naming its own revision: " + s.held());
+        }
         for (Slots.Def def : Slots.ALL) {
-            if (!List.of(Slots.DAILY_GOLF, Slots.ICE_BOAT).contains(def)) {
+            if (!List.of(Slots.DAILY_GOLF, Slots.ICE_BOAT, Slots.SKY_RINGS).contains(def)) {
                 assertTrue(d.slot(def.id()).placed(), def.id() + ": every other course reads as usual");
                 assertNull(d.slot(def.id()).held(), def.id() + ": not held");
             }
@@ -76,6 +83,24 @@ class AreaRevisionHoldTest {
         assertNull(d.slot(Slots.DAILY_GOLF.id()).held(), "not held");
         assertArrayEquals(new int[]{8768, 160, 4096}, d.slot(Slots.DAILY_GOLF.id()).origin(), "at Col G");
         assertEquals(fresh(LayoutFixtures.bundled()), d, "exactly a fresh install's reading");
+    }
+
+    @Test
+    void aFileAtRevision24HoldsOnlySkyRingsTwo() {
+        YamlConfiguration c = LayoutFixtures.bundled();
+        c.set("games.fresh.classics.slots.fresh_classic_rings.origin", List.of(6080, 128, 4992));
+        c.set("config_revision", 24); // revision 21 saved long ago, then 25 couldn't be
+        assertTrue(GamesAreaMigration.unsaved(c), "below revision 25");
+        DailySettings d = fresh(c);
+        for (DailySettings.SlotConfig s : List.of(d.slot(Slots.SKY_RINGS.id()),
+                d.archive().classic(Slots.CLASSIC_RINGS.id()))) {
+            assertFalse(s.placed() || s.enabled(), s.id() + ": held where it was built");
+            assertTrue(s.held().contains("still at config revision 24") && s.held().contains("revision 25 moves this"
+                    + " area"), s.id() + ": " + s.held());
+        }
+        assertTrue(d.slot(Slots.DAILY_GOLF.id()).placed(), "golf moved at 21 and is read as usual");
+        assertNull(d.slot(Slots.DAILY_GOLF.id()).held(), "not held");
+        assertTrue(d.archive().classic(Slots.CLASSIC_GOLF.id()).placed(), "nor Classic Golf");
     }
 
     @Test

@@ -29,8 +29,8 @@ import java.util.List;
  */
 public final class DropMarks {
 
-    /** The pool sizes a mark may name: Hard, Medium and Easy's whole floor. */
-    public static final List<Integer> POOL_SIZES = List.of(5, 7, 11);
+    /** The pool sizes a mark may name: Hard's 5, the Long Drop's 6, Medium's 7 and Easy's whole floor, 11. */
+    public static final List<Integer> POOL_SIZES = List.of(5, 6, 7, 11);
 
     private DropMarks() {
     }
@@ -195,8 +195,8 @@ public final class DropMarks {
 
     /**
      * The mix a dropper course was made from, read back from its pools (11 a side is Easy, 7 Medium,
-     * 5 Hard): what the validator needs for a plan that arrives without its slot's mix, a recalled or
-     * kept one. {@code null} when a pool names no tier or the course isn't a dropper.
+     * 6 the Long Drop, 5 Hard): what the validator needs for a plan that arrives without its slot's
+     * mix, a recalled or kept one. {@code null} when a pool names no tier or the course isn't a dropper.
      */
     public static String mix(Course c) {
         if (c == null || c.start() == null || c.finish() == null || c.checkpoints().size() % 2 != 0) {

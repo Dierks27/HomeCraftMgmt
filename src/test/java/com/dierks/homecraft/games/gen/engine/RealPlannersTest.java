@@ -47,11 +47,18 @@ class RealPlannersTest {
     /**
      * Every shipped slot. The ice boat only once its planner makes the Mountain Run v2 (boat algo 4, package
      * MA): its shipped half is the v4 one now (480 x 176 x 640), which the v3 spiral planner doesn't plan; the
-     * v3 planner keeps its own tests at its 0.36 box (LegacyBoxes.v036).
+     * v3 planner keeps its own tests at its 0.36 box (LegacyBoxes.v036). Sky Rings only once its shipped half
+     * is the 512-wide square its loop needs (the planner refuses a smaller one; RingsPlannerTest plans at
+     * RingsV3Boxes meanwhile).
      */
     private static List<String> shipped() {
         List<String> out = new java.util.ArrayList<>(List.of("fresh_parkour_easy", "fresh_parkour",
-                "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf"));
+                "fresh_parkour_hard", "fresh_golf", "fresh_tiny_golf"));
+        Box rings = Slots.SKY_RINGS.half('A');
+        if (rings.sizeX() >= RingsPlanner.MIN_SIZE_XZ && rings.sizeZ() >= RingsPlanner.MIN_SIZE_XZ
+                && rings.sizeY() >= RingsPlanner.MIN_SIZE_Y) {
+            out.add(3, "fresh_rings");
+        }
         if (BoatPlanner.ALGO >= PlanCheck.BOAT_MOUNTAIN_ALGO) {
             out.add("fresh_boat");
         }
@@ -140,6 +147,10 @@ class RealPlannersTest {
                 assertNotNull(c, id + "'s row decodes as a course");
                 assertEquals(tag, c.gen(), id + "'s row carries the tag the gate vouches for");
                 assertTrue(tag.goldMs() > 0 && tag.silverMs() > tag.goldMs(), id + " has its star times");
+                if (id.equals("fresh_rings")) {
+                    assertTrue(tag.refMs() >= 40_000 && tag.refMs() <= 80_000, "Sky Rings' reference time is 0.8 of"
+                            + " the autopilot's lap round the loop, 40 to 80 s: " + tag.refMs());
+                }
             }
         }
         assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"

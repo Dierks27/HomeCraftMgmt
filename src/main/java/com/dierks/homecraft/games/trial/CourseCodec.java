@@ -83,8 +83,18 @@ public final class CourseCodec {
         if (c.gen() != null) {
             y.set(GenTagCodec.KEY, GenTagCodec.write(c.gen()));
         }
+        if (c.elytra() != null) {
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("rockets", c.elytra().rockets());
+            e.put("need", new ArrayList<>(c.elytra().need()));
+            e.put("legs", c.elytra().legs());
+            y.set(ELYTRA_KEY, e);
+        }
         return y.saveToString();
     }
+
+    /** The key of Sky Rings' rocket budget: {@code elytra: {rockets, need, legs}}. */
+    public static final String ELYTRA_KEY = "elytra";
 
     /** Read course {@code id} from its YAML text; never throws. */
     public static Decoded decode(String id, String text) {
@@ -164,8 +174,16 @@ public final class CourseCodec {
                 enabled = false;
             }
         }
+        Course.Elytra elytra = null;
+        if (y.isSet(ELYTRA_KEY)) {
+            // read leniently: a course without a budget hands out rockets the old way
+            elytra = elytra(y.get(ELYTRA_KEY));
+            if (elytra == null) {
+                problems.add("its elytra: block can't be read - left out, rockets the old way");
+            }
+        }
         Course c = new Course(id, kind, name, tier, y.getString("world", ""), start, checkpoints, finish, fallY,
-                minSeconds, enabled, y.getBoolean("pinned", false), y.getInt("rev", 1), gen);
+                minSeconds, enabled, y.getBoolean("pinned", false), y.getInt("rev", 1), gen, elytra);
         if (enabled && !c.ready()) {
             problems.add("it was open without a start and a finish - closed");
             c = c.withEnabled(false);
@@ -211,6 +229,29 @@ public final class CourseCodec {
             return null;
         }
         return new Course.Mark(x, y, z, Course.radius(r));
+    }
+
+    /** Sky Rings' rocket budget from its YAML value, or {@code null} when any part of it is missing or malformed. */
+    private static Course.Elytra elytra(Object raw) {
+        Map<?, ?> m = map(raw);
+        if (m == null) {
+            return null;
+        }
+        Double rockets = number(m.get("rockets"));
+        Object legs = m.get("legs");
+        if (rockets == null || rockets < 0 || rockets > 64 || !(m.get("need") instanceof List<?> raws)
+                || !(legs instanceof String s)) {
+            return null;
+        }
+        List<Integer> need = new ArrayList<>();
+        for (Object n : raws) {
+            Double v = number(n);
+            if (v == null || v < 0 || v > 64) {
+                return null;
+            }
+            need.add((int) Math.round(v));
+        }
+        return new Course.Elytra((int) Math.round(rockets), need, s);
     }
 
     /** A map from a YAML value: a section or a plain map (a list entry). */

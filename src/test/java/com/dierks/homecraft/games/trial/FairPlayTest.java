@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * run on a course whose layout changed records nothing; a test run is never counted but says
  * whether it would have been; the parkour fall height sits fall_depth under the lower of the last
  * and next checkpoint, a course's own fall_y wins for any kind, and elytra and boat courses have
- * no default; and a landing is fine near the start, in a checkpoint or at the finish only.
+ * no default (but Sky Rings, which has a floor 32 under the lower ring of every leg, never under its own);
+ * and a landing is fine near the start, in a checkpoint or at the finish only.
  *
  * <p>Also pinned (review fixes): a gap between trial ticks over 250 ms is a server stall, and a
  * leg its window touches isn't speed-checked — the reviewer's honest 7.2 s run through a 1.7 s
@@ -153,6 +154,24 @@ class FairPlayTest {
         Course elytra = new Course("sky", TrialKind.ELYTRA, "Sky", Tier.EASY, "games", PARKOUR.start(), List.of(),
                 PARKOUR.finish(), null, null, true, false, 1);
         assertTrue(Double.isNaN(FairPlay.fallY(elytra, -1, 6)), "nor does an elytra course: landing is its reset");
+    }
+
+    @Test
+    void skyRingsHasAFloorOnEveryLegThirtyTwoUnderItsLowerRing() {
+        List<Course.Mark> rings = List.of(new Course.Mark(0, 270, -25, 7), new Course.Mark(0, 300, -125, 7),
+                new Course.Mark(0, 250, -230, 7));
+        Course sky = new Course("fresh_rings", TrialKind.ELYTRA, "Sky Rings", Tier.EASY, "games",
+                new Course.Spot(0.5, 280, 0.5, 180, 0), rings, new Course.Mark(0, 240, -330, 7), 150.0, 30, true,
+                false, 1, null, new Course.Elytra(4, List.of(1, 1, 0, 0), "LG"));
+        assertEquals(32, FairPlay.ELYTRA_FLOOR_DEPTH, 1e-9);
+        assertEquals(238, FairPlay.fallY(sky, -1, 6), 1e-9, "the start (280) to ring 1 (270): 270 - 32");
+        assertEquals(238, FairPlay.fallY(sky, 0, 6), 1e-9, "ring 1 (270) to the climb's ring 2 (300): 270 - 32");
+        assertEquals(218, FairPlay.fallY(sky, 1, 6), 1e-9, "ring 2 (300) to ring 3 (250): 250 - 32");
+        assertEquals(208, FairPlay.fallY(sky, 2, 6), 1e-9, "ring 3 (250) to the gold ring (240): 240 - 32");
+        assertEquals(215, FairPlay.fallY(sky.withFallY(215.0), 2, 6), 1e-9, "never under the course's own");
+        Course hand = sky.withElytra(null).withFallY(null);
+        assertTrue(Double.isNaN(FairPlay.fallY(hand, 1, 6)), "a hand-built elytra course: landing is its reset");
+        assertEquals(150, FairPlay.fallY(sky.withElytra(null), 1, 6), 1e-9, "with its own fall_y: that, as before");
     }
 
     @Test
@@ -682,5 +701,26 @@ class FairPlayTest {
         assertFalse(FairPlay.stale(then, then.layoutHash(), now, bothStand),
                 "the run keeps its snapshot: while its half stands, its finish counts on the old board");
         assertTrue(FairPlay.stale(then, then.layoutHash(), now, onlyNew), "once its half is being cleared it doesn't");
+    }
+
+    @Test
+    void aLongDropEditionIsJudgedLikeAnyDropper() {
+        // the Dropper since the Long Drop: EEMHX, a Hard course, 19.1 s reference, 3 stars at 24 s, 2 at 35 s
+        GenTag tag = new GenTag("fresh_dropper", "dropper", 1, 20_724, 0, 7L, 'A', "cccccccccccc", 19_100, 24_000,
+                35_000, List.of(), List.of(), 1L);
+        assertEquals(19_100, com.dierks.homecraft.games.gen.dropper.DropRules.refMs("EEMHX"), "the tag's reference");
+        assertEquals(Tier.HARD, com.dierks.homecraft.games.gen.dropper.DropRules.tier("EEMHX"), "a Hard course");
+        Course course = DropperCourses.hand(tag);
+        for (int i = 0; i < 5; i++) {
+            assertEquals(!DropperLayout.isPool(i), FairPlay.ownTeleport(course, i),
+                    "leg " + i + ": the hops up to a ledge are skipped, the falls into a pool checked, as on any dropper");
+        }
+        int min = com.dierks.homecraft.games.gen.dropper.DropRules.minSeconds("EEMHX");
+        assertEquals(9, min, "90% of the walk-off falls: 212 ticks");
+        assertEquals(FairPlay.TOO_QUICK, FairPlay.judge(false, null, false, min * 1000L - 1, min, -1).reason(),
+                "quicker than gravity doesn't count");
+        assertTrue(FairPlay.judge(false, null, false, 24_000, min, -1).counts(), "a gold-time run counts");
+        assertEquals(3, com.dierks.homecraft.games.gen.api.Stars.trial(24_000, tag.goldMs(), tag.silverMs()),
+                "by time it is 3 stars; a bonk makes it 2 (TrialFinish's clean-run rule, pinned there)");
     }
 }

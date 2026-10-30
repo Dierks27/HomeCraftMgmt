@@ -22,11 +22,13 @@ import java.util.List;
  * stick slowly, and a pilot who only points at the ring arrives above it. Once a ring counts it
  * keeps flying straight through it until it is a block past its plane, as a player does, and only
  * then turns for the next one (turning inside the hole clips the frame). It fires a rocket, if it
- * has one, only when it is falling short: once the ring is no longer below its glide line. It must
- * pass every ring's centre closely enough to count, touching nothing. {@link RingsValidator} flies
- * it from every ring at three speeds with the heading a little off, from a standstill at every ring
- * (a fall-reset leaves the player gliding at the ring with no speed) with at most one rocket, and
- * off the start tower.
+ * has one, only on a rocket leg ({@link Target#rocketLeg}: a climb or a level leg), once a leg, and
+ * only when it is falling short: once the ring is no longer below its glide line; on a glide it
+ * never fires, so the rockets a flight uses are exactly the rocket legs it flew. It must pass every
+ * ring's centre closely enough to count, touching nothing. {@link RingsValidator} flies it from
+ * every ring at three speeds with the heading a little off, from a standstill at every ring (a
+ * fall-reset leaves the player gliding at the ring with no speed), each with the rockets the rest of
+ * the course needs, and off the start tower.
  *
  * <p>Look vectors come from {@link StrictMath} or plain arithmetic; nothing here reads a clock or
  * a random number, so a layout is proven the same way on every host.
@@ -186,16 +188,24 @@ public final class ElytraSim {
 
     /**
      * A ring to fly through: its centre, how close to it a pass must come (the checkpoint's
-     * radius less half a block), and the way through it across the ground (nx, nz), a unit vector
-     * along its facing, or (0, 0) for a ring the flight ends in. A pilot keeps aiming through a
-     * ring until it is a block past its plane, then turns for the next one, as a player does; one
-     * that turns inside the hole clips the frame.
+     * radius less half a block), the way through it across the ground (nx, nz), a unit vector
+     * along its facing, or (0, 0) for a ring the flight ends in, and whether the leg into it is a
+     * rocket leg (a climb or a level leg, where a pilot fires exactly one rocket if it has one; on
+     * a glide it never fires). A pilot keeps aiming through a ring until it is a block past its
+     * plane, then turns for the next one, as a player does; one that turns inside the hole clips
+     * the frame.
      */
-    public record Target(double x, double y, double z, double pass, double nx, double nz, boolean last) {
+    public record Target(double x, double y, double z, double pass, double nx, double nz, boolean last,
+                         boolean rocketLeg) {
+
+        /** A ring a pilot may spend a rocket on (every ring was one before Sky Rings v3). */
+        public Target(double x, double y, double z, double pass, double nx, double nz, boolean last) {
+            this(x, y, z, pass, nx, nz, last, true);
+        }
 
         /** A point to pass near, with no facing (the flight ends there). */
         public Target(double x, double y, double z, double pass) {
-            this(x, y, z, pass, 0, 0, true);
+            this(x, y, z, pass, 0, 0, true, true);
         }
 
         /** How far (px, pz) is in front of the ring's plane, along its facing (negative: past it). */
@@ -235,31 +245,53 @@ public final class ElytraSim {
     public static final class Pilot {
         public final Flyer flyer;
         private int rockets;
+        private int rocketsUsed;
+        /** The fastest it has flown, blocks a tick. */
+        private double peakSpeed;
         /** A ring counted but not yet flown through. */
         private Target through;
         /** Where the leg being flown starts (the start, or the last ring passed), across the ground. */
         private double fromX;
         private double fromZ;
+        /** The feet height where the leg being flown starts: {@link #LOST} is measured from the leg's lower end. */
+        private double legStartY;
+        /** Whether a rocket was fired on the leg being flown: one a leg at most. */
+        private boolean firedThisLeg;
 
         public Pilot(Flyer flyer, int rockets) {
             this.flyer = flyer;
             this.rockets = rockets;
             this.fromX = flyer.x;
             this.fromZ = flyer.z;
+            this.legStartY = flyer.y;
         }
 
         /** An exact copy, to try a leg without committing to it. */
         public Pilot copy() {
             Pilot p = new Pilot(flyer.copy(), rockets);
+            p.rocketsUsed = rocketsUsed;
+            p.peakSpeed = peakSpeed;
             p.through = through;
             p.fromX = fromX;
             p.fromZ = fromZ;
+            p.legStartY = legStartY;
+            p.firedThisLeg = firedThisLeg;
             return p;
         }
 
         /** Rockets not fired yet. */
         public int rockets() {
             return rockets;
+        }
+
+        /** Rockets fired so far. */
+        public int rocketsUsed() {
+            return rocketsUsed;
+        }
+
+        /** The fastest it has flown so far, blocks a tick (0 before its first tick). */
+        public double peakSpeed() {
+            return peakSpeed;
         }
 
         /**
@@ -312,9 +344,12 @@ public final class ElytraSim {
                 double toRing = Math.sqrt(tx * tx + tz * tz);
                 double h = through != null ? hAim : toRing;
                 closest = Math.min(closest, toRing);
-                if (rockets > 0 && f.rocket == 0 && -dy * SHORT_SLOPE < h) {
+                // one rocket a leg, on a rocket leg only, once the ring is no longer below the glide line
+                if (rockets > 0 && f.rocket == 0 && t.rocketLeg() && !firedThisLeg && -dy * SHORT_SLOPE < h) {
                     f.rocket = ROCKET_TICKS;
                     rockets--;
+                    rocketsUsed++;
+                    firedThisLeg = true;
                 }
                 double lx;
                 double ly;
@@ -350,6 +385,7 @@ public final class ElytraSim {
                 glide(f, lx, ly, lz);
                 ticks++;
                 sinceRing++;
+                peakSpeed = Math.max(peakSpeed, f.speed());
                 if (solid != null && touchesAlong(ox, feetY, oz, f, solid)) {
                     return new Result(false, next, ticks, "touched a block at " + (int) Math.floor(f.x) + " "
                             + (int) Math.floor(f.y) + " " + (int) Math.floor(f.z) + " before ring " + (next + 1));
@@ -365,6 +401,8 @@ public final class ElytraSim {
                     through = r.through(f.x, f.z) ? null : r;
                     fromX = r.x();
                     fromZ = r.z();
+                    legStartY = r.y();
+                    firedThisLeg = false;
                     next++;
                     sinceRing = 0;
                     closest = Double.MAX_VALUE;
@@ -381,7 +419,8 @@ public final class ElytraSim {
                         return new Result(false, next, ticks, "missed ring " + (next + 1) + " ("
                                 + Math.round(f.y + BOX / 2 - r.y()) + " off in height)");
                     }
-                    if (f.y + BOX / 2 < r.y() - LOST) {
+                    // measured from the leg's lower end, so a climb to a ring 40 up isn't "lost" at its first tick
+                    if (f.y + BOX / 2 < Math.min(legStartY, r.y()) - LOST) {
                         return new Result(false, next, ticks, "fell far below ring " + (next + 1));
                     }
                 }

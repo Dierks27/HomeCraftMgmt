@@ -43,6 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * own tokens once, all or nothing, by Fresh Courses; a recalled course plays on its original board
  * and first-finish ref with its own stars; every set it uses is the layout's, while today's pick
  * keeps the calendar day; and a hand-built run behaves exactly as before.
+ *
+ * <p>And the clean-run rule: on a Hard dropper (the Dropper since the Long Drop) a gold time with a
+ * bonk is 2 stars and the summary says why; a clean gold is 3; a silver with a bonk is 2 and not
+ * "capped"; an easy or medium dropper and every other course (bonks -1) keep their stars by time alone.
  */
 class TrialFinishTest {
 
@@ -307,6 +311,62 @@ class TrialFinishTest {
 
     private static FairPlay.Verdict counted(long ms) {
         return FairPlay.judge(false, null, false, ms, 5, -1);
+    }
+
+    /** The Dropper's EEMHX layout (a Hard course): 3 stars at 24 s or less, 2 at 35 s or less. */
+    private static GenTag dropperTag() {
+        return new GenTag("fresh_dropper", "dropper", 1, SET_DAY, 0, 0x5e3L, 'A', "d20bf1a7c3e4", 19_100, 24_000,
+                35_000, List.of(), List.of(), 1L, 7);
+    }
+
+    /** A dropper run on that layout with {@code bonks} in its timed run, on a course of {@code tier}. */
+    private static TrialFinish.Run dropperRun(long ms, int bonks, Tier tier) {
+        return new TrialFinish.Run("fresh_dropper", "Dropper", ms, DAY, WEEK, false, false, 25, 7, 2, 3,
+                new TrialFinish.Daily(dropperTag(), STAR_WEEK, 15, GOALS), bonks, tier);
+    }
+
+    @Test
+    void aBonkedGoldTimeOnAHardDropperIsTwoStarsAndTheSummarySaysWhy() {
+        assertEquals(Tier.HARD, TrialFinish.CLEAN_FOR_GOLD, "the rule is for Hard droppers (the Long Drop's)");
+        DailyLedger ledger = new DailyLedger();
+        TrialFinish.Summary s = TrialFinish.settle(counted(20_000), dropperRun(20_000, 1, Tier.HARD), ledger);
+        assertEquals(2, s.stars(), "a gold time with a bonk: 2 stars");
+        assertTrue(s.bonkCapped(), "and the summary says the bonk held the third back");
+        assertEquals(List.of(2), ledger.starsTold, "the player is told 2");
+        assertEquals(2, s.added().added(), "and 2 go to the week");
+
+        DailyLedger clean = new DailyLedger();
+        TrialFinish.Summary c = TrialFinish.settle(counted(20_000), dropperRun(20_000, 0, Tier.HARD), clean);
+        assertEquals(3, c.stars(), "a clean gold time: 3 stars");
+        assertFalse(c.bonkCapped(), "nothing held back");
+
+        DailyLedger silver = new DailyLedger();
+        TrialFinish.Summary v = TrialFinish.settle(counted(30_000), dropperRun(30_000, 3, Tier.HARD), silver);
+        assertEquals(2, v.stars(), "a silver time with bonks is 2 stars by time");
+        assertFalse(v.bonkCapped(), "and the bonks held nothing back: the line isn't shown");
+
+        DailyLedger slow = new DailyLedger();
+        assertEquals(1, TrialFinish.settle(counted(40_000), dropperRun(40_000, 2, Tier.HARD), slow).stars(),
+                "finishing is always 1 star");
+        assertFalse(TrialFinish.Summary.NONE.bonkCapped(), "a run that didn't count caps nothing");
+    }
+
+    @Test
+    void easyAndMediumDroppersAndEveryOtherCourseKeepStarsByTimeAlone() {
+        for (Tier tier : List.of(Tier.EASY, Tier.MEDIUM)) {
+            DailyLedger ledger = new DailyLedger();
+            TrialFinish.Summary s = TrialFinish.settle(counted(20_000), dropperRun(20_000, 4, tier), ledger);
+            assertEquals(3, s.stars(), tier + ": a gold time with bonks is still 3 stars (the daughter's Easy Dropper)");
+            assertFalse(s.bonkCapped(), tier + ": nothing held back");
+        }
+        DailyLedger other = new DailyLedger();
+        TrialFinish.Summary s = TrialFinish.settle(counted(20_000), dropperRun(20_000, -1, Tier.HARD), other);
+        assertEquals(3, s.stars(), "a course that isn't a dropper has no bonks (-1): a Hard parkour golds by time");
+        assertFalse(s.bonkCapped(), "nothing held back");
+        TrialFinish.Run plain = dailyRun(tag(SET_DAY, 0), 40_000, false, false);
+        assertEquals(-1, plain.bonks(), "a run made without bonks has none");
+        assertFalse(plain.bonkCapped(), "and is never capped");
+        assertEquals(3, TrialFinish.settle(counted(40_000), plain, new DailyLedger()).stars(), "as before");
     }
 
     @Test

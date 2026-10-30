@@ -28,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the owner's 0.37.2 file ends with the token shop's three comments (the Prize Counter's header, the icon keys
  * and the collectors'); the owner's 0.38.0 file ends with revision 23's (the header's firework line); the owner's
  * 0.38.1 file ends with revision 24's (the header's launchers 1-10 and remote lines, and the launcher's 1-30 and the
- * Remote); and every fingerprint is what the versions before its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2
- * for 20-22, 0.38.0 for 23, 0.38.1 for 24).
+ * Remote) and revision 25's (the slots' comment with the Long Drop); and every fingerprint is what the versions before
+ * its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2 for 20-22, 0.38.0 for 23, 0.38.1 for 24 and 25).
  */
 class ShippedCommentsTest {
 
@@ -132,6 +132,8 @@ class ShippedCommentsTest {
         String launcher = String.join("\n", after.getComments("arcade.launcher"));
         assertTrue(launcher.contains("(1-30, admins too)") && launcher.contains("Firework Remote")
                 && launcher.contains("Mega, Super, Ultra and Ultimate"), launcher);
+        String slots = String.join("\n", after.getComments("games.fresh.slots"));
+        assertTrue(slots.contains("X the Long Drop") && slots.contains("64 x 144 x 16"), "revision 25's: " + slots);
         assertEquals(bundled.getComments("arcade.holiday_shows"), after.getComments("arcade.holiday_shows"),
                 "the new holiday section comes with its comment (the backfill's)");
     }
@@ -201,6 +203,12 @@ class ShippedCommentsTest {
                 FireworkRemoteMigration.REVISION), "24 on 0.38.1's file: the launcher's and the counter's header");
         assertEquals(List.of(), ShippedComments.refresh(LayoutFixtures.v0380(), FireworkRemoteMigration.REVISION),
                 "and nothing on 0.38.0's (no launcher yet, and its header is 23's to refresh)");
+        assertEquals(List.of("games.fresh.slots"), ShippedComments.refresh(LayoutFixtures.v0381(),
+                com.dierks.homecraft.games.gen.DropperMixMigration.REVISION),
+                "25 on 0.38.1's file (0.38.4's slots text is the same): the slots' comment, for the Long Drop");
+        assertEquals(List.of(), ShippedComments.refresh(LayoutFixtures.v036(),
+                com.dierks.homecraft.games.gen.DropperMixMigration.REVISION),
+                "and nothing on 0.36's, whose slots comment is 21's to refresh");
         YamlConfiguration at23 = LayoutFixtures.v0381();
         List<String> mine = new ArrayList<>(at23.getComments("arcade.launcher"));
         mine.add("my launchers are by the lake");
@@ -233,13 +241,22 @@ class ShippedCommentsTest {
         Set<String> keys = new HashSet<>();
         for (ShippedComments.Stale s : ShippedComments.STALE) {
             assertTrue(keys.add(s.key() + "@" + s.revision()), s.key() + " once a revision");
-            // 20-22 meet a 0.35.0, 0.36.0 or 0.37.2 file; 23 meets 0.38.0's (22 refreshed the older texts first); 24
-            // meets 0.38.1's (23 refreshed 0.38.0's header, and the backfill wrote the launcher's)
-            List<YamlConfiguration> before = s.revision() <= ShopMigration.REVISION ? List.of(v035, v036, v0372)
-                    : s.revision() == GrandShowMigration.REVISION ? List.of(v0380) : List.of(v0381);
+            // a revision meets every file below it: 20 and 21 a 0.35.0 or 0.36.0 file, 22 a 0.37.2 one too, 23 0.38.0's,
+            // 24 0.38.1's, 25 0.38.4's (whose slots comment is 0.38.1's). A text an earlier revision's entry on the same
+            // key already refreshes is never this one's (22 refreshed the older headers before 23 met them)
+            Set<String> earlier = new HashSet<>();
+            for (ShippedComments.Stale e : ShippedComments.STALE) {
+                if (e.key().equals(s.key()) && e.revision() < s.revision()) {
+                    earlier.addAll(e.shipped());
+                }
+            }
             Set<String> shipped = new HashSet<>();
-            for (YamlConfiguration old : before) {
-                if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))) {
+            for (YamlConfiguration old : List.of(v035, v036, v0372, v0380, v0381)) {
+                if (old.getInt("config_revision", 0) >= s.revision()) {
+                    continue; // a file this revision never meets
+                }
+                if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))
+                        && !earlier.contains(fingerprint(old, s.key()))) {
                     shipped.add(fingerprint(old, s.key()));
                 }
             }

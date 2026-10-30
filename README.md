@@ -2728,9 +2728,15 @@ above).
 
 **When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
 224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
-2880), nothing is asked of you. Config revision 21 moves each shipped spot you never changed (the
+2880; the Long Drop: the Dropper and Classic Dropper grow to 64 x 144 x 16 at the same spot), nothing
+is asked of you. Config revision 21 moves each shipped spot you never changed (the
 console: "Config migration: the bigger Golf v4 and Mountain Run v2 areas get their new spots (Golf of
-the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)"). An origin you set yourself stays, with one
+the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)"). Config revision 25 changes the Dropper's mix
+you never changed ("Config migration: the Dropper's shipped mix EEMMH becomes EEMHX (level 5 is the
+Long Drop)"; a mix of your own stays, with one WARN naming `/hcm games gen mix fresh_dropper EEMHX`;
+a mix set by that command wins over the file as always, so run it again if you want the Long Drop
+there), and the taller halves need no spot change: the Dropper is rebuilt where it stands, its old
+64-tall area emptied first, pools before walls. An origin you set yourself stays, with one
 WARN naming it and the shipped spot, and the course grows in place there if it fits (`/hcm games
 check` says if it doesn't). A `half_gap: 32` that 0.35's layout wrote goes with its old spot; one beside
 0.36's spot is yours and stays, with one WARN (its spare half is then in sight: take `half_gap` out for
@@ -2979,7 +2985,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
 | `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts). A change drops a waiting pick: choose again |
-| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`). A change drops a waiting pick: choose again |
+| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHX`; a dropper may hold an X, the Long Drop, where its half is 144 tall: the Dropper's, not Easy Dropper's). A change drops a waiting pick: choose again |
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so). `pin <course> live` is refused, and nothing is pinned, when the course up now was made by an older planner (after an update: "... so it can't be made again after the update"); it stays until its set ends, and `/hcm games gen keep <course> current <new-id> confirm` keeps it for good. A typed seed that an archived set of an older planner was made from is pinned, with a warning: the pin makes a new course from that seed, and the reply says how to have the old one back as it was (`recall <code>`, or `keep`) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
@@ -3470,10 +3476,16 @@ and ride it instead.
 
 Two more Fresh Courses, new with every set and **shipped on** (like the others, they are built only once
 `games.fresh.enabled` is on): **Easy Dropper** (3 easy levels) and
-**Dropper** (5 levels, easy to hard). A level is a glass shaft in its own colour: step off a lime
+**Dropper** (5 levels, easy to the Long Drop). A level is a glass shaft in its own colour: step off a lime
 ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through the holes in the
 coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
-ringed with glowing sea lanterns ("follow the light") and the whole floor is water. A splash clears
+ringed with glowing sea lanterns ("follow the light") and the whole floor is water. The Dropper's
+levels 1-4 are E, E, M and H as before; its level 5 is **the Long Drop** (the letter X): 128 blocks
+straight down (2.7 times a Hard level's 48) through 8 unlit plates that arrive every 0.3 s, most of
+them with two false holes beside the real one, and a hole line that keeps sliding sideways all the
+way to a 6-wide pool. Its sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the / way down!": keep
+steering to the water, because stopping over a hole you have just found usually puts you on the next
+plate. Expect bonks on a first visit; a clean run is a second- or third-visit thing. A splash clears
 the level ("Level 2! of 5 - keep going!") and a quarter of a second later you are on the next ledge;
 the last splash is the finish ("Splash! 0:21.4 · ★★★"). Landing on anything but water (the rim of a
 pool too, even with half of you over the water: only a body wholly over the water splashes) is a **bonk**:
@@ -3489,10 +3501,14 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   counted for the Weekly Cup, and its bonks don't count. One per run; `games.trials.warmup_seconds: 0`
   turns it off with the other warm-ups.
 - **Score and rewards:** the time from Go to the last splash, lower is better, on the set's board.
-  Stars use the mix's rounded tier (EEE is easy, EEMMH medium): 3-star times of about 20 s on Easy
-  Dropper and 27 s on the Dropper. First finish in a set: Easy Dropper 10 tokens a week (5 a day),
-  Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the first clear once ever
-  by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
+  Stars use the mix's rounded tier (EEE is easy; any mix with an X is hard, so the Dropper is a
+  **Hard** course): 3-star times of about 20 s on Easy Dropper and 24 s on the Dropper (2 stars at
+  35 s), and **3 stars on a Hard dropper need a run with no bonks**: a gold time with a bonk is 2
+  stars and the result says "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"
+  (Easy and medium droppers keep stars by time alone). First finish in a set: Easy Dropper 10 tokens
+  a week (5 a day), Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the
+  first clear once ever by tier (the Dropper's is hard's 25); the Star Chart counts its stars. A clean
+  counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
 - **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or a
@@ -3508,19 +3524,27 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   even while Fresh Courses is off; a kept Dropper's plot keeps its water in; and a Dropper whose
   `origin` is moved without a `clear` keeps its old area guarded ("drain first": `/hcm games gen tidy
   <course> confirm` empties it, pools first; status lists it) (see "Moving an area by hand").
-- **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, y 160-223, z 6768-6783
-  (Easy Dropper) and 7360-7375 (Dropper); Classic Dropper (recalls of either) at z 7952-7967. Each
-  half is 64 x 64 x 16. The keep plot size is unchanged.
+- **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, z 6768-6783 (Easy
+  Dropper, y 160-223, 64 x 64 x 16, unchanged by the Long Drop) and z 7360-7375 (Dropper, y 160-303,
+  64 x 144 x 16); Classic Dropper (recalls of either) at z 7952-7967, 64 x 144 x 16 too, so every
+  past Dropper you archived, 64-tall or 144-tall, still recalls into it (an older 64-tall edition
+  stands at its own size in the half's corner). The keep plot size is unchanged (144 fits its 176).
 - **Admin:** `/hcm games gen on fresh_dropper` (or `slots.fresh_dropper.enabled: true`) and it is built
   with the next set, or at once with `/hcm games gen reroll fresh_dropper confirm`. `/hcm games gen mix
-  fresh_dropper EMHHH` changes the levels (1-5 of E, M and H) from the next build. Droppers can't be
+  fresh_dropper EMHHX` changes the levels (1-5 of E, M, H and X; an X only where the half is 144 tall:
+  `/hcm games gen mix fresh_dropper_easy EEX` is refused with "an X level needs a half at least 141
+  tall (this one is 64): X is for the Dropper", and a `mix: EEX` in the Easy Dropper's config row
+  switches it off with that WARN) from the next build; `XXXXX` is allowed (five Long Drops). To have
+  the old Dropper back without a deploy: `/hcm games gen mix fresh_dropper EEMMH` and a reroll (the
+  old shape, 80 blocks higher in the taller half; it is then a medium course again, no clean-run
+  rule). Droppers can't be
   made by hand (`/hcm games course create <id> dropper` is refused); keep one instead. A kept dropper
   can be renamed, re-tiered, enabled, tested and featured, but not re-shaped.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper |
-| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels) |
+| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper (64 x 64 x 16: E, M and H levels only) |
+| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMHX, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels; 64 x 144 x 16, so an X fits; EEMMH before the Long Drop, moved by config revision 25) |
 | `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `10` / `15` | First finish in a weekly set |
 | `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `5` / `8` | First finish in a daily set |
 | `fresh.classics.slots.fresh_classic_dropper.origin` | `[7488, 160, 7952]` | Where Classic Dropper is built |
@@ -3538,6 +3562,7 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
    Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
 3. Finish Easy Dropper on a tablet without sprinting, following the lights.
 4. Finish the Dropper on Java cleanly: 3 stars (under the gold time) and "No bonks - perfect drop!".
+   (The proof is Java physics; keep Bedrock on the Easy Dropper.)
 5. Land on a coloured floor on purpose: "Bonk!", back on that level's ledge, the clock still running,
    and the result says "Bonks: 1".
 6. Stand on the light-blue floor beside a Medium pool: bonk. Land on the rim of a Hard pool with half
@@ -3548,6 +3573,29 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 9. `/hcm games gen reroll fresh_dropper confirm` while someone is mid-run: their run finishes and
    counts on the old board.
 10. Set `games.trials.warmup_seconds: 0` and `/hcm reload`: the practice drop is no longer offered.
+
+**Verify the Long Drop** (after the update that brings it):
+
+1. The console shows "Config migration: the Dropper's shipped mix EEMMH becomes EEMHX" and, at the
+   restart, "Fresh Courses: fresh_dropper's area changed with this version: its halves are 64 x 144 x
+   16 now ..., the pools drained first"; `/hcm games gen status` shows the old area emptied, then the
+   Dropper rebuilt (a new course code, `r1` on its set key); the Easy Dropper is untouched, still at
+   y 160-223 with its old blocks and code.
+2. `/hcm games gen plan fresh_dropper` shows "level 5 (X, purple) ... pool 6x6", a witness line ending
+   in a held direction (like `S4 W9 S12 E8 N*`), "... ticks flown, 0 straight".
+3. Stand on level 5's ledge (y 296): the sign reads "LEVEL 5 of 5 / THE LONG DROP / steer all the /
+   way down!", the water is 128 blocks down, the plates are unlit, some with extra holes.
+4. On Java, walk off aiming at the holes and keep steering: you get wet eventually; expect bonks; each
+   bonk returns you to the top of level 5 with the clock running.
+5. The Dropper tile reads Hard, "3 stars 24 s, 2 stars 35 s"; a finish with any bonk inside 24 s shows
+   two stars and the line "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run"; a clean
+   finish inside 24 s shows three stars and "No bonks - perfect drop!"; the first clear pays 25 once.
+6. `/hcm games gen mix fresh_dropper_easy EEX` is refused ("an X level needs a half at least 141 tall
+   (this one is 64)"); `/hcm games gen mix fresh_dropper XXXXX` is accepted and the reroll builds five
+   Long Drops.
+7. `/hcm games gen recall fresh_dropper <an old DROP code>` places the old 64-tall EEMMH edition in
+   Classic Dropper and it plays as before.
+8. A child plays the Easy Dropper exactly as last week (Bedrock included).
 <!-- ---- end dropper ---- -->
 
 #### Bring back or keep a course

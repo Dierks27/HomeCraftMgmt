@@ -352,6 +352,16 @@ class GenAdminTest {
         assertTrue(heard().contains("easy, medium or hard"), heard());
         run("mix fresh_tiny_golf EEEE");
         assertTrue(heard().contains("1-3"), "tiny golf fits three holes: " + heard());
+        run("mix fresh_tiny_golf EXE");
+        assertTrue(heard().contains("E, M and H"), "golf has no Long Drop: " + heard());
+        run("mix fresh_dropper");
+        assertTrue(heard().contains("<E, M, H and X, like EEMHX>"), "a dropper's usage names the X: " + heard());
+        run("mix fresh_tiny_golf");
+        assertTrue(heard().contains("<E, M and H, like EEE>"), "golf's doesn't: " + heard());
+        run("mix fresh_dropper_easy EEX");
+        assertTrue(heard().contains("141 tall") && heard().contains("X is for the Dropper"),
+                "an X on the 64-tall Easy Dropper is refused at the command: " + heard());
+        run("mix fresh_dropper XXXXX");
         run("tier fresh_rings Medium");
         run("mix fresh_tiny_golf emh");
         run("pin fresh_rings live 7");
@@ -362,7 +372,7 @@ class GenAdminTest {
         run("pin fresh_rings now");
         assertTrue(heard().contains("16 hex digits"), heard());
         run("unpin fresh_rings");
-        assertEquals(List.of("tier fresh_rings Medium", "tier fresh_tiny_golf emh",
+        assertEquals(List.of("tier fresh_dropper XXXXX", "tier fresh_rings Medium", "tier fresh_tiny_golf emh",
                 "pin fresh_rings live 7", "pin fresh_rings live 7", "pin fresh_rings 3f2a91c07d1e55b0 0",
                 "unpin fresh_rings"), ops.calls, "the good ones reached the engine (today reads as live)");
     }

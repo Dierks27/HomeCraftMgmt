@@ -31,7 +31,8 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
   - Add `DROPPER("dropper", "Dropper", 80, 2.5, GAMES_DROPPER, rules)`.
   - `DropperPlanner.KIND` then picks it up by itself through `TrialKind.of("dropper")`.
   - The course kind is part of the plan hash. **Re-pin `DropperPlannerTest`'s golden hashes** in the
-    same commit. Keep `ALGO = 1`, because no dropper has been built yet.
+    same commit. Keep `ALGO = 1`, because no dropper has been built yet. (The Long Drop, §8, kept it at
+    1 too: the nine E/M/H goldens did not move, so every archived edition still re-derives.)
 
 ## 2. Slots and config
 
@@ -44,7 +45,11 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
   - `classicFor` maps a dropper to `fresh_classic_dropper`, and `classicByWord("dropper")` does too.
   - The halves are 64 × 64 × 16 at x 7488 (half B at x 8128, 576 further), y 160, z 6768 / 7360 /
     7952, in the east column of the layout (LAYOUT-SPEC §1.5; 0.35 had them at x 5376, z 4096 / 4160
-    / 4224). That is inside the keep plot size, so `KeepArea` doesn't move.
+    / 4224). That is inside the keep plot size, so `KeepArea` doesn't move. Since the Long Drop (§8)
+    the Dropper's and Classic Dropper's halves are 64 × 144 × 16 (y 160-303) at the same spots; Easy
+    Dropper's stays 64 × 64 × 16. A `Def` whose size changed makes every old claim read as resized, so
+    the engine records and empties the old area by itself and rebuilds there; no `LayoutGuard.RESIZED`
+    entry, because no spot moves.
 - **`gen/api/CourseCode`**: add `EDROP` (`fresh_dropper_easy`) and `DROP` (`fresh_dropper`).
 - **`gen/api/GenCopy`**: the slot names and "This week's courses" lines.
 - **`gen/{DailyCourses, DailySettings}`** and `config.yml` (`games.fresh`):
@@ -55,9 +60,11 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
 - **`gen/engine/GenService`**: add `WORK.put("dropper", 300_000L)`, which is
   `DropperPlanner.WORK_BUDGET`. The planner splits the budget evenly across the levels and counts
   simulated ticks, so every host makes the same plan. A typical plan uses about 18k (EEE) to 45k
-  (HHHHH), most of it the pilots (§7).
+  (HHHHH), most of it the pilots (§7). (`WORK_BUDGET` is 600,000 since the Long Drop, shared as
+  "what is left over the levels still to plan", §8; `GenService.WORK` reads the constant.)
 - **Admin mix**: `/hcm games gen mix fresh_dropper EEMHH` goes through `tierProblem`, which is
-  `DropRules.mixProblem`.
+  `DropRules.mixProblem` (`mixProblem(mix, plots, sizeY)` since the Long Drop, so an X is refused on a
+  64-tall half at the command; the usage line reads "<E, M, H and X, like EEMHX>").
 
 ## 3. The engine
 
@@ -126,8 +133,15 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
   bonks" (20), with E4's backfill caution. Test, void and stale runs never count, and neither does a
   practice drop (§5).
 - **Stars**: `PlannedTrial.refMs` is `DropRules.refMs(mix)`. The row's tier is `DropRules.tier(mix)`
-  (the rounded mean), so `Stars.threshold(refMs, factor)` uses that tier's factor. EEE gives a
-  9.8 s reference (gold 19.6 s, shown as 20 s), and EEMMH gives 17.4 s (gold 26.1 s, shown as 27 s).
+  (the rounded mean; any mix with an X is hard), so `Stars.threshold(refMs, factor)` uses that tier's
+  factor. EEE gives a 9.8 s reference (gold 19.6 s, shown as 20 s), EEMMH 17.4 s (gold 26.1 s, shown
+  as 27 s), and EEMHX 19.1 s (hard: gold 23.875 s shown as 24 s, silver 34.38 s shown as 35 s,
+  minSeconds 9). **The bonk cap** (`TrialFinish.CLEAN_FOR_GOLD = HARD`): `TrialFinish.Run` carries
+  the run's bonks (-1 off a dropper) and the course's tier; in `settleDaily`, after `Stars.trial`, a
+  bonked run on a Hard dropper gets at most 2 stars, `Summary.bonkCapped` says so, and
+  `DropperHooks.finished` adds "Gold time, but a bonk: 3 stars on a Hard dropper need a clean run."
+  EEE (easy) and EEMMH (medium) are untouched; `game_dropper_clean` is unchanged. Tags freeze gold and
+  silver at build, as before.
 - **The hop** to the next ledge faces `DropMarks.facing(ledge, pool)`, because a checkpoint mark
   carries no yaw.
 
@@ -179,8 +193,11 @@ only: the pure package already has every piece it needs.
   walk-off is two ground ticks (the last tick over the ledge and the edge tick after it) with ground
   acceleration (0.098) and ground drag (0.546). A walker leaves the edge with 0.118 blocks a tick,
   not 0.198, and drifts about **1.28** blocks once it lets go, not 2.19. A jump-off is one ground
-  tick with the jump's 0.42. The fall times (32/37/40 and 38/42/46 ticks), the top air speeds, the
-  stop and the reaches are unchanged. `DropSim` models the ledge ticks and `DropSimTest` pins them.
+  tick with the jump's 0.42. The fall times (32/37/40 and 38/42/46 ticks; the Long Drop's 128 is
+  71 walking off and 77 jumping, 2.97 blocks a tick at the water), the top air speeds, the stop and
+  the reaches are unchanged. `DropSim` models the ledge ticks and `DropSimTest` pins them. The Long
+  Drop's witness does not coast: it holds a key to the water, so consecutive holes are at least 0.5
+  blocks apart (the planner's offset rule, never the validator's; §8).
 - **More pilots than 33.** A child leaves from anywhere along the edge and at any moment of a walking
   step, and a proof flown from one moment passed levels that bonked a pilot stepping off 0.02 blocks
   later. The pilots now leave every 0.3 blocks along the edge (9 exits) and at three moments of the

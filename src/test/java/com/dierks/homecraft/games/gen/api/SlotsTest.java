@@ -27,8 +27,9 @@ class SlotsTest {
         assertEquals(List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings",
                 "fresh_golf", "fresh_tiny_golf", "fresh_boat", "fresh_dropper_easy", "fresh_dropper"), Slots.ids(),
                 "the slots in display and config order (the two droppers of EVENTS-DROPPER-SPEC §B.1.2 last)");
-        assertEquals(List.of("easy", "medium", "hard", "easy", "EEEMMMMHH", "EEE", "medium", "EEE", "EEMMH"),
-                Slots.ALL.stream().map(Slots.Def::tierOrMix).toList(), "their shipped tiers and mixes");
+        assertEquals(List.of("easy", "medium", "hard", "easy", "EEEMMMMHH", "EEE", "medium", "EEE", "EEMHX"),
+                Slots.ALL.stream().map(Slots.Def::tierOrMix).toList(),
+                "their shipped tiers and mixes (the Dropper's level 5 is the Long Drop, X)");
         assertEquals(List.of(TokenBalance.FRESH_PARKOUR_EASY_DAILY, TokenBalance.FRESH_PARKOUR_DAILY,
                 TokenBalance.FRESH_PARKOUR_HARD_DAILY, TokenBalance.FRESH_RINGS_DAILY, TokenBalance.FRESH_GOLF_DAILY,
                 TokenBalance.FRESH_TINY_GOLF_DAILY, TokenBalance.FRESH_BOAT_DAILY, TokenBalance.FRESH_DROPPER_EASY_DAILY,
@@ -69,7 +70,7 @@ class SlotsTest {
                 new Row("fresh_rings", 6080, 6784, 4096, 4415, 128, 303),
                 new Row("fresh_boat", 6080, 7136, 2880, 3519, 96, 271),
                 new Row("fresh_dropper_easy", 7488, 8128, 6768, 6783, 160, 223),
-                new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 223));
+                new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 303));
         for (Row row : table) {
             Slots.Def s = Slots.of(row.id());
             Box a = s.half('A');
@@ -137,7 +138,8 @@ class SlotsTest {
         assertNull(Slots.DAILY_GOLF.tierProblem("H"), "one hole is a mix");
         assertNotNull(Slots.DAILY_GOLF.tierProblem("EEEEEEEEEE"), "ten holes don't fit nine plots");
         assertNotNull(Slots.TINY_GOLF.tierProblem("EEEE"), "four don't fit Tiny Golf's three");
-        assertNotNull(Slots.TINY_GOLF.tierProblem("EXE"), "only E, M and H");
+        assertNotNull(Slots.TINY_GOLF.tierProblem("EXE"), "only E, M and H: golf has no Long Drop");
+        assertNotNull(Slots.DAILY_GOLF.tierProblem("EEX"), "nor the big course");
         assertNotNull(Slots.TINY_GOLF.tierProblem(""), "nothing is no mix");
         assertNotNull(Slots.TINY_GOLF.tierProblem("easy"), "a golf slot doesn't take a tier");
         assertEquals("EEM", Slots.TINY_GOLF.normalise(" eem "), "a mix is upper-cased");
@@ -171,13 +173,23 @@ class SlotsTest {
         assertNull(Slots.EASY_DROPPER.tierProblem("H"), "one level is a mix");
         assertNull(Slots.FRESH_DROPPER.tierProblem("HHHHH"), "five hard levels fit");
         assertNotNull(Slots.FRESH_DROPPER.tierProblem("EEEEEE"), "six levels don't fit the half's five shafts");
-        assertNotNull(Slots.FRESH_DROPPER.tierProblem("EXE"), "only E, M and H");
+        assertNull(Slots.FRESH_DROPPER.tierProblem("EXE"), "an X (the Long Drop) fits the Dropper's 144-tall half");
+        assertNull(Slots.FRESH_DROPPER.tierProblem("XXXXX"), "five of them too");
+        assertNull(Slots.CLASSIC_DROPPER.tierProblem("EEMHX"), "and Classic Dropper, as tall, holds one");
+        String easyX = Slots.EASY_DROPPER.tierProblem("EEX");
+        assertEquals("an X level needs a half at least 141 tall (this one is 64): X is for the Dropper", easyX,
+                "but not the 64-tall Easy Dropper: refused at the command, with the height");
+        assertNull(Slots.EASY_DROPPER.tierProblem("EEMMH"), "which takes every other letter");
+        assertNotNull(Slots.FRESH_DROPPER.tierProblem("EQE"), "only E, M, H and X");
+        assertTrue(Slots.FRESH_DROPPER.tierProblem("EQE").contains("E, M, H and X"), "and says so");
         assertNotNull(Slots.FRESH_DROPPER.tierProblem("medium"), "a dropper doesn't take a tier");
         assertTrue(Slots.FRESH_DROPPER.tierProblem("medium").contains("dropper mix"), "and says it is a dropper mix");
         assertEquals("EEMHH", Slots.FRESH_DROPPER.normalise(" eemhh "), "a dropper's mix is upper-cased like golf's");
-        for (String mix : List.of("E", "EEE", "EEMMH", "MMMMM", "HHHHH")) {
-            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix),
+        for (String mix : List.of("E", "EEE", "EEMMH", "MMMMM", "HHHHH", "EEMHX", "XXXXX", "EQE", "EEEEEE")) {
+            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 144),
                     Slots.FRESH_DROPPER.tierProblem(mix), mix + ": the slot's rule is the Dropper's own mix rule");
+            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 64),
+                    Slots.EASY_DROPPER.tierProblem(mix), mix + ": the Easy Dropper's too, at its own height");
         }
     }
 
@@ -185,15 +197,21 @@ class SlotsTest {
     void theDropperRegionsAreTheSpecsAndClearOfEverythingElse() {
         assertEquals(Slots.DROPPER, Slots.CLASSIC_DROPPER.generator(), "Classic Dropper holds droppers");
         Box classic = Slots.CLASSIC_DROPPER.half('A');
-        assertEquals(List.of(7488, 160, 7952, 7551, 223, 7967), List.of(classic.minX(), classic.minY(), classic.minZ(),
-                classic.maxX(), classic.maxY(), classic.maxZ()), "Classic Dropper's half A (the spec's table)");
+        assertEquals(List.of(7488, 160, 7952, 7551, 303, 7967), List.of(classic.minX(), classic.minY(), classic.minZ(),
+                classic.maxX(), classic.maxY(), classic.maxZ()), "Classic Dropper's half A (the spec's table, 144 tall)");
         assertSame(Slots.CLASSIC_DROPPER, Slots.classicFor(Slots.EASY_DROPPER), "Easy Dropper is recalled into it");
         assertSame(Slots.CLASSIC_DROPPER, Slots.classicFor(Slots.FRESH_DROPPER), "and so is the Dropper");
         assertSame(Slots.CLASSIC_DROPPER, Slots.classicByWord("dropper"), "the word dropper names it");
         List<Slots.Def> every = new java.util.ArrayList<>(Slots.ALL);
         every.addAll(Slots.CLASSICS);
+        assertEquals(List.of(64, 64, 16), List.of(Slots.EASY_DROPPER.sizeX(), Slots.EASY_DROPPER.sizeY(),
+                Slots.EASY_DROPPER.sizeZ()), "Easy Dropper's half is 64 x 64 x 16, unchanged by the Long Drop");
+        for (Slots.Def d : List.of(Slots.FRESH_DROPPER, Slots.CLASSIC_DROPPER)) {
+            assertEquals(List.of(64, 144, 16), List.of(d.sizeX(), d.sizeY(), d.sizeZ()),
+                    d.id() + ": a 64 x 144 x 16 half, tall enough for the Long Drop (141 rows)");
+            assertEquals(303, d.half('A').maxY(), d.id() + ": y 160..303, inside the world's 312");
+        }
         for (Slots.Def d : List.of(Slots.EASY_DROPPER, Slots.FRESH_DROPPER, Slots.CLASSIC_DROPPER)) {
-            assertEquals(List.of(64, 64, 16), List.of(d.sizeX(), d.sizeY(), d.sizeZ()), d.id() + ": a 64 x 64 x 16 half");
             assertEquals(4, d.half('A').sizeX() / 16, d.id() + ": 4 chunks along x");
             assertEquals(0, d.half('A').minZ() % 16, d.id() + ": 1 chunk along z, on its line");
             for (Slots.Def other : every) {

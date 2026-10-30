@@ -683,4 +683,25 @@ class FairPlayTest {
                 "the run keeps its snapshot: while its half stands, its finish counts on the old board");
         assertTrue(FairPlay.stale(then, then.layoutHash(), now, onlyNew), "once its half is being cleared it doesn't");
     }
+
+    @Test
+    void aLongDropEditionIsJudgedLikeAnyDropper() {
+        // the Dropper since the Long Drop: EEMHX, a Hard course, 19.1 s reference, 3 stars at 24 s, 2 at 35 s
+        GenTag tag = new GenTag("fresh_dropper", "dropper", 1, 20_724, 0, 7L, 'A', "cccccccccccc", 19_100, 24_000,
+                35_000, List.of(), List.of(), 1L);
+        assertEquals(19_100, com.dierks.homecraft.games.gen.dropper.DropRules.refMs("EEMHX"), "the tag's reference");
+        assertEquals(Tier.HARD, com.dierks.homecraft.games.gen.dropper.DropRules.tier("EEMHX"), "a Hard course");
+        Course course = DropperCourses.hand(tag);
+        for (int i = 0; i < 5; i++) {
+            assertEquals(!DropperLayout.isPool(i), FairPlay.ownTeleport(course, i),
+                    "leg " + i + ": the hops up to a ledge are skipped, the falls into a pool checked, as on any dropper");
+        }
+        int min = com.dierks.homecraft.games.gen.dropper.DropRules.minSeconds("EEMHX");
+        assertEquals(9, min, "90% of the walk-off falls: 212 ticks");
+        assertEquals(FairPlay.TOO_QUICK, FairPlay.judge(false, null, false, min * 1000L - 1, min, -1).reason(),
+                "quicker than gravity doesn't count");
+        assertTrue(FairPlay.judge(false, null, false, 24_000, min, -1).counts(), "a gold-time run counts");
+        assertEquals(3, com.dierks.homecraft.games.gen.api.Stars.trial(24_000, tag.goldMs(), tag.silverMs()),
+                "by time it is 3 stars; a bonk makes it 2 (TrialFinish's clean-run rule, pinned there)");
+    }
 }

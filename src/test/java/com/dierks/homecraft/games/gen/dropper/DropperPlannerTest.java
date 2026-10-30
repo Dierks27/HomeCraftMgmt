@@ -327,10 +327,10 @@ class DropperPlannerTest {
         assertEquals(List.of("fresh_dropper_easy", "fresh_dropper", "fresh_classic_dropper"),
                 DropperSlots.ALL.stream().map(Slots.Def::id).toList(), "the three slots");
         assertEquals("EEE", DropperSlots.EASY.tierOrMix(), "Easy Dropper: 3 easy levels");
-        assertEquals("EEMMH", DropperSlots.DROPPER_SLOT.tierOrMix(), "Dropper: 5 levels, easy to hard");
-        assertEquals(new Box(7488, 160, 6768, 7551, 223, 6783), DropperSlots.EASY.half('A'), "Easy's half A");
-        assertEquals(new Box(8128, 160, 7360, 8191, 223, 7375), DropperSlots.DROPPER_SLOT.half('B'),
-                "the Dropper's half B, 576 past A");
+        assertEquals("EEMHX", DropperSlots.DROPPER_SLOT.tierOrMix(), "Dropper: 5 levels, easy to the Long Drop");
+        assertEquals(new Box(7488, 160, 6768, 7551, 223, 6783), DropperSlots.EASY.half('A'), "Easy's half A, 64 tall");
+        assertEquals(new Box(8128, 160, 7360, 8191, 303, 7375), DropperSlots.DROPPER_SLOT.half('B'),
+                "the Dropper's half B, 576 past A, 144 tall");
         assertEquals(7952, DropperSlots.CLASSIC.originZ(), "the Classic Dropper, a row further along z");
         assertTrue(DropperSlots.EASY.enabled() && DropperSlots.DROPPER_SLOT.enabled(),
                 "both ship on (inside games.fresh, which ships off)");

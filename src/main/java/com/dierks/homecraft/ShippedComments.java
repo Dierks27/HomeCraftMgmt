@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The comments in the owner's config.yml that config revisions 20, 21, 22, 23 and 24 make stale, refreshed from the
- * bundled file (the v4 audit, ECON02; SHOP-V2-SPEC §7.6).
+ * The comments in the owner's config.yml that config revisions 20, 21, 22, 23, 24 and 25 make stale, refreshed from
+ * the bundled file (the v4 audit, ECON02; SHOP-V2-SPEC §7.6).
  *
  * <p><b>Why.</b> A revision moves values, and the backfill only comments keys it adds, so a comment on a key
  * that was already there keeps describing the old version. After 0.37's two revisions the owner's file still
@@ -32,7 +32,9 @@ import java.util.Set;
  * {@link FireworkRemoteMigration}) makes two of 0.38.1's stale: the Prize Counter's header (its firework line said
  * "launchers (1-3)", and it has no {@code remote}) and {@code arcade.launcher}'s (it said "(1-10, admins too)" and
  * named only the Mega show). The owner's file holds exactly 0.38.1's texts there: revision 23 refreshed the header to
- * 0.38.1's, and the backfill gave the new {@code arcade.launcher} 0.38.1's comment.
+ * 0.38.1's, and the backfill gave the new {@code arcade.launcher} 0.38.1's comment. Revision 25 (the Long Drop,
+ * {@link com.dierks.homecraft.games.gen.DropperMixMigration}) makes the slots' comment stale once more: it said
+ * "E easy, M medium, H hard" with no X and named only the v4 areas as grown (0.37.2 through 0.38.4 shipped one text).
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
  * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's or 0.38.1's), told
@@ -74,9 +76,12 @@ final class ShippedComments {
     /** {@code FireworkRemoteMigration.REVISION}: the Firework Remote and the bigger Mega shows. */
     private static final int REV_REMOTE = FireworkRemoteMigration.REVISION;
 
+    /** {@code DropperMixMigration.REVISION}: the Long Drop (the Dropper's taller halves and its X level). */
+    private static final int REV_DROPPER = com.dierks.homecraft.games.gen.DropperMixMigration.REVISION;
+
     /**
-     * Every comment revisions 20, 21, 22, 23 and 24 make stale, in file order (frozen: 0.35.0's, 0.36.0's, 0.37.2's,
-     * 0.38.0's and 0.38.1's texts).
+     * Every comment revisions 20, 21, 22, 23, 24 and 25 make stale, in file order (frozen: 0.35.0's, 0.36.0's,
+     * 0.37.2's, 0.38.0's and 0.38.1's texts).
      */
     static final List<Stale> STALE = List.of(
             // the launcher's: "(1-10, admins too)" and only the Mega show (0.38.1); 15 a player and the Remote now
@@ -103,6 +108,9 @@ final class ShippedComments {
             new Stale("games.fresh.world", REV_AREAS, Set.of("cf98000938cc4089", "450d9f6b116ee1a1")),
             // the slots without the bigger halves, their new spots and the old areas emptied by themselves
             new Stale("games.fresh.slots", REV_AREAS, Set.of("d0f43fc28a015b8a", "b21c017d24e981a6")),
+            // the slots again: "E easy, M medium, H hard" without the X, the droppers' halves without the Dropper's
+            // 144 (0.37.2 = 0.38.0 = 0.38.1 = 0.38.4); the Long Drop, the taller Dropper and its clean-run rule now
+            new Stale("games.fresh.slots", REV_DROPPER, Set.of("da5555ee01b0e940")),
             // "well under 5 MB" (0.35) and "a Mountain Run about 50 KB ... about 6 MB" (0.36): now 0.4 MB, 25 MB
             new Stale("games.fresh.archive", REV_AREAS, Set.of("58fe358d73bbc064", "0081a1a17d71e8e9")),
             // the plots, without what fits one (0.35, 0.36): Golf v4 does; a Mountain Run v2 can't be kept

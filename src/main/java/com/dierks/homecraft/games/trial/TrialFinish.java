@@ -52,7 +52,8 @@ import java.util.List;
  *
  * <p><b>The clean-run rule</b> ({@link #CLEAN_FOR_GOLD}): on a Hard dropper (the Dropper since the Long
  * Drop, or any mix whose rounded tier is hard) the third star needs a run with no bonks. A gold time with
- * a bonk is 2 stars, and the result says why ({@link Summary#bonkCapped}). Easy and medium droppers, and
+ * a bonk is 2 stars, and the result says why ({@link Summary#bonkCapped}); after any bonked run there,
+ * the next-star line asks for a run with no bonks ({@link Summary#cleanNeeded}). Easy and medium droppers, and
  * every other course, keep stars by time alone: a Long Drop has 9 s of slack inside its gold time, three
  * deep bonks' worth, so without the rule a first visit could gold it through the plates.
  */
@@ -102,8 +103,13 @@ final class TrialFinish {
             return null;
         }
 
-        /** A Fresh course: tell the player their stars, what the next one needs, and the week. */
-        default void stars(int stars, GamesDao.StarsAdded added) {
+        /**
+         * A Fresh course: tell the player their stars, what the next one needs, and the week.
+         *
+         * @param cleanNeeded the next star needs a run with no bonks as well as the time
+         *                    ({@link Summary#cleanNeeded})
+         */
+        default void stars(int stars, GamesDao.StarsAdded added, boolean cleanNeeded) {
         }
 
         /**
@@ -207,14 +213,17 @@ final class TrialFinish {
      * @param added     what recording the stars did, or {@code null} (not a Fresh course, or not recorded)
      * @param bonkCapped whether a gold time earned 2 stars, not 3, because the run bonked on a Hard dropper
      *                   ({@link #CLEAN_FOR_GOLD}); the result says so
+     * @param cleanNeeded whether the next star needs a run with no bonks: 2 stars from a bonked run on a
+     *                    Hard dropper, by a gold time held back or a silver one, so "Next star: under 0:24"
+     *                    never reads as done when the run was already under it
      */
     record Summary(ScoreResult course, ScoreResult week, int earned, int stars, long weekStars,
-                   GamesDao.StarsAdded added, boolean bonkCapped) {
+                   GamesDao.StarsAdded added, boolean bonkCapped, boolean cleanNeeded) {
 
-        static final Summary NONE = new Summary(ScoreResult.NONE, ScoreResult.NONE, 0, 0, -1, null, false);
+        static final Summary NONE = new Summary(ScoreResult.NONE, ScoreResult.NONE, 0, 0, -1, null, false, false);
 
         Summary(ScoreResult course, ScoreResult week, int earned, int stars, long weekStars, GamesDao.StarsAdded added) {
-            this(course, week, earned, stars, weekStars, added, false);
+            this(course, week, earned, stars, weekStars, added, false, false);
         }
 
         Summary(ScoreResult course, ScoreResult week, int earned) {
@@ -264,7 +273,8 @@ final class TrialFinish {
         }
         String weekBoard = GenBoards.week(daily.weekKey());
         GamesDao.StarsAdded added = ledger.addStars(GenBoards.stars(tag), weekBoard, stars);
-        ledger.stars(stars, added);
+        boolean cleanNeeded = run.bonkCapped() && stars == Stars.MAX - 1;
+        ledger.stars(stars, added, cleanNeeded);
         int earned = firstClear(run, tag.slot(), ledger);
         if (daily.freshClear() > 0) {
             earned += ledger.payWhole(RewardKind.DAILY_CLEAR, SkillRewards.freshClearRef(tag.slot(), tag.edition()),
@@ -273,7 +283,7 @@ final class TrialFinish {
         earned += acrossGames(run, ledger);
         earned += goals(added, daily.goals(), weekBoard, ledger::payGoal);
         return new Summary(set, ScoreResult.NONE, earned, stars, added == null ? -1 : added.weekTotal(), added,
-                bonkCapped);
+                bonkCapped, cleanNeeded);
     }
 
     /** Pays one goal: its ref, its tokens and its line; the tokens actually paid. */

@@ -185,13 +185,19 @@ class SlotsTest {
         assertNull(Slots.EASY_DROPPER.tierProblem("EEMMH"), "which takes every other letter");
         assertNotNull(Slots.FRESH_DROPPER.tierProblem("EQE"), "only E, M, H and X");
         assertTrue(Slots.FRESH_DROPPER.tierProblem("EQE").contains("E, M, H and X"), "and says so");
+        assertEquals("a dropper mix is 1-5 of E, M and H (like EEE)", Slots.EASY_DROPPER.tierProblem("EEEEEE"),
+                "the Easy Dropper names only the letters its half takes, and its own mix as the example");
+        assertEquals("a dropper mix is 1-5 of E, M and H (like EEE)", Slots.EASY_DROPPER.tierProblem("medium"),
+                "a tier there too");
+        assertEquals("a dropper mix is 1-5 of E, M, H and X (like EEMHX)", Slots.FRESH_DROPPER.tierProblem("EEEEEE"),
+                "while the Dropper's names the X");
         assertNotNull(Slots.FRESH_DROPPER.tierProblem("medium"), "a dropper doesn't take a tier");
         assertTrue(Slots.FRESH_DROPPER.tierProblem("medium").contains("dropper mix"), "and says it is a dropper mix");
         assertEquals("EEMHH", Slots.FRESH_DROPPER.normalise(" eemhh "), "a dropper's mix is upper-cased like golf's");
         for (String mix : List.of("E", "EEE", "EEMMH", "MMMMM", "HHHHH", "EEMHX", "XXXXX", "EQE", "EEEEEE")) {
-            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 144),
+            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 144, "EEMHX"),
                     Slots.FRESH_DROPPER.tierProblem(mix), mix + ": the slot's rule is the Dropper's own mix rule");
-            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 64),
+            assertEquals(com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(mix, 5, 64, "EEE"),
                     Slots.EASY_DROPPER.tierProblem(mix), mix + ": the Easy Dropper's too, at its own height");
         }
     }

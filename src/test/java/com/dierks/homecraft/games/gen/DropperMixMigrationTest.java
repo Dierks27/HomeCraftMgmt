@@ -52,6 +52,10 @@ class DropperMixMigrationTest {
                 + " the Long Drop)"), "saying what moved: " + log);
         assertTrue(log.get(0).contains("64 x 144 x 16") && log.get(0).contains("emptied by itself"),
                 "and what the restart does with the taller halves: " + log);
+        assertTrue(log.get(0).contains("mix command still wins") && log.get(0).contains("/hcm games gen status")
+                && log.get(0).contains("/hcm games gen mix fresh_dropper EEMHX"),
+                "and that a mix set by command (which it can't see) still wins, with how to check and change it: "
+                        + log);
         assertFalse(DropperMixMigration.apply(c, new ArrayList<>()), "a second run changes nothing");
     }
 

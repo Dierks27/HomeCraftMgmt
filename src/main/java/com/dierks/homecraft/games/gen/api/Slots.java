@@ -181,13 +181,13 @@ public final class Slots {
          * tier is one of {@link #TIERS}; a golf mix is 1 to {@link #plots} of E, M and H; a Dropper's
          * is 1 to {@link #plots} of E, M, H and X, one letter a level, and every letter's shaft must fit
          * the half's height (the Dropper's own {@code DropRules.mixProblem}: an X needs a 144-tall half,
-         * so it is refused on the 64-tall Easy Dropper at the command, not at build time). Golf keeps
-         * refusing an X.
+         * so it is refused on the 64-tall Easy Dropper at the command, not at build time, and a bad mix
+         * there is told "E, M and H (like EEE)", never offered the X). Golf keeps refusing an X.
          */
         public String tierProblem(String tierOrMix) {
             String t = normalise(tierOrMix);
             if (dropper()) {
-                return com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(t, plots, sizeY);
+                return com.dierks.homecraft.games.gen.dropper.DropRules.mixProblem(t, plots, sizeY, this.tierOrMix);
             }
             if (mixed()) {
                 return t.isEmpty() || t.length() > plots || !MIX.matcher(t).matches()

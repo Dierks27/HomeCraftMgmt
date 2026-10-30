@@ -358,6 +358,12 @@ class GenAdminTest {
         assertTrue(heard().contains("<E, M, H and X, like EEMHX>"), "a dropper's usage names the X: " + heard());
         run("mix fresh_tiny_golf");
         assertTrue(heard().contains("<E, M and H, like EEE>"), "golf's doesn't: " + heard());
+        run("mix fresh_dropper_easy");
+        assertTrue(heard().contains("<E, M and H, like EEE>"), "nor the Easy Dropper's: its half can't hold one: "
+                + heard());
+        run("mix fresh_dropper_easy EEEEEE");
+        assertTrue(heard().contains("1-5 of E, M and H (like EEE)") && !heard().contains("X"),
+                "and a bad mix there is never offered the X it would refuse: " + heard());
         run("mix fresh_dropper_easy EEX");
         assertTrue(heard().contains("141 tall") && heard().contains("X is for the Dropper"),
                 "an X on the 64-tall Easy Dropper is refused at the command: " + heard());

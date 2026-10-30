@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -325,7 +326,7 @@ public final class GenAdmin implements GameAdmin {
                 }
                 if (arg == null) {
                     say(sender, "&cUsage: /hcm games gen " + verb + " " + id + " " + (def.dropper()
-                            ? "<E, M, H and X, like " + def.tierOrMix() + ">" : def.mixed()
+                            ? "<" + DropRules.letters(def.sizeY()) + ", like " + def.tierOrMix() + ">" : def.mixed()
                             ? "<E, M and H, like " + def.tierOrMix() + ">" : "<easy|medium|hard>"));
                     return;
                 }

@@ -189,7 +189,16 @@ public final class DailyText {
      * out.
      */
     public static String trialFinish(int stars, long goldMs, long silverMs, long weekTotal) {
-        return finish(stars, trialNext(stars, goldMs, silverMs), weekTotal);
+        return trialFinish(stars, goldMs, silverMs, weekTotal, false);
+    }
+
+    /**
+     * {@link #trialFinish(int, long, long, long)} for a run whose third star needs a run with no bonks
+     * ({@code cleanNeeded}: a bonked run on a Hard dropper): "&amp;e★★☆ 2 stars! &amp;7Next star: a run
+     * with no bonks under 0:24."
+     */
+    public static String trialFinish(int stars, long goldMs, long silverMs, long weekTotal, boolean cleanNeeded) {
+        return finish(stars, trialNext(stars, goldMs, silverMs, cleanNeeded), weekTotal);
     }
 
     /** A golf round's finish line: "&amp;e★☆☆ 1 star! &amp;7Next star: 32 strokes or less. This week: 3★". */
@@ -199,8 +208,25 @@ public final class DailyText {
 
     /** What a time trial's next star needs: "Next star: under 0:45.", or "Top marks!" at three. */
     public static String trialNext(int stars, long goldMs, long silverMs) {
+        return trialNext(stars, goldMs, silverMs, false);
+    }
+
+    /**
+     * {@link #trialNext(int, long, long)}, where {@code cleanNeeded} says the run bonked on a Hard dropper,
+     * whose third star needs a run with no bonks: at 2 stars that is what the next one needs, "Next star:
+     * a run with no bonks under 0:24." (the run may already have beaten 0:24). Below 2 the next star is
+     * the time alone, bonks or not.
+     */
+    public static String trialNext(int stars, long goldMs, long silverMs, boolean cleanNeeded) {
         long next = Stars.nextTrialMs(stars, goldMs, silverMs);
-        return stars >= Stars.MAX ? "Top marks!" : next > 0 ? "Next star: under " + clock(next) + "." : "";
+        if (stars >= Stars.MAX) {
+            return "Top marks!";
+        }
+        if (next <= 0) {
+            return "";
+        }
+        return "Next star: " + (cleanNeeded && stars == Stars.MAX - 1 ? "a run with no bonks " : "") + "under "
+                + clock(next) + ".";
     }
 
     /** What a golf round's next star needs: "Next star: 32 strokes or less.", or "Top marks!". */

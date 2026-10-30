@@ -225,6 +225,14 @@ class DropRulesTest {
         assertEquals("a dropper mix is 1-5 of E, M, H and X (like EEMHX)", DropRules.mixProblem("EQE", 5, 144),
                 "a letter that isn't one");
         assertNotNull(DropRules.mixProblem(null, 5, 144), "nothing is not a mix");
+        assertEquals("a dropper mix is 1-5 of E, M and H (like EEE)", DropRules.mixProblem("EEEEEE", 5, 64, "EEE"),
+                "a half too short for a Long Drop is never told X is allowed, and gets its slot's example");
+        assertEquals("a dropper mix is 1-5 of E, M and H (like EEMMH)", DropRules.mixProblem("EQE", 5, 140),
+                "nor one a block short of it");
+        assertEquals("a dropper mix is 1-5 of E, M, H and X (like EEMHX)", DropRules.mixProblem("EQE", 5, 141),
+                "the floor names it");
+        assertEquals("E, M and H", DropRules.letters(64), "the Easy Dropper's letters");
+        assertEquals("E, M, H and X", DropRules.letters(144), "the Dropper's");
     }
 
     @Test

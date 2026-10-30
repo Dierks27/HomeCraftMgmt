@@ -274,16 +274,25 @@ public final class DropRules {
     }
 
     /**
+     * {@link #mixProblem(String, int, int, String)} with the shipped mix as the example when an X fits
+     * the half ({@code EEMHX}), and the old one when it doesn't ({@code EEMMH}).
+     */
+    public static String mixProblem(String mix, int plots, int halfSizeY) {
+        return mixProblem(mix, plots, halfSizeY, xFits(halfSizeY) ? "EEMHX" : "EEMMH");
+    }
+
+    /**
      * Why {@code mix} can't be the mix of a slot with {@code plots} levels whose halves are
      * {@code halfSizeY} tall, or {@code null} when it can: the letters, at most {@code plots} of them,
      * and every letter's shaft fitting the half ({@link DropperGeometry#minSizeY}). So an X is refused
      * at the command on the 64-tall Easy Dropper, not at build time: "an X level needs a half at least
-     * 141 tall (this one is 64): X is for the Dropper".
+     * 141 tall (this one is 64): X is for the Dropper". A mix that isn't one is told the letters this
+     * half takes ({@link #letters}: no X on a half too short for it) and the slot's own {@code example}.
      */
-    public static String mixProblem(String mix, int plots, int halfSizeY) {
+    public static String mixProblem(String mix, int plots, int halfSizeY, String example) {
         String m = normalise(mix);
         if (mixProblem(m) != null || m.length() > plots) {
-            return mixWords(plots);
+            return mixWords(plots, letters(halfSizeY), example);
         }
         for (Level l : levels(m)) {
             int need = DropperGeometry.minSizeY(l);
@@ -295,8 +304,25 @@ public final class DropRules {
         return null;
     }
 
+    /**
+     * The letters a half {@code halfSizeY} tall takes: "E, M, H and X" when a Long Drop's shaft fits it
+     * ({@link DropperGeometry#minSizeY}, 141), "E, M and H" when it doesn't (the 64-tall Easy Dropper),
+     * so the mix command never offers an X it would then refuse.
+     */
+    public static String letters(int halfSizeY) {
+        return xFits(halfSizeY) ? "E, M, H and X" : "E, M and H";
+    }
+
+    private static boolean xFits(int halfSizeY) {
+        return halfSizeY >= DropperGeometry.minSizeY(Level.EXTREME);
+    }
+
     private static String mixWords(int most) {
-        return "a dropper mix is 1-" + most + " of E, M, H and X (like EEMHX)";
+        return mixWords(most, "E, M, H and X", "EEMHX");
+    }
+
+    private static String mixWords(int most, String letters, String example) {
+        return "a dropper mix is 1-" + most + " of " + letters + " (like " + example + ")";
     }
 
     /** The levels of a mix, in order; empty when it isn't one. */

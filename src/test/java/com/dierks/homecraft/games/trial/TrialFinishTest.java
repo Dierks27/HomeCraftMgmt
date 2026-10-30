@@ -271,9 +271,13 @@ class TrialFinishTest {
         }
 
         @Override
-        public void stars(int stars, GamesDao.StarsAdded added) {
+        public void stars(int stars, GamesDao.StarsAdded added, boolean cleanNeeded) {
             starsTold.add(stars);
+            cleanTold.add(cleanNeeded);
         }
+
+        /** Whether each next-star line was told to ask for a run with no bonks. */
+        final List<Boolean> cleanTold = new ArrayList<>();
 
         @Override
         public int payGoal(String ref, int tokens, String detail) {
@@ -333,21 +337,28 @@ class TrialFinishTest {
         assertEquals(2, s.stars(), "a gold time with a bonk: 2 stars");
         assertTrue(s.bonkCapped(), "and the summary says the bonk held the third back");
         assertEquals(List.of(2), ledger.starsTold, "the player is told 2");
+        assertTrue(s.cleanNeeded(), "and that the next star needs a run with no bonks, not a time already beaten");
+        assertEquals(List.of(true), ledger.cleanTold, "which the finish line is told");
         assertEquals(2, s.added().added(), "and 2 go to the week");
 
         DailyLedger clean = new DailyLedger();
         TrialFinish.Summary c = TrialFinish.settle(counted(20_000), dropperRun(20_000, 0, Tier.HARD), clean);
         assertEquals(3, c.stars(), "a clean gold time: 3 stars");
         assertFalse(c.bonkCapped(), "nothing held back");
+        assertFalse(c.cleanNeeded(), "and no star left to ask for");
 
         DailyLedger silver = new DailyLedger();
         TrialFinish.Summary v = TrialFinish.settle(counted(30_000), dropperRun(30_000, 3, Tier.HARD), silver);
         assertEquals(2, v.stars(), "a silver time with bonks is 2 stars by time");
         assertFalse(v.bonkCapped(), "and the bonks held nothing back: the line isn't shown");
+        assertTrue(v.cleanNeeded(), "but the third star still needs a run with no bonks, and the next-star line says so");
+        assertEquals(List.of(true), silver.cleanTold, "to the finish line too");
 
         DailyLedger slow = new DailyLedger();
-        assertEquals(1, TrialFinish.settle(counted(40_000), dropperRun(40_000, 2, Tier.HARD), slow).stars(),
-                "finishing is always 1 star");
+        TrialFinish.Summary one = TrialFinish.settle(counted(40_000), dropperRun(40_000, 2, Tier.HARD), slow);
+        assertEquals(1, one.stars(), "finishing is always 1 star");
+        assertFalse(one.cleanNeeded(), "and the next one (silver) is a matter of time alone");
+        assertFalse(TrialFinish.Summary.NONE.cleanNeeded(), "a run that didn't count asks for nothing");
         assertFalse(TrialFinish.Summary.NONE.bonkCapped(), "a run that didn't count caps nothing");
     }
 
@@ -358,6 +369,7 @@ class TrialFinishTest {
             TrialFinish.Summary s = TrialFinish.settle(counted(20_000), dropperRun(20_000, 4, tier), ledger);
             assertEquals(3, s.stars(), tier + ": a gold time with bonks is still 3 stars (the daughter's Easy Dropper)");
             assertFalse(s.bonkCapped(), tier + ": nothing held back");
+            assertEquals(List.of(false), ledger.cleanTold, tier + ": and no clean run asked for");
         }
         DailyLedger other = new DailyLedger();
         TrialFinish.Summary s = TrialFinish.settle(counted(20_000), dropperRun(20_000, -1, Tier.HARD), other);

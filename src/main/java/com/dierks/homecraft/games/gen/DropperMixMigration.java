@@ -20,7 +20,8 @@ import java.util.Locale;
  * read: the Easy Dropper does not change by one block, and an X can't be typed onto its 64-tall half.
  * Nothing else of the entry is touched: {@code enabled}, {@code origin}, {@code half_gap}. An admin's own
  * mix set by command ({@code GenAdminKeys.tier}) wins over config as it always has and is not touched
- * either: the README says to run the command again if they ever set one.
+ * either: the README says to run the command again if they ever set one, and so does the INFO line, since
+ * this step runs before the database opens and can't see whether one is set.
  *
  * <p><b>The size change is the engine's</b>, as for the v4 areas ({@link GamesAreaMigration}): the Defs
  * are taller, so at the restart the old 64-tall claim no longer matches, it is recorded in
@@ -72,7 +73,9 @@ public final class DropperMixMigration {
             log.add("Config migration: the Dropper's shipped mix " + OLD_MIX + " becomes " + shipped
                     + " (level 5 is the Long Drop). Its halves are 64 x " + Slots.FRESH_DROPPER.sizeY()
                     + " x 16 now; after the restart its old area is emptied by itself (pools first) and the"
-                    + " Dropper is built again, taller, at the same spot.");
+                    + " Dropper is built again, taller, at the same spot. A mix set with the mix command still wins"
+                    + " over the file: /hcm games gen status shows the one in use, and /hcm games gen mix "
+                    + Slots.FRESH_DROPPER.id() + " " + shipped + " sets the shipped one, from the next build.");
             return true;
         }
         log.add(LayoutGuard.WARN + "Config migration: kept your own " + KEY + " " + raw + " for "

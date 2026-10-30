@@ -102,10 +102,13 @@ public final class ResultMenu extends GameMenu {
         return "&e" + DailyText.starsWon(daily.stars());
     }
 
-    /** What the next star needs (or top marks) and the week's total. */
+    /**
+     * What the next star needs (or top marks), a run with no bonks too after a bonked run on a Hard
+     * dropper ({@link TimeTrials.Daily#cleanNeeded}), and the week's total.
+     */
     static String[] starsLore(TimeTrials.Daily daily) {
         List<String> out = new ArrayList<>();
-        String next = DailyText.trialNext(daily.stars(), daily.goldMs(), daily.silverMs());
+        String next = DailyText.trialNext(daily.stars(), daily.goldMs(), daily.silverMs(), daily.cleanNeeded());
         if (!next.isEmpty()) {
             out.add("&7" + next);
         }

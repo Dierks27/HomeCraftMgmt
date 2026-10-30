@@ -285,9 +285,15 @@ public final class TimeTrials implements Game {
      * @param cadence   the words the screen uses ({@link GenCopy#words}): the set's length in days
      *                  ("this week", "today"), or {@link GenCopy#CLASSIC} for a recalled course
      * @param code      the course's code ("HARD-40"), or {@code null}
+     * @param cleanNeeded whether the next star needs a run with no bonks ({@link TrialFinish.Summary#cleanNeeded})
      */
     public record Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence,
-                        String code) {
+                        String code, boolean cleanNeeded) {
+
+        /** A set's run whose next star is a matter of time alone. */
+        public Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence, String code) {
+            this(board, stars, weekStars, goldMs, silverMs, cadence, code, false);
+        }
 
         /** A weekly set with no code (the shape before cadences). */
         public Daily(String board, int stars, long weekStars, long goldMs, long silverMs) {
@@ -2315,7 +2321,7 @@ public final class TimeTrials implements Game {
         drops.finished(p, run, ms, verdict.counts(), summary.stars(), summary.bonkCapped()); // bonks, the splash, a clean drop
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
-                tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
+                tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code, summary.cleanNeeded());
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
                 summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily,
                 run.drop == null ? -1 : run.drop.bonks());
@@ -2465,10 +2471,10 @@ public final class TimeTrials implements Game {
             }
 
             @Override
-            public void stars(int stars, GamesDao.StarsAdded added) {
+            public void stars(int stars, GamesDao.StarsAdded added, boolean cleanNeeded) {
                 GenTag t = run.course.gen();
                 p.sendMessage(Text.of(DailyText.trialFinish(stars, t == null ? 0 : t.goldMs(),
-                        t == null ? 0 : t.silverMs(), added == null ? -1 : added.weekTotal())));
+                        t == null ? 0 : t.silverMs(), added == null ? -1 : added.weekTotal(), cleanNeeded)));
             }
 
             @Override

@@ -74,7 +74,8 @@ public final class NowBoard {
         Map<UUID, Playing> by = new LinkedHashMap<>();
         for (TrialsNow.Run r : runs) {
             by.putIfAbsent(r.player(), new Playing(names.apply(r.player()), r.course(), runWhere(r.starting(),
-                    r.warmup(), r.racing(), r.done(), r.reached(), r.checkpoints()), r.done() ? 0 : r.ms(), GAME));
+                    r.warmup(), r.racing(), r.done(), r.reached(), r.checkpoints(), r.rings()), r.done() ? 0 : r.ms(),
+                    GAME));
         }
         for (GolfNow.Round r : rounds) {
             by.putIfAbsent(r.player(), new Playing(names.apply(r.player()), r.course(),
@@ -121,6 +122,12 @@ public final class NowBoard {
      */
     public static String runWhere(boolean starting, boolean warmup, boolean racing, boolean done, int reached,
                                   int checkpoints) {
+        return runWhere(starting, warmup, racing, done, reached, checkpoints, false);
+    }
+
+    /** {@link #runWhere}, saying "ring 3" instead of "checkpoint 3" on an elytra course ({@code rings}). */
+    public static String runWhere(boolean starting, boolean warmup, boolean racing, boolean done, int reached,
+                                  int checkpoints, boolean rings) {
         if (done) {
             return ClubBoardText.FINISHED;
         }
@@ -130,7 +137,8 @@ public final class NowBoard {
         if (warmup) {
             return ClubBoardText.WARMING_UP;
         }
-        String cp = checkpoints > 0 && reached > 0 ? ClubBoardText.checkpoint(Math.min(reached, checkpoints)) : null;
+        int at = Math.min(reached, checkpoints);
+        String cp = checkpoints > 0 && reached > 0 ? rings ? ClubBoardText.ring(at) : ClubBoardText.checkpoint(at) : null;
         if (racing) {
             return cp == null ? ClubBoardText.RACING : ClubBoardText.RACING + ", " + cp;
         }

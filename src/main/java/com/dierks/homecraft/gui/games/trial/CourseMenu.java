@@ -87,7 +87,7 @@ public final class CourseMenu extends GameMenu {
         }
         set(4, Menus.icon(TimeTrials.icon(course.kind()), "&e" + course.name() + " &7(" + TrialText.label(course) + ")",
                 head.toArray(new String[0])), null);
-        List<String> rules = new ArrayList<>(course.kind().rules());
+        List<String> rules = new ArrayList<>(TimeTrials.rulesFor(course));
         rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         Long best = trials.best(viewer, course.id());
@@ -196,7 +196,7 @@ public final class CourseMenu extends GameMenu {
         }
         set(4, Menus.icon(TimeTrials.icon(course.kind()), headerName(course, slot, DailyLookup.code(games, t)),
                 head.toArray(new String[0])), null);
-        List<String> rules = new ArrayList<>(course.kind().rules());
+        List<String> rules = new ArrayList<>(TimeTrials.rulesFor(course));
         rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         String board = TimeTrials.board(course);

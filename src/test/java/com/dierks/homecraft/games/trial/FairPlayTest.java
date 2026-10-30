@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * run on a course whose layout changed records nothing; a test run is never counted but says
  * whether it would have been; the parkour fall height sits fall_depth under the lower of the last
  * and next checkpoint, a course's own fall_y wins for any kind, and elytra and boat courses have
- * no default; and a landing is fine near the start, in a checkpoint or at the finish only.
+ * no default (but Sky Rings, which has a floor 32 under the lower ring of every leg, never under its own);
+ * and a landing is fine near the start, in a checkpoint or at the finish only.
  *
  * <p>Also pinned (review fixes): a gap between trial ticks over 250 ms is a server stall, and a
  * leg its window touches isn't speed-checked — the reviewer's honest 7.2 s run through a 1.7 s
@@ -153,6 +154,24 @@ class FairPlayTest {
         Course elytra = new Course("sky", TrialKind.ELYTRA, "Sky", Tier.EASY, "games", PARKOUR.start(), List.of(),
                 PARKOUR.finish(), null, null, true, false, 1);
         assertTrue(Double.isNaN(FairPlay.fallY(elytra, -1, 6)), "nor does an elytra course: landing is its reset");
+    }
+
+    @Test
+    void skyRingsHasAFloorOnEveryLegThirtyTwoUnderItsLowerRing() {
+        List<Course.Mark> rings = List.of(new Course.Mark(0, 270, -25, 7), new Course.Mark(0, 300, -125, 7),
+                new Course.Mark(0, 250, -230, 7));
+        Course sky = new Course("fresh_rings", TrialKind.ELYTRA, "Sky Rings", Tier.EASY, "games",
+                new Course.Spot(0.5, 280, 0.5, 180, 0), rings, new Course.Mark(0, 240, -330, 7), 150.0, 30, true,
+                false, 1, null, new Course.Elytra(4, List.of(1, 1, 0, 0), "LG"));
+        assertEquals(32, FairPlay.ELYTRA_FLOOR_DEPTH, 1e-9);
+        assertEquals(238, FairPlay.fallY(sky, -1, 6), 1e-9, "the start (280) to ring 1 (270): 270 - 32");
+        assertEquals(238, FairPlay.fallY(sky, 0, 6), 1e-9, "ring 1 (270) to the climb's ring 2 (300): 270 - 32");
+        assertEquals(218, FairPlay.fallY(sky, 1, 6), 1e-9, "ring 2 (300) to ring 3 (250): 250 - 32");
+        assertEquals(208, FairPlay.fallY(sky, 2, 6), 1e-9, "ring 3 (250) to the gold ring (240): 240 - 32");
+        assertEquals(215, FairPlay.fallY(sky.withFallY(215.0), 2, 6), 1e-9, "never under the course's own");
+        Course hand = sky.withElytra(null).withFallY(null);
+        assertTrue(Double.isNaN(FairPlay.fallY(hand, 1, 6)), "a hand-built elytra course: landing is its reset");
+        assertEquals(150, FairPlay.fallY(sky.withElytra(null), 1, 6), 1e-9, "with its own fall_y: that, as before");
     }
 
     @Test

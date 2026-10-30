@@ -485,10 +485,15 @@ public final class FairPlay {
      * {@code fallDepth} below the lower of the last checkpoint reached (or the start) and the next
      * one (or the finish) — so a course that climbs or drops still has a sensible floor on every
      * leg. Elytra and boat courses have no default: their resets are landing and leaving the boat.
+     * Sky Rings (an elytra course with a rocket budget) also has a floor on every leg,
+     * {@link #elytraFloor}, never under the course's own.
      *
      * @param lastCheckpoint the last checkpoint reached, 0-based, or -1 for none
      */
     public static double fallY(Course course, int lastCheckpoint, int fallDepth) {
+        if (course.kind() == TrialKind.ELYTRA && course.elytra() != null && course.start() != null) {
+            return elytraFloor(course, lastCheckpoint);
+        }
         if (course.fallY() != null) {
             return course.fallY();
         }
@@ -503,6 +508,30 @@ public final class FairPlay {
                 : course.finish() != null ? Double.valueOf(course.finish().y()) : null;
         double floor = nextY == null ? lastY : Math.min(lastY, nextY);
         return floor - fallDepth;
+    }
+
+    /**
+     * Sky Rings: a flyer this far under the lower of a leg's two rings is going nowhere. The autopilot's
+     * proven lines never go more than 24 under it ({@code ElytraSim.LOST}), so 32 never resets one, and with
+     * climbs in the course one floor under the lowest ring would leave a missed climb sinking for a minute.
+     */
+    public static final double ELYTRA_FLOOR_DEPTH = 32;
+
+    /**
+     * Below this height a Sky Rings run goes back to its last ring: {@value #ELYTRA_FLOOR_DEPTH} under the
+     * lower of the last ring reached (the start before ring 1) and the next one (the gold ring after the
+     * last), and never under the course's own fall height.
+     *
+     * @param lastCheckpoint the last checkpoint reached, 0-based, or -1 for none
+     */
+    static double elytraFloor(Course course, int lastCheckpoint) {
+        List<Course.Mark> targets = course.targets();
+        double lastY = lastCheckpoint >= 0 && lastCheckpoint < course.checkpoints().size()
+                ? course.checkpoints().get(lastCheckpoint).y() : course.start().y();
+        int next = lastCheckpoint + 1;
+        double low = next >= 0 && next < targets.size() ? Math.min(lastY, targets.get(next).y()) : lastY;
+        double floor = low - ELYTRA_FLOOR_DEPTH;
+        return course.fallY() == null ? floor : Math.max(course.fallY(), floor);
     }
 
     /** Mountain Run v2: a boat this far under the lower of a leg's two marks is off the track (§12). */

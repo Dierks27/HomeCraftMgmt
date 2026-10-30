@@ -33,6 +33,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+          # Keep Gradle's dependency cache between runs. The 0.38.4 release
+          # build died in 14 s on a Maven Central "429 Too Many Requests" before
+          # a single test ran; with the cache warm, a run only reaches Central
+          # for a dependency that actually changed.
+          cache: gradle
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew

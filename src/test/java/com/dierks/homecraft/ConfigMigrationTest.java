@@ -1874,6 +1874,30 @@ class ConfigMigrationTest {
                 "restart_times: [] stays off: an empty list is a setting, not a missing key");
     }
 
+    /** Revision 25 in the ladder: Classic Sky Rings' shipped spot moves west; Sky Rings grows where it is. */
+    @Test
+    void revision25MovesClassicSkyRingsWestAndLeavesSkyRingsWhereItIs() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 24);
+        onDisk.set("games.fresh.classics.slots.fresh_classic_rings.origin", List.of(6080, 128, 4992)); // 0.36-0.38's
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+        assertEquals(List.of(1760, 128, 2880), onDisk.getIntegerList("games.fresh.classics.slots.fresh_classic_rings"
+                + ".origin"), "the Classic's shipped spot moves: " + log);
+        assertEquals(List.of(6080, 128, 4096), onDisk.getIntegerList("games.fresh.slots.fresh_rings.origin"),
+                "Sky Rings keeps its spot (it grows in place)");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"), "and the revision is stamped");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith("Config migration: the bigger Sky Rings areas get their new"
+                + " spots")), "one INFO line: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
+
+        YamlConfiguration at21 = bundled();
+        at21.set("config_revision", 21);
+        at21.set("games.fresh.slots.fresh_golf.origin", List.of(9024, 160, 4096)); // the owner's own golf spot
+        List<String> said = HomeCraftManagement.migrateConfig(at21, "world");
+        assertTrue(said.stream().noneMatch(l -> l.contains("fresh_golf")), "revision 21's areas are never looked at"
+                + " again from a file past it: " + said);
+    }
+
     /** The game's shipped settings with {@code enabled: false}, read through its own parser. */
     private static <S> S switchedOff(GameSpec<S> spec) {
         return spec.parse().apply(new GamesConfig.Node("games." + spec.id(), Map.of("enabled", false), w -> { }),

@@ -74,10 +74,11 @@ import java.util.function.Function;
  * revision 19 marks again) gets the STAMPED decision again, never a new one: things may have been
  * built at the decided spots since.
  *
- * <p><b>v4: the resized places</b> ({@link #RESIZED}). Golf of the Week, Classic Golf and the Ice Boat are
- * bigger from v4 on, so no decision keeps their 0.35 spot or shape: both write their shipped spot (an
- * owner's own stays) and drop a {@code half_gap: 32}. Config revision 21 ({@code GamesAreaMigration}) moves
- * a file that is already past revision 19 the same way; the engine empties their old areas (RETIRE).
+ * <p><b>v4 and Sky Rings v3: the resized places</b> ({@link #RESIZED}). Golf of the Week, Classic Golf and the
+ * Ice Boat are bigger from v4 on, and Sky Rings and Classic Sky Rings from Sky Rings v3 on, so no decision keeps
+ * their 0.35 spot or shape: both write their shipped spot (an owner's own stays) and drop a {@code half_gap: 32}.
+ * Config revisions 21 and 25 ({@code GamesAreaMigration}) move a file that is already past revision 19 the same
+ * way; the engine empties their old areas (RETIRE).
  */
 public final class LayoutGuard {
 
@@ -228,15 +229,17 @@ public final class LayoutGuard {
                     com.dierks.homecraft.games.clubhouse.ClubhouseSettings.ORIGIN, null));
 
     /**
-     * The places whose size v4 changed (GOLF-V4-SPEC §5.2 step 1, MOUNTAIN-V2-SPEC §10.3 item 7): Golf of the
-     * Week and Classic Golf (128 x 16 x 224 now; a 128-wide half at a 0.35 spot would overlap Tiny Golf's
-     * 0.35 box) and the Ice Boat (the Mountain Run v2's 480 x 176 x 640). None is ever "legacy-held": each
-     * takes its shipped spot and the default gap in BOTH decisions, unless the owner set their own spot,
-     * which stays (the slot then resizes in place). Whatever stood at its old spot is emptied by itself
-     * (RETIRE, {@code gen.<slot>.old}), so moving it never strands blocks.
+     * The places whose size a later version changed (GOLF-V4-SPEC §5.2 step 1, MOUNTAIN-V2-SPEC §10.3 item 7):
+     * Golf of the Week and Classic Golf (128 x 16 x 224 now; a 128-wide half at a 0.35 spot would overlap Tiny
+     * Golf's 0.35 box), the Ice Boat (the Mountain Run v2's 480 x 176 x 640), and Sky Rings and Classic Sky
+     * Rings (Sky Rings v3's 512 x 176 x 512; at 0.35's x 4096 it would grow onto Classic Parkour's and the keep
+     * area's 0.35 boxes). None is ever "legacy-held": each takes its shipped spot and the default gap in BOTH
+     * decisions, unless the owner set their own spot, which stays (the slot then resizes in place). Whatever
+     * stood at its old spot is emptied by itself (RETIRE, {@code gen.<slot>.old}), so moving it never strands
+     * blocks.
      */
     public static final Set<String> RESIZED = Set.of(Slots.DAILY_GOLF.id(), Slots.CLASSIC_GOLF.id(),
-            Slots.ICE_BOAT.id());
+            Slots.ICE_BOAT.id(), Slots.SKY_RINGS.id(), Slots.CLASSIC_RINGS.id());
 
     private static Area slot(Slots.Def def, int x, int y, int z) {
         return new Area(def.id(), def.name(), Slots.isClassic(def.id()) ? Kind.CLASSIC : Kind.SLOT,
@@ -659,9 +662,9 @@ public final class LayoutGuard {
                 + String.join(", ", why == null ? List.of() : why) + "), so every one keeps its 0.35 spot and shape:"
                 + " config.yml now says so (the 0.35 origins, half_gap: 32 for each course and Classic, and"
                 + " keep.plot_gap: 0). From some courses players can see others; /hcm games check lists them and"
-                + " how to move one by hand (README \"Moving an area by hand\"). Golf of the Week, Classic Golf and"
-                + " the Ice Boat are bigger now, so they take their new spots; what stands at their old ones is"
-                + " emptied by itself."
+                + " how to move one by hand (README \"Moving an area by hand\"). Golf of the Week, Classic Golf, the"
+                + " Ice Boat, Sky Rings and Classic Sky Rings are bigger now, so they take their new spots; what stands"
+                + " at their old ones is emptied by itself."
                 + (own.isEmpty() ? "" : " Your own spots stay too: " + String.join(", ", own) + "."));
         return changed;
     }

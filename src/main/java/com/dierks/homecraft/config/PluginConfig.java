@@ -1297,11 +1297,10 @@ public final class PluginConfig {
             return GamesConfig.parse(c, null, null);
         }
         GamesConfig.Parsed p = GamesConfig.parse(c, warn, info);
-        // F10: revision 21 couldn't be saved: the areas it moves wait where they were built, rather than be
+        // F10: revision 21 or 25 couldn't be saved: the areas it moves wait where they were built, rather than be
         // built at an older spot at their new size and moved again once the file is saved
         return com.dierks.homecraft.games.gen.GamesAreaMigration.unsaved(c)
-                ? com.dierks.homecraft.games.gen.GamesAreaMigration.hold(p,
-                com.dierks.homecraft.games.gen.GamesAreaMigration.heldWhy(c)) : p;
+                ? com.dierks.homecraft.games.gen.GamesAreaMigration.hold(p, c) : p;
     }
 
     /** (Re)parse config.yml into the typed views above. */

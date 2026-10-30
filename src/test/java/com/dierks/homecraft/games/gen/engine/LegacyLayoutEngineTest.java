@@ -42,8 +42,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class LegacyLayoutEngineTest {
 
-    /** A parkour course and Sky Rings, built in 0.35 and running. */
-    private static final List<String> ON = List.of("fresh_parkour_easy", "fresh_rings");
+    /**
+     * Two parkour courses, built in 0.35 and running. (Sky Rings grew with Sky Rings v3, so like golf it takes its
+     * new spot in both decisions and never keeps 0.35's: LayoutGuardResizedTest.)
+     */
+    private static final List<String> ON = List.of("fresh_parkour_easy", "fresh_parkour");
     /** A Dropper 0.35 claimed and then switched off, its pools still standing (water: drain first if moved). */
     private static final Slots.Def DROPPER = Slots.FRESH_DROPPER;
     private static final String W = GenKit.WORLD;

@@ -3179,15 +3179,16 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * The tag a layout goes live with (its star times from the plan's expert time), for the flip and
-     * for an admin's test run of a preview (WP-ADM), so the two can't differ.
+     * The tag a layout goes live with (its star times from the plan's expert time, Sky Rings' with its own
+     * factors when {@code stars.rings} is set), for the flip and for an admin's test run of a preview (WP-ADM),
+     * so the two can't differ.
      */
     static GenTag tagFor(Slots.Def def, String generator, Plan plan, long day, int reroll, long seed, char half,
                          String mix, DailySettings.Stars factors, long now, int cadence) {
         PlannedCourse pc = plan.course();
         long ref = pc instanceof PlannedTrial t ? t.refMs() : 0;
-        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(starTier(def, mix)));
-        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(starTier(def, mix)));
+        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(def, starTier(def, mix)));
+        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(def, starTier(def, mix)));
         List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
         List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
         return new GenTag(def.id(), generator, plan.algo(), day, reroll, seed, half, plan.hash(), ref, gold, silver,
@@ -5446,8 +5447,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         long silver = src.silverMs();
         if (w.remade() && !orig.golf()) {
             DailySettings.Stars factors = host.settings().stars();
-            gold = Stars.threshold(ref, factors.gold(starTier(orig, src.tierOrMix())));
-            silver = Stars.threshold(ref, factors.silver(starTier(orig, src.tierOrMix())));
+            gold = Stars.threshold(ref, factors.gold(orig, starTier(orig, src.tierOrMix())));
+            silver = Stars.threshold(ref, factors.silver(orig, starTier(orig, src.tierOrMix())));
         }
         List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
         List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();

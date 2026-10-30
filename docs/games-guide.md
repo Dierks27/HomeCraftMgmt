@@ -1281,10 +1281,10 @@ These are played in the Games world, on courses the server's builders make. Each
 1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Elytra courses have an elytra icon and a label like (Elytra · Medium).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
 3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run. If the course is Today's pick, the Today's pick button opens its course screen.
-4. Your things are saved and put away, and you go to the Clubhouse first: "Off to Sky Rings!" and a countdown, "Sky Rings in 5". After 5 seconds you go on to the start line, or at once with Go now: Sky Rings; Stay here - hang out keeps you in the Clubhouse (tap Games to start later). You arrive at the start line wearing an elytra, with 3 rockets and the course kit. (With the Clubhouse off, you go straight to the start and home afterwards, as before.)
+4. Your things are saved and put away, and you go to the Clubhouse first: "Off to Sky Rings!" and a countdown, "Sky Rings in 5". After 5 seconds you go on to the start line, or at once with Go now: Sky Rings; Stay here - hang out keeps you in the Clubhouse (tap Games to start later). You arrive at the start line wearing an elytra, with the course's rockets (Sky Rings: 8 for the whole run) and the course kit. (With the Clubhouse off, you go straight to the start and home afterwards, as before.)
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
 6. Take off and glide: jump, then press jump again while you fall to open your wings. Fly through every ring in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time.
-7. Click the rockets while gliding for a boost. Your rockets are filled back up to 3 at every ring, and each time you go back.
+7. Click the rockets while gliding for a boost. Sky Rings gives no rockets at the rings; going back gives you only what the rest of the course needs, never more. Hand-built courses fill you back to 3 at every ring, and each time you go back.
 8. If you land anywhere except near the start, inside a ring or at the finish, or if you touch water, you go back to your last ring and keep gliding from it. If you haven't reached a ring yet, you go back to the start. The clock keeps running.
 9. After the last ring, fly into the finish. You see your time, your best and the course record.
 10. You come back to the Clubhouse ("Back in the Clubhouse! Sky Rings 1:23.4") and your result screen opens there. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're taken straight back to the start line; Back to the courses picks another. Leave game in the Clubhouse takes you home with all your things.
@@ -1292,7 +1292,7 @@ These are played in the Games world, on courses the server's builders make. Each
 **On the screen**
 
 - Hotbar slot 1: Back to checkpoint (a recovery compass). Click it to go back to your last ring, or to the start if you have none yet. The clock keeps running. During the countdown it just says Wait for the countdown.
-- Hotbar slot 2: Rockets (3 of them). Click while gliding for a boost. If you aren't gliding it just says Rockets work while you glide.
+- Hotbar slot 2: Rockets (8 on Sky Rings, 3 on a hand-built course). Click while gliding for a boost. If you aren't gliding it just says Rockets work while you glide.
 - Your chest slot: the elytra. It never breaks.
 - Hotbar slot 9: Leave game (an oak door). Click it, then click again within 3 seconds. If you started from the Clubhouse you go back there (your things come back when you leave it); otherwise you leave and your things come back. /hcm leave always goes home.
 - Typing /hcm leave also ends the run and brings your things back.
@@ -1331,12 +1331,13 @@ These are played in the Games world, on courses the server's builders make. Each
 - Put down anything on your mouse cursor first. Otherwise you see: Put down what you're holding first.
 - While you play, only /hcm play, /hcm leave, /hcm games and /hcm help work.
 - Stay on the start spot for the countdown. If you are more than 1 block away at Go, it says Stay at the start until it says Go! and counts again.
-- Some elytra courses have a fall height set by the builder. Drop below it and you go back to your last ring.
+- Some elytra courses have a fall height set by the builder. Drop below it and you go back to your last ring. On Sky Rings, dropping 32 blocks under the lower of your last ring and the next sends you back.
 - Falling into the void, or someone moving you a short way, sends you back to your last ring. Being moved more than 16 blocks, or to another world, ends your game.
 
 **Tips**
 
-- Save a rocket for when you are slow or low. You get back to 3 at every ring.
+- Save your rockets for the white rings: a white ring is above you, so fire one as you leave the ring before it and pull up. A level leg is free if you arrive fast; slow, it takes one. A rainbow ring is a glide and never needs one.
+- On a hand-built elytra course you get back to 3 rockets at every ring.
 - Landing is safe within 2 blocks of the start, inside a ring and at the finish. Anywhere else sends you back.
 - Water sends you back too, even a quick touch, unless you are inside a ring or near the start.
 - Bumping into a wall doesn't hurt you in a game.
@@ -1576,7 +1577,7 @@ These are played in the Games world, on courses the server's builders make. Each
 
 ## Fresh Courses
 
-New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes of four lengths) and Tiny Golf (3 short holes; see [Golf of the Week and Tiny Golf](#golf-of-the-week-and-tiny-golf)), Easy Dropper and Dropper (see [The Dropper](#the-dropper)), plus Ice Boat (see [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)) when the owner turns it on. Fresh Courses ship switched off: they show up once the owner turns them on. By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
+New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings (a 1-2 minute loop of the sky through 20 rings), Golf of the Week (9 holes of four lengths) and Tiny Golf (3 short holes; see [Golf of the Week and Tiny Golf](#golf-of-the-week-and-tiny-golf)), Easy Dropper and Dropper (see [The Dropper](#the-dropper)), plus Ice Boat (see [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)) when the owner turns it on. Fresh Courses ship switched off: they show up once the owner turns them on. By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
 
 - Open them with /hcm play fresh_courses, or the Fresh Courses tile on the Courses and Golf tabs. /hcm play fresh_parkour_tiers opens Parkour Levels, where the three parkour courses sit side by side.
 - They are free skill games, the same for everyone. They play like the time trials and mini golf above, with the same kit, rules and "your things come back".
@@ -1795,7 +1796,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - the website feed /api/arcade lists each cabinet's server record on one board: Creeper Sweeper's Normal board (a time), Ore Merge Classic (points), Snake Classic (apples), Mini Match Classic (flips, lower wins), Simon Says Classic (points), Whack-a-Zombie Classic (points), Connect Four Hard (wins) and Tic-Tac-Toe Wins (wins). Record holders' names are left out of the feed unless the owner turns them on (web.dashboard.arcade_show_names). In game, names always show.
 - the website feed /api/arcade lists every open course with its id and name (plus kind and tier for time trials, holes and par for golf) and its record. The record holder's name is only included when the server allows names on the feed.
 - the shipped config.yml has games.enabled: false, so none of these games show until the owner turns the games on.
-- where the code and older write-ups differ, the code was used. The elytra rules line and the rockets item in game say 3 more at every ring, but the code tops your rockets back up to 3 at every ring and on every send-back (it does not add 3). README's fair-play list and this guide agree: a changed walk speed, or movement boosted past a normal player's (faster, a higher jump or step, a longer safe fall, any change of gravity), stops a run from counting; sprinting and anything that only slows you never do.
+- where the code and older write-ups differ, the code was used. A hand-built elytra course tops your rockets back up to 3 at every ring and on every send-back (it does not add 3), and its rockets item now says so. README's fair-play list and this guide agree: a changed walk speed, or movement boosted past a normal player's (faster, a higher jump or step, a longer safe fall, any change of gravity), stops a run from counting; sprinting and anything that only slows you never do.
 - checkpoints, rings and golf out-of-bounds boxes are invisible spaces set by the builders. The plugin does not draw them, so how they look depends on each course. The golf club distances are worked out from the game's physics numbers (each club's speed and how fast the ball slows), on flat, plain ground.
 
 ---

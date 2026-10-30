@@ -16,9 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The comments config revisions 20, 21, 22, 23 and 24 make stale in the owner's file ({@link ShippedComments}, the v4
- * audit ECON02/ECON05, SHOP-V2-SPEC §7.6), against verbatim copies of 0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's and
- * 0.38.1's bundled config.yml.
+ * The comments config revisions 20, 21, 22, 23, 24 and 25 make stale in the owner's file ({@link ShippedComments},
+ * the v4 audit ECON02/ECON05, SHOP-V2-SPEC §7.6), against verbatim copies of 0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's
+ * and 0.38.1's bundled config.yml.
  *
  * <p>Pinned here: the owner's 0.36 file, migrated and backfilled, ends with exactly the bundled file's comments
  * on every key, so it no longer says "x 1760-8191 ... Keep the sky there free", "a Mountain Run about 50 KB",
@@ -28,8 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the owner's 0.37.2 file ends with the token shop's three comments (the Prize Counter's header, the icon keys
  * and the collectors'); the owner's 0.38.0 file ends with revision 23's (the header's firework line); the owner's
  * 0.38.1 file ends with revision 24's (the header's launchers 1-10 and remote lines, and the launcher's 1-30 and the
- * Remote); and every fingerprint is what the versions before its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2
- * for 20-22, 0.38.0 for 23, 0.38.1 for 24).
+ * Remote) and revision 25's (Sky Rings' bigger halves in the slots' and the keep area's); and every fingerprint is what
+ * the versions before its revision shipped on that key (0.35.0, 0.36.0 or 0.37.2 for 20-22, 0.38.0 for 23, 0.38.1
+ * for 24 and 25).
  */
 class ShippedCommentsTest {
 
@@ -134,6 +135,14 @@ class ShippedCommentsTest {
                 && launcher.contains("Mega, Super, Ultra and Ultimate"), launcher);
         assertEquals(bundled.getComments("arcade.holiday_shows"), after.getComments("arcade.holiday_shows"),
                 "the new holiday section comes with its comment (the backfill's)");
+        String slots = String.join("\n", after.getComments("games.fresh.slots"));
+        assertTrue(slots.contains("Sky Rings' halves are 512 x 176 x 512") && slots.contains("Classic Golf, Ice Boat,"
+                + " Sky Rings"), "revision 25: the slots name Sky Rings' bigger halves: " + slots);
+        String keep = String.join("\n", after.getComments("games.fresh.keep.area"));
+        assertTrue(keep.contains("a Sky Rings v3 course (512 x 176 x 512) don't"), "and a v3 course can't be kept: "
+                + keep);
+        assertEquals(bundled.getComments("games.fresh.stars.rings"), after.getComments("games.fresh.stars.rings"),
+                "Sky Rings' own star factors come with their comment (the backfill's)");
     }
 
     @Test
@@ -218,8 +227,13 @@ class ShippedCommentsTest {
         assertEquals(List.of("games.fresh", "games.fresh.world", "games.fresh.slots", "games.fresh.archive",
                 "games.fresh.keep.area", "games.race_night", "games.race_night.races",
                 "games.race_night.max_race_minutes"),
-                ShippedComments.refresh(c, GamesAreaMigration.REVISION), "21: the areas' and the run's");
-        assertEquals(List.of(), ShippedComments.refresh(c, GamesAreaMigration.REVISION), "and a second run has none left");
+                ShippedComments.refresh(c, GamesAreaMigration.V4), "21: the areas' and the run's");
+        assertEquals(List.of(), ShippedComments.refresh(c, GamesAreaMigration.V4), "and a second run has none left");
+        assertEquals(List.of("games.fresh.slots", "games.fresh.keep.area"),
+                ShippedComments.refresh(LayoutFixtures.v0381(), GamesAreaMigration.REVISION),
+                "25 on 0.38.1's file: Sky Rings' slots and keep comments");
+        assertEquals(List.of(), ShippedComments.refresh(LayoutFixtures.v036(), GamesAreaMigration.REVISION),
+                "and nothing on 0.36's, whose two are 21's to refresh");
     }
 
     @Test
@@ -233,13 +247,22 @@ class ShippedCommentsTest {
         Set<String> keys = new HashSet<>();
         for (ShippedComments.Stale s : ShippedComments.STALE) {
             assertTrue(keys.add(s.key() + "@" + s.revision()), s.key() + " once a revision");
-            // 20-22 meet a 0.35.0, 0.36.0 or 0.37.2 file; 23 meets 0.38.0's (22 refreshed the older texts first); 24
-            // meets 0.38.1's (23 refreshed 0.38.0's header, and the backfill wrote the launcher's)
-            List<YamlConfiguration> before = s.revision() <= ShopMigration.REVISION ? List.of(v035, v036, v0372)
-                    : s.revision() == GrandShowMigration.REVISION ? List.of(v0380) : List.of(v0381);
+            // a revision meets every file below it: 20 and 21 a 0.35.0 or 0.36.0 file, 22 a 0.37.2 one too, 23 0.38.0's,
+            // 24 0.38.1's, 25 0.38.4's (whose slots and keep comments are 0.38.1's). A text an earlier revision's entry
+            // on the same key already refreshes is never this one's (22 refreshed the older headers before 23 met them)
+            Set<String> earlier = new HashSet<>();
+            for (ShippedComments.Stale e : ShippedComments.STALE) {
+                if (e.key().equals(s.key()) && e.revision() < s.revision()) {
+                    earlier.addAll(e.shipped());
+                }
+            }
             Set<String> shipped = new HashSet<>();
-            for (YamlConfiguration old : before) {
-                if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))) {
+            for (YamlConfiguration old : List.of(v035, v036, v0372, v0380, v0381)) {
+                if (old.getInt("config_revision", 0) >= s.revision()) {
+                    continue; // a file this revision never meets
+                }
+                if (old.contains(s.key()) && !old.getComments(s.key()).equals(bundled.getComments(s.key()))
+                        && !earlier.contains(fingerprint(old, s.key()))) {
                     shipped.add(fingerprint(old, s.key()));
                 }
             }

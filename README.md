@@ -2238,8 +2238,9 @@ Easy, Medium, Hard and "Why did we build this?".
   your best, this week's best, the record and who holds it, what it pays, and Start.
 - **A run.** You arrive at the start line (from 0.38.3 by way of the Clubhouse first, see [The
   Clubhouse](#the-clubhouse)) with only the course kit: Back to checkpoint and Leave
-  game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
-  ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
+  game (click twice), plus a worn elytra and the course's rockets on an elytra course (Sky Rings: 8
+  for the whole run, none at the rings; a hand-built course: 3, back to 3 at every ring), or a boat
+  of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
   still look around), and the clock starts on "Go!". Reach every checkpoint in order, then the
   finish. On a Fresh Courses parkour course a checkpoint counts with your feet up on its pad, not
   while falling past it or under it (0.37.1). From 0.37.3 the feet must be over the pad itself too:
@@ -2578,7 +2579,8 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 
 Right after the 04:00 restart, the plugin builds a new set of courses by itself: **Easy Parkour,
 Parkour and Hard Parkour** (three courses, each with its own board), **Sky Rings** (an elytra course:
-fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes of four lengths,
+a 1-2 minute loop round a huge square of sky through 20 rings with 8 rockets to spend; a white ring
+means climb, a rainbow ring is a glide), **Golf of the Week** (9 holes of four lengths,
 par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
 (see "Golf v4" below), and two droppers, **Easy Dropper** and **Dropper** (see "The Dropper" below).
 **Ice Boat**, a 2-3 minute run down a whole mountain, the Winding Road or the Slalom (see "Ice Boat:
@@ -2621,10 +2623,13 @@ next. That's all.
 **Where they are.** In your existing Games world (`games.fresh.world: ""` means the first of
 `games.worlds`), far from spawn and high in the sky. Everything the games build stands in x
 1760-9599, z 2880-10367, y 96-303: the courses and the Classics in two columns (x 6080 and x 7488,
-z 4096-7967), Golf of the Week and Classic Golf in a column of their own (x 8768-9599, z 4096-5119,
-their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north of everything (x 6080-7615,
-z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640), the Clubhouse and Falling Floors
-south of them (z 8544), and the kept courses' plots to the west (from x 1760, z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
+z 4096-7967), Sky Rings' loop of sky at the top of the first (x 6080-7679, z 4096-4607, y 128-303:
+each half a 512 x 176 x 512 square), Golf of the Week and Classic Golf in a column of their own
+(x 8768-9599, z 4096-5119, their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north
+of everything (x 6080-7615, z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640),
+Classic Sky Rings to the west (x 1760-3359, z 2880-3391, the same size as Sky Rings'), the Clubhouse
+and Falling Floors south of them (z 8544), and the kept courses' plots to the west (from x 1760,
+z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
 course's own spare half included, so from any course players see only that course, whatever view
 distance the server uses (the server sends chunks up to its view distance plus one; 576 blocks is
 clear up to view distance 34, and Paper's largest is 32). Each course owns two halves 576 blocks
@@ -2728,9 +2733,14 @@ above).
 
 **When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
 224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
-2880), nothing is asked of you. Config revision 21 moves each shipped spot you never changed (the
-console: "Config migration: the bigger Golf v4 and Mountain Run v2 areas get their new spots (Golf of
-the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)"). An origin you set yourself stays, with one
+2880; Sky Rings v3: Sky Rings grows to 512 x 176 x 512 where it stands, at x 6080, z 4096, and Classic
+Sky Rings, the same size, moves west to x 1760, z 2880), nothing is asked of you. Config revisions 21
+and 25 move each shipped spot you never changed (the console: "Config migration: the bigger Golf v4
+and Mountain Run v2 areas get their new spots (Golf of the Week [7488, 160, 4096] -> [8768, 160,
+4096]; ...)", and "... the bigger Sky Rings areas get their new spots (Classic Sky Rings [6080, 128,
+4992] -> [1760, 128, 2880])"). Sky Rings itself keeps its spot: its old 128 x 176 x 320 course is
+emptied and the big loop is built over it, in 2-3 minutes after the restart ("fresh_rings's area
+changed with this version ... emptied by itself"). An origin you set yourself stays, with one
 WARN naming it and the shipped spot, and the course grows in place there if it fits (`/hcm games
 check` says if it doesn't). A `half_gap: 32` that 0.35's layout wrote goes with its old spot; one beside
 0.36's spot is yours and stays, with one WARN (its spare half is then in sight: take `half_gap` out for
@@ -2756,7 +2766,7 @@ area is empty") and what is in the way of one; `/hcm games gen tidy <course> con
 guarded until the world has been saved twice (Paper's autosave, every 5 minutes by default) or the next
 start finds it still empty; only then is it let go. If the server is killed before that save, the old
 blocks come back with the world, and the next start empties them again (a WARN says so). If config.yml
-can't be written at the update (a read-only file, a full disk), those three areas stay where they were
+can't be written at the update (a read-only file, a full disk), the areas that update moves stay where they were
 built, closed, and nothing is built or emptied for them until it can: the console says why (SEVERE),
 and `/hcm games check` has a FAIL for each ("…: config.yml couldn't be saved at this update …", fix: "make
 config.yml writable (the SEVERE at the start says why it couldn't be saved), then restart; nothing is
@@ -2775,7 +2785,8 @@ status says "drain first").
   (and take out its `half_gap`, or set it to 576), `/hcm reload` and `/hcm games gen on <course>`: the
   new area is checked empty and the next course is built there.
 - **A Classic:** `/hcm games gen unrecall <classic> confirm` (it empties both halves once nobody is on
-  them) and wait for the console's "<classic>'s halves are empty" (status says "empty"). Then change
+  them) and wait for the console's "<classic>'s halves are empty" (status says "empty"). (Classic Sky
+  Rings' move west with Sky Rings v3 was the update's, not yours: nothing to do.) Then change
   `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm reload`: the console
   says "Its old halves were emptied first", and the next recall checks the new spot empty and is
   built there. Changed before its halves are empty, it WARNs and leaves the old halves as they are (a
@@ -2833,7 +2844,9 @@ every `origin`, `half_gap`, `keep.area`, `keep.plot_gap` and the Games worlds as
 lists them as kept).
 
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
-(both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
+(both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Sky Rings'
+expert time is 0.8 x the autopilot's own flown lap, and it has star factors of its own (`stars.rings`:
+gold 1.4, silver 2.0, so about 1:22 and 1:57 on easy). Golf: 3 at
 par or better, 2 within one stroke per three holes over par, 1 for finishing. Only a counted run
 earns stars. The first counted finish of each course in each set pays from `rewards`, about a token a
 minute of first-time play: weekly Easy 10, Parkour 15, Hard 20, Sky Rings 15, Golf of the Week 25,
@@ -2907,6 +2920,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[5, 10]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |
+| `fresh.stars.rings.gold` / `.silver` | 1.4 / 2.0 | Sky Rings' and Classic Sky Rings' own factors on every tier (their expert time is a flown lap, so easy's 2.0 / 3.0 gave every clean run three stars). Set them to 2.0 / 3.0 for easy's |
 | `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16). Move one by hand only (see "Moving an area by hand") |
 | `fresh.slots.<course>.half_gap` | not set (576) | Optional: blocks between a course's two halves along x (32-4096, a multiple of 16). 576 keeps the spare half, where the next course is built, out of sight; a server that built in 0.35 has `32` written |
 | `fresh.slots.fresh_boat.style` | `random` | Which Mountain Run v2 the Ice Boat makes: `random` (each week's own, the Winding Road or the Slalom, about half and half; the Winding Road every week while Race Night is on), `road` (always the Winding Road) or `slalom` (always the Slalom; Race Night then holds no night on it, and `/hcm games check` says so). Anything else: one WARN, random. A week already built keeps its style: a change counts from the next build (`/hcm games gen reroll fresh_boat confirm` makes one now) |
@@ -3574,8 +3588,11 @@ every Fresh course's tile, on its screen and in the finish line, so they can ask
 - A course up now can't be recalled (by `current`, its code, its number or its date): recall an older one.
 - A set is kept once: a second keep of it is refused and names the course it was kept as (clear
   that plot to keep it again). A course whose half doesn't fit a plot (144 x 176 x 336) can't be kept:
-  a Mountain Run v2 says "Mountain Run v2 courses are too big to keep; they stay in the archive". Golf
-  v4 (128 x 16 x 224) fits. `keep <course> last` without an id is refused ("Give the new course
+  a Mountain Run v2 says "Mountain Run v2 courses are too big to keep; they stay in the archive", and
+  Sky Rings can't be kept, like the Ice Boat ("Sky Rings courses are too big to keep; they stay in the
+  archive": a v3 loop is 512 x 176 x 512). Golf v4 (128 x 16 x 224) fits. A Sky Rings course from
+  before v3 isn't recalled into the new Classic either ("made by Sky Rings v2 ... it stays in the
+  archive"). `keep <course> last` without an id is refused ("Give the new course
   an id too").
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
@@ -3616,7 +3633,8 @@ every Fresh course's tile, on its screen and in the finish line, so they can ask
    3-day grid, and the courses change on that day.
 4. Finish Easy Parkour on a tablet without sprinting, and every other parkour tier on Java (Hard's
    tightest jump is the one to watch on Bedrock).
-5. Fly Sky Rings with no rockets. Miss a ring on purpose, then fly on from the checkpoint.
+5. Fly Sky Rings: spend a rocket on each white ring, try a level leg at speed with none, miss a ring on
+   purpose and fly on from it.
 6. Play Tiny Golf at par, then play one hole badly on purpose: it finishes by par + 1 without the
    ball being picked up.
 7. `/hcm games gen reroll fresh_golf confirm` while someone plays the big golf course: their round
@@ -4673,7 +4691,8 @@ the backfill never replaces a single value you wrote where a section belongs, it
     cleared. A run going at the time finishes with "the course changed during your run". Your
     next finish reads "★ New best!", not "Your first finish", and the course screen's tokens item
     says the first finish is done.
-35. An elytra course: a worn elytra and 3 rockets, back to 3 at each ring; landing outside a ring
+35. Sky Rings hands out 8 rockets and none at the rings; a reset gives back only what the course still
+    needs; a hand-built elytra course: 3, back to 3 at each ring. Landing outside a ring
     sends you back to the last one, even a landing within half a second of a Back to checkpoint.
     A boat course: getting out sends you back to the last checkpoint, and after `/hcm leave` the
     boat is gone.

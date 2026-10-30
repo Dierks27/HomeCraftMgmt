@@ -16,11 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Config revision 21 ({@link GamesAreaMigration}): the v4 areas. Golf of the Week and Classic Golf move to
- * x 8768, the Ice Boat north to z 2880, wherever the file still holds an origin this plugin shipped (0.36's,
- * or 0.35's that the legacy guard wrote back, with its {@code half_gap: 32}); an owner's own spot stays, with
- * a WARN, and so does an owner's {@code half_gap: 32} beside 0.36's spot; nothing else is touched; and a
- * second run changes nothing.
+ * Config revisions 21 and 25 ({@link GamesAreaMigration}): the areas that grew. Revision 21: Golf of the Week and
+ * Classic Golf move to x 8768, the Ice Boat north to z 2880, wherever the file still holds an origin this plugin
+ * shipped (0.36's, or 0.35's that the legacy guard wrote back, with its {@code half_gap: 32}); an owner's own spot
+ * stays, with a WARN, and so does an owner's {@code half_gap: 32} beside 0.36's spot; nothing else is touched; and
+ * a second run changes nothing. Revision 25 (Sky Rings v3): Sky Rings grows in place at its 0.36-0.38 spot (only
+ * 0.35's moves), Classic Sky Rings moves west to 1760,128,2880 from either earlier spot, by the same rules; each
+ * revision moves only its own areas.
  */
 class GamesAreaMigrationTest {
 
@@ -151,18 +153,114 @@ class GamesAreaMigrationTest {
         assertEquals("EEMMH", c.getString(SLOTS + "fresh_golf.mix"), "their golf mix");
     }
 
+    /** The bundled file as 0.36-0.38 shipped Sky Rings' two areas (Sky Rings' spot is the same today). */
+    private static YamlConfiguration v038() {
+        YamlConfiguration c = LayoutFixtures.bundled();
+        c.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));
+        return c;
+    }
+
+    @Test
+    void skyRingsGrowsInPlaceAndItsClassicMovesWest() {
+        YamlConfiguration c = v038();
+        List<String> log = new ArrayList<>();
+        assertTrue(GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, log), "the file changes");
+        assertEquals(List.of(6080, 128, 4096), list(c.get(SLOTS + "fresh_rings.origin")), "Sky Rings stays: it grows"
+                + " in place there");
+        assertEquals(List.of(1760, 128, 2880), list(c.get(CLASSICS + "fresh_classic_rings.origin")),
+                "Classic Sky Rings moves west");
+        assertEquals(LayoutFixtures.bundled().saveToString(), c.saveToString(), "now exactly the bundled file");
+        assertEquals(1, log.size(), "one line: " + log);
+        assertTrue(!log.get(0).startsWith(LayoutGuard.WARN) && log.get(0).contains("Sky Rings areas")
+                && log.get(0).contains("Classic Sky Rings [6080, 128, 4992] -> [1760, 128, 2880]")
+                && log.get(0).contains("emptied by themselves"), "an INFO saying what moved: " + log);
+        assertFalse(GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, new ArrayList<>()),
+                "a second run changes nothing");
+    }
+
+    @Test
+    void the035RingsSpotsTheGuardWroteBackMoveWithTheirOldGap() {
+        YamlConfiguration c = LayoutFixtures.v035();
+        c.set(SLOTS + "fresh_rings.half_gap", 32);
+        c.set(CLASSICS + "fresh_classic_rings", List.of(4608, 128, 4736)); // a bare list, as 0.35 allowed
+        GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, new ArrayList<>());
+        assertEquals(List.of(6080, 128, 4096), list(c.get(SLOTS + "fresh_rings.origin")),
+                "0.35's rings spot is ours: at x 4096 a 512-wide half would grow onto Classic Parkour's");
+        assertNull(c.get(SLOTS + "fresh_rings.half_gap"), "and its 0.35 gap goes");
+        assertEquals(List.of(1760, 128, 2880), list(c.get(CLASSICS + "fresh_classic_rings")),
+                "a bare Classic list stays a bare list, at its new spot");
+        assertEquals(List.of(4864, 160, 4096), list(c.get(SLOTS + "fresh_golf.origin")),
+                "revision 25 leaves golf to revision 21");
+    }
+
+    @Test
+    void anOwnersOwnRingsSpotAndGapStayWithAWarnEach() {
+        YamlConfiguration c = v038();
+        c.set(SLOTS + "fresh_rings.origin", List.of(6400, 128, 4096));
+        c.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4096 + 1024));
+        c.set(CLASSICS + "fresh_classic_rings.half_gap", 32);
+        List<String> log = new ArrayList<>();
+        GamesAreaMigration.apply(c, GamesAreaMigration.REVISION, log);
+        assertEquals(List.of(6400, 128, 4096), list(c.get(SLOTS + "fresh_rings.origin")), "the owner's spot stays");
+        assertEquals(List.of(6080, 128, 5120), list(c.get(CLASSICS + "fresh_classic_rings.origin")), "and theirs");
+        assertEquals(32, c.getInt(CLASSICS + "fresh_classic_rings.half_gap"), "with the gap they set");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(LayoutGuard.WARN) && l.contains("kept your own"
+                + " games.fresh.slots.fresh_rings.origin [6400, 128, 4096]") && l.contains("512 x 176 x 512")
+                && l.contains("[6080, 128, 4096]")), "one WARN: theirs, the new size, the shipped spot: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(LayoutGuard.WARN) && l.contains("fresh_classic_rings.origin")
+                && l.contains("[1760, 128, 2880]")), "and one for the Classic: " + log);
+        assertTrue(log.stream().noneMatch(l -> !l.startsWith(LayoutGuard.WARN)), "nothing moved, so no INFO: " + log);
+
+        YamlConfiguration gap = v038();
+        gap.set(SLOTS + "fresh_rings.half_gap", 32);
+        List<String> said = new ArrayList<>();
+        GamesAreaMigration.apply(gap, GamesAreaMigration.REVISION, said);
+        assertEquals(32, gap.getInt(SLOTS + "fresh_rings.half_gap"), "a 32 beside the 0.36 spot is the owner's own");
+        assertTrue(said.stream().anyMatch(l -> l.startsWith(LayoutGuard.WARN) && l.contains(
+                "games.fresh.slots.fresh_rings.half_gap 32 for Sky Rings at [6080, 128, 4096]")), "named: " + said);
+    }
+
+    @Test
+    void eachRevisionMovesOnlyItsOwnAreas() {
+        YamlConfiguration c = v036();
+        c.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));
+        GamesAreaMigration.apply(c, GamesAreaMigration.V4, new ArrayList<>());
+        assertEquals(List.of(8768, 160, 4096), list(c.get(SLOTS + "fresh_golf.origin")), "21 moves golf");
+        assertEquals(List.of(6080, 128, 4992), list(c.get(CLASSICS + "fresh_classic_rings.origin")),
+                "but not Classic Sky Rings");
+        YamlConfiguration d = v036();
+        d.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));
+        GamesAreaMigration.apply(d, GamesAreaMigration.REVISION, new ArrayList<>());
+        assertEquals(List.of(7488, 160, 4096), list(d.get(SLOTS + "fresh_golf.origin")), "25 leaves golf");
+        assertEquals(List.of(1760, 128, 2880), list(d.get(CLASSICS + "fresh_classic_rings.origin")),
+                "and moves Classic Sky Rings");
+        YamlConfiguration both = v036();
+        both.set(CLASSICS + "fresh_classic_rings.origin", List.of(6080, 128, 4992));
+        GamesAreaMigration.apply(both, new ArrayList<>());
+        assertEquals(LayoutFixtures.bundled().saveToString(), both.saveToString(), "both together: a file from"
+                + " before 21 ends exactly as the bundled one");
+    }
+
     @Test
     void theMovesAreTheMergedTable() {
-        assertEquals(List.of(Slots.DAILY_GOLF, Slots.ICE_BOAT, Slots.CLASSIC_GOLF),
-                GamesAreaMigration.MOVES.stream().map(GamesAreaMigration.Move::def).toList(), "the three grown areas");
+        assertEquals(List.of(Slots.DAILY_GOLF, Slots.ICE_BOAT, Slots.CLASSIC_GOLF, Slots.SKY_RINGS,
+                Slots.CLASSIC_RINGS), GamesAreaMigration.MOVES.stream().map(GamesAreaMigration.Move::def).toList(),
+                "the five grown areas");
+        assertEquals(List.of(21, 21, 21, 25, 25), GamesAreaMigration.MOVES.stream().map(GamesAreaMigration.Move::revision)
+                .toList(), "the v4 areas in revision 21, Sky Rings' in 25");
         assertEquals(LayoutGuard.RESIZED, java.util.Set.copyOf(GamesAreaMigration.MOVES.stream()
-                .map(m -> m.def().id()).toList()), "the same three the legacy guard never keeps at 0.35's shape");
+                .map(m -> m.def().id()).toList()), "the same five the legacy guard never keeps at 0.35's shape");
         for (GamesAreaMigration.Move m : GamesAreaMigration.MOVES) {
             LayoutGuard.Area a = LayoutGuard.AREAS.stream().filter(x -> x.id().equals(m.def().id())).findFirst()
                     .orElseThrow();
             assertTrue(m.shipped().contains(a.legacy()), m.def().id() + ": 0.35's spot counts as ours");
             assertEquals(a.shipped(), m.to(), m.def().id() + ": it moves to the shipped spot");
         }
-        assertEquals(21, GamesAreaMigration.REVISION, "revision 21 (20 is the token balance)");
+        assertEquals(21, GamesAreaMigration.V4, "revision 21 (20 is the token balance)");
+        assertEquals(25, GamesAreaMigration.REVISION, "and 25, Sky Rings v3 (24 is the Firework Remote)");
+        assertEquals(List.of(List.of(4096, 128, 4352)), GamesAreaMigration.MOVES.get(3).shipped(),
+                "Sky Rings: only 0.35's spot moves (0.36-0.38's is today's)");
+        assertEquals(List.of(List.of(6080, 128, 4992), List.of(4608, 128, 4736)), GamesAreaMigration.MOVES.get(4)
+                .shipped(), "Classic Sky Rings: 0.36-0.38's, then 0.35's");
     }
 }

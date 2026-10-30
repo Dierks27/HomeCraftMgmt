@@ -222,15 +222,15 @@ class LayoutGuardTest {
         assertEquals(1, log.size(), "one line: " + log);
         assertTrue(log.get(0).startsWith(LayoutGuard.WARN) && log.get(0).contains("Parkour's area is claimed")
                 && log.get(0).contains("Moving an area by hand"), "a warning that says why and how to move: " + log);
-        assertTrue(log.get(0).contains("Golf of the Week, Classic Golf and the Ice Boat are bigger now"),
-                "and that the three grown areas take their new spots: " + log);
+        assertTrue(log.get(0).contains("Golf of the Week, Classic Golf, the Ice Boat, Sky Rings and Classic Sky Rings"
+                + " are bigger now"), "and that the five grown areas take their new spots: " + log);
         Map<String, List<Box>> want = new java.util.LinkedHashMap<>(
                 LayoutFixtures.legacyPlaces());
         for (String id : LayoutGuard.RESIZED) {
             want.put(id, LayoutFixtures.shippedPlaces().get(id));
         }
         assertEquals(want, LayoutFixtures.places(LayoutFixtures.reread(c)),
-                "every place reads back exactly where and as 0.35 built it, the three grown ones at their v4 spots");
+                "every place reads back exactly where and as 0.35 built it, the five grown ones at their new spots");
         String once = c.saveToString();
         assertFalse(LayoutGuard.apply(c, Decision.LEGACY, false, List.of(), null, new ArrayList<>()),
                 "a second run changes nothing");
@@ -336,21 +336,30 @@ class LayoutGuardTest {
 
     @Test
     void aBareClassicListStaysAListWhenItMovesAndGainsItsGapWhenItStays() {
-        String path = area("fresh_classic_rings").entry();
+        // Classic Parkour: Classic Sky Rings grew with Sky Rings v3, so no decision keeps it at 0.35's spot
+        String path = area("fresh_classic_parkour").entry();
         YamlConfiguration moved = LayoutFixtures.v035();
-        moved.set(path, List.of(4608, 128, 4736));
+        moved.set(path, List.of(4096, 160, 4736));
         LayoutGuard.apply(moved, Decision.NEW, true, List.of(), null, new ArrayList<>());
-        assertEquals(List.of(6080, 128, 4992), list(moved.get(path)), "moved, still a bare list");
+        assertEquals(List.of(7488, 160, 6128), list(moved.get(path)), "moved, still a bare list");
 
         YamlConfiguration kept = LayoutFixtures.v035();
-        kept.set(path, List.of(4608, 128, 4736));
+        kept.set(path, List.of(4096, 160, 4736));
         LayoutGuard.apply(kept, Decision.LEGACY, true, List.of("x"), null, new ArrayList<>());
         ConfigurationSection s = kept.getConfigurationSection(path);
         assertNotNull(s, "it becomes a section, the one shape that holds a gap");
-        assertEquals(List.of(4608, 128, 4736), list(s.get("origin")), "same spot");
+        assertEquals(List.of(4096, 160, 4736), list(s.get("origin")), "same spot");
         assertEquals(32, s.getInt("half_gap"), "same shape");
-        assertEquals(LayoutFixtures.legacyPlaces().get("fresh_classic_rings"),
-                LayoutFixtures.places(LayoutFixtures.reread(kept)).get("fresh_classic_rings"), "read back as 0.35 built it");
+        assertEquals(LayoutFixtures.legacyPlaces().get("fresh_classic_parkour"),
+                LayoutFixtures.places(LayoutFixtures.reread(kept)).get("fresh_classic_parkour"),
+                "read back as 0.35 built it");
+
+        YamlConfiguration grown = LayoutFixtures.v035();
+        String rings = area("fresh_classic_rings").entry();
+        grown.set(rings, List.of(4608, 128, 4736));
+        LayoutGuard.apply(grown, Decision.LEGACY, true, List.of("x"), null, new ArrayList<>());
+        assertEquals(List.of(1760, 128, 2880), list(grown.get(rings)), "a grown Classic in a bare list takes its new"
+                + " spot even on a legacy server, still a bare list");
     }
 
     @Test

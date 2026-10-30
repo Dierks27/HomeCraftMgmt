@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * config.yml: the spec's table exactly; not one pair of places in sight of each other at view distance
  * 32 (Paper's largest) for all 26 halves, the Clubhouse, the arena and a keep area at its largest (100
  * plots), which a brute force over every chunk agrees with; every half in the number range the golf
- * ball and the pilots were proven in (x, z 4096..8191), but golf's column and the boat, each with its
- * proof ({@link LayoutSightTest#rangeProblem}); every box on the chunk grid; nothing overlapping or within
+ * ball and the pilots were proven in (x, z 4096..8191), but golf's column, the boat and Classic Sky Rings, each
+ * with its proof ({@link LayoutSightTest#rangeProblem}); every box on the chunk grid; nothing overlapping or within
  * the build rule's 32 blocks; nothing near a 0.35 spot, a 0.36 one v4 left behind, or the world's spawn;
  * and the kept-course plots still 144 x 176 x 336, so no kept course moves when a generator grows.
  * A new place or a moved default has to pass all of it.
@@ -84,7 +84,7 @@ class ShippedLayoutTest {
         assertEquals(LayoutSightTest.NEW_ARENA, FallingFloorsSettings.defaults().box(), "the arena's box");
         assertEquals(LayoutSightTest.NEW_KEEP, DailySettings.Archive.shipped().keep(), "24 plots from x 1760, z 7296");
         assertEquals(List.of(144, 176, 336), List.of(KeepArea.PLOT_X, KeepArea.PLOT_Y, KeepArea.PLOT_Z),
-                "the kept plots are pinned: the Mountain Run v2's bigger half moves no kept course");
+                "the kept plots are pinned: the Mountain Run v2's and Sky Rings v3's bigger halves move no kept course");
         assertEquals(Sight.GAP, Slots.HALF_GAP, "a course's halves stand 576 apart by default");
         assertEquals(Sight.GAP, KeepArea.DEFAULT_GAP, "and so do kept plots");
         assertEquals(576, Sight.GAP, "36 chunk columns");
@@ -180,6 +180,9 @@ class ShippedLayoutTest {
     void nothingShippedMeetsOrSeesAnOldAreaV4LeavesBehind() {
         for (Map.Entry<String, Box> n : shipped(BIG_KEEP).entrySet()) {
             for (Map.Entry<String, Box> o : LayoutSightTest.OLD_036.entrySet()) {
+                if (LayoutSightTest.emptiedFirst(n.getKey(), o.getKey())) {
+                    continue; // Sky Rings v3 over 0.36's golf: emptied before it is built (LayoutSightTest)
+                }
                 assertFalse(n.getValue().intersects(o.getValue()), n.getKey() + " is clear of " + o.getKey());
                 int dist = Math.min(Sight.chunksApart(n.getValue(), Sight.REACH, o.getValue()),
                         Sight.chunksApart(o.getValue(), Sight.REACH, n.getValue()));

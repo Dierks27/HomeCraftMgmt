@@ -20,11 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The layout that keeps every place out of every other's sight (LAYOUT-SPEC §1.5-§1.6), checked with
  * {@link Sight} and against a brute force: nothing is in sight of anything at view distance 32, the
  * closest two places are 36 chunks apart, every half stays in the number range the golf ball and the
- * pilots were proven in (x, z 4096..8191) but golf's column and the boat (each with its proof), and
- * nothing meets or sees a 0.35 spot, or a 0.36 one v4 left behind (the old areas RETIRE empties).
+ * pilots were proven in (x, z 4096..8191) but golf's column, the boat and Classic Sky Rings (each with its
+ * proof), and nothing meets or sees a 0.35 spot, or a 0.36 one v4 left behind (the old areas RETIRE empties).
  *
  * <p>v4 (V4-DECISIONS "The merged layout", ONE table): Golf of the Week and Classic Golf are 128 x 16 x 224
  * in Col G at x 8768, the Mountain Run v2 is 480 x 176 x 640 north at z 2880; everything else as 0.36.
+ * Sky Rings v3: Sky Rings' halves are 512 x 176 x 512 at the same spot, and Classic Sky Rings', the same size,
+ * stand in the west at x 1760, z 2880.
  *
  * <p>The new spots are the spec's table, written out here, so this pins the table itself
  * ({@code ShippedLayoutTest} proves the shipped defaults are this table). The 0.35 layout, measured
@@ -41,7 +43,7 @@ class LayoutSightTest {
         int e = 7488;
         int g = 8768;
         NEW.put(Slots.SKY_RINGS, new int[]{w, 128, 4096});
-        NEW.put(Slots.CLASSIC_RINGS, new int[]{w, 128, 4992});
+        NEW.put(Slots.CLASSIC_RINGS, new int[]{1760, 128, 2880});
         NEW.put(Slots.ICE_BOAT, new int[]{w, 96, 2880});
         NEW.put(Slots.DAILY_PARKOUR_EASY, new int[]{w, 160, 6592});
         NEW.put(Slots.DAILY_PARKOUR_MEDIUM, new int[]{w, 160, 7232});
@@ -66,10 +68,23 @@ class LayoutSightTest {
     }
 
     /**
+     * Whether new box {@code n} may meet or see the 0.36 area {@code o}: only Sky Rings v3's square, over 0.36's
+     * Golf of the Week and beside its Classic Golf (x 7488). Those stand only on a server that skipped 0.37-0.38,
+     * and there the engine empties an old area next to a region before it builds there (it crowds the region:
+     * {@link OldAreas#crowds}), so the two never stand side by side.
+     */
+    static boolean emptiedFirst(String n, String o) {
+        return n.startsWith(Slots.SKY_RINGS.id() + ":") && (o.startsWith(Slots.DAILY_GOLF.id() + ":")
+                || o.startsWith(Slots.CLASSIC_GOLF.id() + ":"));
+    }
+
+    /**
      * The number-range rule (LAYOUT-SPEC §1.4, relaxed for v4): every half is in x, z 4096..8191, except golf's,
      * which is in one binade with its own Classic (x 8192..16383, z 4096..8191: a moved golf plan is proven
-     * again where it stands, and the probe of 857k putts moved across x 8192 found no behaviour change), and
-     * the boat's, whose plan is translation-exact (half-local integers; MOUNTAIN-V2-SPEC §10.2).
+     * again where it stands, and the probe of 857k putts moved across x 8192 found no behaviour change), the
+     * boat's, whose plan is translation-exact (half-local integers; MOUNTAIN-V2-SPEC §10.2), and Classic Sky
+     * Rings', which only ever holds a recalled plan: that is flown again by the validator where it stands
+     * before it opens (PlanCheck, RingsValidator), and RingsBinadeProbeTest measures plans moved there.
      */
     static String rangeProblem(String name, Box b) {
         String id = name.substring(0, name.indexOf(':'));
@@ -77,7 +92,7 @@ class LayoutSightTest {
             return b.minX() >= 8192 && b.maxX() <= 16383 && b.minZ() >= 4096 && b.maxZ() <= 8191 ? null
                     : name + " leaves golf's binade x 8192..16383, z 4096..8191: " + b.describe();
         }
-        if (id.equals(Slots.ICE_BOAT.id())) {
+        if (id.equals(Slots.ICE_BOAT.id()) || id.equals(Slots.CLASSIC_RINGS.id())) {
             return b.minX() % 16 == 0 && b.minZ() % 16 == 0 ? null : name + " isn't 16-aligned: " + b.describe();
         }
         return b.minX() >= 4096 && b.maxX() <= 8191 && b.minZ() >= 4096 && b.maxZ() <= 8191 ? null
@@ -244,6 +259,13 @@ class LayoutSightTest {
     void nothingNewMeetsOrSeesAn036AreaV4LeftBehind() {
         for (Map.Entry<String, Box> n : newLayout().entrySet()) {
             for (Map.Entry<String, Box> o : OLD_036.entrySet()) {
+                if (emptiedFirst(n.getKey(), o.getKey())) {
+                    if (n.getValue().gap(o.getValue()) < Regions.APART) {
+                        assertTrue(OldAreas.crowds(List.of(o.getValue()), List.of(n.getValue())), n.getKey()
+                                + " waits for " + o.getKey() + " to be emptied before it is built");
+                    }
+                    continue;
+                }
                 assertFalse(n.getValue().intersects(o.getValue()), n.getKey() + " is clear of " + o.getKey());
                 int d = Math.min(Sight.chunksApart(n.getValue(), Sight.REACH, o.getValue()),
                         Sight.chunksApart(o.getValue(), Sight.REACH, n.getValue()));
@@ -273,6 +295,33 @@ class LayoutSightTest {
             assertFalse(b.maxX() >= 8192 && b.minX() <= 10175 && b.maxZ() >= 3520 && b.minZ() <= 5695,
                     id + " keeps out of golf's x 8192..10175, z 3520..5695");
         }
+    }
+
+    @Test
+    void skyRingsGrewInPlaceAndItsClassicStandsInTheWest() {
+        Map<String, Box> l = newLayout();
+        assertEquals(Box.sized(6080, 128, 4096, 512, 176, 512), l.get("fresh_rings:A"), "Sky Rings v3, half A");
+        assertEquals(Box.sized(7168, 128, 4096, 512, 176, 512), l.get("fresh_rings:B"), "half B, 576 along x");
+        assertEquals(Box.sized(1760, 128, 2880, 512, 176, 512), l.get("fresh_classic_rings:A"), "its Classic, west");
+        assertEquals(Box.sized(2848, 128, 2880, 512, 176, 512), l.get("fresh_classic_rings:B"), "and its half B");
+        assertEquals(896, l.get("fresh_tiny_golf:A").minZ() - l.get("fresh_rings:B").maxZ() - 1,
+                "Tiny Golf is 896 south of Sky Rings' half B");
+        assertEquals(1088, l.get("fresh_golf:A").minX() - l.get("fresh_rings:B").maxX() - 1,
+                "and golf's column 1088 east of it");
+        assertTrue(l.get("fresh_rings:B").maxX() <= 8191, "half B stays inside x 4096..8191, so a live plan is"
+                + " flown where the goldens were pinned");
+        // the old 128 x 176 x 320 areas (0.36-0.38) RETIRE empties: Sky Rings' is inside its new half (it grew in
+        // place); the Classic's old spot keeps the build rule from everything new, so it never holds a build up
+        Box oldClassicA = Box.sized(6080, 128, 4992, 128, 176, 320);
+        Box oldClassicB = Box.sized(6784, 128, 4992, 128, 176, 320);
+        for (Map.Entry<String, Box> n : l.entrySet()) {
+            for (Box old : List.of(oldClassicA, oldClassicB)) {
+                assertTrue(n.getValue().gap(old) > Regions.APART, n.getKey() + " keeps the build rule from Classic Sky"
+                        + " Rings' old area " + old.describe());
+            }
+        }
+        assertTrue(l.get("fresh_rings:A").contains(Box.sized(6080, 128, 4096, 128, 176, 320)),
+                "Sky Rings' old half A is inside its new one");
     }
 
     @Test

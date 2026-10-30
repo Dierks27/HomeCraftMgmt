@@ -208,25 +208,30 @@ public final class Slots {
      * blocks (36 chunk columns) from every other, a course's own spare half included (HALF_GAP), so from
      * any course a player sees only that course at every view distance a server can set (Sight). The
      * kept courses' plots (KeepArea), the Clubhouse and the arena stand further out on the same rule. An
-     * install that built at 0.35's spots keeps them (LayoutGuard), except the three areas whose size this
-     * version changed (golf's two and the boat), which take their new spot everywhere.
+     * install that built at 0.35's spots keeps them (LayoutGuard), except the five areas whose size a later
+     * version changed (golf's two, the boat and Sky Rings' two), which take their new spot everywhere.
      *
-     *   Col W, x 6080 (half B at x + size + 576): Sky Rings z 4096, Classic Sky Rings z 4992, Easy Parkour
-     *   z 6592, Parkour z 7232, Hard Parkour z 7872.
+     *   Col W, x 6080 (half B at x + size + 576): Sky Rings z 4096 (v5, 512 x 176 x 512 halves, x 6080..7679),
+     *   Easy Parkour z 6592, Parkour z 7232, Hard Parkour z 7872.
      *   Col E, x 7488: Tiny Golf z 5504, Classic Parkour z 6128, Easy Dropper z 6768, Dropper z 7360,
      *   Classic Dropper z 7952.
      *   Col G, x 8768 (v4, Golf v4's bigger halves): Golf of the Week z 4096, Classic Golf z 4896.
      *   North, z 2880 (v4, the Mountain Run v2): Ice Boat, x 6080..7615, y 96..271.
+     *   West, z 2880: Classic Sky Rings x 1760..3359 (512 x 176 x 512; outside 4096..8191: a recalled plan is
+     *   proven again where it stands, RingsBinadeProbeTest).
      *
      * The number range. Every half of Col W and Col E stays inside x, z 4096..8191, the range 0.35's halves
      * stood in, so the golf ball, the Dropper's pilots and the elytra sim give bit-identical answers when a
-     * plan is moved there. Two areas sit outside it, each with its proof: golf's Col G is in one binade with
+     * plan is moved there. Three areas sit outside it, each with its proof: golf's Col G is in one binade with
      * its own Classic (x 8192..16383, z 4096..8191; a moved golf plan is proven again where it stands before
-     * it opens, and the probe of 857k putts moved across x 8192 found no behaviour change), and the boat,
+     * it opens, and the probe of 857k putts moved across x 8192 found no behaviour change); the boat,
      * whose planner and validator work in half-local integers and whose plan is translation-exact, so no
-     * double ever depends on where it stands. The 0.36 spots of the moved areas (Golf of the Week 7488,160,
-     * 4096 and Classic Golf 7488,160,4800 at 64 x 16 x 128, Ice Boat 6080,160,5888 at 128 x 16 x 128) are
-     * emptied by RETIRE after the update (GenService, gen.<slot>.old).
+     * double ever depends on where it stands; and Classic Sky Rings in the west, which only ever holds a
+     * recalled plan, flown again by the validator where it stands before it opens (PlanCheck), as
+     * RingsBinadeProbeTest does for plans moved there. The 0.36 spots of the moved areas
+     * (Golf of the Week 7488,160,4096 and Classic Golf 7488,160,4800 at 64 x 16 x 128, Ice Boat 6080,160,
+     * 5888 at 128 x 16 x 128) and Sky Rings and Classic Sky Rings at 6080,128,4096 / 6080,128,4992
+     * (128 x 176 x 320, 0.36-0.38) are emptied by RETIRE after the update (GenService, gen.<slot>.old).
      */
 
     public static final Def DAILY_PARKOUR_EASY = new Def("fresh_parkour_easy", PARKOUR, GAME_TRIALS, "parkour",
@@ -238,8 +243,12 @@ public final class Slots {
     public static final Def DAILY_PARKOUR_HARD = new Def("fresh_parkour_hard", PARKOUR, GAME_TRIALS, "parkour",
             "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 6080, 160, 7872,
             TokenBalance.FRESH_PARKOUR_HARD_DAILY, TokenBalance.FRESH_PARKOUR_HARD_WEEKLY);
+    /**
+     * Sky Rings v3: a loop of rings round a 512 x 512 square of sky, its tower at the south edge. It grew
+     * in place from 128 x 176 x 320, so its spot is the one every version since 0.36 shipped.
+     */
     public static final Def SKY_RINGS = new Def("fresh_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
-            128, 176, 320, 0, true, "easy", 6080, 128, 4096,
+            512, 176, 512, 0, true, "easy", 6080, 128, 4096,
             TokenBalance.FRESH_RINGS_DAILY, TokenBalance.FRESH_RINGS_WEEKLY);
     /** Golf v4 (GOLF-V4-SPEC §4.1): nine 40 x 64 plots, 3 to a row, in a 128 x 16 x 224 half. */
     public static final Def DAILY_GOLF = new Def("fresh_golf", GOLF, GAME_GOLF, "golf", "Golf of the Week", "&d",
@@ -281,9 +290,9 @@ public final class Slots {
     /*
      * A Classics slot is empty and closed until an admin recalls an archived course into it. It is
      * NOT in ALL: the scheduler never builds one on its own, the Star Chart doesn't count it, and a
-     * screen listing "this week's courses" doesn't show it. Its regions stand in the same two
-     * columns, each in a row of its own next to its kind (Classic Sky Rings under Sky Rings, Classic
-     * Golf under Golf of the Week, Classic Dropper after the droppers), each half the size of the
+     * screen listing "this week's courses" doesn't show it. Its regions stand in the same columns,
+     * each in a row of its own next to its kind (Classic Golf under Golf of the Week, Classic Dropper
+     * after the droppers), except Classic Sky Rings, in the west at z 2880, each half the size of the
      * largest course its kind can hold (a Classic Golf half is the big golf course's, so Tiny Golf
      * fits too). Its tier or mix is the recalled course's own; the shipped one here only satisfies
      * the region checks.
@@ -292,9 +301,13 @@ public final class Slots {
     /** Classic Parkour: holds any parkour tier. */
     public static final Def CLASSIC_PARKOUR = new Def("fresh_classic_parkour", PARKOUR, GAME_TRIALS, "parkour",
             "Classic Parkour", "&6", 64, 48, 64, 0, true, "easy", 7488, 160, 6128, 0, 0);
-    /** Classic Sky Rings. */
+    /**
+     * Classic Sky Rings: as big as Sky Rings' half, in the west at x 1760, z 2880, because grown in its old
+     * row it would reach Tiny Golf. Only a v3 edition can be recalled into it (an older one stays in the
+     * archive, and the validator says why).
+     */
     public static final Def CLASSIC_RINGS = new Def("fresh_classic_rings", RINGS, GAME_TRIALS, "elytra",
-            "Classic Sky Rings", "&6", 128, 176, 320, 0, true, "easy", 6080, 128, 4992, 0, 0);
+            "Classic Sky Rings", "&6", 512, 176, 512, 0, true, "easy", 1760, 128, 2880, 0, 0);
     /**
      * Classic Golf: holds the big golf course or Tiny Golf, its half as big as Golf of the Week's. A course
      * of an older golf version (64 x 16 x 128, or Tiny Golf's 64 x 16 x 48) is recalled at its own size, in

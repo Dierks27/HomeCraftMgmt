@@ -57,7 +57,8 @@ class SlotsTest {
 
     @Test
     void theDefaultHalvesAreTheSpecsTable() {
-        // v4's merged table: Golf of the Week 128 x 16 x 224 at x 8768, the Mountain Run v2 480 x 176 x 640 north
+        // v4's merged table: Golf of the Week 128 x 16 x 224 at x 8768, the Mountain Run v2 480 x 176 x 640 north;
+        // Sky Rings v3's 512 x 176 x 512 in place
         record Row(String id, int ax, int bx, int z1, int z2, int y1, int y2) {
         }
         List<Row> table = List.of(
@@ -66,12 +67,14 @@ class SlotsTest {
                 new Row("fresh_parkour_hard", 6080, 6720, 7872, 7935, 160, 207),
                 new Row("fresh_golf", 8768, 9472, 4096, 4319, 160, 175),
                 new Row("fresh_tiny_golf", 7488, 8128, 5504, 5551, 160, 175),
-                new Row("fresh_rings", 6080, 6784, 4096, 4415, 128, 303),
+                new Row("fresh_rings", 6080, 7168, 4096, 4607, 128, 303),
                 new Row("fresh_boat", 6080, 7136, 2880, 3519, 96, 271),
                 new Row("fresh_dropper_easy", 7488, 8128, 6768, 6783, 160, 223),
-                new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 223));
+                new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 223),
+                // Sky Rings v3: a 512 x 512 square, and its Classic the same size in the west
+                new Row("fresh_classic_rings", 1760, 2848, 2880, 3391, 128, 303));
         for (Row row : table) {
-            Slots.Def s = Slots.of(row.id());
+            Slots.Def s = Slots.any(row.id());
             Box a = s.half('A');
             Box b = s.half('b');
             assertEquals(row.ax(), a.minX(), row.id() + ": half A starts at its origin");

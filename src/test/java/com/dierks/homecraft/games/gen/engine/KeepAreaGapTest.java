@@ -49,7 +49,7 @@ class KeepAreaGapTest {
         assertTrue(a.describe().endsWith("plots 576 apart"), "said: " + a.describe());
         assertEquals(24, a.plots().size(), "every plot");
         assertEquals(a.plot(24), a.plots().get(23), "in order");
-        Box built = a.build(8, Slots.SKY_RINGS);
+        Box built = a.build(8, Slots.DAILY_GOLF); // Golf v4's 128 x 16 x 224, the largest course a plot holds now
         assertEquals(a.plot(8).minX() + KeepArea.MARGIN, built.minX(), "a course still stands 8 in");
         assertTrue(a.plot(8).contains(built), "inside its plot");
     }

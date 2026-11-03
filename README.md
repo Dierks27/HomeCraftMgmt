@@ -59,7 +59,8 @@ and the How It Works **Guide**.
   - The shop shows each pack's odds, what's inside, and which Minis you're still missing.
 - **Where Minis live:** the **Museum** shows every Mini there is. Display Cases, Vending
   Machines, the Auction House and a Card Binder hold them.
-- **The wild hunt:** now and then a Mini appears in the wild near a player.
+- **The wild hunt:** now and then a Mini appears in the wild near a player. Never near a
+  player in the Nether, where it would land on the bedrock roof (Nether mobs still drop Minis).
   - Everyone hears about it, then hints follow: the biome, then a direction, then a light beam.
   - Whoever reaches it first catches it. It's only minted when it's caught, so Minis that get
     away never waste a number.
@@ -115,7 +116,8 @@ Tokens are **earned by playing and never become dollars**.
 
 ### Courier — delivery jobs
 Take a run from the PC's job board, carry the parcel to a village house built at the far end,
-and get paid by distance and how you travelled (on foot pays more than by elytra).
+and get paid by distance and how you travelled (on foot pays more than by elytra). Runs are
+taken above ground only, never in the Nether.
 
 ### Sound Mufflers — hush the noisy stuff
 A block you put next to a noisy farm. Its menu opens the moment it's placed. Pick what to hush

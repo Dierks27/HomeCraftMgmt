@@ -289,6 +289,11 @@ public final class CourierService {
         if (!plugin.sandbox().check(player, "courier accept")) {
             return failed(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
+        // The waypoint search looks down from the top of the world; in the Nether that is the
+        // bedrock roof, so there is nowhere down there to send anyone. See WorldShape.
+        if (!Ground.fromTop(player.getWorld())) {
+            return failed(WorldShape.COURIER_REFUSAL);
+        }
         if (active(player) != null) {
             return failed("You already have a run on. Finish or abandon it first.");
         }

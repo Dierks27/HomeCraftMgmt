@@ -45,7 +45,8 @@ public final class WaypointService {
     public CompletableFuture<Location> find(Player player, Location from, int min, int max) {
         CompletableFuture<Location> result = new CompletableFuture<>();
         World world = from.getWorld();
-        if (world == null) {
+        // Never rolled under a ceiling: the search would stop on the Nether's roof (WorldShape).
+        if (world == null || !Ground.fromTop(world)) {
             result.complete(null);
             return result;
         }

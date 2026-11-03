@@ -76,21 +76,48 @@ public final class HuntMath {
         return due;
     }
 
-    /** A distance in blocks as a radar band: Burning! under 12, Hot under 32, Warm under 64. */
-    public static Band band(double distance) {
+    /**
+     * Where a Mini Radar's bands end, in blocks: closer than {@code burningUnder} reads Burning!, closer than
+     * {@code hotUnder} Hot, closer than {@code warmUnder} Warm, and anything further Cold. A {@code burningUnder} of 0
+     * means no Burning band at all, so Hot is the closest a radar ever reads.
+     */
+    public record Bands(int burningUnder, int hotUnder, int warmUnder) {
+        /** What the bundled file ships: no Burning band, Hot under 32, Warm under 64. */
+        public static final Bands SHIPPED = new Bands(0, 32, 64);
+    }
+
+    /** A distance in blocks as a radar band, by {@code bands}; a negative distance (no Mini live) is NONE. */
+    public static Band band(double distance, Bands bands) {
         if (distance < 0) {
             return Band.NONE;
         }
-        if (distance < 12) {
+        if (distance < bands.burningUnder()) {
             return Band.BURNING;
         }
-        if (distance < 32) {
+        if (distance < bands.hotUnder()) {
             return Band.HOT;
         }
-        if (distance < 64) {
+        if (distance < bands.warmUnder()) {
             return Band.WARM;
         }
         return Band.COLD;
+    }
+
+    /**
+     * True while a radar that locked on at {@code lockedAt} is still reading at {@code now} (milliseconds): for
+     * {@code lastsSeconds} after it locked on, or for good with 0 (then it reads until the Mini is caught or gets away).
+     */
+    public static boolean charged(long lockedAt, int lastsSeconds, long now) {
+        return lastsSeconds <= 0 || now - lockedAt < lastsSeconds * 1000L;
+    }
+
+    /**
+     * True when a radar whose last reading was at {@code lastReadingAt} is due its next one at {@code now}
+     * (milliseconds), {@code intervalSeconds} apart. The radar is checked once a second, so a reading that comes due
+     * up to half a second after a check is taken at that check rather than a whole second late.
+     */
+    public static boolean readingDue(long lastReadingAt, int intervalSeconds, long now) {
+        return now - lastReadingAt >= intervalSeconds * 1000L - 500L;
     }
 
     /** A namespaced biome key ("minecraft:dark_forest") as words: "Dark Forest". */

@@ -348,12 +348,6 @@ public final class HuntService {
         return best;
     }
 
-    /** How warm a player is: the radar band for the nearest live spawn in their world. */
-    public HuntMath.Band distanceBand(Player player) {
-        Hunt h = nearest(player);
-        return h == null ? HuntMath.Band.NONE : HuntMath.band(distance(player.getLocation(), h));
-    }
-
     private static double distance(Location at, Hunt h) {
         double dx = at.getX() - (h.x + 0.5);
         double dy = at.getY() - h.y;

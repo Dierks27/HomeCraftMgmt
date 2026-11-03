@@ -914,6 +914,17 @@ public final class PluginConfig {
                 32);
     }
 
+    /**
+     * The Mini Radar ({@code arcade.radar}): a reading every {@code intervalSeconds} (2-30), for {@code lastsSeconds}
+     * after it locks on (0-600; 0 = until the Mini is caught or gets away), in {@code bands}; with
+     * {@code onePerHunt}, one radar a player per wild Mini. Read by {@link #readRadar}.
+     */
+    public record Radar(int intervalSeconds, int lastsSeconds, com.dierks.homecraft.hunt.HuntMath.Bands bands,
+                        boolean onePerHunt) {
+        /** What the bundled file ships: a reading every 6 seconds for a minute, Cold/Warm/Hot, once per Mini. */
+        public static final Radar DEFAULTS = new Radar(6, 60, com.dierks.homecraft.hunt.HuntMath.Bands.SHIPPED, true);
+    }
+
     /** The Mini trading blocks' appearance (Phase 4c). */
     public record MiniBlocks(BlockDef vending, BlockDef display, BlockDef auction) {
     }
@@ -987,6 +998,7 @@ public final class PluginConfig {
     private Marketplace marketplace;
     private SoundMuffler soundMuffler = new SoundMuffler(true, new BlockDef(Material.WHITE_WOOL, "&fSound Muffler"), 8, 16, 25);
     private Launcher launcher = Launcher.DEFAULTS;
+    private Radar radar = Radar.DEFAULTS;
     private com.dierks.homecraft.arcade.HolidayShows holidayShows = com.dierks.homecraft.arcade.HolidayShows.SHIPPED;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     /** Extra skin slots that aren't 1:1 with a block type (pallet_used, vending_upper, mailbox.<variant>). */
@@ -1068,6 +1080,11 @@ public final class PluginConfig {
     /** The Firework Launcher block, how many a player may have placed, and a Mega show's range (0.38.1). */
     public Launcher launcher() {
         return launcher;
+    }
+
+    /** The Mini Radar's cadence, charge, bands and once-per-Mini rule ({@code arcade.radar}). */
+    public Radar radar() {
+        return radar;
     }
 
     /** The holiday firework shows' windows ({@code arcade.holiday_shows}, 0.38.2). */
@@ -1436,6 +1453,8 @@ public final class PluginConfig {
         this.soundMuffler = readSoundMuffler(c);
         // ---- The Firework Launcher (0.38.1) ----
         this.launcher = readLauncher(c);
+        // ---- The Mini Radar: absent (a start whose backfill didn't run) = the shipped radar ----
+        this.radar = readRadar(c.getConfigurationSection("arcade.radar"), log::warning);
         // ---- Holiday firework shows (0.38.2): absent (a start whose backfill didn't run) = the shipped windows ----
         this.holidayShows = com.dierks.homecraft.arcade.HolidayShows.read(c.contains("arcade.holiday_shows"),
                 c.get("arcade.holiday_shows.enabled"), c.get("arcade.holiday_shows.windows"), log::warning);
@@ -2973,6 +2992,61 @@ public final class PluginConfig {
         int perPlayer = clamped(c, "arcade.launcher.per_player", d.perPlayer(), 1, 30);
         int range = clamped(c, "arcade.launcher.range", d.range(), 8, 64);
         return new Launcher(block, perPlayer, range);
+    }
+
+    /**
+     * {@code arcade.radar}: each number brought into its range ({@code interval_seconds} 2-30, {@code lasts_seconds}
+     * 0-600, {@code burning_under} 0-64, {@code hot_under} 1-128, {@code warm_under} 2-256) with one WARN, and a value
+     * that isn't a whole number, or a {@code one_per_hunt} that isn't true or false, read as the shipped one with one
+     * WARN. Bands out of order (a Hot band no wider than the Burning one, or a Warm band no wider than the Hot one) are
+     * read as the shipped bands, with one WARN. An absent key, or an absent section, is the shipped value.
+     */
+    static Radar readRadar(ConfigurationSection sec, java.util.function.Consumer<String> warning) {
+        Radar d = Radar.DEFAULTS;
+        String at = "arcade.radar.";
+        int interval = radarWhole(at + "interval_seconds", raw(sec, "interval_seconds"), d.intervalSeconds(), 2, 30,
+                warning);
+        int lasts = radarWhole(at + "lasts_seconds", raw(sec, "lasts_seconds"), d.lastsSeconds(), 0, 600, warning);
+        com.dierks.homecraft.hunt.HuntMath.Bands shipped = d.bands();
+        int burning = radarWhole(at + "burning_under", raw(sec, "burning_under"), shipped.burningUnder(), 0, 64,
+                warning);
+        int hot = radarWhole(at + "hot_under", raw(sec, "hot_under"), shipped.hotUnder(), 1, 128, warning);
+        int warm = radarWhole(at + "warm_under", raw(sec, "warm_under"), shipped.warmUnder(), 2, 256, warning);
+        com.dierks.homecraft.hunt.HuntMath.Bands bands = new com.dierks.homecraft.hunt.HuntMath.Bands(burning, hot,
+                warm);
+        if ((burning > 0 && hot <= burning) || warm <= hot) {
+            warning.accept("arcade.radar bands burning_under " + burning + ", hot_under " + hot + ", warm_under "
+                    + warm + " are out of order (each must be bigger than the one before; burning_under 0 = no "
+                    + "Burning band); using " + shipped.burningUnder() + ", " + shipped.hotUnder() + ", "
+                    + shipped.warmUnder() + ".");
+            bands = shipped;
+        }
+        Object rawOne = raw(sec, "one_per_hunt");
+        boolean onePerHunt = d.onePerHunt();
+        if (rawOne instanceof Boolean b) {
+            onePerHunt = b;
+        } else if (rawOne != null) {
+            warning.accept(at + "one_per_hunt '" + rawOne + "' isn't true or false; using " + d.onePerHunt() + ".");
+        }
+        return new Radar(interval, lasts, bands, onePerHunt);
+    }
+
+    private static Object raw(ConfigurationSection sec, String key) {
+        return sec == null ? null : sec.get(key);
+    }
+
+    /** A whole number at {@code path} for the radar: absent = {@code dflt}; unreadable = {@code dflt}, one WARN. */
+    private static int radarWhole(String path, Object raw, int dflt, int min, int max,
+                                  java.util.function.Consumer<String> warning) {
+        if (raw == null) {
+            return dflt;
+        }
+        double n = raw instanceof Boolean ? Double.NaN : number(raw, Double.NaN);
+        if (Double.isNaN(n) || n != Math.rint(n)) {
+            warning.accept(path + " '" + raw + "' isn't a whole number; using " + dflt + ".");
+            return dflt;
+        }
+        return clamped(path, (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, n)), min, max, warning);
     }
 
     /** What a Firework Launcher may be made of (0.38.1): the two blocks its guards keep empty and quiet. */

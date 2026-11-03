@@ -63,7 +63,9 @@ and the How It Works **Guide**.
   - Everyone hears about it, then hints follow: the biome, then a direction, then a light beam.
   - Whoever reaches it first catches it. It's only minted when it's caught, so Minis that get
     away never waste a number.
-  - The Mini Radar and the Mini Lure help.
+  - The Mini Radar and the Mini Lure help. The radar says Cold, Warm or Hot every few seconds for a
+    minute, never which way; it works once per Mini (`arcade.radar` sets how often, how long, the bands
+    and the once-per-Mini rule).
 
 ### The Arcade — tokens buy fun
 Tokens are **earned by playing and never become dollars**.
@@ -253,7 +255,8 @@ you upgrade again, set the mix back to `EEMHX`** (in the file before the start, 
 fresh_dropper EEMHX` and a reroll after it): revision 25 has already run on this file and doesn't run
 twice, so otherwise the Dropper stays EEMMH, with no Long Drop and no WARN. The big areas come back by
 themselves. Each way, the rebuilt Sky Rings and Dropper are new courses with fresh boards; nothing is
-deleted.
+deleted. The `arcade.radar` section 0.38.5 adds is not read by 0.38.4, which goes back to its
+two-second radar with a Burning! band; leave the section in the file for the way up again.
 
 **Back to 0.38.3 from 0.38.4:** the jar alone. 0.38.3 reads revision 24 (0.38.4 keeps it; 0.38.3 has no
 unknown-section check at the top level, so the new `golem` section is simply ignored there, without

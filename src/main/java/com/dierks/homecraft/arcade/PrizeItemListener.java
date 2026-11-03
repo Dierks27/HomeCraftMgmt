@@ -45,7 +45,8 @@ import java.util.UUID;
  * <ul>
  *   <li><b>Boosts</b>: right-click for the effect. Buying more stacks the time, up to three times
  *       one boost's length.</li>
- *   <li><b>Mini Radar</b>: right-click to lock onto the live hunt ({@link RadarService}).</li>
+ *   <li><b>Mini Radar</b>: right-click to lock onto the live hunt ({@link RadarService}). With
+ *       {@code arcade.radar.one_per_hunt}, a second radar on the same Mini is refused and kept.</li>
  *   <li><b>Mini Lure</b>: right-click to set it — the next wild Mini that rolls for anyone lands
  *       near you instead. One set at a time.</li>
  *   <li><b>Firework Shows</b>: right-click for a show that cannot hurt anyone, as long as its row's {@code seconds}
@@ -120,12 +121,21 @@ public final class PrizeItemListener implements Listener {
                     Sounds.refused(player);
                     return;
                 }
-                if (plugin.radar() != null && plugin.radar().activate(player)) {
-                    consume(player, hand);
-                    player.sendMessage(Text.of("&bMini Radar on! &7Watch the bar at the bottom of your screen."));
-                } else {
-                    player.sendMessage(Text.of("&7No wild Mini right now. Your radar is still full."));
-                    Sounds.refused(player);
+                RadarLocks.Lock lock = plugin.radar() == null ? RadarLocks.Lock.NO_MINI : plugin.radar().activate(player);
+                switch (lock) {
+                    case ON -> {
+                        consume(player, hand);
+                        player.sendMessage(Text.of("&bMini Radar on! &7Watch the bar at the bottom of your screen."));
+                    }
+                    case USED -> {
+                        player.sendMessage(Text.of("&7You already used a Mini Radar on this Mini. "
+                                + "Keep this one for the next one!"));
+                        Sounds.refused(player);
+                    }
+                    case NO_MINI -> {
+                        player.sendMessage(Text.of("&7No wild Mini right now. Your radar is still full."));
+                        Sounds.refused(player);
+                    }
                 }
             }
             case LURE -> {

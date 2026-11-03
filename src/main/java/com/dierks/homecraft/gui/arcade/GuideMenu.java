@@ -153,9 +153,36 @@ public final class GuideMenu extends Menu {
         step(23, Material.BEACON, "&d3. A light beam", "&7Near the end, look", "&7for the beam!");
         set(24, arrow("→"), null);
         step(25, Material.PLAYER_HEAD, "&d4. Catch it!", "&7Right-click it to keep it.", "&7Be quick — it runs away.");
-        step(38, Material.COMPASS, "&bMini Radar", "&7Cold, Warm, Hot…", "&7Burning!");
+        step(38, Material.COMPASS, "&bMini Radar", radarLore(plugin.config().radar()));
         step(40, Material.CLOCK, "&bAbout 5 minutes", "&7Then it gets away.");
         step(42, Material.HEART_OF_THE_SEA, "&bMini Lure", "&7The next wild Mini", "&7appears near you.");
+    }
+
+    /**
+     * The Mini Radar tile's lore, from {@code arcade.radar} so the guide never disagrees with the radar: its bands
+     * ("Cold, Warm or Hot", with Burning! only when that band is on), how often it reads, for how long, and "One per
+     * Mini." when a player's radar works once per wild Mini.
+     */
+    static String[] radarLore(com.dierks.homecraft.config.PluginConfig.Radar r) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add(r.bands().burningUnder() > 0 ? "&7Cold, Warm, Hot or Burning!" : "&7Cold, Warm or Hot");
+        lines.add("&7every " + r.intervalSeconds() + " seconds");
+        int lasts = r.lastsSeconds();
+        String forHowLong;
+        if (lasts <= 0) {
+            forHowLong = "until it's caught or gets away.";
+        } else if (lasts == 60) {
+            forHowLong = "for a minute.";
+        } else if (lasts % 60 == 0) {
+            forHowLong = "for " + (lasts / 60) + " minutes.";
+        } else {
+            forHowLong = "for " + lasts + " seconds.";
+        }
+        lines.add("&7" + forHowLong);
+        if (r.onePerHunt()) {
+            lines.add("&7One per Mini.");
+        }
+        return lines.toArray(new String[0]);
     }
 
     /** Crate, Scratch Ticket, Rare Card and Card trade-in, each over what it gives. */

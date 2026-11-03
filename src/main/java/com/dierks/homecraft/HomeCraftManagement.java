@@ -552,7 +552,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.looks.start(); // the wardrobe's minute: a run that ends, the sweep, the heads-up
         this.candy.start(); // the Candy Apple shower's 5-tick task, only inside its window
         this.arcade.start();
-        this.radar.start(); // the Mini Radar's two-second ping
+        this.radar.start(); // the Mini Radar's once-a-second check (arcade.radar sets each radar's cadence)
         this.remotes.start(); // the holograms' pass, the sets of everyone on, and every Show Map's renderer
         this.golems.start(); // the recipe, the loaded golems, the tag and marker pass
         this.tradeService.start(); // prune the trade log, a WARN per trade that didn't finish, the trade clock

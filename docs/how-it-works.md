@@ -177,7 +177,7 @@ reaches it first keeps it.
 
 Two things help:
 
-- **Mini Radar:** use it while a wild Mini is out. It tells you Cold, Warm, Hot… Burning!
+- **Mini Radar:** use it while a wild Mini is out. For a minute, every few seconds, it tells you Cold, Warm or Hot. It never says which way. One radar works once per Mini: a second one on the same Mini is kept for the next.
 - **Mini Lure:** set it, and the next wild Mini appears near you.
 
 The Arcade shows if a wild Mini is out right now, who it's near and how long is left.

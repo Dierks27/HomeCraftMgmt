@@ -116,4 +116,18 @@ class RadarLocksTest {
         assertEquals(List.of("3:READ", "6:READ", "9:READ", "12:READ", "15:READ", "18:READ", "20:SPENT"),
                 run(locks, A, 30, quicker), "the new cadence and the new length, from when it locked on");
     }
+
+    @Test
+    void aRestartRemembersNothingTheMiniOutlivesTheMemory() {
+        PluginConfig.Radar shipped = PluginConfig.Radar.DEFAULTS;
+        RadarLocks before = new RadarLocks();
+        assertEquals(RadarLocks.Lock.ON, before.lock(A, "hunt-1", T0, shipped));
+        assertEquals(RadarLocks.Lock.USED, before.lock(A, "hunt-1", T0 + 1000, shipped));
+
+        RadarLocks after = new RadarLocks();
+        assertFalse(after.active(A, T0 + 2000, live::contains, shipped), "the running radar stops");
+        assertFalse(after.usedOn(A, "hunt-1"));
+        assertEquals(RadarLocks.Lock.ON, after.lock(A, "hunt-1", T0 + 2000, shipped),
+                "memory only (the documented limit): one more radar on a Mini that was out over a restart");
+    }
 }

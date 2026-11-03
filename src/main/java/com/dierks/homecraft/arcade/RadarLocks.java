@@ -25,6 +25,12 @@ import java.util.function.Predicate;
  * <p>With {@code one_per_hunt}, a player's radar works once per wild Mini: every Mini a player has locked onto is
  * remembered while it is out, and a second radar on it is refused before anything is spent. A Mini that is caught
  * or gets away is forgotten at the next check.
+ *
+ * <p>All of it is memory only, like the hunt cooldowns: a restart starts a new one with nothing on and nothing used.
+ * A wild Mini is kept across a restart, so a radar running on it stops without a word, and a player who used a
+ * radar on it before the restart can use one more on it after. That is a narrow window (a restart while that Mini
+ * is out, at most a hunt's few minutes) and is accepted so that the radar adds no table (the schema stays as it
+ * was, and the way back to the release before stays the jar alone).
  */
 public final class RadarLocks {
 

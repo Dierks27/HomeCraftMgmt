@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@code arcade.radar}, the Mini Radar toned down: what config.yml ships (a reading every 6 seconds for a minute,
  * no Burning! band, Hot under 32, Warm under 64, once per Mini), the code's defaults the same, each key with a
- * one-line comment, and every value brought into range or read as the shipped one with one WARN. The old radar is
- * still there when configured.
+ * one-line comment, the seconds brought into range and every other bad value read as the shipped one with one WARN.
+ * The old radar is still there when configured.
  */
 class RadarConfigTest {
 
@@ -111,16 +111,47 @@ class RadarConfigTest {
                   hot_under: 40
                   warm_under: 500
                 """), warnings::add);
-        assertEquals(new PluginConfig.Radar(2, 600, new HuntMath.Bands(0, 40, 256), true), r);
+        assertEquals(new PluginConfig.Radar(2, 600, new HuntMath.Bands(0, 40, 64), true), r,
+                "the seconds are brought into range; a band out of range is its shipped value");
         assertEquals(List.of("arcade.radar.interval_seconds 1 is outside 2-30; using 2.",
                 "arcade.radar.lasts_seconds 9999 is outside 0-600; using 600.",
                 "arcade.radar.burning_under -3 is outside 0-64; using 0.",
-                "arcade.radar.warm_under 500 is outside 2-256; using 256."), warnings);
+                "arcade.radar.warm_under 500 is outside 2-256; using 64."), warnings);
 
         warnings.clear();
         assertEquals(30, PluginConfig.readRadar(section("radar:\n  interval_seconds: 45\n"), warnings::add)
                 .intervalSeconds());
         assertEquals(List.of("arcade.radar.interval_seconds 45 is outside 2-30; using 30."), warnings);
+    }
+
+    @Test
+    void oneBandOutOfRangeIsOneWarnAndKeepsTheOwnersOtherBands() throws Exception {
+        List<String> warnings = new ArrayList<>();
+        PluginConfig.Radar r = PluginConfig.readRadar(section("""
+                radar:
+                  burning_under: 12
+                  hot_under: 200
+                  warm_under: 64
+                """), warnings::add);
+        assertEquals(new HuntMath.Bands(12, 32, 64), r.bands(),
+                "Hot is its shipped 32; the owner's Burning! under 12 and Warm under 64 stay");
+        assertEquals(List.of("arcade.radar.hot_under 200 is outside 1-128; using 32."), warnings,
+                "exactly one WARN, and the value it names is the one used");
+
+        warnings.clear();
+        assertEquals(new HuntMath.Bands(0, 32, 64), PluginConfig.readRadar(section("radar:\n  hot_under: 0\n"),
+                warnings::add).bands());
+        assertEquals(List.of("arcade.radar.hot_under 0 is outside 1-128; using 32."), warnings);
+    }
+
+    @Test
+    void theHeaderSaysWhatTheCodeDoes() throws Exception {
+        String header = String.join(" ", bundled().getComments("arcade.radar")).replaceAll("\\s+", " ");
+        assertTrue(header.contains("(Cold, Warm or Hot; Burning! too when burning_under is above 0)"), header);
+        assertFalse(header.contains("Cold, Warm, Hot, Burning!"), "the shipped radar never reads Burning!");
+        assertTrue(header.contains("A seconds value outside its range is brought into it, a band outside its range "
+                + "is read as its shipped value"), header);
+        assertTrue(header.contains("all three are read as the shipped ones with one WARN"), header);
     }
 
     @Test

@@ -2995,11 +2995,13 @@ public final class PluginConfig {
     }
 
     /**
-     * {@code arcade.radar}: each number brought into its range ({@code interval_seconds} 2-30, {@code lasts_seconds}
-     * 0-600, {@code burning_under} 0-64, {@code hot_under} 1-128, {@code warm_under} 2-256) with one WARN, and a value
-     * that isn't a whole number, or a {@code one_per_hunt} that isn't true or false, read as the shipped one with one
-     * WARN. Bands out of order (a Hot band no wider than the Burning one, or a Warm band no wider than the Hot one) are
-     * read as the shipped bands, with one WARN. An absent key, or an absent section, is the shipped value.
+     * {@code arcade.radar}: {@code interval_seconds} (2-30) and {@code lasts_seconds} (0-600) brought into their range
+     * with one WARN; a band outside its range ({@code burning_under} 0-64, {@code hot_under} 1-128, {@code warm_under}
+     * 2-256) read as that band's shipped value with one WARN, so one bad band doesn't push the others out of order or
+     * drop them; and a value that isn't a whole number, or a {@code one_per_hunt} that isn't true or false, read as the
+     * shipped one with one WARN. Bands then out of order (a Hot band no wider than the Burning one, or a Warm band no
+     * wider than the Hot one) are read as the shipped bands, with one WARN. An absent key, or an absent section, is the
+     * shipped value.
      */
     static Radar readRadar(ConfigurationSection sec, java.util.function.Consumer<String> warning) {
         Radar d = Radar.DEFAULTS;
@@ -3008,10 +3010,10 @@ public final class PluginConfig {
                 warning);
         int lasts = radarWhole(at + "lasts_seconds", raw(sec, "lasts_seconds"), d.lastsSeconds(), 0, 600, warning);
         com.dierks.homecraft.hunt.HuntMath.Bands shipped = d.bands();
-        int burning = radarWhole(at + "burning_under", raw(sec, "burning_under"), shipped.burningUnder(), 0, 64,
+        int burning = radarBand(at + "burning_under", raw(sec, "burning_under"), shipped.burningUnder(), 0, 64,
                 warning);
-        int hot = radarWhole(at + "hot_under", raw(sec, "hot_under"), shipped.hotUnder(), 1, 128, warning);
-        int warm = radarWhole(at + "warm_under", raw(sec, "warm_under"), shipped.warmUnder(), 2, 256, warning);
+        int hot = radarBand(at + "hot_under", raw(sec, "hot_under"), shipped.hotUnder(), 1, 128, warning);
+        int warm = radarBand(at + "warm_under", raw(sec, "warm_under"), shipped.warmUnder(), 2, 256, warning);
         com.dierks.homecraft.hunt.HuntMath.Bands bands = new com.dierks.homecraft.hunt.HuntMath.Bands(burning, hot,
                 warm);
         if ((burning > 0 && hot <= burning) || warm <= hot) {
@@ -3047,6 +3049,21 @@ public final class PluginConfig {
             return dflt;
         }
         return clamped(path, (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, n)), min, max, warning);
+    }
+
+    /**
+     * A radar band at {@code path}: absent = {@code dflt}; not a whole number, or outside {@code min}-{@code max},
+     * = {@code dflt} with one WARN. Not clamped: a band clamped to the edge of its range lands out of order with the
+     * owner's other bands, which then fell back as well with a second WARN.
+     */
+    private static int radarBand(String path, Object raw, int dflt, int min, int max,
+                                 java.util.function.Consumer<String> warning) {
+        int v = radarWhole(path, raw, dflt, Integer.MIN_VALUE, Integer.MAX_VALUE, warning);
+        if (v < min || v > max) {
+            warning.accept(path + " " + v + " is outside " + min + "-" + max + "; using " + dflt + ".");
+            return dflt;
+        }
+        return v;
     }
 
     /** What a Firework Launcher may be made of (0.38.1): the two blocks its guards keep empty and quiet. */

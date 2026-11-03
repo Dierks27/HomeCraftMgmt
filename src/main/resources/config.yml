@@ -1334,9 +1334,12 @@ arcade:
   # nearest launchers (anyone's) within range blocks of whoever uses it (8-64).
   launcher: { material: DROPPER, name: "&6Firework Launcher", per_player: 15, range: 32 }
   # The Mini Radar (the mini_radar prize, and a crate drop): used while a wild Mini is out, it locks onto the
-  # nearest one and the bar at the bottom of the screen says how warm you are (Cold, Warm, Hot, Burning!) with a
-  # note that climbs as you close in. It never says which way. Bands are blocks from the Mini; each must be
-  # bigger than the one before. A bad value is read as the shipped one with one WARN.
+  # nearest one and the bar at the bottom of the screen says how warm you are (Cold, Warm or Hot; Burning! too
+  # when burning_under is above 0) with a note that climbs as you close in. It never says which way. Bands are
+  # blocks from the Mini; each must be bigger than the one before, or all three are read as the shipped ones
+  # with one WARN. A seconds value outside its range is brought into it, a band outside its range is read as
+  # its shipped value, and anything else that can't be read (not a whole number, or a one_per_hunt that isn't
+  # true or false) is read as the shipped value, each with one WARN.
   radar:
     interval_seconds: 6    # seconds between readings (2-30)
     lasts_seconds: 60      # seconds one radar keeps reading after it locks on, then it is spent (0-600; 0 = until the Mini is caught or gets away)

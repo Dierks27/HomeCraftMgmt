@@ -28,8 +28,8 @@ import java.util.regex.Pattern;
  * as they were.
  *
  * <p>The windows are {@code arcade.holiday_shows} ({@link #read}): Halloween, Christmas, New Year (which runs over
- * 1 January), Valentine's, St Patrick's and Independence Day ship ({@link #SHIPPED}, the same as the bundled file, so
- * Halloween is on from the first start even if the backfill never ran). The first window that holds a day wins. A
+ * 1 January), Valentine's, St Patrick's, Independence Day and Thanksgiving ship ({@link #SHIPPED}, the same as the
+ * bundled file, so Halloween is on from the first start even if the backfill never ran). The first window that holds a day wins. A
  * window that can't be read is skipped with one WARN naming every problem; colours are a dye name (the colour a
  * vanilla firework star of that dye has) or {@code "#RRGGBB"}.
  *
@@ -62,7 +62,10 @@ public record HolidayShows(boolean enabled, List<Window> windows) {
     static final int MAX_COLOURS = 8;
     /** No holiday shows at all. */
     public static final HolidayShows OFF = new HolidayShows(false, List.of());
-    /** The six windows the bundled file ships, as literals (a test pins them to the bundled section). */
+    /**
+     * The seven windows the bundled file ships, as literals (a test pins them to the bundled section). Thanksgiving
+     * (0.38.6) is the owner's own row: 22 to 30 November covers the fourth Thursday and its weekend in every year.
+     */
     public static final HolidayShows SHIPPED = new HolidayShows(true, List.of(
             window("halloween", "Halloween", "10-24", "10-31", List.of(dye(DyeColor.ORANGE), dye(DyeColor.PURPLE),
                     dye(DyeColor.LIME)), List.of(dye(DyeColor.YELLOW), dye(DyeColor.WHITE)), FireworkEffect.Type.CREEPER),
@@ -76,7 +79,10 @@ public record HolidayShows(boolean enabled, List<Window> windows) {
             window("st_patricks", "St Patrick's", "03-14", "03-17", List.of(dye(DyeColor.LIME), Color.fromRGB(0x1FAF3F),
                     Color.fromRGB(0xFFD700)), List.of(Color.fromRGB(0xCCFFCC)), FireworkEffect.Type.STAR),
             window("independence_day", "Independence Day", "07-01", "07-05", List.of(dye(DyeColor.RED),
-                    dye(DyeColor.WHITE), dye(DyeColor.BLUE)), List.of(dye(DyeColor.WHITE)), FireworkEffect.Type.BURST)));
+                    dye(DyeColor.WHITE), dye(DyeColor.BLUE)), List.of(dye(DyeColor.WHITE)), FireworkEffect.Type.BURST),
+            window("thanksgiving", "Thanksgiving", "11-22", "11-30", List.of(dye(DyeColor.ORANGE), dye(DyeColor.BROWN),
+                    Color.fromRGB(0xFFD700), dye(DyeColor.RED)), List.of(dye(DyeColor.YELLOW)),
+                    FireworkEffect.Type.BALL_LARGE)));
 
     private static final Pattern DAY = Pattern.compile("\\d\\d-\\d\\d");
     private static final Pattern HEX = Pattern.compile("#?[0-9A-Fa-f]{6}");
@@ -102,6 +108,24 @@ public record HolidayShows(boolean enabled, List<Window> windows) {
             }
         }
         return null;
+    }
+
+    /**
+     * The theme with this id, whatever the date and whether or not the long shows take themes, or empty when no
+     * window has the id. The Family Feast asks for "thanksgiving" so its own fireworks wear the owner's Thanksgiving
+     * colours even with {@code enabled: false}, which is about the long shows only.
+     */
+    public java.util.Optional<Theme> byId(String id) {
+        if (id == null) {
+            return java.util.Optional.empty();
+        }
+        String want = id.trim().toLowerCase(Locale.ROOT);
+        for (Window w : windows) {
+            if (w.theme().id().equals(want)) {
+                return java.util.Optional.of(w.theme());
+            }
+        }
+        return java.util.Optional.empty();
     }
 
     // ---- reading arcade.holiday_shows ----------------------------------------------------------------

@@ -19,6 +19,10 @@ public final class MiniDraft {
     private double price;
     private boolean craftable;
     private java.util.List<String> tags = new java.util.ArrayList<>();
+    // A holiday Mini's keys: not edited in the Studio, only carried through so a save keeps them.
+    private boolean eventOnly;
+    private java.time.LocalDate earnFrom;
+    private java.time.LocalDate earnTo;
 
     public MiniDraft(String id, String name, String series, String category, Rarity rarity,
                      MiniType type, String texture, long cap, double price, boolean craftable) {
@@ -38,14 +42,20 @@ public final class MiniDraft {
         MiniDraft d = new MiniDraft(def.id(), def.name(), def.series(), def.category(), def.rarity(),
                 def.type(), def.texture(), def.cap(), def.price(), def.craftable());
         d.setTags(def.tags());
+        d.eventOnly = def.eventOnly();
+        d.earnFrom = def.earnFrom();
+        d.earnTo = def.earnTo();
         return d;
     }
 
-    /** Convert to an immutable {@link MiniDef}, deriving the id from the name if unset. */
+    /**
+     * Convert to an immutable {@link MiniDef}, deriving the id from the name if unset. A holiday
+     * Mini's {@code event_only} and earn dates come through unchanged.
+     */
     public MiniDef toDef() {
         String finalId = (id == null || id.isBlank()) ? MiniIds.slug(name) : id;
         return new MiniDef(finalId, name, series, category, rarity, type,
-                texture == null ? "" : texture, cap, price, craftable, tags);
+                texture == null ? "" : texture, cap, price, craftable, tags, eventOnly, earnFrom, earnTo);
     }
 
     /** Drop tags (lower-case, de-duplicated). */

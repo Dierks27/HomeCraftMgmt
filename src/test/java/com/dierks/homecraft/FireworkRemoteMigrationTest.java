@@ -120,9 +120,12 @@ class FireworkRemoteMigrationTest {
         assertEquals(15, c.getInt(PER_PLAYER));
         assertEquals(bundled.getConfigurationSection("arcade.launcher").getValues(false),
                 c.getConfigurationSection("arcade.launcher").getValues(false), "the launcher section is the bundled one");
-        assertEquals(25, c.getInt("config_revision"), "on through revision 25 (Sky Rings and the Long Drop)");
-        assertEquals(List.of(ADDED_ALL, FIFTEEN, RINGS_MOVED, MIX_MOVED, "Config migration: config_revision 23 → 25."),
-                log, "one INFO each, revision 25's two, and the revision");
+        assertEquals(26, c.getInt("config_revision"), "on through revisions 25 (Sky Rings and the Long Drop) and 26"
+                + " (Thanksgiving)");
+        List<String> expected = new ArrayList<>(List.of(ADDED_ALL, FIFTEEN, RINGS_MOVED, MIX_MOVED));
+        expected.addAll(ThanksgivingMigrationTest.NO_WINDOWS);
+        expected.add("Config migration: config_revision 23 → 26.");
+        assertEquals(expected, log, "one INFO each, revision 25's two, revision 26's three, and the revision");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -136,7 +139,7 @@ class FireworkRemoteMigrationTest {
         assertFalse(c.contains(PER_PLAYER), "no launcher section yet: the backfill writes it");
         HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
         assertEquals(15, c.getInt(PER_PLAYER), "the backfill's 15");
-        assertEquals("Config migration: config_revision 22 → 25.", log.get(log.size() - 1));
+        assertEquals("Config migration: config_revision 22 → 26.", log.get(log.size() - 1));
     }
 
     @Test
@@ -152,14 +155,17 @@ class FireworkRemoteMigrationTest {
         YamlConfiguration at24 = LayoutFixtures.v0381();
         at24.set("config_revision", 24);
         int launchers = at24.getInt(PER_PLAYER);
-        assertEquals(List.of(RINGS_MOVED, MIX_MOVED, "Config migration: config_revision 24 → 25."),
-                HomeCraftManagement.migrateConfig(at24, "world"), "no revision-24 step runs from 24, only 25's");
+        List<String> from24 = new ArrayList<>(List.of(RINGS_MOVED, MIX_MOVED));
+        from24.addAll(ThanksgivingMigrationTest.NO_WINDOWS);
+        from24.add("Config migration: config_revision 24 → 26.");
+        assertEquals(from24, HomeCraftManagement.migrateConfig(at24, "world"),
+                "no revision-24 step runs from 24, only 25's and 26's");
         assertEquals(launchers, at24.getInt(PER_PLAYER), "the launchers are as they were");
-        YamlConfiguration at25 = LayoutFixtures.v0381();
-        at25.set("config_revision", 25);
-        String before = at25.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at25, "world"), "no step runs from 25");
-        assertEquals(before, at25.saveToString());
+        YamlConfiguration at26 = LayoutFixtures.v0381();
+        at26.set("config_revision", 26);
+        String before = at26.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at26, "world"), "no step runs from 26");
+        assertEquals(before, at26.saveToString());
     }
 
     // ---- the owner's own rows and values -----------------------------------------------------------------
@@ -320,8 +326,8 @@ class FireworkRemoteMigrationTest {
         assertFalse(grand.contains("FireworkRemoteMigration"), "revision 23 is left as it is");
         assertEquals(23, GrandShowMigration.REVISION);
         assertEquals(24, FireworkRemoteMigration.REVISION);
-        assertEquals(HomeCraftManagement.CONFIG_REVISION, FireworkRemoteMigration.REVISION + 1,
-                "the revision before the newest (25: Sky Rings' areas and the Long Drop)");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, FireworkRemoteMigration.REVISION + 2,
+                "two before the newest (25: Sky Rings' areas and the Long Drop; 26: Thanksgiving)");
     }
 
     /**
@@ -364,8 +370,8 @@ class FireworkRemoteMigrationTest {
         assertNull(HomeCraftManagement.newerConfigWarning(HomeCraftManagement.CONFIG_REVISION),
                 "this build's own revision says nothing");
         YamlConfiguration rolledBack = LayoutFixtures.bundled();
-        rolledBack.set("config_revision", 26);
+        rolledBack.set("config_revision", 27);
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(rolledBack, "world"), "no step runs");
-        assertEquals(26, rolledBack.getInt("config_revision"), "and the revision is never lowered");
+        assertEquals(27, rolledBack.getInt("config_revision"), "and the revision is never lowered");
     }
 }

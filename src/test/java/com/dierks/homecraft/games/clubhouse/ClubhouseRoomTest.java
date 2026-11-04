@@ -284,8 +284,8 @@ class ClubhouseRoomTest {
     @Test
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
-        assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "generated", "rebuild",
-                "off"), admin.tab(null, new String[]{""}), "every subcommand");
+        assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "generated",
+                "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("confirm"), admin.tab(null, new String[]{"rebuild", "c"}), "rebuild confirm");
         assertEquals(List.of("1", "2", "3"), admin.tab(null, new String[]{"podium", ""}), "the three places");
         assertEquals(List.of("fame", "playing", "stats"), admin.tab(null, new String[]{"board", ""}),
@@ -399,6 +399,50 @@ class ClubhouseRoomTest {
         later.meta(ClubhouseRoom.WEEK_DONE_KEY, "20700");
         assertEquals("20700", later.meta(ClubhouseRoom.WEEK_DONE_KEY), "the week marker round-trips");
         assertEquals("20700", host.meta.get(ClubhouseRoom.WEEK_DONE_KEY), "through the store");
+    }
+
+    /**
+     * 0.38.6: the generated room's feast plates and line come from its plan; an owner-built room's feast table is
+     * saved under {@code gen.} and read back: ten plates to the admin's right and ten one block ahead, for each way
+     * they faced, and the line over the middle facing back to where they stood; unset, or in another world, none.
+     */
+    @Test
+    void theFeastTableOfAnOwnerBuiltRoomIsSavedAndReadBack() {
+        ClubhouseRoom generated = room();
+        assertEquals(ClubhousePlanner.feastCells(BOX).size(), generated.feastCells().size(), "the generated tables");
+        assertEquals(ClubhousePlanner.feastLine(BOX), generated.feastLine());
+
+        ClubhouseRoom r = room();
+        r.here(new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f));
+        assertNull(r.feastCells(), "not set: no table");
+        assertNull(r.feastLine());
+        assertTrue(r.feast(new ClubhouseRoom.Place("games", 110.3, 71.0, -30.7, 3f)).contains("ten plates"), "feast");
+        assertTrue(GenMetaDao.allowed(ClubhouseRoom.FEAST_KEY), "under gen.: the live store keeps it");
+        List<int[]> cells = r.feastCells();
+        assertEquals(20, cells.size());
+        assertArrayEquals(new int[]{110, 71, -31}, cells.get(0), "the first where the admin stood");
+        assertArrayEquals(new int[]{101, 71, -31}, cells.get(9), "facing south: ten to the west (their right)");
+        assertArrayEquals(new int[]{110, 71, -30}, cells.get(10), "the second row one block ahead (south)");
+        WallBoards.Wall line = r.feastLine();
+        assertEquals(106.0, line.x(), 0.001, "over the middle of the row");
+        assertEquals(73.0, line.y(), 0.001, "two blocks over the plates");
+        assertEquals(-30.0, line.z(), 0.001, "between the two rows");
+        assertEquals(WallBoards.turn(180f), line.yaw(), 0.001f, "facing back to where they stood");
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("feast games;110")), r.statusLines().toString());
+
+        ClubhouseRoom later = room();
+        assertArrayEquals(new int[]{110, 71, -31}, later.feastCells().get(0), "read back after a restart");
+        for (float[] way : new float[][]{{180f, 1, 0, 0, -1}, {90f, 0, -1, -1, 0}, {-90f, 0, 1, 1, 0}}) {
+            later.feast(new ClubhouseRoom.Place("games", 10, 71, 10, way[0]));
+            int[] second = later.feastCells().get(1);
+            int[] ahead = later.feastCells().get(10);
+            assertEquals(10 + (int) way[1], second[0], "yaw " + way[0] + ": right x");
+            assertEquals(10 + (int) way[2], second[2], "yaw " + way[0] + ": right z");
+            assertEquals(10 + (int) way[3], ahead[0], "yaw " + way[0] + ": ahead x");
+            assertEquals(10 + (int) way[4], ahead[2], "yaw " + way[0] + ": ahead z");
+        }
+        host.meta.put(ClubhouseRoom.FEAST_KEY, "hub;1;2;3;0");
+        assertNull(room().feastCells(), "a feast table in another world than the room's isn't drawn");
     }
 
     /**

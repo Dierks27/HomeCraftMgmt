@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -57,6 +58,9 @@ import java.util.function.Predicate;
  *       (hcm.arcade.use)</li>
  *   <li>{@code /hcm candy now [player]|status|clear|bag <player>|add <player> <n>} — run the Candy
  *       Apple shower. (admin)</li>
+ *   <li>{@code /hcm harvest}, {@code /hcm turkey} and {@code /hcm feast} — Thanksgiving's Harvest Basket,
+ *       Catch the Turkey and the Family Feast; see {@link HarvestCommand}, {@link TurkeyCommand} and
+ *       {@link FeastCommand}. (hcm.arcade.use; their admin words, admin)</li>
  *   <li>{@code /hcm looks ...} and {@code /hcm account move ...} — My Looks, the wardrobe's admin tools and
  *       the account move; see {@link LooksCommand}. {@code /hcm trail} with nothing after it opens My Looks;
  *       {@code /hcm trail toggle} switches the trail off and back on, {@code next} goes to the next one, and
@@ -319,6 +323,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "museum" -> handleMuseum(sender, args);
             case "hunt" -> handleHunt(sender, args);
             case "candy" -> handleCandy(sender, args);
+            case "harvest" -> HarvestCommand.handle(plugin, sender, args);
+            case "turkey" -> TurkeyCommand.handle(plugin, sender, args);
+            case "feast" -> FeastCommand.handle(plugin, sender, args);
             case "backup" -> handleBackup(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
@@ -396,7 +403,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cSpecify a player: /hcm mini give " + id + " <player>"));
                     return;
                 }
-                com.dierks.homecraft.mini.MiniService.MintResult r = minis.giveAdmin(target, id);
+                com.dierks.homecraft.mini.MiniService.MintResult r = minis.giveAdmin(target, id, sender.getName());
                 sender.sendMessage(r.ok()
                         ? Text.of("&aGave " + id + " #" + r.mintNumber() + " to " + target.getName() + ".")
                         : Text.of("&c" + r.error()));
@@ -556,6 +563,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     // ---------------------------------------------------------------------
     //  candy (the Candy Apple shower: your own count; admins run it)
     // ---------------------------------------------------------------------
+
+    /**
+     * Thanksgiving's admin words for the tab list (0.38.6): {@code /hcm harvest}, {@code /hcm turkey} and
+     * {@code /hcm feast}, each handled by its own class; and the words followed by an online player's name.
+     */
+    static final Map<String, List<String>> THANKSGIVING_VERBS = Map.of(
+            "harvest", HarvestCommand.VERBS,
+            "turkey", TurkeyCommand.VERBS,
+            "feast", FeastCommand.VERBS);
+    static final Set<String> THANKSGIVING_NAMED = Set.of("harvest now", "harvest hat", "harvest add", "turkey now");
 
     /** {@code /hcm candy}'s admin words (hcm.admin). With no word it is the player's own count (hcm.arcade.use). */
     static final List<String> CANDY_VERBS = List.of("now", "status", "clear", "bag", "add");
@@ -726,7 +743,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         boolean onSale = plugin.config().arcade().collectorsOnSale();
         for (com.dierks.homecraft.config.PluginConfig.Prize p : com.dierks.homecraft.arcade.Collectors.ROWS) {
-            if (p.collector() != null && p.collector().inSeason(today)) {
+            if (p.collector() != null && !p.collector().earned() && p.collector().inSeason(today)) {
                 sender.sendMessage(Text.of("&7" + collectorSaleLine(p.display(), p.collector(), onSale, zone)));
             }
         }
@@ -1876,9 +1893,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm mini repair-escaped [confirm] &7- give back numbers old escapes burned"));
             sender.sendMessage(Text.of("&e/hcm hunt spawn [rarity] [player]|status|clear &7- the wild hunt"));
             sender.sendMessage(Text.of("&e/hcm candy now [player]|status|clear|bag <player>|add <player> <n> &7- the Candy Apple shower"));
+            sender.sendMessage(Text.of("&e/hcm harvest now [player]|status|clear|hat <player>|add <player> <n> &7- the Harvest Basket"));
+            sender.sendMessage(Text.of("&e/hcm turkey now [player]|status|clear &7- Catch the Turkey"));
+            sender.sendMessage(Text.of("&e/hcm feast pot [clear]|status|test|reset confirm &7- the Family Feast"));
         }
         if (sender.hasPermission("hcm.arcade.use")) {
             sender.sendMessage(Text.of("&e/hcm candy &7- your candy apples and the next shower"));
+            sender.sendMessage(Text.of("&e/hcm harvest &7- your Harvest Basket treats and the next shower"));
+            sender.sendMessage(Text.of("&e/hcm turkey &7- the next turkey and your catches today"));
+            sender.sendMessage(Text.of("&e/hcm feast &7- the Family Feast table and your gifts"));
         }
     }
 
@@ -2274,9 +2297,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "candy", "trail", "looks", "account", "achievements", "guide", "config", "homes");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "candy", "harvest", "turkey", "feast", "trail", "looks", "account", "achievements", "guide", "config", "homes");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "balance", "tokens", "quests", "courier", "trail", "looks", "achievements", "guide");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "harvest", "turkey", "feast", "balance", "tokens", "quests", "courier", "trail", "looks", "achievements", "guide");
             }
             if (sender.hasPermission(GamesCommand.PLAY)) {
                 addMatches(out, args[0], "play", "leave");
@@ -2340,6 +2363,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 4 && args[0].equalsIgnoreCase("hunt") && args[1].equalsIgnoreCase("spawn")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[3].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 2 && sender.hasPermission("hcm.admin") && THANKSGIVING_VERBS.containsKey(
+                args[0].toLowerCase(Locale.ROOT))) {
+            addMatches(out, args[1], THANKSGIVING_VERBS.get(args[0].toLowerCase(Locale.ROOT)).toArray(new String[0]));
+        } else if (args.length == 3 && sender.hasPermission("hcm.admin")
+                && THANKSGIVING_NAMED.contains(args[0].toLowerCase(Locale.ROOT) + " " + args[1].toLowerCase(Locale.ROOT))) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
                     out.add(p.getName());
                 }
             }

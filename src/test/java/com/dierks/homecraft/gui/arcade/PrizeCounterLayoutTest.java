@@ -191,7 +191,8 @@ class PrizeCounterLayoutTest {
         }
         assertEquals(22, all.get(PrizeTab.COSMETICS).size(),
                 "9 fireworks, 8 trails, 2 collector trails and 3 name colours: 1 + 2 + 1 rows");
-        assertEquals(24, all.get(PrizeTab.LOOKS).size(), "14 hats and caps, 10 balls: 2 + 2 rows");
+        assertEquals(26, all.get(PrizeTab.LOOKS).size(), "16 hats and caps (the Turkey and Pilgrim Hats 2026 too),"
+                + " 10 balls: 2 + 2 rows");
     }
 
     // ---- the bundled config, read as the counter shows it ------------------------------------------------------

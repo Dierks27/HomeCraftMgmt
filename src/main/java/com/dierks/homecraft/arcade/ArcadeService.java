@@ -300,10 +300,11 @@ public final class ArcadeService {
         };
     }
 
-    /** The issuable Minis carrying a tag; {@code "*"} is every Mini. */
+    /** The issuable Minis carrying a tag; {@code "*"} is every Mini but the holiday ones. */
     public List<MiniDef> tagPool(String tag) {
         if ("*".equals(tag)) {
-            return plugin.cards().issuable(plugin.miniService().catalog());
+            return plugin.cards().issuable(
+                    com.dierks.homecraft.mini.EventMinis.crateTagPool(tag, plugin.miniService().catalog()));
         }
         return plugin.cards().issuable(plugin.miniService().poolFromTag(tag));
     }
@@ -348,12 +349,9 @@ public final class ArcadeService {
         if (have < cost) {
             return Outcome.fail("You need " + (cost - have) + " more tokens.");
         }
-        List<MiniDef> pool = new ArrayList<>();
-        for (MiniDef def : plugin.miniService().catalog()) {
-            if (def.rarity().ordinal() >= arc.pityRarity().ordinal() && plugin.cards().canIssue(def)) {
-                pool.add(def);
-            }
-        }
+        // Never a holiday Mini: only its event gives it.
+        List<MiniDef> pool = plugin.cards().issuable(
+                com.dierks.homecraft.mini.EventMinis.pityPool(plugin.miniService().catalog(), arc.pityRarity()));
         String none = "No " + floorWords(arc.pityRarity()) + " Card is left right now. Nothing was charged.";
         // Weighted by rarity, like crates and wild drops: the floor guarantees Rare-or-better, it
         // was never meant to make a Legendary as likely as a Rare.

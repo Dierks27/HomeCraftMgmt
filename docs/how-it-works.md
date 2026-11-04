@@ -30,10 +30,11 @@ Spend them in the **Arcade** (`/hcm arcade`):
     - Bigger shows: the **Super Firework Show** (100 tokens, 4 launchers), the **Ultra Firework Show** (125, 5 launchers) and the **Ultimate Firework Show** (200, 10 launchers, a minute and a half, for special events). Each launcher has its own colours. With fewer launchers they fire the same show from the ones you have.
     - The **Firework Remote** (10 tokens, yours to keep): tap your launchers with it in the order you want them to fire. Tap one again to take it off. Up to 10. Then a show fires from those, wherever they are, as long as someone is near them (and you see the rockets from about 30-40 blocks, so link the ones near where you'll watch). With nothing linked, a show uses the launchers nearest you, as before.
     - While you hold the Remote (in either hand), each linked launcher that can fire right now has its number floating over it ("#3"). Tap the ground with the Remote for **My Show**: your launchers, numbered and coloured, how far away and which way, where exactly and whose, "not loaded" for one too far from everyone to fire, a **Show Map** (a real map with a flag for each launcher; on Bedrock the flags show their colours, not their numbers) and Clear all. A dropped Show Map disappears after a few minutes like any dropped item: get it again from My Show, for free.
-    - **Holiday shows:** on Halloween, Christmas, New Year, Valentine's, St Patrick's and Independence Day, the long shows come in that holiday's colours, with its own shape mixed in (creeper faces for Halloween!). The 3-second Firework Show stays as it is.
+    - **Holiday shows:** on Halloween, Thanksgiving, Christmas, New Year, Valentine's, St Patrick's and Independence Day, the long shows come in that holiday's colours, with its own shape mixed in (creeper faces for Halloween!). The 3-second Firework Show stays as it is.
     - Halloween collectors: the Autumn Leaves 2026 trail (October and November). Yours for good. Tap one to buy it for yourself, or tap Give a present to buy one for someone who's online.
     - Christmas collectors: the Twinkle 2026 trail (1 December to 6 January). Yours for good, and it can be a present too.
-  - **Looks:** hats and caps for 90 days (the Creeper Hat, the Dragon Hat and four colourful caps), golf balls you keep, and the collector caps: the Pumpkin Cap 2026 (October) and the Santa Cap 2026 (December), yours for good.
+  - **Looks:** hats and caps for 90 days (the Creeper Hat, the Dragon Hat and four colourful caps), golf balls you keep, and the collector caps: the Pumpkin Cap 2026 (October), the Turkey Hat 2026 (November, and it can be a present) and the Santa Cap
+    2026 (December), yours for good.
   - Perks: an extra home, `/hat`.
   - Trophies: a numbered Arcade Trophy (each one costs a bit more), a trophy ladder from Bronze to Legend, and a Trophy of the Month.
   - Minis: a Rare Card once a week, filament, a Display Case.
@@ -147,8 +148,37 @@ see them and pick them up. Indoors they pop up from the floor instead.
   counts.
 - Type `/hcm candy` to see how many you've found and when the next shower comes.
 
-Candy apples don't fall in the Games world, during a game, or when you've stood still for 5
-minutes.
+Candy apples don't fall in the Games world, during a game, in the Nether or the End, or when you've stood
+still for 5 minutes.
+
+## Harvest Basket (November, until 29 Nov)
+
+Every hour in November you hear a chime and a bell, "Harvest time!", and three treats fall in front of
+you: cornbread, a pumpkin pie and a baked potato. Only you can see them and pick them up.
+
+- **Eat one** for a warm little boost. On Bedrock, if you're full, hold it and tap.
+- **A Golden Pie** sparkles gold and gives 3 tokens (up to 6 a day). Your first shower always has one.
+- **Find 26** and you get the **Pilgrim Hat 2026**, yours for good.
+- Your treats can go in the Feast Pot too (below).
+- Type `/hcm harvest` to see how many you've found and when the next shower comes.
+
+## Catch the Turkey (22-29 Nov)
+
+Six times a day, and once soon after you join, a big turkey of your own comes near you. "Gobble gobble!"
+**Tap it to catch it.** Everyone who catches a turkey gets a firework, a Turkey Feather 2026 and 3 tokens
+(up to 6 a day). It never runs away, so take your time. Sometimes a catch also gives a Turkey Mini!
+Type `/hcm turkey` to see when the next one comes.
+
+## Family Feast (22-29 Nov)
+
+Fill the feast table together! Hold some food and tap the **Feast Pot**: one bit of food goes in each tap
+(sneak to put in the whole stack). Bread, pies, cooked meat, cake and your Harvest Basket treats all count.
+The tables in the Clubhouse fill up as the food goes in. When they're full, everyone who helped gets
+fireworks, 20 tokens and a **Turkey Mini 2026**, and everyone sees "Thankful for: ..." with your names.
+Missed it? You get your moment the next time you come on (until 29 Nov).
+Type `/hcm feast` to see how full the table is.
+
+The basket and the turkey only come in the normal world, never the Nether or the End.
 
 ## Minis
 

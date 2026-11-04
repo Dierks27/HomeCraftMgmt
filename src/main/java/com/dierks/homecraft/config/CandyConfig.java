@@ -9,7 +9,9 @@ import java.time.format.DateTimeParseException;
 import java.util.function.Consumer;
 
 /**
- * Reads {@code arcade.events.candy}, the Candy Apple shower's settings (HALLOWEEN-SPEC §2.2, D10, D18).
+ * Reads {@code arcade.events.candy}, the Candy Apple shower's settings (HALLOWEEN-SPEC §2.2, D10, D18), and
+ * {@code arcade.events.harvest}, the Harvest Basket's (0.38.6): one shower engine runs both, so one parser reads
+ * both, each with its own path, shipped settings and name in its WARNs.
  *
  * <p><b>Dates.</b> {@code from} and {@code to} are local dates ({@code clock.time_zone}), both included. A
  * quoted {@code "2026-10-31"} is read with {@link LocalDate#parse}; a bare {@code 2026-10-31} is turned into a
@@ -28,6 +30,8 @@ public final class CandyConfig {
 
     /** Where the section lives in config.yml. */
     public static final String PATH = "arcade.events.candy";
+    /** Where the Harvest Basket's section lives (0.38.6). */
+    public static final String HARVEST_PATH = "arcade.events.harvest";
 
     /** The shipped window: October 2026. */
     public static final LocalDate DEFAULT_FROM = LocalDate.of(2026, 10, 1);
@@ -38,6 +42,14 @@ public final class CandyConfig {
     /** The interval's range, in minutes; 0 for {@code last_day_every_minutes} means "as every_minutes". */
     static final int MIN_EVERY = 10;
     static final int MAX_EVERY = 120;
+
+    /**
+     * The Harvest Basket's shipped settings: on from 1 Nov to 29 Nov 2026, a shower an hour at :40 (so it never
+     * lands on the candy's :10), every half hour on the last day, 3 treats, a 4 in 100 Golden Pie paying 3 tokens
+     * under a cap of 6 a day, and 26 treats for the Pilgrim Hat.
+     */
+    public static final Candy HARVEST_DEFAULTS = new Candy(true, LocalDate.of(2026, 11, 1),
+            LocalDate.of(2026, 11, 29), 60, 40, 30, 3, 4, 3, 6, 26, false);
 
     private CandyConfig() {
     }
@@ -98,52 +110,63 @@ public final class CandyConfig {
      * {@code null}).
      */
     public static Candy parse(ConfigurationSection root, Consumer<String> warn) {
+        return parse(root, PATH, Candy.DEFAULTS, "the Candy Apple shower", warn);
+    }
+
+    /**
+     * One shower's settings from {@code root} (the whole config.yml): the section at {@code path}, read against
+     * {@code defaults} (a missing key or section reads as these, and a bad date falls back to their dates), with
+     * {@code label} ("the Harvest Basket") in its WARNs, which go to {@code warn} (may be {@code null}).
+     */
+    public static Candy parse(ConfigurationSection root, String path, Candy defaults, String label,
+                              Consumer<String> warn) {
         Consumer<String> w = warn == null ? s -> {
         } : warn;
         if (root == null) {
-            return Candy.DEFAULTS;
+            return defaults;
         }
-        Candy d = Candy.DEFAULTS;
-        boolean enabled = root.getBoolean(PATH + ".enabled", d.enabled());
+        Candy d = defaults;
+        boolean enabled = root.getBoolean(path + ".enabled", d.enabled());
 
-        LocalDate from = date(root, "from", w);
-        LocalDate to = date(root, "to", w);
+        LocalDate from = date(root, path, "from", d, label, w);
+        LocalDate to = date(root, path, "to", d, label, w);
         if (from == null || to == null) {
             // the WARN is said; the shipped date stands in so the year and the status still read
             enabled = false;
-            from = from == null ? DEFAULT_FROM : from;
-            to = to == null ? DEFAULT_TO : to;
+            from = from == null ? d.from() : from;
+            to = to == null ? d.to() : to;
         } else if (from.isAfter(to)) {
-            w.accept(PATH + ".from (" + from + ") is after " + PATH + ".to (" + to
-                    + ") - the Candy Apple shower is off.");
+            w.accept(path + ".from (" + from + ") is after " + path + ".to (" + to
+                    + ") - " + label + " is off.");
             enabled = false;
         } else if (from.getYear() != to.getYear() || CandyRules.days(from, to) > LONG_WINDOW_DAYS) {
-            w.accept(PATH + " runs from " + from + " to " + to + " (" + CandyRules.days(from, to) + " days"
+            w.accept(path + " runs from " + from + " to " + to + " (" + CandyRules.days(from, to) + " days"
                     + (from.getYear() != to.getYear() ? ", into another year" : "") + ") - it still runs, and its "
-                    + "year is " + from.getYear() + " (from " + PATH + ".from).");
+                    + "year is " + from.getYear() + " (from " + path + ".from).");
         }
 
-        int every = number(root, "every_minutes", d.everyMinutes(), MIN_EVERY, MAX_EVERY, w);
-        int offset = number(root, "offset_minutes", d.offsetMinutes(), 0, every - 1, w);
-        int lastDayEvery = lastDayEvery(root, d.lastDayEveryMinutes(), w);
-        int apples = number(root, "apples_per_shower", d.applesPerShower(), 1, 12, w);
-        int goldenPercent = number(root, "golden_percent", d.goldenPercent(), 0, 100, w);
-        int goldenTokens = number(root, "golden_tokens", d.goldenTokens(), 0, 20, w);
-        int cap = number(root, "daily_token_cap", d.dailyTokenCap(), 0, 50, w);
-        int goal = number(root, "goal", d.goal(), 1, 200, w);
-        boolean adminsSeeAll = root.getBoolean(PATH + ".admins_see_all", d.adminsSeeAll());
+        int every = number(root, path, "every_minutes", d.everyMinutes(), MIN_EVERY, MAX_EVERY, w);
+        int offset = number(root, path, "offset_minutes", d.offsetMinutes(), 0, every - 1, w);
+        int lastDayEvery = lastDayEvery(root, path, d.lastDayEveryMinutes(), w);
+        int apples = number(root, path, "apples_per_shower", d.applesPerShower(), 1, 12, w);
+        int goldenPercent = number(root, path, "golden_percent", d.goldenPercent(), 0, 100, w);
+        int goldenTokens = number(root, path, "golden_tokens", d.goldenTokens(), 0, 20, w);
+        int cap = number(root, path, "daily_token_cap", d.dailyTokenCap(), 0, 50, w);
+        int goal = number(root, path, "goal", d.goal(), 1, 200, w);
+        boolean adminsSeeAll = root.getBoolean(path + ".admins_see_all", d.adminsSeeAll());
         return new Candy(enabled, from, to, every, offset, lastDayEvery, apples, goldenPercent, goldenTokens, cap,
                 goal, adminsSeeAll);
     }
 
     /**
      * A date key: a quoted ISO date, or a bare YAML date (a {@link java.util.Date} at UTC midnight); missing reads
-     * as the shipped date. Null, with one WARN, for anything else.
+     * as the shipped date ({@code defaults}'). Null, with one WARN, for anything else.
      */
-    static LocalDate date(ConfigurationSection root, String key, Consumer<String> warn) {
-        Object raw = root.get(PATH + "." + key);
+    static LocalDate date(ConfigurationSection root, String path, String key, Candy defaults, String label,
+                          Consumer<String> warn) {
+        Object raw = root.get(path + "." + key);
         if (raw == null) {
-            return "from".equals(key) ? DEFAULT_FROM : DEFAULT_TO;
+            return "from".equals(key) ? defaults.from() : defaults.to();
         }
         if (raw instanceof LocalDate ld) {
             return ld;
@@ -158,37 +181,39 @@ public final class CandyConfig {
                 // fall through to the warning
             }
         }
-        warn.accept(PATH + "." + key + " '" + raw + "' is not a date - write it as \"2026-10-31\" (with the "
-                + "quotes). The Candy Apple shower is off.");
+        warn.accept(path + "." + key + " '" + raw + "' is not a date - write it as \"" + defaults.to()
+                + "\" (with the quotes). " + Character.toUpperCase(label.charAt(0)) + label.substring(1) + " is off.");
         return null;
     }
 
     /** A whole number squeezed into {@code [min, max]}, with one WARN when it had to change. */
-    private static int number(ConfigurationSection root, String key, int def, int min, int max, Consumer<String> warn) {
-        Integer v = integer(root, key, def, warn);
+    private static int number(ConfigurationSection root, String path, String key, int def, int min, int max,
+                              Consumer<String> warn) {
+        Integer v = integer(root, path, key, def, warn);
         int n = v == null ? def : v;
         int clamped = Math.max(min, Math.min(max, n));
         if (clamped != n) {
-            warn.accept(PATH + "." + key + " " + n + " is outside " + min + "-" + max + "; using " + clamped + ".");
+            warn.accept(path + "." + key + " " + n + " is outside " + min + "-" + max + "; using " + clamped + ".");
         }
         return clamped;
     }
 
     /** {@code last_day_every_minutes}: 0 (as every_minutes), or 10-120. */
-    private static int lastDayEvery(ConfigurationSection root, int def, Consumer<String> warn) {
-        Integer v = integer(root, "last_day_every_minutes", def, warn);
+    private static int lastDayEvery(ConfigurationSection root, String path, int def, Consumer<String> warn) {
+        Integer v = integer(root, path, "last_day_every_minutes", def, warn);
         int n = v == null ? def : v;
         int clamped = n <= 0 ? 0 : Math.max(MIN_EVERY, Math.min(MAX_EVERY, n));
         if (clamped != n) {
-            warn.accept(PATH + ".last_day_every_minutes " + n + " is not 0 or " + MIN_EVERY + "-" + MAX_EVERY
+            warn.accept(path + ".last_day_every_minutes " + n + " is not 0 or " + MIN_EVERY + "-" + MAX_EVERY
                     + "; using " + clamped + ".");
         }
         return clamped;
     }
 
     /** The key as a whole number; missing reads as {@code def}; null, with one WARN, when it isn't a number. */
-    private static Integer integer(ConfigurationSection root, String key, int def, Consumer<String> warn) {
-        Object raw = root.get(PATH + "." + key);
+    private static Integer integer(ConfigurationSection root, String path, String key, int def,
+                                   Consumer<String> warn) {
+        Object raw = root.get(path + "." + key);
         if (raw == null) {
             return def;
         }
@@ -198,7 +223,7 @@ public final class CandyConfig {
         try {
             return Integer.parseInt(String.valueOf(raw).trim());
         } catch (NumberFormatException e) {
-            warn.accept(PATH + "." + key + " '" + raw + "' is not a whole number; using " + def + ".");
+            warn.accept(path + "." + key + " '" + raw + "' is not a whole number; using " + def + ".");
             return null;
         }
     }

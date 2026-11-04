@@ -329,7 +329,7 @@ class SimLimitsTest {
         assertTrue(s.seasons().enabled());
         assertEquals(0.045, s.seasons().predictableCap(0.10));
         assertEquals(2, s.seasons().rampDays());
-        assertEquals(7, s.seasons().list().size());
+        assertEquals(8, s.seasons().list().size(), "Feast Week is the eighth (0.38.6)");
         assertEquals("harvest_time", s.seasons().list().get(5).id());
 
         SimSettings.Real r = s.real();

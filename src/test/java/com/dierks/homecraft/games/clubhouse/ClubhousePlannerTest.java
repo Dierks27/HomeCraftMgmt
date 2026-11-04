@@ -49,7 +49,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("948a67d26f10", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("935f7b726f88", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -187,7 +187,45 @@ class ClubhousePlannerTest {
             assertTrue(front != null && front.endsWith("_stained_glass"), "a bench's seat faces a table: " + op + " "
                     + s);
         }
-        assertEquals(16, benches, "two tables, four sides, two seats each");
+        assertEquals(16 + 2 * 14, benches, "two small tables (four sides, two seats each) and two long feast tables "
+                + "(five a side, two at each end)");
+    }
+
+    /**
+     * 0.38.6: the two feast tables are 5 x 2 orange glass at x 10-14 and 17-21, z 8-9, with the aisle x 15-16 open
+     * between them up to the podium; every plate is air over the glass, inside the room, and the top of every table
+     * block is spawn-proof; the line hangs over the aisle facing the arrivals.
+     */
+    @Test
+    void theFeastTables() {
+        Map<Long, String> b = blocks(SITE.plan());
+        List<int[]> cells = ClubhousePlanner.feastCells(BOX);
+        assertEquals(com.dierks.homecraft.arcade.feast.FeastRules.CELLS, cells.size(), "twenty plates");
+        Set<String> seen = new HashSet<>();
+        int west = 0;
+        for (int[] c : cells) {
+            assertNull(b.get(key(c[0], c[1], c[2])), "a plate hangs in air: " + c[0] + "," + c[1] + "," + c[2]);
+            String under = b.get(key(c[0], c[1] - 1, c[2]));
+            assertEquals(ClubhousePlanner.FEAST_GLASS, under, "over the glass");
+            assertTrue(ClubhousePlanner.spawnProof(under), "nothing spawns on it");
+            assertTrue(SITE.in(c[0] + 0.5, c[1], c[2] + 0.5), "in the room's air");
+            assertTrue(seen.add(c[0] + "," + c[2]), "no two plates share a block");
+            west += c[0] - BOX.minX() <= 14 ? 1 : 0;
+        }
+        assertEquals(10, west, "ten on each table");
+        assertTrue(cells.get(0)[0] - BOX.minX() <= 14 && cells.get(1)[0] - BOX.minX() >= 17,
+                "west and east in turn: both fill together");
+        for (int x : new int[]{15, 16}) {
+            for (int z = 4 + 1; z <= 7; z++) {
+                assertNull(b.get(key(BOX.minX() + x, BOX.minY() + 1, BOX.minZ() + z)), "the aisle to the podium is "
+                        + "open at x " + x + ", z " + z);
+            }
+        }
+        WallBoards.Wall line = ClubhousePlanner.feastLine(BOX);
+        assertTrue(SITE.in(line.x(), line.y(), line.z()), "the line floats in the room");
+        assertEquals(WallBoards.turn(0f), line.yaw(), 0.001f, "facing south, to the arrivals");
+        assertTrue(SITE.plan().summary().get(1).contains("feast tables"), SITE.plan().summary().toString());
+        assertEquals(3, ClubhousePlanner.ALGO, "a new room: every server builds it once");
     }
 
     /**

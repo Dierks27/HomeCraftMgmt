@@ -34,6 +34,10 @@ import java.util.UUID;
  *       ({@link #tokensToPay}), what counts ({@link #counts}, {@link #touchCounts}) and the goal
  *       ({@link #crossed}).</li>
  * </ul>
+ *
+ * <p>Since 0.38.6 the same rules run the Harvest Basket too. Where the two showers differ, the rule takes the
+ * difference as an argument (the keys' prefix, the ledger source, the bar's words, the Overworld-only skip), and
+ * the candy form calls it with candy's values, so candy behaves exactly as before.
  */
 public final class CandyRules {
 
@@ -109,17 +113,35 @@ public final class CandyRules {
 
     /** The player's count for the year ({@code player_counters}); the year in the key starts next October at 0. */
     public static String counterKey(int year) {
-        return "candy:" + year;
+        return counterKey("candy", year);
     }
 
     /** Written at the first golden pickup, so every shower until then has one. */
     public static String goldenSeenKey(int year) {
-        return "candy:" + year + ":golden_seen";
+        return goldenSeenKey("candy", year);
     }
 
     /** The bag's mark, written before the bag is given. */
     public static String bagKey(int year) {
-        return "candy:" + year + ":bag";
+        return rewardKey("candy", "bag", year);
+    }
+
+    /** A shower's count for the year: {@code "<prefix>:<year>"} ({@code candy:2026}, {@code harvest:2026}). */
+    public static String counterKey(String prefix, int year) {
+        return prefix + ":" + year;
+    }
+
+    /** A shower's golden-seen mark: {@code "<prefix>:<year>:golden_seen"}. */
+    public static String goldenSeenKey(String prefix, int year) {
+        return counterKey(prefix, year) + ":golden_seen";
+    }
+
+    /**
+     * A shower's reward mark, written before the reward is given: {@code "<prefix>:<year>:<suffix>"}, so
+     * {@code candy:2026:bag} for the Trick-or-Treat Bag and {@code harvest:2026:hat} for the Pilgrim Hat.
+     */
+    public static String rewardKey(String prefix, String suffix, int year) {
+        return counterKey(prefix, year) + ":" + suffix;
     }
 
     /** {@code Keys.CANDY_DROP}'s value on a shower candy: {@code "<owner uuid>:<slot id>"}. */
@@ -292,6 +314,29 @@ public final class CandyRules {
             return LIVE_ON_SERVER + " candies already out on the server";
         }
         return null;
+    }
+
+    /** The reason a shower that runs in the Overworld only gives for the Nether or the End. */
+    public static final String NOT_OVERWORLD = "not the Overworld";
+
+    /**
+     * {@link #skip(State)} for a shower that may run in the Overworld only (both do): in an economy
+     * world that is not the Overworld (the Nether, the End), the reason is {@link #NOT_OVERWORLD}, right after
+     * the Games-world check, so no treat ever falls through a Nether roof or lands by lava. Everything else is
+     * {@link #skip(State)}'s, in its order.
+     *
+     * @param overworldOnly the shower runs in the Overworld only
+     * @param overworld     the player's world is an Overworld ({@code Environment.NORMAL})
+     */
+    public static String skip(State s, boolean overworldOnly, boolean overworld) {
+        String why = skip(s);
+        if (!overworldOnly || overworld) {
+            return why;
+        }
+        if (s.dead() || s.sleeping() || s.mode() == GameMode.SPECTATOR || !s.economyWorld() || s.gamesWorld()) {
+            return why;
+        }
+        return NOT_OVERWORLD;
     }
 
     /** Whole minutes idle (Paper's {@code getIdleDuration}), for the skip and {@code /hcm candy status}. */
@@ -525,10 +570,18 @@ public final class CandyRules {
 
     /** Tokens already paid for candy today: the {@code EVENT_CANDY} lines of the ledger since local midnight. */
     public static long paidToday(List<TokenDao.SourceTotal> totals) {
+        return paidToday(totals, TokenService.Source.EVENT_CANDY);
+    }
+
+    /**
+     * Tokens already paid today under one shower's own source (its lines of the ledger since local midnight), so
+     * each shower keeps its own daily cap and never counts the other's.
+     */
+    public static long paidToday(List<TokenDao.SourceTotal> totals, TokenService.Source source) {
         long paid = 0;
-        if (totals != null) {
+        if (totals != null && source != null) {
             for (TokenDao.SourceTotal t : totals) {
-                if (TokenService.Source.EVENT_CANDY.name().equals(t.source())) {
+                if (source.name().equals(t.source())) {
                     paid += t.earned();
                 }
             }
@@ -613,12 +666,14 @@ public final class CandyRules {
 
     /**
      * Bedrock's eat fallback: Geyser sends no food component, so a full Bedrock player can't eat the red apple.
-     * Only for a Bedrock player who is full, with a Candy Apple (not a golden one, always edible) in the main
-     * hand, home from every game.
+     * Only for a Bedrock player who is full, with a shower item its shower eats on a tap in the main hand, home
+     * from every game. {@code edible} is the shower's own "eats on a tap": for candy a Candy Apple and not a
+     * golden one (vanilla always lets a golden apple be eaten), for the Harvest Basket every treat, the Golden Pie
+     * included (a pie is not always edible on Bedrock).
      */
-    public static boolean eatsOnTap(boolean bedrock, int foodLevel, boolean tap, boolean mainHand, boolean redCandy,
+    public static boolean eatsOnTap(boolean bedrock, int foodLevel, boolean tap, boolean mainHand, boolean edible,
                                     boolean home) {
-        return bedrock && foodLevel >= 20 && tap && mainHand && redCandy && home;
+        return bedrock && foodLevel >= 20 && tap && mainHand && edible && home;
     }
 
     /** The bag is a toy on both editions: on Java a tap is otherwise followed by the bundle's own use, which empties it. */
@@ -720,7 +775,12 @@ public final class CandyRules {
 
     /** The action bar after a counted pickup: {@code Candy apples: 17 / 31}, or just the count from the goal on. */
     public static String actionBar(long found, int goal) {
-        return "&6Candy apples: &f" + found + (found < goal ? " &7/ " + goal : "");
+        return actionBar(found, goal, "Candy apples");
+    }
+
+    /** {@link #actionBar(long, int)} for any shower: {@code Harvest Basket: 17 / 26}. */
+    public static String actionBar(long found, int goal, String noun) {
+        return "&6" + noun + ": &f" + found + (found < goal ? " &7/ " + goal : "");
     }
 
     /**
@@ -728,9 +788,18 @@ public final class CandyRules {
      * bag!}, or {@code · Your bag is waiting!} while it is owed. Its fill is {@link #progress}.
      */
     public static String barLine(long found, int goal, boolean bagWaiting) {
+        return barLine(found, goal, bagWaiting, "Candy apples", "bag", "·");
+    }
+
+    /**
+     * {@link #barLine(long, int, boolean)} for any shower: its {@code noun} ("Harvest Basket"), its reward's word
+     * ("hat") and the mark between the count and the reward ("-" where only plain letters will do).
+     */
+    public static String barLine(long found, int goal, boolean waiting, String noun, String reward, String mark) {
         if (found < goal) {
-            return "&6Candy apples &f" + found + " &7/ " + goal;
+            return "&6" + noun + " &f" + found + " &7/ " + goal;
         }
-        return "&6Candy apples: &f" + found + " &7· " + (bagWaiting ? "&eYour bag is waiting!" : "&aYou got your bag!");
+        return "&6" + noun + ": &f" + found + " &7" + mark + " "
+                + (waiting ? "&eYour " + reward + " is waiting!" : "&aYou got your " + reward + "!");
     }
 }

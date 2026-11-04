@@ -52,9 +52,12 @@ public final class CardService {
      * Every issuer (packs, crates, the pity exchange, anything added later) now asks this one
      * question, and {@link #issue} asks it again itself, so a path that forgets still cannot get
      * a dead Card out.
+     *
+     * <p>A holiday Mini never has Cards (only its event makes one), so a pack, crate or Rare Card
+     * that names it gives nothing for it.
      */
     public boolean canIssue(MiniDef def) {
-        if (def == null) {
+        if (!EventMinis.hasCards(def)) {
             return false;
         }
         if (plugin.miniService().mintedOut(def)) {
@@ -113,12 +116,16 @@ public final class CardService {
     /**
      * Admin: give a Card ignoring the cap check (still tallies issuance). The one path allowed
      * past {@link #canIssue}, and it says so in the log when it actually goes past it — an
-     * admin testing a print should be able to, but it should never be a surprise later.
+     * admin testing a print should be able to, but it should never be a surprise later. Never a
+     * holiday Mini's Card: the Printer would refuse it, so it would be a dead Card.
      */
     public IssueResult giveAdmin(Player player, String id) {
         MiniDef def = plugin.miniService().def(id);
         if (def == null) {
             return IssueResult.fail("No such Mini '" + id + "'.");
+        }
+        if (!EventMinis.hasCards(def)) {
+            return IssueResult.fail(def.name() + " is a holiday Mini: it has no Cards, only its event gives it.");
         }
         if (!canIssue(def)) {
             plugin.getLogger().info("Admin Card give: " + id + " to " + player.getName()

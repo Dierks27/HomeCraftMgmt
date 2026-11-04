@@ -111,12 +111,14 @@ class KitSlotsTest {
     /** Where a raw write is the point: the kit rules themselves, and the saved state's own restore and clear. */
     private static final List<String> ALLOWED = List.of("world/KitItems.java", "world/BukkitStateAdapter.java");
     /**
-     * A raw write on something that is nobody's inventory (0.38.4): an item frame's item, a jukebox block's disc.
+     * A raw write on something that is nobody's inventory (0.38.4): an item frame's item, a jukebox block's disc;
+     * the feast table's plates are item frames too (0.38.6).
      * By file and code, never by a comment: a new raw write elsewhere has to be added here to pass.
      */
     private static final Map<String, String> ALLOWED_LINES = Map.of(
             "clubhouse/TrophyWall.java", "f.setItem(item(t), false)",
-            "clubhouse/JukeboxCorner.java", "jb.getInventory().clear()");
+            "clubhouse/JukeboxCorner.java", "jb.getInventory().clear()",
+            "clubhouse/FeastTable.java", "f.setItem(item(kind), false)");
 
     @Test
     void noGameWritesAPlayersInventoryExceptThroughTheKitRules() throws IOException {

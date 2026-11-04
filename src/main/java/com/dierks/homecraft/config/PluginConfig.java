@@ -449,20 +449,27 @@ public final class PluginConfig {
     /**
      * A collector's season (local dates, inclusive), look and season name. {@code look} is null for a trail.
      * {@code season} names the holiday on its lines ("Christmas 2026 collector"); a blank one is worked out
-     * from the start month ({@link #seasonOf}).
+     * from the start month ({@link #seasonOf}). {@code earned} (0.38.6) marks one that is never sold or given as a
+     * present: an event hands it over (the Harvest Basket's Pilgrim Hat), and an admin can still give it back.
      */
     public record Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
-                            CapLook look, String season) {
+                            CapLook look, String season, boolean earned) {
         public Collector {
             if (season == null || season.isBlank()) {
                 season = seasonOf(from);
             }
         }
 
-        /** A collector whose season name comes from its start month ({@link #seasonOf}). */
+        /** A collector that is sold in its season (not {@link #earned}). */
+        public Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
+                         CapLook look, String season) {
+            this(year, from, to, giftable, look, season, false);
+        }
+
+        /** A collector sold in its season, whose season name comes from its start month ({@link #seasonOf}). */
         public Collector(int year, java.time.LocalDate from, java.time.LocalDate to, boolean giftable,
                          CapLook look) {
-            this(year, from, to, giftable, look, seasonOf(from));
+            this(year, from, to, giftable, look, seasonOf(from), false);
         }
 
         public boolean inSeason(java.time.LocalDate today) {
@@ -1011,6 +1018,10 @@ public final class PluginConfig {
     private Arcade arcade;
     /** Off until {@link #load()} has read it. */
     private CandyConfig.Candy candy = CandyConfig.Candy.OFF;
+    /** The Harvest Basket, Catch the Turkey and the Family Feast (0.38.6): off until {@link #load()} has read them. */
+    private CandyConfig.Candy harvest = CandyConfig.HARVEST_DEFAULTS.withEnabled(false);
+    private TurkeyConfig.Turkey turkey = TurkeyConfig.Turkey.OFF;
+    private FeastConfig.Feast feast = FeastConfig.Feast.OFF;
     private Map<String, Icon> arcadeIcons = Map.of();
     private Reveal reveal = new Reveal(60, 24, 6);
     private Map<String, AchievementDef> achievements;
@@ -1207,6 +1218,24 @@ public final class PluginConfig {
      */
     public CandyConfig.Candy candy() {
         return candy;
+    }
+
+    /**
+     * The Harvest Basket (0.38.6): {@code arcade.events.harvest}, read by the candy's parser with its own path,
+     * shipped settings and name. Never null; switched off until loaded.
+     */
+    public CandyConfig.Candy harvest() {
+        return harvest;
+    }
+
+    /** Catch the Turkey (0.38.6): {@code arcade.events.turkey}. Never null; switched off until loaded. */
+    public TurkeyConfig.Turkey turkey() {
+        return turkey;
+    }
+
+    /** The Family Feast (0.38.6): {@code arcade.events.feast}. Never null; switched off until loaded. */
+    public FeastConfig.Feast feast() {
+        return feast;
     }
 
     /** One-time achievement definitions keyed by id (Phase 9). */
@@ -1480,6 +1509,10 @@ public final class PluginConfig {
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
         this.candy = CandyConfig.parse(c, log::warning);
+        this.harvest = CandyConfig.parse(c, CandyConfig.HARVEST_PATH, CandyConfig.HARVEST_DEFAULTS,
+                "the Harvest Basket", log::warning);
+        this.turkey = TurkeyConfig.parse(c, log::warning);
+        this.feast = FeastConfig.parse(c, log::warning);
         this.arcadeIcons = readArcadeIcons(c);
         this.reveal = new Reveal(
                 Math.max(10, c.getInt("arcade.reveal.spin_ticks", 60)),
@@ -3173,7 +3206,11 @@ public final class PluginConfig {
                     continue;
                 }
                 List<String> tags = readTags(e.get("tags"));
-                catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable, tags));
+                // A holiday Mini (0.38.6): only its event gives it, between earn_from and earn_to.
+                com.dierks.homecraft.mini.EventMinis.Window w =
+                        com.dierks.homecraft.mini.EventMinis.readWindow(e, id, log::warning);
+                catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable, tags,
+                        w.eventOnly(), w.from(), w.to()));
                 cardSpecs.put(id, readCardSpec(e.get("card"), rarity));
             }
         }

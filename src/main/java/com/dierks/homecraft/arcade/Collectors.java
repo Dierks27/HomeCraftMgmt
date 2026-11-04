@@ -28,9 +28,14 @@ public final class Collectors {
     private Collectors() {
     }
 
+    /** The Turkey Hat 2026: sold on the Looks tab through November 2026. */
+    public static final String TURKEY_ID = "cap_turkey_2026";
+    /** The Pilgrim Hat 2026: earned only, from the Harvest Basket; never sold or given as a present. */
+    public static final String PILGRIM_ID = "cap_pilgrim_2026";
+
     /** Every collector id ever shipped. Never remove or rename one: an owned trail shows only while its row exists. */
     public static final List<String> SHIPPED_IDS = List.of("cap_pumpkin_2026", "trail_leaves_2026",
-            "cap_santa_2026", "trail_twinkle_2026");
+            "cap_santa_2026", "trail_twinkle_2026", TURKEY_ID, PILGRIM_ID);
 
     /** A collector trail's days: kept for good, 100 years, never a Long.MAX_VALUE that overflows. */
     static final int KEPT_DAYS = 36500;
@@ -44,7 +49,15 @@ public final class Collectors {
                     LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31), new CapLook(0xB02E26, "rib", "quartz")),
             // the season runs into the new year: inSeason compares whole dates, so 6 Jan 2027 is still in it
             trail("trail_twinkle_2026", "&bTwinkle 2026", "Twinkly lights follow you!", 400, 2026,
-                    LocalDate.of(2026, 12, 1), LocalDate.of(2027, 1, 6), "ELECTRIC_SPARK", Material.SEA_LANTERN));
+                    LocalDate.of(2026, 12, 1), LocalDate.of(2027, 1, 6), "ELECTRIC_SPARK", Material.SEA_LANTERN),
+            // brown leather with a red stripe: on Bedrock the brown alone is the look
+            cap(TURKEY_ID, "&6Turkey Hat 2026", "A turkey hat for Thanksgiving!", 250, 2026,
+                    LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), new CapLook(0x835432, "rib", "redstone"),
+                    "Thanksgiving"),
+            // black with a gold band; the Harvest Basket gives it at its goal
+            earnedCap(PILGRIM_ID, "&6Pilgrim Hat 2026", "Earned from the Harvest Basket!", 2026,
+                    LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), new CapLook(0x1D1D21, "coast", "gold"),
+                    "Thanksgiving"));
 
     /**
      * A collector cap: a Looks row (0.38; it was on Cosmetics before the Looks tab), one each for good
@@ -53,11 +66,33 @@ public final class Collectors {
      */
     static Prize cap(String id, String display, String desc, int price, int year, LocalDate from, LocalDate to,
                      CapLook look) {
+        return cap(id, display, desc, price, year, from, to, look, null);
+    }
+
+    /**
+     * A collector cap, as {@link #cap(String, String, String, int, int, LocalDate, LocalDate, CapLook)}, with its
+     * season named ("Thanksgiving"), for a month whose own name would be the plain "Holiday".
+     */
+    static Prize cap(String id, String display, String desc, int price, int year, LocalDate from, LocalDate to,
+                     CapLook look, String season) {
+        return capRow(id, display, desc, price, new Collector(year, from, to, true, look, season, false));
+    }
+
+    /**
+     * An earned collector cap (0.38.6): a Looks row, one each for good, never sold, never given as a present, so it
+     * has no price and no tile. An event hands it over through {@code PrizeService.grantEarned}; an admin can give
+     * it back with {@code /hcm give prize}, as any collector.
+     */
+    static Prize earnedCap(String id, String display, String desc, int year, LocalDate from, LocalDate to,
+                           CapLook look, String season) {
+        return capRow(id, display, desc, 0, new Collector(year, from, to, false, look, season, true));
+    }
+
+    private static Prize capRow(String id, String display, String desc, int price, Collector collector) {
         return new Prize(id, PrizeTab.LOOKS, display, List.of(desc), price, new Icon("", Material.LEATHER_HELMET),
                 PrizeType.HAT, true, new PrizeLimit(LimitPer.LIFETIME, 1),
                 1, null, null, null, null, 0, 0, null, 0, "",
-                List.of(), List.of(), null, null, List.of(),
-                new Collector(year, from, to, true, look));
+                List.of(), List.of(), null, null, List.of(), collector);
     }
 
     /**
@@ -120,15 +155,17 @@ public final class Collectors {
     }
 
     /**
-     * True for an id no config row may use: a collector's, or a Halloween candy or bag id (those are
-     * known by their own item key, so a config row with such an id could never be what it says).
+     * True for an id no config row may use: a collector's, a Halloween candy or bag id, or a Thanksgiving treat or
+     * feather id (those are known by their own item key, so a config row with such an id could never be what it
+     * says).
      */
     public static boolean reserved(String id) {
         if (id == null) {
             return false;
         }
         String n = id.trim().toLowerCase(Locale.ROOT);
-        return isCollectorId(n) || n.startsWith("candy_") || n.startsWith("bag_trick_or_treat_");
+        return isCollectorId(n) || n.startsWith("candy_") || n.startsWith("bag_trick_or_treat_")
+                || n.startsWith("harvest_") || n.startsWith("turkey_feather_");
     }
 
     /** The one warning for a config row {@link #reserved} skips. */

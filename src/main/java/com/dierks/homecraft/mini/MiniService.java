@@ -23,7 +23,7 @@ import java.util.UUID;
 /**
  * The Minis engine: owns the config-driven catalog and is the single source of
  * truth for minting. Every copy — printed from a Card, found in the wild / a crate,
- * spawned naturally, or admin-given — is created by {@link #mintItem} and nowhere
+ * spawned naturally, given by a holiday event, or admin-given — is created by {@link #mintItem} and nowhere
  * else, so mint counts and per-copy provenance stay honest and the cap is enforced
  * on every path without exception. The Museum is browse-only (no money mint).
  */
@@ -53,7 +53,9 @@ public final class MiniService {
         /** Printed from a Card. */
         PRINTER,
         /** Given by an admin. */
-        ADMIN
+        ADMIN,
+        /** Given by a holiday event (the only way a holiday Mini is made; see {@link EventMinis}). */
+        EVENT
     }
 
     private final HomeCraftManagement plugin;
@@ -173,15 +175,13 @@ public final class MiniService {
 
     /**
      * Every mintable Mini carrying {@code tag} (case-insensitive). Untagged Minis never
-     * appear in a tag pool; minted-out types are excluded so the pool is always live.
+     * appear in a tag pool; minted-out types are excluded so the pool is always live, and a
+     * holiday Mini is never in one (only its event gives it).
      */
     public List<MiniDef> poolFromTag(String tag) {
         List<MiniDef> out = new ArrayList<>();
-        if (tag == null || tag.isBlank()) {
-            return out;
-        }
-        for (MiniDef def : catalog.values()) {
-            if (def.hasTag(tag) && !mintedOut(def)) {
+        for (MiniDef def : EventMinis.tagPool(tag, catalog.values())) {
+            if (!mintedOut(def)) {
                 out.add(def);
             }
         }
@@ -233,6 +233,9 @@ public final class MiniService {
         if (def == null) {
             return Minted.fail("No such Mini.");
         }
+        if (!EventMinis.mintAllowed(def, origin == Origin.EVENT)) {
+            return Minted.fail(def.name() + " is a holiday Mini: only its event gives it.");
+        }
         if (mintedOut(def)) {
             return Minted.fail(def.name() + " is minted out.");
         }
@@ -277,6 +280,51 @@ public final class MiniService {
             return Minted.fail("No such Mini '" + id + "'.");
         }
         return mintAndGive(player, def, grade, shiny ? "SHINY" : null, Origin.WILD_DROP);
+    }
+
+    /**
+     * <b>The holiday mint</b>, for event code (the Family Feast, Catch the Turkey, and later
+     * events): one Standard copy of {@code miniId} handed to {@code player} like every other mint.
+     * Everyone gets the same grade, never a lucky roll, so a child's copy is as good as an adult's.
+     *
+     * <p>A holiday Mini is refused outside its {@code earn_from..earn_to} window (local days, both
+     * included): before it opens, and for good after it closes. Every Mini is refused at its cap.
+     * A full bag refuses too, before the mint, so no copy is ever dropped on the ground and no mint
+     * number is spent; callers check {@link #hasRoom} first and keep it owed. A refusal is quiet
+     * for the player; the caller decides what to say.
+     *
+     * @param reason the event's name, for the player's line and the log ("Family Feast")
+     * @return true only if a copy was minted and given
+     */
+    public boolean mintEvent(Player player, String miniId, String reason) {
+        if (player == null || miniId == null) {
+            return false;
+        }
+        MiniDef def = catalog.get(miniId);
+        if (def == null) {
+            plugin.getLogger().warning("Event Mini '" + miniId + "' (" + reason + ") is not in minis.series, "
+                    + "so nobody gets it. Add its row back, then give a lost one back with /hcm mini give "
+                    + miniId + " <player> (inside its window).");
+            return false;
+        }
+        java.time.LocalDate today = plugin.config().clock().today();
+        if (EventMinis.eventRefusal(def, today, mintedOut(def), hasRoom(player)) != null) {
+            return false;
+        }
+        Minted m = mintAndGive(player, def, Grade.STANDARD, null, Origin.EVENT);
+        if (!m.ok()) {
+            return false;
+        }
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&6You got a &f" + def.name() + "&6! &7(#"
+                + m.mintNumber() + (def.uncapped() ? "" : " of " + def.cap()) + ")"));
+        plugin.getLogger().info("Event Mini " + def.id() + " #" + m.mintNumber() + " to " + player.getName()
+                + " (" + reason + ").");
+        return true;
+    }
+
+    /** Whether {@code player} has an empty slot: a Mini never stacks, so that is room for one. */
+    public static boolean hasRoom(Player player) {
+        return player != null && player.getInventory().firstEmpty() != -1;
     }
 
     /**
@@ -623,7 +671,10 @@ public final class MiniService {
         }
     }
 
-    /** Museum display icon (cosmetic; shows live minted/cap + circulation + value appraisal). */
+    /**
+     * Museum display icon (cosmetic; shows live minted/cap + circulation + value appraisal). A
+     * holiday Mini also shows its earn window ("Earn: 22 Nov - 29 Nov 2026") or "Closed".
+     */
     public ItemStack icon(MiniDef def) {
         MiniDao.Counts c = counts(def.id());
         String valueText = null;
@@ -631,7 +682,8 @@ public final class MiniService {
             double[] range = plugin.values().gradeRange(def);
             valueText = economy.format(range[0]) + " – " + economy.format(range[1]);
         }
-        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), c.escaped(), valueText);
+        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), c.escaped(), valueText,
+                EventMinis.museumLine(def, plugin.config().clock().today()));
     }
 
     /**
@@ -852,9 +904,35 @@ public final class MiniService {
      * overshooting the number is not.
      */
     public MintResult giveAdmin(Player target, String id) {
+        return giveAdmin(target, id, null);
+    }
+
+    /**
+     * As {@link #giveAdmin(Player, String)}, naming the admin. A holiday Mini is the one exception
+     * to "only event code mints it": an event marks a helper's Mini before it mints, so a mint that
+     * failed (a database error, a row missing for a moment) would leave her without one for good.
+     * The admin gives it back here: one Standard copy as the event would, only inside its window,
+     * under its cap and into an empty slot, and the log says who did it. Random draws still never
+     * see it.
+     */
+    public MintResult giveAdmin(Player target, String id, String who) {
         MiniDef def = catalog.get(id);
         if (def == null) {
             return MintResult.fail("No such Mini '" + id + "'.");
+        }
+        if (def.eventOnly()) {
+            String no = EventMinis.eventRefusal(def, plugin.config().clock().today(), mintedOut(def),
+                    hasRoom(target));
+            if (no != null) {
+                return MintResult.fail(no);
+            }
+            Minted m = mintAndGive(target, def, Grade.STANDARD, null, Origin.EVENT);
+            if (!m.ok()) {
+                return MintResult.fail(m.error());
+            }
+            plugin.getLogger().info("Event Mini " + def.id() + " #" + m.mintNumber() + " given back to "
+                    + target.getName() + " by " + (who == null ? "an admin" : who) + ".");
+            return new MintResult(true, null, m.mintNumber());
         }
         Minted m = mintAndGive(target, def, Grade.STANDARD, null, Origin.ADMIN);
         return m.ok()

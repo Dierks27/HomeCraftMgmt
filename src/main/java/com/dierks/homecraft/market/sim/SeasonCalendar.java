@@ -67,7 +67,11 @@ public final class SeasonCalendar {
             season("harvest_time", "Harvest Time", "09-15", "10-31", pct("wheat", -4.0),
                     "Harvest time! The farms are full of wheat."),
             season("gift_season", "Gift Season", "12-10", "12-26", pct("gold_ingot", 4.0, "diamond", 4.0),
-                    "Gift season! Shiny gold and diamonds make great presents."));
+                    "Gift season! Shiny gold and diamonds make great presents."),
+            // 0.38.6: the owner's own row; Crate sells all five from config revision 26
+            season("feast_week", "Feast Week", "11-22", "11-30", pct("bread", -4.0, "baked_potato", -4.0,
+                    "cooked_chicken", -4.0, "carrot", -4.0, "pumpkin", -4.0),
+                    "Feast week! Food for the family table costs a little less."));
 
     /**
      * One season's current window.

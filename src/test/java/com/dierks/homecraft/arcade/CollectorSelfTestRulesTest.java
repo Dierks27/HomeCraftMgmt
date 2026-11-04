@@ -104,10 +104,11 @@ class CollectorSelfTestRulesTest {
                 .startsWith("trail_twinkle_2026's particle ELECTRIC_SPARK is not a particle on this server"));
     }
 
-    /** The self-test covers every collector: two caps (dye, trim) and two trails (particle). */
+    /** The self-test covers every collector: four caps (dye, trim), the earned Pilgrim Hat too, and two trails. */
     @Test
     void theSelfTestCoversEveryCollector() {
-        assertEquals(List.of("cap_pumpkin_2026", "cap_santa_2026"), Collectors.ROWS.stream()
+        assertEquals(List.of("cap_pumpkin_2026", "cap_santa_2026", "cap_turkey_2026", "cap_pilgrim_2026"),
+                Collectors.ROWS.stream()
                 .filter(p -> p.type() == PrizeType.HAT && p.collector().look() != null).map(Prize::id).toList());
         assertEquals(List.of("trail_leaves_2026", "trail_twinkle_2026"), Collectors.ROWS.stream()
                 .filter(p -> p.type() == PrizeType.TRAIL).map(Prize::id).toList());

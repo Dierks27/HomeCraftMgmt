@@ -2,7 +2,6 @@ package com.dierks.homecraft.arcade.candy;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.PrizeItemListener;
-import com.dierks.homecraft.arcade.TokenService;
 import com.dierks.homecraft.arcade.candy.CandyRules.BagStep;
 import com.dierks.homecraft.arcade.candy.CandyRules.Column;
 import com.dierks.homecraft.arcade.candy.CandyRules.Floor;
@@ -53,8 +52,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
@@ -79,11 +76,14 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * The Candy Apple shower (HALLOWEEN-SPEC D10-D18, D11a): every 20 minutes through October (every 10 on the last
- * day), each player in an economy world hears "Trick or treat!" and six candy apples fall a few steps in front of
- * them. Only they see and pick up their own candy. Collecting {@code goal} earns the Trick-or-Treat Bag, and a rare
- * Golden Candy Apple pays a few tokens under a daily cap. The rules are {@link CandyRules}'; this reads the
- * world and the players, and acts.
+ * The shower engine: the Candy Apple shower (HALLOWEEN-SPEC D10-D18, D11a) and, since 0.38.6, the Harvest Basket,
+ * one instance each, told apart by their {@link ShowerProfile}. On the schedule in its config (a shower an hour
+ * as shipped, every half hour on the last day), each player in an economy world hears the chime and sees the
+ * shower's title, and a few items fall a few steps in front of them. Only they see and pick up their own.
+ * Collecting {@code goal} earns the shower's reward (the Trick-or-Treat Bag, the Pilgrim Hat), and a rare golden
+ * one pays a few tokens under a daily cap, read back from the shower's own ledger source. The rules are
+ * {@link CandyRules}'; this reads the world and the players, and acts. Every word, sound, item and key that
+ * differs between the two showers comes from the profile, so each instance counts, guards and sweeps only its own.
  *
  * <p><b>One task, every 5 ticks.</b> It drops the apples that are due (at most {@value #PLACEMENTS_PER_RUN} a
  * run, each in loaded chunks only) and draws the falling ones; every 4th run (once a second) it checks the window
@@ -121,20 +121,18 @@ public final class CandyService implements Listener {
     static final long JOIN_BAG_DELAY_TICKS = 40L;
     static final int PICKUP_BAR_SECONDS = 5;
     static final int SHOWER_BAR_SECONDS = 3;
-    /** The red apple's treat (Speed I or Jump Boost I), and the golden one's Speed II. */
-    static final int TREAT_TICKS = 20 * 20;
-    static final int GOLDEN_SPEED_TICKS = 30 * 20;
-    /** Others see an eater's treat particles from this far. */
-    static final double VIEW_RANGE = 32;
-    /** The giggle comes this long after the chime. */
+    /** The second sound (the giggle, the bell) comes this long after the chime. */
     static final long GIGGLE_DELAY_TICKS = 6L;
 
     private static final DateTimeFormatter DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH);
 
-    /** An apple still to drop: whose, for which slot, when, golden or not, the look at shower time, and its retries. */
-    private record Pending(UUID owner, long slot, long dueTick, boolean golden, float yaw, int requeued) {
+    /**
+     * An item still to drop: whose, for which slot, when, golden or not, the look at shower time, its retries, and
+     * which of its shower it is (the Harvest Basket's kind follows it).
+     */
+    private record Pending(UUID owner, long slot, long dueTick, boolean golden, float yaw, int requeued, int index) {
         Pending retry(long at) {
-            return new Pending(owner, slot, at, golden, yaw, requeued + 1);
+            return new Pending(owner, slot, at, golden, yaw, requeued + 1, index);
         }
     }
 
@@ -185,6 +183,7 @@ public final class CandyService implements Listener {
 
     private final HomeCraftManagement plugin;
     private final AchievementDao counters;
+    private final ShowerProfile profile;
     private final Random random;
 
     private final Map<UUID, Drop> live = new LinkedHashMap<>();
@@ -215,14 +214,31 @@ public final class CandyService implements Listener {
     private long barSerial;
     private long lastErrorAt;
 
+    /** The Candy Apple shower. */
     public CandyService(HomeCraftManagement plugin, AchievementDao counters) {
-        this(plugin, counters, new Random());
+        this(plugin, counters, ShowerProfile.candy());
     }
 
-    CandyService(HomeCraftManagement plugin, AchievementDao counters, Random random) {
+    /** The shower {@code profile} names ({@link ShowerProfile#harvest()} for the Harvest Basket). */
+    public CandyService(HomeCraftManagement plugin, AchievementDao counters, ShowerProfile profile) {
+        this(plugin, counters, profile, new Random());
+    }
+
+    /** The shower {@code profile} names, counting in the plugin's own database. */
+    public CandyService(HomeCraftManagement plugin, ShowerProfile profile) {
+        this(plugin, new AchievementDao(plugin.database()), profile);
+    }
+
+    CandyService(HomeCraftManagement plugin, AchievementDao counters, ShowerProfile profile, Random random) {
         this.plugin = plugin;
         this.counters = counters;
+        this.profile = profile;
         this.random = random;
+    }
+
+    /** Which shower this instance runs. */
+    public ShowerProfile profile() {
+        return profile;
     }
 
     // ---- lifecycle -------------------------------------------------------------------------
@@ -251,7 +267,7 @@ public final class CandyService implements Listener {
             return;
         }
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, PERIOD_TICKS, PERIOD_TICKS);
-        plugin.getLogger().info("Candy Apple shower on through " + DAY_MONTH.format(c.to()) + ": every "
+        plugin.getLogger().info(profile.text().name() + " on through " + DAY_MONTH.format(c.to()) + ": every "
                 + c.everyMinutes() + " minutes from :" + String.format("%02d", c.offsetMinutes())
                 + (c.lastDayEveryMinutes() > 0 ? ", every " + c.lastDayEveryMinutes() + " on the last day" : "") + ".");
     }
@@ -284,7 +300,7 @@ public final class CandyService implements Listener {
             long now = System.currentTimeMillis();
             if (now - lastErrorAt > 60_000L) {
                 lastErrorAt = now;
-                plugin.getLogger().log(Level.WARNING, "The Candy Apple shower hit an error (it keeps going).", e);
+                plugin.getLogger().log(Level.WARNING, profile.text().sentence() + " hit an error (it keeps going).", e);
             }
         }
     }
@@ -298,7 +314,7 @@ public final class CandyService implements Listener {
         LocalDate today = local.toLocalDate();
         if (!open(c, today)) {
             if (today.isAfter(c.to())) {
-                plugin.getLogger().info("The Candy Apple shower is over for " + c.year() + ".");
+                plugin.getLogger().info(profile.text().sentence() + " is over for " + c.year() + ".");
             }
             stop();
             return;
@@ -315,7 +331,7 @@ public final class CandyService implements Listener {
         lastSlot = slot;
         if (CandyRules.heldByRestart(slot, plugin.clock().zone(), restartHold())) {
             // the candy isn't saved, and the restart would wipe it
-            plugin.getLogger().info("Candy Apple shower at " + CandyRules.slotStart(slot).toLocalTime()
+            plugin.getLogger().info(profile.text().name() + " at " + CandyRules.slotStart(slot).toLocalTime()
                     + " skipped: a restart is close.");
             return;
         }
@@ -334,7 +350,7 @@ public final class CandyService implements Listener {
     private String shower(Player p, long slot) {
         CandyConfig.Candy c = settings();
         State s = state(p);
-        String why = CandyRules.skip(s);
+        String why = CandyRules.skip(s, profile.overworldOnly(), overworld(p.getWorld()));
         if (why != null) {
             return why;
         }
@@ -347,21 +363,25 @@ public final class CandyService implements Listener {
         float yaw = p.getLocation().getYaw();
         for (int i = 0; i < apples; i++) {
             boolean golden = CandyRules.golden(random, c.goldenPercent(), i == goldenAt, seen);
-            queue.add(new Pending(p.getUniqueId(), slot, ticks + (long) i * CandyRules.SPREAD_TICKS, golden, yaw, 0));
+            queue.add(new Pending(p.getUniqueId(), slot, ticks + (long) i * CandyRules.SPREAD_TICKS, golden, yaw, 0,
+                    i));
         }
         showStart(p);
         return null;
     }
 
-    /** "Trick or treat!", the chime, then a high, quiet giggle (not a cackle), and the bar for 3 s. */
+    /**
+     * The shower's title ("Trick or treat!", "Harvest time!"), the chime, then its second sound (a high, quiet
+     * giggle; a bell), and the bar for 3 s.
+     */
     private void showStart(Player p) {
         try {
-            p.showTitle(Title.title(Text.of("&6Trick or treat!"), Text.of("&eCandy apples are falling!"),
+            p.showTitle(Title.title(Text.of(profile.text().title()), Text.of(profile.text().subtitle()),
                     Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(2), Duration.ofMillis(500))));
             p.playSound(p.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.0f);
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 if (p.isOnline()) {
-                    p.playSound(p.getLocation(), Sound.ENTITY_WITCH_CELEBRATE, 0.5f, 1.6f);
+                    profile.fx().playSecond(p);
                 }
             }, GIGGLE_DELAY_TICKS);
         } catch (RuntimeException ignored) {
@@ -435,9 +455,18 @@ public final class CandyService implements Listener {
         return null;
     }
 
-    /** Candy can be out where the player is now: an economy world, not a Games world, home from every game. */
+    /**
+     * Candy can be out where the player is now: an economy world, not a Games world, home from every game (and the
+     * Overworld, for a shower that falls there only).
+     */
     private boolean candyHere(Player p) {
-        return plugin.sandbox().allowed(p.getWorld()) && !gamesWorld(p.getWorld()) && homeFromGames(p);
+        return plugin.sandbox().allowed(p.getWorld()) && !gamesWorld(p.getWorld()) && homeFromGames(p)
+                && (!profile.overworldOnly() || overworld(p.getWorld()));
+    }
+
+    /** An Overworld: not the Nether, not the End. */
+    private static boolean overworld(World w) {
+        return w != null && w.getEnvironment() == World.Environment.NORMAL;
     }
 
     /**
@@ -576,7 +605,8 @@ public final class CandyService implements Listener {
         String tag = CandyRules.dropTag(owner, pd.slot());
         Vector velocity = new Vector(0, spot.pop() ? CandyRules.POP_SPEED : CandyRules.FALL_SPEED, 0);
         World w = spot.at().getWorld();
-        Item item = w.dropItem(spot.at(), CandyItems.candy(c.year(), pd.golden()), e -> {
+        org.bukkit.NamespacedKey dropKey = profile.dropKey().get();
+        Item item = w.dropItem(spot.at(), profile.items().item(c.year(), pd.golden(), pd.index()), e -> {
             e.setOwner(owner);
             e.setCanMobPickup(false);
             e.setPickupDelay(10);
@@ -584,7 +614,7 @@ public final class CandyService implements Listener {
             e.setInvulnerable(true);
             e.setVisibleByDefault(false);
             e.setVelocity(velocity);
-            e.getPersistentDataContainer().set(Keys.CANDY_DROP, PersistentDataType.STRING, tag);
+            e.getPersistentDataContainer().set(dropKey, PersistentDataType.STRING, tag);
             if (pd.golden()) {
                 e.customName(Text.of("&6Golden!"));
                 e.setCustomNameVisible(true);
@@ -610,7 +640,7 @@ public final class CandyService implements Listener {
                 p.playSound(at, Sound.ENTITY_CHICKEN_EGG, 0.8f, 1.2f);
             }
             if (pd.golden()) {
-                p.spawnParticle(Particle.SMALL_FLAME, at, 2, 0.1, 0.1, 0.1, 0);
+                profile.fx().goldenAppears(p, at);
                 p.playSound(at, Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.6f, 1.2f);
             }
         } catch (RuntimeException ignored) {
@@ -619,7 +649,7 @@ public final class CandyService implements Listener {
     }
 
     /**
-     * Every 5 ticks: 2 witch sparkles at each falling apple (and a little flame at a golden one), and the landing
+     * Every 5 ticks: 2 of the shower's sparkles at each falling item (and a spark at a golden one), and the landing
      * the moment it touches down: a positional "plop", so she hears where it is, and a puff of green sparkles.
      */
     private void falling() {
@@ -638,10 +668,7 @@ public final class CandyService implements Listener {
                     o.playSound(at, Sound.ENTITY_CHICKEN_EGG, 0.8f, 1.2f);
                     o.spawnParticle(Particle.HAPPY_VILLAGER, at.clone().add(0, 0.3, 0), 6, 0.25, 0.2, 0.25, 0);
                 } else {
-                    o.spawnParticle(Particle.WITCH, at, 2, 0.1, 0.1, 0.1, 0);
-                    if (d.golden) {
-                        o.spawnParticle(Particle.SMALL_FLAME, at, 1, 0.05, 0.05, 0.05, 0);
-                    }
+                    profile.fx().falling(o, at, d.golden);
                 }
             } catch (RuntimeException ignored) {
                 // cosmetic
@@ -691,7 +718,7 @@ public final class CandyService implements Listener {
             if (o != null) {
                 // "Eaten right away": the count, the pop, a golden's moment and tokens, and the treat on the spot.
                 count(o, 1, d.golden);
-                treat(o, d.golden, true);
+                profile.treat().eat(o, d.golden, true, random);
             }
         }
     }
@@ -733,7 +760,7 @@ public final class CandyService implements Listener {
             if (p == null || !p.isOnline() || !bagHome(p)) {
                 continue;
             }
-            if (p.getInventory().firstEmpty() != -1) {
+            if (profile.reward().hasRoom(p)) {
                 tryBag(p);
             } else {
                 tellAdmins(p); // once a shower
@@ -795,16 +822,17 @@ public final class CandyService implements Listener {
         UUID id = p.getUniqueId();
         long after;
         try {
-            after = counters.addCounter(id, CandyRules.counterKey(c.year()), got);
+            after = counters.addCounter(id, profile.counterKey(c.year()), got);
         } catch (SQLException e) {
-            plugin.getLogger().warning("Could not count " + p.getName() + "'s candy apple: " + e.getMessage());
+            plugin.getLogger().warning("Could not count " + p.getName() + "'s " + profile.text().one() + ": "
+                    + e.getMessage());
             return;
         }
         long before = after - got;
         found.put(id, after);
         try {
             p.playSound(p.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.0f);
-            p.sendActionBar(Text.of(CandyRules.actionBar(after, c.goal())));
+            p.sendActionBar(Text.of(profile.text().actionBar(after, c.goal())));
             if (CandyRules.milestone(before, after, c.goal())) {
                 p.playSound(p.getLocation(), Sound.ENTITY_ALLAY_ITEM_GIVEN, 0.8f, 1.0f);
             }
@@ -837,11 +865,11 @@ public final class CandyService implements Listener {
     private void goldenPickup(Player p, CandyConfig.Candy c) {
         UUID id = p.getUniqueId();
         if (!goldenSeen(p) && plugin.achievements() != null) {
-            plugin.achievements().firstTime(p, CandyRules.goldenSeenKey(c.year()));
+            plugin.achievements().firstTime(p, profile.goldenSeenKey(c.year()));
             goldenSeen.put(id, true);
         }
         try {
-            p.showTitle(Title.title(Text.of("&6GOLDEN!"), Text.of("&eA Golden Candy Apple!"),
+            p.showTitle(Title.title(Text.of("&6GOLDEN!"), Text.of(profile.text().goldenLine()),
                     Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(2), Duration.ofMillis(500))));
             p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.4f);
             Fireworks.burstInView(p);
@@ -854,10 +882,10 @@ public final class CandyService implements Listener {
             return;
         }
         long since = plugin.clock().startOfDay(plugin.clock().dayKey());
-        long paid = CandyRules.paidToday(plugin.tokens().totals(since, id));
+        long paid = CandyRules.paidToday(plugin.tokens().totals(since, id), profile.source());
         int pay = CandyRules.tokensToPay(paid, c.goldenTokens(), c.dailyTokenCap(), open, pays);
         if (pay > 0) {
-            plugin.tokens().award(p, pay, TokenService.Source.EVENT_CANDY, "Golden Candy Apple");
+            plugin.tokens().award(p, pay, profile.source(), profile.text().goldenReason());
         }
     }
 
@@ -884,14 +912,15 @@ public final class CandyService implements Listener {
         long marked;
         long count;
         try {
-            marked = counters.counter(id, CandyRules.bagKey(c.year()));
-            count = counters.counter(id, CandyRules.counterKey(c.year()));
+            marked = counters.counter(id, profile.rewardKey(c.year()));
+            count = counters.counter(id, profile.counterKey(c.year()));
         } catch (SQLException e) {
-            plugin.getLogger().warning("Could not read " + p.getName() + "'s candy apples: " + e.getMessage());
+            plugin.getLogger().warning("Could not read " + p.getName() + "'s " + profile.text().many() + ": "
+                    + e.getMessage());
             return BagResult.FAILED;
         }
         found.put(id, count);
-        boolean room = p.getInventory().firstEmpty() != -1;
+        boolean room = profile.reward().hasRoom(p);
         BagStep step = CandyRules.bagStep(marked > 0, count, c.goal(), bagHome(p), room);
         switch (step) {
             case HAS_IT, NOT_YET -> {
@@ -902,13 +931,13 @@ public final class CandyService implements Listener {
             }
             case WAIT_ROOM -> {
                 if (toldMakeRoom.add(id)) {
-                    p.sendMessage(Text.of("&6Make room in your bag for your Trick-or-Treat Bag!"));
+                    p.sendMessage(Text.of("&6Make room in your bag for your " + profile.reward().title() + "!"));
                 }
                 tellAdmins(p);
                 return BagResult.FULL;
             }
             default -> {
-                return handOverBag(p, c, () -> counters.addCounter(id, CandyRules.bagKey(c.year()), 1) == 1);
+                return handOverBag(p, c, () -> counters.addCounter(id, profile.rewardKey(c.year()), 1) == 1);
             }
         }
     }
@@ -921,58 +950,46 @@ public final class CandyService implements Listener {
         if (!bagHome(target)) {
             return target.getName() + " is in a game or another world. Try again when they're back.";
         }
-        if (target.getInventory().firstEmpty() == -1) {
+        if (!profile.reward().hasRoom(target)) {
             return target.getName() + "'s bag is full.";
         }
         CandyConfig.Candy c = settings();
         UUID id = target.getUniqueId();
         BagResult r = handOverBag(target, c, () -> {
-            counters.addCounter(id, CandyRules.bagKey(c.year()), 1);
+            counters.addCounter(id, profile.rewardKey(c.year()), 1);
             return true;
         });
         forgetOwed(id);
         return switch (r) {
             case GIVEN -> null;
             case FAILED -> "That couldn't be saved. Try again.";
-            default -> "That bag couldn't be given.";
+            default -> "That " + profile.reward().word() + " couldn't be given.";
         };
     }
 
     /**
-     * The mark, then the bag, then the moment: the toast, the title and a burst in view. The caller settles the
-     * owed set ({@link #tryBag}, {@link #giveBag}).
+     * The mark, then the reward ({@link ShowerReward#give}), then its moment. The caller settles the owed set
+     * ({@link #tryBag}, {@link #giveBag}).
      */
     private BagResult handOverBag(Player p, CandyConfig.Candy c, CandyRules.Mark mark) {
-        HandOver done = CandyRules.handOver(mark, () -> {
-            Map<Integer, ItemStack> left = p.getInventory().addItem(CandyItems.bag(c.year(), c.goal()));
-            return left.isEmpty();
-        });
+        ShowerReward reward = profile.reward();
+        HandOver done = CandyRules.handOver(mark, () -> reward.give(plugin, p, c.year(), c.goal()));
         switch (done) {
             case ALREADY -> {
                 return BagResult.HAS_IT;
             }
             case NOT_SAVED -> {
-                plugin.getLogger().warning("Could not save " + p.getName() + "'s Trick-or-Treat Bag mark - no bag"
-                        + " given; it is tried again on their next join or /hcm candy.");
+                plugin.getLogger().warning("Could not save " + p.getName() + "'s " + reward.title() + " mark - no "
+                        + reward.word() + " given; it is tried again on their next join or /hcm " + profile.id() + ".");
                 return BagResult.FAILED;
             }
             case LOST -> {
-                plugin.getLogger().severe(p.getName() + "'s Trick-or-Treat Bag " + c.year() + " was marked but"
-                        + " didn't fit - give it with /hcm candy bag " + p.getName() + ".");
+                plugin.getLogger().severe(p.getName() + "'s " + reward.title() + " " + c.year() + " was marked but"
+                        + " didn't fit - give it with " + reward.restoreHint(profile.id()) + " " + p.getName() + ".");
                 return BagResult.FAILED;
             }
             default -> {
-                try {
-                    p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
-                    p.showTitle(Title.title(Text.of("&6Trick-or-Treat Bag!"),
-                            Text.of("&eYou found " + c.goal() + " candy apples!"),
-                            Title.Times.times(Duration.ofMillis(250), Duration.ofMillis(2500), Duration.ofMillis(500))));
-                    Fireworks.burstInView(p);
-                } catch (RuntimeException ignored) {
-                    // cosmetic
-                }
-                p.sendMessage(Text.of("&6✦ &eThe " + CandyItems.bagName(c.year()) + " &eis yours! &7It's in your"
-                        + " bag. Put your candy apples in it!"));
+                reward.moment(p, c.year(), c.goal());
                 return BagResult.GIVEN;
             }
         }
@@ -993,8 +1010,8 @@ public final class CandyService implements Listener {
         adminsTold.put(p.getUniqueId(), showers);
         for (Player admin : plugin.getServer().getOnlinePlayers()) {
             if (admin.hasPermission("hcm.admin")) {
-                admin.sendMessage(Text.of("&6" + p.getName() + "'s bag is full, so their Trick-or-Treat Bag is"
-                        + " waiting."));
+                admin.sendMessage(Text.of("&6" + p.getName() + "'s bag is full, so their " + profile.reward().title()
+                        + " is waiting."));
             }
         }
     }
@@ -1010,62 +1027,15 @@ public final class CandyService implements Listener {
 
     // ---- the treat (D13) -------------------------------------------------------------------
 
-    /** Eating any candy, on either edition. Eating inside a game is already cancelled (KitGuard, LOWEST). */
+    /**
+     * Eating any of this shower's items (only its own key: candy never gets the basket's treat), on either
+     * edition. Eating inside a game is already cancelled (KitGuard, LOWEST).
+     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEat(PlayerItemConsumeEvent event) {
         ItemStack item = event.getItem();
-        if (CandyItems.isCandy(item)) {
-            treat(event.getPlayer(), CandyItems.isGolden(item), false);
-        }
-    }
-
-    /**
-     * The treat: Speed I or Jump Boost I for 20 s for a red apple; Speed II for 30 s on top of vanilla's golden
-     * apple for a golden one. Particles at {@code eye + 1.2 x look} for the eater (at their own head they clip a
-     * first-person screen), and at their head for anyone within 32 blocks. Never levitation, blindness, nausea,
-     * darkness, slowness or Glowing.
-     *
-     * @param touched eaten right away by a full bag's touch: a golden one then also gets vanilla's own effects,
-     *                and no second title or burst (its pickup had them)
-     */
-    private void treat(Player p, boolean golden, boolean touched) {
-        try {
-            Location eye = p.getEyeLocation();
-            Location inView = eye.clone().add(eye.getDirection().multiply(1.2));
-            Location head = eye.clone().add(0, 0.5, 0);
-            if (!golden) {
-                boolean speedy = random.nextBoolean();
-                p.addPotionEffect(new PotionEffect(speedy ? PotionEffectType.SPEED : PotionEffectType.JUMP_BOOST,
-                        TREAT_TICKS, 0, false, true, true));
-                particles(p, Particle.HEART, 6, inView, head, 0);
-                p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_BURP, 0.7f, 1.2f);
-                p.sendMessage(Text.of("&dYum! &7You feel " + (speedy ? "speedy" : "bouncy") + "!"));
-                return;
-            }
-            if (touched) {
-                p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 5 * 20, 1, false, true, true));
-                p.addPotionEffect(new PotionEffect(PotionEffectType.ABSORPTION, 120 * 20, 0, false, true, true));
-            }
-            p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, GOLDEN_SPEED_TICKS, 1, false, true, true));
-            particles(p, Particle.TOTEM_OF_UNDYING, 20, inView, head, 0.1);
-            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.2f);
-            if (!touched) {
-                Fireworks.burstInView(p);
-                p.showTitle(Title.title(Text.of("&6GOLDEN!"), Text.of("&eYou feel super speedy!"),
-                        Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(2), Duration.ofMillis(500))));
-            }
-            p.sendMessage(Text.of("&6Yum! &7You feel super speedy!"));
-        } catch (RuntimeException ignored) {
-            // cosmetic: the count never depends on the treat
-        }
-    }
-
-    private static void particles(Player p, Particle particle, int count, Location inView, Location head, double speed) {
-        p.spawnParticle(particle, inView, count, 0.3, 0.3, 0.3, speed);
-        for (Player other : p.getWorld().getPlayers()) {
-            if (!other.equals(p) && other.getLocation().distanceSquared(head) <= VIEW_RANGE * VIEW_RANGE) {
-                other.spawnParticle(particle, head, count, 0.3, 0.3, 0.3, speed);
-            }
+        if (profile.items().isItem(item)) {
+            profile.treat().eat(event.getPlayer(), profile.items().isGolden(item), false, random);
         }
     }
 
@@ -1089,13 +1059,13 @@ public final class CandyService implements Listener {
         }
         Player p = event.getPlayer();
         ItemStack held = p.getInventory().getItemInMainHand();
-        Material type = held.getType();
-        if (type != Material.APPLE && !type.name().endsWith("BUNDLE")) {
+        ShowerItems items = profile.items();
+        if (!items.tapMaterials().contains(held.getType())) {
             return; // every right-click on the server comes here: the item's type first
         }
-        boolean bag = CandyItems.isBag(held);
-        boolean red = !bag && CandyItems.isCandy(held) && !CandyItems.isGolden(held);
-        if (!bag && !red) {
+        boolean bag = items.isToy(held);
+        boolean edible = !bag && items.edibleOnTap(held);
+        if (!bag && !edible) {
             return;
         }
         boolean tap = air;
@@ -1119,21 +1089,22 @@ public final class CandyService implements Listener {
             return;
         }
         TapStep step = CandyRules.tapStep(
-                CandyRules.eatsOnTap(Bedrock.is(p), p.getFoodLevel(), tap, true, true, homeFromGames(p)),
+                CandyRules.eatsOnTap(Bedrock.is(p), p.getFoodLevel(), tap, true, edible, homeFromGames(p)),
                 eatAt.get(p.getUniqueId()), now, EAT_COOLDOWN_MS);
         if (step == TapStep.PASS) {
             return;
         }
         // Inside the cooldown too: a held tap repeats the use, and left alone the server would start its own eat of
-        // the red apple (it can always be eaten), taking a second apple on top of this one.
+        // the item (it can always be eaten), taking a second one on top of this one.
         cancel(event);
         if (step == TapStep.CANCEL) {
             return;
         }
         ItemStack inHand = p.getInventory().getItem(EquipmentSlot.HAND);
-        if (inHand == null || inHand.getAmount() <= 0 || !CandyItems.isCandy(inHand) || CandyItems.isGolden(inHand)) {
+        if (inHand == null || inHand.getAmount() <= 0 || !items.edibleOnTap(inHand)) {
             return;
         }
+        boolean golden = items.isGolden(inHand);
         eatAt.put(p.getUniqueId(), now);
         inHand.setAmount(inHand.getAmount() - 1);
         try {
@@ -1141,20 +1112,20 @@ public final class CandyService implements Listener {
         } catch (RuntimeException ignored) {
             // cosmetic
         }
-        treat(p, false, false);
+        profile.treat().eat(p, golden, false, random);
     }
 
-    /** The bag's trick or treat: the chime, the giggle, and witch sparkles in view. */
+    /** The bag's trick or treat: the chime, the giggle, and witch sparkles in view (the shower's own). */
     private void toy(Player p) {
         try {
             p.playSound(p.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.0f);
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 if (p.isOnline()) {
-                    p.playSound(p.getLocation(), Sound.ENTITY_WITCH_CELEBRATE, 0.5f, 1.6f);
+                    profile.fx().playSecond(p);
                 }
             }, GIGGLE_DELAY_TICKS);
             Location eye = p.getEyeLocation();
-            p.spawnParticle(Particle.WITCH, eye.clone().add(eye.getDirection().multiply(1.2)), 8, 0.3, 0.3, 0.3, 0);
+            profile.fx().toy(p, eye.clone().add(eye.getDirection().multiply(1.2)));
         } catch (RuntimeException ignored) {
             // cosmetic
         }
@@ -1214,24 +1185,29 @@ public final class CandyService implements Listener {
         }
     }
 
-    /** Shower candy: an item entity carrying {@link Keys#CANDY_DROP}. Cheap: merges and hoppers ask every tick. */
-    private static boolean tagged(Entity e) {
-        if (!(e instanceof Item) || Keys.CANDY_DROP == null) {
+    /**
+     * This shower's item on the ground: an item entity carrying its drop key ({@link Keys#CANDY_DROP},
+     * {@link Keys#HARVEST_DROP}). Cheap: merges and hoppers ask every tick.
+     */
+    private boolean tagged(Entity e) {
+        org.bukkit.NamespacedKey key = profile.dropKey().get();
+        if (!(e instanceof Item) || key == null) {
             return false;
         }
         try {
-            return e.getPersistentDataContainer().has(Keys.CANDY_DROP, PersistentDataType.STRING);
+            return e.getPersistentDataContainer().has(key, PersistentDataType.STRING);
         } catch (RuntimeException ex) {
             return false;
         }
     }
 
-    private static String dropTag(Entity e) {
-        if (!(e instanceof Item) || Keys.CANDY_DROP == null) {
+    private String dropTag(Entity e) {
+        org.bukkit.NamespacedKey key = profile.dropKey().get();
+        if (!(e instanceof Item) || key == null) {
             return null;
         }
         try {
-            return e.getPersistentDataContainer().get(Keys.CANDY_DROP, PersistentDataType.STRING);
+            return e.getPersistentDataContainer().get(key, PersistentDataType.STRING);
         } catch (RuntimeException ex) {
             return null;
         }
@@ -1241,8 +1217,8 @@ public final class CandyService implements Listener {
 
     /**
      * The live candy for an admin when {@code admins_see_all} is on; the bag 40 ticks later (after a game's
-     * crash restore), with a line about the shower; and, on the first join of a local day while it is on, a
-     * welcome shower 30 s later (SHOULD).
+     * crash restore); and, on the first join of a local day while it is on, a line about the shower with it and
+     * a welcome shower 30 s later (SHOULD). Later joins that day get no line: one a day is enough to hear.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
@@ -1256,31 +1232,34 @@ public final class CandyService implements Listener {
                 }
             }
         }
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> afterJoin(id), JOIN_BAG_DELAY_TICKS);
         LocalDate today = plugin.clock().today();
+        boolean firstToday = false;
         if (task != null && open(c, today)) {
             Long day = welcomedDay.get(id);
             if (day == null || day != today.toEpochDay()) {
                 welcomedDay.put(id, today.toEpochDay());
                 welcomeDue.put(id, plugin.clock().nowMillis() + WELCOME_DELAY_MS);
+                firstToday = true;
             }
         }
+        boolean line = firstToday;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> afterJoin(id, line), JOIN_BAG_DELAY_TICKS);
     }
 
-    private void afterJoin(UUID id) {
+    /** The bag, then the day's line ({@code line}: this join was the first of the local day). */
+    private void afterJoin(UUID id, boolean line) {
         Player p = Bukkit.getPlayer(id);
         if (p == null || !p.isOnline()) {
             return;
         }
         BagResult bag = tryBag(p); // an owed bag can still be claimed after the window
         CandyConfig.Candy c = settings();
-        if (bag == BagResult.GIVEN || bag == BagResult.FAILED || !open(c, plugin.clock().today())) {
+        if (!line || bag == BagResult.GIVEN || bag == BagResult.FAILED || !open(c, plugin.clock().today())) {
             return;
         }
         long n = found(id);
         int every = CandyRules.everyOn(c.everyMinutes(), c.lastDayEveryMinutes(), c.lastDay(plugin.clock().today()));
-        p.sendMessage(Text.of("&6✦ Candy apples fall every " + every + " minutes until " + DAY_MONTH.format(c.to())
-                + "! &7You've found &f" + n + (n < c.goal() ? " &7of " + c.goal() : "") + "&7."));
+        p.sendMessage(Text.of(profile.text().joinLine(every, DAY_MONTH.format(c.to()), n, c.goal())));
     }
 
     /** That player's candy, queued apples and bar go; their caches too. */
@@ -1314,7 +1293,7 @@ public final class CandyService implements Listener {
         CandyConfig.Candy c = settings();
         UUID id = p.getUniqueId();
         try {
-            String line = CandyRules.barLine(n, c.goal(), owed.contains(id));
+            String line = profile.text().barLine(n, c.goal(), owed.contains(id), profile.reward().word());
             float progress = CandyRules.progress(n, c.goal());
             BossBar bar = bars.get(id);
             if (bar == null) {
@@ -1353,9 +1332,9 @@ public final class CandyService implements Listener {
 
     // ---- for /hcm candy (the commands) -----------------------------------------------------
 
-    /** The settings now ({@code arcade.events.candy}). */
+    /** The settings now ({@code arcade.events.candy}, {@code arcade.events.harvest}). */
     public CandyConfig.Candy settings() {
-        return plugin.config().candy();
+        return profile.settings().apply(plugin.config());
     }
 
     /** Whether the shower is on today: enabled, the Arcade on, and today inside the window (D18). */
@@ -1375,17 +1354,18 @@ public final class CandyService implements Listener {
     public String nowRefusal() {
         CandyConfig.Candy c = settings();
         LocalDate today = plugin.clock().today();
+        String the = profile.text().sentence();
         if (!c.enabled() || !plugin.config().arcade().enabled()) {
-            return "The Candy Apple shower is off (arcade.events.candy.enabled).";
+            return the + " is off (" + profile.configPath() + ".enabled).";
         }
         if (today.isAfter(c.to())) {
-            return "The Candy Apple shower is over for this year.";
+            return the + " is over for this year.";
         }
         if (today.isBefore(c.from())) {
-            return "The Candy Apple shower starts on " + DAY_MONTH.format(c.from()) + ".";
+            return the + " starts on " + DAY_MONTH.format(c.from()) + ".";
         }
         if (task == null) {
-            return "The Candy Apple shower isn't running. Try /hcm reload.";
+            return the + " isn't running. Try /hcm reload.";
         }
         return null;
     }
@@ -1450,7 +1430,7 @@ public final class CandyService implements Listener {
             return n;
         }
         try {
-            long read = counters.counter(player, CandyRules.counterKey(settings().year()));
+            long read = counters.counter(player, profile.counterKey(settings().year()));
             if (Bukkit.getPlayer(player) != null) {
                 found.put(player, read);
             }
@@ -1463,7 +1443,7 @@ public final class CandyService implements Listener {
     /** Whether the player has had this year's bag (false when it can't be read). */
     public boolean hasBag(UUID player) {
         try {
-            return counters.counter(player, CandyRules.bagKey(settings().year())) > 0;
+            return counters.counter(player, profile.rewardKey(settings().year())) > 0;
         } catch (SQLException e) {
             return false;
         }
@@ -1494,9 +1474,10 @@ public final class CandyService implements Listener {
         UUID id = target.getUniqueId();
         long after;
         try {
-            after = counters.addCounter(id, CandyRules.counterKey(c.year()), n);
+            after = counters.addCounter(id, profile.counterKey(c.year()), n);
         } catch (SQLException e) {
-            plugin.getLogger().warning("Could not add candy apples for " + target.getName() + ": " + e.getMessage());
+            plugin.getLogger().warning("Could not add " + profile.text().many() + " for " + target.getName() + ": "
+                    + e.getMessage());
             return null;
         }
         found.put(id, after);
@@ -1529,7 +1510,7 @@ public final class CandyService implements Listener {
         }
         boolean read;
         try {
-            read = counters.counter(p.getUniqueId(), CandyRules.goldenSeenKey(settings().year())) > 0;
+            read = counters.counter(p.getUniqueId(), profile.goldenSeenKey(settings().year())) > 0;
         } catch (SQLException e) {
             return true; // can't tell: no extra golden, and nothing cached
         }
@@ -1583,8 +1564,9 @@ public final class CandyService implements Listener {
             }
         }
         if (removed > 0) {
-            plugin.getLogger().info("Candy Apple shower: removed " + removed + " leftover cand"
-                    + (removed == 1 ? "y" : "ies") + ".");
+            ShowerText t = profile.text();
+            plugin.getLogger().info(t.name() + ": removed " + removed + " leftover "
+                    + (removed == 1 ? t.leftoverOne() : t.leftoverMany()) + ".");
         }
     }
 }

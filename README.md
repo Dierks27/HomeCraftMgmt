@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.5-sky-loop-and-long-drop`
+- **Version:** `0.38.6-thanksgiving`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -57,6 +57,9 @@ and the How It Works **Guide**.
     nothing is left.
   - Packs sell for dollars or tokens.
   - The shop shows each pack's odds, what's inside, and which Minis you're still missing.
+- **The Holiday Collection (0.38.6):** Minis earned only at their holiday, like the Turkey Mini 2026
+  from the Family Feast. Never in a pack, a crate or the wild, and closed for good after their days.
+  See [The Holiday Collection](#the-holiday-collection-and-the-turkey-mini-2026).
 - **Where Minis live:** the **Museum** shows every Mini there is. Display Cases, Vending
   Machines, the Auction House and a Card Binder hold them.
 - **The wild hunt:** now and then a Mini appears in the wild near a player. Never near a
@@ -97,7 +100,9 @@ Tokens are **earned by playing and never become dollars**.
   `/hat` via LuckPerms and EssentialsX), the numbered Arcade Trophy (place it and tap it to open the
   Arcade), a trophy ladder and a Trophy of the Month;
   holiday collectors you keep for good and can give to someone online (Halloween: the Pumpkin Cap
-  2026 and the Autumn Leaves 2026 trail; Christmas: the Santa Cap 2026 and the Twinkle 2026 trail);
+  2026 and the Autumn Leaves 2026 trail; Christmas: the Santa Cap 2026 and the Twinkle 2026 trail;
+  Thanksgiving: the Turkey Hat 2026, and the Pilgrim Hat 2026 earned from the
+  [Harvest Basket](#the-harvest-basket));
   and the **Keepers** (0.38): the Legend Crown, three keeper trails and two keeper hats, yours for
   good. See [The token shop](#the-token-shop-my-looks-and-the-keepers-038).
 - **Worn looks run out, nothing else does (0.38):** hats and caps last 90 days and trails 30, with a
@@ -239,6 +244,12 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.5 from 0.38.6:** the jar alone (0.38.5 reads revision 26 and runs nothing, with one WARN;
+0.38.6 changes no schema). The Harvest Basket, the turkey and the Feast stop, and the Thanksgiving
+rows in the lists keep working. **The Turkey Mini 2026 is an ordinary EPIC Mini in 0.38.5** (in Card
+Packs, the crate's card reward and the Rare Card), so keep a rollback short. See
+[If you roll back to 0.38.5](#if-you-roll-back-to-0385). Nothing is lost.
 
 **Back to 0.38.4 from 0.38.5:** **first set `games.fresh.slots.fresh_dropper.mix` back to `EEMMH`** in
 config.yml: 0.38.4 refuses a mix with an X ("a dropper mix is 1-5 of E, M and H") and would switch the
@@ -1752,10 +1763,11 @@ after 31 October with nothing to edit.
   2. a spectator;
   3. not in an economy world;
   4. in the Games world;
-  5. in a game, a race, a golf round, Falling Floors or the Clubhouse, or on the way back ("in a game");
-  6. idle 5 minutes or more ("idle N min");
-  7. gliding, or flying more than 2 blocks up; in lava; in water; in a boat or minecart;
-  8. 12 of their candies already out (120 on the server).
+  5. not in the Overworld: the Nether or the End, even an economy one ("not the Overworld"; 0.38.6);
+  6. in a game, a race, a golf round, Falling Floors or the Clubhouse, or on the way back ("in a game");
+  7. idle 5 minutes or more ("idle N min");
+  8. gliding, or flying more than 2 blocks up; in lava; in water; in a boat or minecart;
+  9. 12 of their candies already out (120 on the server).
 
   **Creative players get the shower,** the count and the bag, but never tokens.
 - **Only yours.** Each candy is hidden from everyone else, on Java and on Bedrock, and only its
@@ -1801,7 +1813,7 @@ after 31 October with nothing to edit.
   can be claimed after that, on a join or with `/hcm candy`. Next year, set `from` and `to` to the
   new dates: the year in the count, the names and the bag comes from `from`, so 2027 starts from 0
   with a "2027" bag.
-- On join, while the shower runs, each player reads "✦ Candy apples fall every 60 minutes until
+- On their first join of a local day (every join before 0.38.6), while the shower runs, each player reads "✦ Candy apples fall every 60 minutes until
   31 Oct! You've found 17 of 31."
 
 #### Owner knobs (`arcade.events.candy`)
@@ -1842,6 +1854,264 @@ naming the new default ([Upgrading to 0.38.1](#upgrading-to-0381-revision-23)).
 
 Inside a world game `/hcm candy` is refused, like every `/hcm` command except play, leave, games
 and help.
+
+---
+
+## Thanksgiving 2026 (0.38.6)
+
+0.38.6 brings six Thanksgiving things in one update, all built so the youngest player needs no reading:
+every cue is a tap, a sound, a title, a firework or a bar that fills, and every reward is per player, never
+first-only. The nephews get the same prizes she does, never more.
+
+| What | When (local dates, `clock.time_zone`) | Where |
+|---|---|---|
+| [The Harvest Basket](#the-harvest-basket) | From the update to 29 Nov 2026 | Treats fall around each player |
+| [Catch the Turkey](#catch-the-turkey) | 22 to 29 Nov 2026 | A big turkey of your own in front of you |
+| [The Family Feast](#the-family-feast) | 22 to 29 Nov 2026 | The Feast Pot at home; the tables in the Clubhouse |
+| [Feast Week at Crate](#feast-week-at-crate) | 22 to 30 Nov, every year | Crate's food prices |
+| [The show colours](#thanksgiving-show-colours) | 22 to 30 Nov, every year | The long firework shows |
+| [The Turkey Hat and the Pilgrim Hat](#the-turkey-hat-and-the-pilgrim-hat) | November 2026 | The Looks tab; the basket |
+| [The Turkey Mini 2026](#the-holiday-collection-and-the-turkey-mini-2026) | 22 to 29 Nov 2026 | The Feast and the turkey |
+
+**Overworld only.** The basket and the turkey come only to a player in the Overworld of an economy world,
+never the Nether or the End (the Nether worlds are economy worlds now, and treats through a Nether roof or a
+turkey by lava are no place for a child). Since 0.38.6 the Candy Apple shower is Overworld only too. None of
+them ever comes in the Games world, a game, a race or the Clubhouse, or to anyone idle 5 minutes or more.
+
+**Your own rows win.** The update adds the Thanksgiving show window, Feast Week, Crate's foods and the
+Holiday Collection to your config.yml (revision 26). A row whose id you already have is kept exactly as you
+wrote it, with one INFO line if it differs from ours; nothing of yours is ever replaced or warned about.
+
+### The Harvest Basket
+
+The Candy Apple shower's twin for November. About once an hour (at :40; every half hour on 29 Nov) each
+player hears a chime and a bell and sees "Harvest time!" / "Treats are falling!". Three treats fall in front
+of them with orange dust: **Cornbread 2026**, **Pumpkin Pie 2026** and **Baked Potato 2026**. Only you see
+and pick up your own. A bar, `Harvest Basket 17 / 26`, fills as you collect.
+
+- **A welcome shower** 30 seconds after your first join of a day, and the "treats fall every ..." chat line
+  on that first join only (candy now does the same).
+- **The Golden Pie.** Every shower's third treat is a Golden Pie, with gold dust and a glint, until you
+  have picked up your first. Then 4 in 100 are. Picking one up plays "GOLDEN!" with a firework and pays
+  **3 tokens, at most 6 a player a local day** (ledger source `EVENT_HARVEST`, "Harvest Basket"). Nothing is
+  paid in Creative, but the moment still plays.
+- **The Pilgrim Hat 2026** at 26 treats: a black cap with a gold band, kept for good, shown in My Looks,
+  with a firework and "Pilgrim Hat! / Yours to keep!". The mark is written before the hat is handed over.
+  With no room in the bag, or while in a game, it waits and is tried again every second. A lost one comes
+  back with `/hcm harvest hat <player>` or `/hcm give prize cap_pilgrim_2026 <player>`.
+- **Eating one** gives a short warm boost; a Golden Pie gives Speed and Absorption. **On Bedrock a full
+  player eats any treat by holding it and tapping**, the Golden Pie included. A tap on the Feast Pot never
+  eats a treat: it puts the treat in the pot.
+- **Nothing can be placed, planted or sold.** The treats are tagged prizes made from bread, pumpkin pie
+  and baked potato (no pumpkin, carrot, potato or wheat), so crafting, furnaces, villagers and Crate refuse
+  them. A treat on the ground despawns like candy; one carried is kept on death.
+- Counts are per player per year (`harvest:2026`, `harvest:2026:golden_seen`, `harvest:2026:hat`). An
+  account move keeps the larger count and the hat mark. Live treats are never saved.
+- **Off by itself** after 29 Nov ("The Harvest Basket is over for 2026."). Each shower keeps its own caps
+  if you ever make the candy and basket windows overlap.
+- **If her Golden Pie shows no glint on Bedrock,** change `HarvestItems.GOLDEN_MATERIAL` to
+  `GOLDEN_CARROT` in a later build; the tap rule follows it.
+
+### Catch the Turkey
+
+**Six times a day** (00:50, 04:50, 08:50, 12:50, 16:50 and 20:50, three minutes each) and once 90 seconds
+after each player's first join of the day, **every player gets their own big turkey** 4 to 6 blocks in
+front of them, in sight, on dry ground with no lava or fire beside it. It gobbles, the title says
+"Gobble gobble! / Catch the turkey!", and sparkles hover over it.
+
+- **A tap catches it,** Java or Bedrock, as a hit or a use, empty hand or any item. Everyone who catches a
+  turkey in a run gets the same prize, once that run: a firework, "You caught the turkey!", a level-up
+  chime, a **Turkey Feather 2026** (into a free slot; skipped quietly with none) and **3 tokens** (Survival
+  and Adventure only, at most 6 a day; ledger source `EVENT_TURKEY`). If her uncles tap hers first she can
+  still catch it: **it never runs away and stays until the run ends**. Tapping again only clucks.
+- **A small chance of a Turkey Mini 2026:** 5 in 100 per catch (`mini_chance_percent`), at most one extra
+  per player for the season, while the Mini's window is open and under its cap. A catch with a full bag
+  doesn't roll, so the chance is kept for a later catch and no Mini is ever dropped on the ground.
+- **A welcome turkey** counts only for its owner, and is never given twice in a day, even after a restart,
+  a reload or a rejoin. Each catch is saved before the prize, so nothing pays twice.
+- **Nothing can hurt or misuse it:** no damage, leads, breeding, eggs, riding, name tags, mobs going after
+  it, portals or teleports. It is never saved; leftovers are removed at start and when a chunk loads. At the
+  end of the run it waddles home with a poof.
+- Runs inside the Games' restart hold are skipped. A welcome turkey that would start inside the hold, or
+  still be running at the restart, waits: it comes after the restart, when she is back. Before 22 Nov (or
+  with the switch off), `/hcm turkey now` is a **test run**: you get the turkey and the catch moment, but no
+  claim, feather, tokens or welcome mark.
+
+### The Family Feast
+
+The family fills a feast table together. Food goes in at the **Feast Pot**, one block an admin picks in the
+home world (food can't go in inside the Clubhouse, where only the kit is carried). The tables in the
+Clubhouse show the progress.
+
+- **At the pot:** a floating "Feast Pot" name and slow sparkles. **A tap holding food puts in one item**,
+  with a munch and a chime that rises as the table fills, and a 5-second family bar. **A sneak-tap** (Java
+  only) puts in the stack, up to 40 points a player a local day. On Bedrock every tap puts in one item, even
+  crouched: on a tablet crouch stays on by itself, and she shouldn't lose a stack of pies to it. An
+  empty-hand tap shows the bar. Points: bread, baked potato, cookie, apple, carrot, cooked fish and melon 1;
+  cooked meat, stews, beetroot soup and golden carrot 2; pumpkin pie and rabbit stew 3; cake 6. **Her
+  Harvest Basket treats are welcome** at their normal points. Candy, prizes, kit items and other named items
+  get a soft low note and stay in the hand. Creative counts.
+- **The pot can't be broken** while the Feast is open (an admin sneaking can), blown up, pushed or burnt.
+- **In the Clubhouse:** two orange-glass tables (5 x 2 each) with an aisle to the podium. Twenty plates
+  fill with food as the total grows, and a line reads `Family Feast 137 / 150` with a bar.
+- **When the table is full** (150 points): every helper is paid **20 tokens once** (ledger source
+  `EVENT_FEAST`, paid even when offline), each helper who is home gets **one Turkey Mini 2026** and their
+  own moment ("The Feast is ready! / Thank you, everyone!", a firework), everyone online reads
+  "Thankful for: Dad, Sam, Lee and Lily!" in the order of their first gifts, and a 30-second show goes up
+  over the pot. One loaf counts the same as a stack of pies. **The Turkey Mini goes straight into the bag,
+  never on the ground:** a helper with a full bag gets it the second a slot is free (inside the window). If
+  one ever fails to arrive (the log says "could not get their turkey_mini_2026"), `/hcm mini give
+  turkey_mini_2026 <player>` gives it back, inside its window.
+- **A helper who missed it** (offline, or in a game) gets the same Turkey Mini and their own moment the
+  first time they are home inside the window; in the Clubhouse the room's ceremony plays when a helper who
+  hasn't seen it walks in. Late helpers (after the fill, until 29 Nov) are paid at once. **Outside the
+  window nothing is given**, so a helper who first comes back after 29 Nov gets their 20 tokens (paid at the
+  fill) but no Turkey Mini.
+- "Nothing here moves a token" stays true of the Clubhouse: the arcade pays, never the room.
+- **Try it on a test edition first** (below): `edition: "test"` keeps its points, markers and pay apart
+  from the real one, mints no Turkey Mini, and `/hcm feast reset confirm` clears it. The reset is refused
+  for a year edition once its table has filled or anyone has been paid or given a Turkey Mini, so the real
+  Feast never gives anything twice.
+
+### Feast Week at Crate
+
+From 22 to 30 Nov every year, bread, baked potatoes, cooked chicken, carrots and pumpkins cost about 4% less
+at Crate, with the headline "Feast week! Food for the family table costs a little less." Crate now sells
+**pumpkin, carrot, potato, bread, baked potato and cooked chicken** for good (added after wheat). Pumpkin
+is priced below wheat. Bread ($0.50-$1.90) always sells for less than three wheat cost, and a baked potato
+($0.10-$0.19) for less than a potato, whatever the stock and the mood, so cooking to sell at Crate never
+pays. Buying them ready-made is the bargain. Remove the rows to stop Crate trading them.
+
+At start, a season naming an item Crate doesn't sell logs one WARN listing those items: with your new
+seasons it names blue_dye, egg, emerald, firework_rocket, green_dye, melon_slice, red_dye, sugar and
+sweet_berries. Those parts of the seasons do nothing until Crate sells the item.
+
+### Thanksgiving show colours
+
+From 22 to 30 Nov every year, every long show (Grand, Mega, Super, Ultra, Ultimate) comes in orange, brown,
+gold and red with yellow fades, mixed with large balls ("Thanksgiving Mega Firework Show!"). The 3-second
+show and Party Time don't change. The dates are MM-DD, so they cover Thanksgiving every year.
+
+### The Turkey Hat and the Pilgrim Hat
+
+| Collector | Price | On sale | What it is |
+|---|---|---|---|
+| **Turkey Hat 2026** (`cap_turkey_2026`) | 250 tokens | 1 to 30 Nov 2026 | A brown leather cap with a red stripe, on the Looks tab, "Thanksgiving 2026 collector". Can be given as a present; on Bedrock the brown is the whole look |
+| **Pilgrim Hat 2026** (`cap_pilgrim_2026`) | earned only | never | A black cap with a gold band, from 26 Harvest Basket treats. Never on sale, never a crate prize, never a present |
+
+Both are collectors (one each, kept for good). An earned collector gets no tile and can't be bought.
+`/hcm give prize cap_pilgrim_2026 <player>` gives a lost one back. Ids starting `harvest_` or
+`turkey_feather_` are reserved, like `candy_`.
+
+### The Holiday Collection and the Turkey Mini 2026
+
+A new Mini series, **Holiday Collection** (EPIC), for Minis you can only earn at their holiday. Its first
+Mini is the **Turkey Mini 2026** (cap 20).
+
+- A Mini with `event_only: true` is **never in a random draw**: not in Card Packs (`tag: ''` included), not
+  the Arcade Crate's `card` reward (`tag: '*'` included), not the Rare Card, not wild drops or the wild hunt.
+  It has no Cards, so the Printer, the Binder and trade-in never see one, and the Card Binder counts only
+  Minis that have Cards. Only event code mints it, one Standard copy each, so her copy is as good as
+  anyone's, and never onto the ground: a full bag waits for a free slot. `/hcm mini give <id> <player>` is
+  the one admin way, to give back a Mini an event owed but couldn't mint: it gives one Standard copy only
+  inside the window, under the cap and into an empty slot, and the log names the admin.
+- Only between `earn_from` and `earn_to` (both days included, `clock.time_zone`). After `earn_to` it is
+  **closed for good**; copies already owned keep working and can be traded. The Museum shows "Earn: 22 Nov -
+  29 Nov 2026", then "Closed". The cap still counts.
+- The Turkey Mini 2026 comes from the Family Feast (one per helper) and, now and then, from Catch the Turkey
+  (one extra at most). At the cap, extras simply stop.
+
+**Your commented-out Holiday Collection block.** The update added the Turkey Mini 2026 to a live "Holiday
+Collection" series in your config.yml (or, if you already had that series live, to it), so it is earnable
+now. To add it, the update re-saves config.yml, which keeps comments only on keys, not inside lists: **if
+your commented-out block sat between two series it is gone from config.yml**; if it was the last thing in
+the list it is still there, just above `grades:`. Either way your copy is in
+`backups/config-<stamp>-pre-migration.yml` (the start log's "Config backup (pre-migration): ..." line names
+it). Take the rows from there (or from where it now sits), **leave out the Turkey Mini 2026 row** (it would
+be a duplicate), and add each of the others to the live Holiday Collection's `entries:` only when it has its
+head Value and its event exists in the plugin.
+
+### Owner knobs
+
+| Section and key | Default | What it does |
+|---|---|---|
+| `arcade.events.harvest.enabled` | `true` | The Harvest Basket's switch (after `/hcm reload`). Counts and hats stay |
+| `arcade.events.harvest.from`, `to` | `"2026-11-01"`, `"2026-11-29"` | Its window, both days included. A missing `from` reads 1 Nov |
+| `arcade.events.harvest.every_minutes`, `offset_minutes`, `last_day_every_minutes` | `60`, `40`, `30` | How often it falls, as candy's |
+| `arcade.events.harvest.apples_per_shower`, `golden_percent` | `3`, `4` | Treats per shower, and the chance in 100 of a Golden Pie |
+| `arcade.events.harvest.golden_tokens`, `daily_token_cap` | `3`, `6` | Tokens per Golden Pie, and the most a day |
+| `arcade.events.harvest.goal` | `26` | Treats for the Pilgrim Hat |
+| `arcade.events.harvest.admins_see_all` | `false` | `true`: admins see everyone's treats too, to help a child find hers |
+| `arcade.events.turkey.enabled`, `from`, `to` | `true`, `"2026-11-22"`, `"2026-11-29"` | Catch the Turkey's switch and window |
+| `arcade.events.turkey.every_minutes`, `offset_minutes`, `run_minutes` | `240`, `50`, `3` | Runs at 00:50, 04:50 ... 20:50, three minutes each |
+| `arcade.events.turkey.welcome` | `true` | A turkey of your own 90 s after your first join of the day |
+| `arcade.events.turkey.scale` | `2.0` | How big the turkey is (1.0-3.0) |
+| `arcade.events.turkey.tokens`, `daily_token_cap` | `3`, `6` | Tokens per catch (once a run), and the most a day |
+| `arcade.events.turkey.feather` | `true` | A Turkey Feather 2026 with each catch |
+| `arcade.events.turkey.mini_chance_percent` | `5` | The chance in 100 a catch also gives a Turkey Mini (one extra a player, at most) |
+| `arcade.events.feast.enabled`, `from`, `to` | `true`, `"2026-11-22"`, `"2026-11-29"` | The Family Feast's switch and window |
+| `arcade.events.feast.edition` | `"2026"` | The edition its points, markers and pay are kept under. `"test"` to try it, then back to `"2026"` |
+| `arcade.events.feast.goal` | `150` | Points to fill the tables (10-2000) |
+| `arcade.events.feast.daily_points_per_player` | `40` | The most one player adds in a local day (0 = no limit) |
+| `arcade.events.feast.tokens` | `20` | Tokens for every helper when it is full, once each |
+| `arcade.events.feast.creative_helpers_paid` | `true` | `false`: a helper who only gave in Creative is not paid (the moment is everyone's either way) |
+
+The three sections are new: the first start of 0.38.6 writes them, with their comments, into your
+config.yml. `/hcm config reset arcade.events.harvest` (or `turkey`, `feast`) puts one back.
+
+### Commands
+
+| Command | Who | What |
+|---|---|---|
+| `/hcm harvest` | everyone | Your treats, your Pilgrim Hat and the next shower |
+| `/hcm harvest now [player]` | admin | A shower now; one line each, "showered" or why not |
+| `/hcm harvest status` / `clear` | admin | Window, next shower, treats out and each player's count / remove every treat out |
+| `/hcm harvest hat <player>` | admin | Give the Pilgrim Hat back, free, and mark it |
+| `/hcm harvest add <player> <n>` | admin | Add to a count, then check for the hat (test it on your own account, never hers) |
+| `/hcm turkey` | everyone | The next turkey, and how many you caught today |
+| `/hcm turkey now [player]` | admin | A run now (a test run outside the window: no claim, feather, tokens or welcome mark) |
+| `/hcm turkey status` / `clear` | admin | Live turkeys, runs, seconds left, catchers / remove every turkey |
+| `/hcm feast` | everyone | The table's progress and your gifts |
+| `/hcm feast pot` / `pot clear` | admin | Make the block you look at (within 5 blocks, Overworld economy world) the Feast Pot / forget it |
+| `/hcm feast status` | admin | Total and goal, helpers, done and shown, the pot ("pot: missing" if the block changed), the edition |
+| `/hcm feast test` | admin | Play the home ceremony at the pot, and the room's if you are in the Clubhouse. No markers, no pay |
+| `/hcm feast reset confirm` | admin | Delete everything of the configured edition. Refused for a year edition once it has filled |
+| `/hcm games clubhouse feast` | admin | An owner-built room's feast table: stand on it facing across it (ten plates to your right, ten ahead) |
+
+### Owner flags
+
+- **Thanksgiving moves.** The show window and Feast Week are MM-DD and repeat every year; 22-30 Nov covers
+  Thanksgiving in every year. The basket, the turkey, the Feast and the Turkey Mini are dated 2026: next
+  year needs new dates (and a new edition, a new Mini row).
+- **Crate keeps the six foods for good.** Remove their `market.catalog` rows to stop.
+- **Feast Week is small on purpose:** the plugin caps every predictable season at 4.5%.
+- **Creative gifts count** at the Feast Pot, under the same daily cap, and `creative_helpers_paid: true`
+  pays a Creative helper too. Set it to `false` to keep "Creative earns no tokens".
+- **The feast tables stay in the Clubhouse all year** as furniture (the room's plan has no dates). Only the
+  food on them is seasonal.
+- **Test on your own account and a "test" Feast edition,** so her real Thanksgiving moments are still
+  waiting for her.
+
+### If you roll back to 0.38.5
+
+The jar alone; 0.38.6 changes no schema. 0.38.5 reads `config_revision: 26`, runs nothing and logs one WARN.
+It ignores the `harvest`, `turkey` and `feast` sections and the new ledger source names. The show window,
+Feast Week and Crate's six foods keep working (they are plain rows); remove the catalog rows by hand to stop
+Crate trading them. The Holiday Collection's `event_only`, `earn_from` and `earn_to` are not read by 0.38.5,
+so **the Turkey Mini 2026 becomes an ordinary EPIC Mini there, in Card Packs, the crate's card reward and
+the Rare Card** (it has no tags, so not in the wild), and Cards of it can be printed. Keep a rollback short;
+don't delete the row while anyone owns one. **For a rollback longer than an evening,** first set the
+`turkey_mini_2026` row's `cap:` to the number already minted (the Museum shows it; `0` before 22 Nov):
+0.38.5 then treats it as minted out and leaves it out of packs, the crate's card reward and the Rare Card.
+Put `cap: 20` back after upgrading again. **Don't edit Minis in the Admin Studio while on 0.38.5:** it
+rewrites `minis.series` without `event_only`, `earn_from` and `earn_to`. If you did, put
+`event_only: true`, `earn_from: "2026-11-22"` and `earn_to: "2026-11-29"` back on the `turkey_mini_2026`
+row before upgrading, because the upgrade won't (revision 26 has already run), and the Turkey Mini would
+stay an ordinary pack Mini for good. The Turkey and Pilgrim Hats stay as items but drop
+out of My Looks until the upgrade. Live treats and turkeys were never saved; basket treats in bags stay
+tagged prizes (still unplaceable), but a dropped one doesn't despawn in 0.38.5. The Clubhouse converges back
+to its 0.38.5 plan at its first start, and the plates are swept. Feast points, rewards and markers stay in
+the database, unused; the Feast Pot is an ordinary block. Upgrading again runs no step twice.
 
 ---
 
@@ -3999,6 +4269,13 @@ every race and round works exactly as before**.
   written before the podium, so a crash never repeats it). It can run up to about 30 s after the
   second of them walks in (it waits for a boards' read that carries the new week). Points never
   become tokens or money.
+- **The feast tables (0.38.6).** Two orange-glass tables, 5 x 2 each, at the room's front with an
+  aisle straight to the podium. They are the Family Feast's progress: 20 plates fill with food as the
+  family puts food in the Feast Pot at home, and a line reads "Family Feast 137 / 150" with a bar. A
+  helper who hasn't seen the full table gets the room's ceremony when they walk in (a title, the
+  "Thankful for" line and 20 s of bursts). The tables stay all year as furniture; the food is only
+  there while the Feast is open. The plan's ALGO goes 2 -> 3 and the room converges at the next start.
+  The room pays nothing: the Feast pays from the arcade. See [The Family Feast](#the-family-feast).
 - **Locked in place.** Every board hangs flat on its wall like a sign, facing into the room, just off
   the wall, and big enough to read from anywhere in the room. They used to turn to face whoever
   looked at them, half into the wall from the side.
@@ -4093,7 +4370,8 @@ every race and round works exactly as before**.
   clubhouse status` lists them. A results board set before 0.38.3 keeps the way you faced then, so if
   it faces the wall, set it again. The trophy case and the jukebox (0.38.4) are set the same way:
   `trophies` where the first frame goes (your back to the wall; the row runs to your right) and
-  `jukebox` standing on a real jukebox; both optional, and status lists them as "not set (optional)". Nothing is built or guarded then. `/hcm games clubhouse generated`
+  `jukebox` standing on a real jukebox, and `feast` (0.38.6) standing on the feast table facing across it
+  (ten plates to your right, ten ahead); all optional, and status lists them as "not set (optional)". Nothing is built or guarded then. `/hcm games clubhouse generated`
   goes back.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.

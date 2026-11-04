@@ -516,9 +516,10 @@ public final class HuntService {
             return "A hunt is already running (max_live " + n.maxLive() + "). /hcm hunt clear first.";
         }
         MiniService minis = plugin.miniService();
+        // Head Minis only, never a holiday Mini (only its event gives it).
         List<MiniDef> pool = new ArrayList<>();
-        for (MiniDef d : minis.catalog()) {
-            if (d.type() == MiniType.HEAD && (rarity == null || d.rarity() == rarity) && !minis.mintedOut(d)) {
+        for (MiniDef d : com.dierks.homecraft.mini.EventMinis.huntPool(minis.catalog(), rarity)) {
+            if (!minis.mintedOut(d)) {
                 pool.add(d);
             }
         }

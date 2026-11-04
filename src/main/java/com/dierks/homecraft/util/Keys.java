@@ -87,6 +87,12 @@ public final class Keys {
      * starts with "candy" keeps its protection and gets no treat.
      */
     public static NamespacedKey CANDY_ITEM;
+    /**
+     * {@code hcm:harvest_item} - on a Harvest Basket treat (0.38.6, and only there): holds the year (an
+     * integer). Its own key, so a treat never gets the candy apple's treat or goes in the candy bag, and the
+     * Feast Pot can welcome it by this key while it refuses every other prize.
+     */
+    public static NamespacedKey HARVEST_ITEM;
     /** On a token-prize item: what it does when used (BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY). */
     public static NamespacedKey PRIZE_KIND;
     /** On a boost item: the potion effect key, its amplifier and minutes. */
@@ -186,6 +192,18 @@ public final class Keys {
      * only while the Games are on) or {@link #EFFECT_ENTITY} (deleted by the effects service on sight).
      */
     public static NamespacedKey CANDY_DROP;
+    /**
+     * On a Harvest Basket treat lying on the ground (0.38.6): {@code "<owner uuid>:<slot id>"} (String), the
+     * same rules as {@link #CANDY_DROP} under a key of its own, so the two showers never count each other's.
+     */
+    public static NamespacedKey HARVEST_DROP;
+    /**
+     * On a Catch the Turkey turkey (0.38.6): {@code "<run id>|<owner uuid>"} (String). Never persistent, and
+     * removed on chunk load. Deliberately NOT {@link #GAME_ENTITY} or {@link #EFFECT_ENTITY}.
+     */
+    public static NamespacedKey TURKEY;
+    /** On the Family Feast's floating "Feast Pot" name over the pot (0.38.6). Never persistent; swept at start. */
+    public static NamespacedKey FEAST;
     /** On the Copper Golem Brush (0.38.4): the tool that picks a Copper Golem's chests (BYTE 1). */
     public static NamespacedKey GOLEM_BRUSH;
     /** On a Copper Golem: the chests it may put things in, packed x/y/z (LONG_ARRAY), and their world (String). */
@@ -230,6 +248,7 @@ public final class Keys {
         WILD_GRADE = new NamespacedKey(plugin, "wild_grade");
         TOKEN_PRIZE = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:token_prize"));
         CANDY_ITEM = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:candy_item"));
+        HARVEST_ITEM = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:harvest_item"));
         PRIZE_KIND = new NamespacedKey(plugin, "prize_kind");
         BOOST_EFFECT = new NamespacedKey(plugin, "boost_effect");
         BOOST_AMPLIFIER = new NamespacedKey(plugin, "boost_amplifier");
@@ -255,6 +274,9 @@ public final class Keys {
         GAME_SIGN = new NamespacedKey(plugin, "game_sign");
         GAME_ENTITY = new NamespacedKey(plugin, "game_entity");
         CANDY_DROP = new NamespacedKey(plugin, "candy_drop");
+        HARVEST_DROP = new NamespacedKey(plugin, "harvest_drop");
+        TURKEY = new NamespacedKey(plugin, "turkey");
+        FEAST = new NamespacedKey(plugin, "feast");
         GOLEM_BRUSH = new NamespacedKey(plugin, "golem_brush");
         GOLEM_CHESTS = new NamespacedKey(plugin, "golem_chests");
         GOLEM_WORLD = new NamespacedKey(plugin, "golem_world");

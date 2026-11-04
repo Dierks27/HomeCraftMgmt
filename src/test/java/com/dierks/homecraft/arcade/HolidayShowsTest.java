@@ -56,8 +56,9 @@ class HolidayShowsTest {
     @Test
     void eachShippedWindowIsOnFromItsFirstToItsLastDay() {
         HolidayShows h = HolidayShows.SHIPPED;
-        int[][] windows = {{10, 24, 10, 31}, {12, 18, 12, 26}, {2, 10, 2, 14}, {3, 14, 3, 17}, {7, 1, 7, 5}};
-        String[] ids = {"halloween", "christmas", "valentines", "st_patricks", "independence_day"};
+        int[][] windows = {{10, 24, 10, 31}, {12, 18, 12, 26}, {2, 10, 2, 14}, {3, 14, 3, 17}, {7, 1, 7, 5},
+                {11, 22, 11, 30}};
+        String[] ids = {"halloween", "christmas", "valentines", "st_patricks", "independence_day", "thanksgiving"};
         for (int i = 0; i < ids.length; i++) {
             int[] w = windows[i];
             assertEquals(ids[i], on(h, w[0], w[1]), ids[i] + ": its first day");
@@ -69,7 +70,7 @@ class HolidayShowsTest {
         }
         assertNull(on(h, 6, 15), "a plain day in June: the shows as they are");
         assertNull(on(h, 11, 1), "nor 1 November");
-        assertEquals(6, h.windows().size());
+        assertEquals(7, h.windows().size());
     }
 
     @Test
@@ -189,11 +190,41 @@ class HolidayShowsTest {
                 c.get("arcade.holiday_shows.windows"), warnings::add);
         assertEquals(List.of(), warnings, "the bundled section reads with no WARN");
         assertEquals(HolidayShows.SHIPPED, read, "and is the code's own copy, window for window");
-        assertEquals(List.of("halloween", "christmas", "new_year", "valentines", "st_patricks", "independence_day"),
+        assertEquals(List.of("halloween", "christmas", "new_year", "valentines", "st_patricks", "independence_day",
+                        "thanksgiving"),
                 read.windows().stream().map(w -> w.theme().id()).toList());
-        assertEquals(List.of("Halloween", "Christmas", "New Year", "Valentine's", "St Patrick's", "Independence Day"),
+        assertEquals(List.of("Halloween", "Christmas", "New Year", "Valentine's", "St Patrick's", "Independence Day",
+                        "Thanksgiving"),
                 read.windows().stream().map(w -> w.theme().name()).toList());
         assertEquals(java.util.Set.of(FireworkEffect.Type.BALL, FireworkEffect.Type.BALL_LARGE,
                 FireworkEffect.Type.STAR, FireworkEffect.Type.BURST, FireworkEffect.Type.CREEPER), HolidayShows.SHAPES);
+    }
+
+    @Test
+    void thanksgivingIsTheOwnersRowFromTheTwentySecondToTheThirtieth() {
+        HolidayShows h = HolidayShows.SHIPPED;
+        assertEquals("thanksgiving", on(h, 11, 26), "Thanksgiving Day 2026");
+        assertEquals("thanksgiving", on(h, 11, 22), "its first day");
+        assertNull(on(h, 11, 21), "not the day before");
+        assertEquals("thanksgiving", h.themeOn(LocalDate.of(2027, 11, 25)).id(), "Thanksgiving Day 2027 too");
+        Theme t = h.themeOn(LocalDate.of(YEAR, 11, 26));
+        assertEquals("Thanksgiving", t.name());
+        assertEquals(List.of(DyeColor.ORANGE.getFireworkColor(), DyeColor.BROWN.getFireworkColor(),
+                Color.fromRGB(0xFFD700), DyeColor.RED.getFireworkColor()), t.colours());
+        assertEquals(List.of(DyeColor.YELLOW.getFireworkColor()), t.fades());
+        assertEquals(FireworkEffect.Type.BALL_LARGE, t.shape());
+    }
+
+    @Test
+    void byIdFindsAThemeWhateverTheDate() {
+        HolidayShows h = HolidayShows.SHIPPED;
+        assertEquals("thanksgiving", h.byId("thanksgiving").orElseThrow().id());
+        assertEquals("thanksgiving", h.byId(" Thanksgiving ").orElseThrow().id(), "trimmed, any case");
+        assertTrue(h.byId("easter").isEmpty(), "no such window");
+        assertTrue(h.byId(null).isEmpty());
+        HolidayShows off = new HolidayShows(false, h.windows());
+        assertTrue(off.byId("thanksgiving").isPresent(), "switched off is about the long shows only");
+        assertNull(off.themeOn(LocalDate.of(YEAR, 11, 26)));
+        assertTrue(HolidayShows.OFF.byId("thanksgiving").isEmpty(), "no windows at all");
     }
 }

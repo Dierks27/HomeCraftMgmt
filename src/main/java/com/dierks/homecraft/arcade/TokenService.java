@@ -81,7 +81,12 @@ public final class TokenService {
         GAMES_CUP_REFUND("Weekly Cup refund"),
         // The Candy Apple shower (HALLOWEEN-SPEC D16): a Golden Candy Apple picked up, under a daily cap that is
         // read back from these lines. Nothing is staked, so it is not a game of chance.
-        EVENT_CANDY("Candy Apples");
+        EVENT_CANDY("Candy Apples"),
+        // Thanksgiving 2026 (0.38.6), each under its own daily cap read back from its own lines: a Golden Pie
+        // from the Harvest Basket, a caught turkey, and the Family Feast's one reward for every helper.
+        EVENT_HARVEST("Harvest Basket"),
+        EVENT_TURKEY("Catch the Turkey"),
+        EVENT_FEAST("Family Feast");
 
         private final String label;
 

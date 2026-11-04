@@ -101,8 +101,9 @@ class ShopMigrationTest {
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
         assertEquals(List.of(), warns(log), "nothing the owner changed: no WARN");
         assertCounterAndCrateAreBundled(c, "0.37.2");
-        assertEquals(25, c.getInt("config_revision"), "and on through revisions 23, 24 and 25 (GrandShowMigrationTest,"
-                + " FireworkRemoteMigrationTest; Sky Rings and the Long Drop)");
+        assertEquals(26, c.getInt("config_revision"), "and on through revisions 23, 24, 25 and 26"
+                + " (GrandShowMigrationTest, FireworkRemoteMigrationTest; Sky Rings and the Long Drop;"
+                + " ThanksgivingMigrationTest)");
         List<String> counter = log.stream().filter(l -> l.startsWith("Config migration: Prize Counter - ")).toList();
         assertEquals(3, counter.size(), "one INFO for the counter, revision 23's Grand Firework Show and revision"
                 + " 24's bigger shows: " + log);
@@ -115,8 +116,9 @@ class ShopMigrationTest {
                 "and revision 23's one for the candy: " + log);
         assertEquals(List.of(FireworkRemoteMigrationTest.RINGS_MOVED, FireworkRemoteMigrationTest.MIX_MOVED),
                 log.subList(5, 7), "and revision 25's two: " + log);
-        assertEquals(8, log.size(), "and nothing else but the revision: " + log);
-        assertEquals("Config migration: config_revision 21 → 25.", log.get(7));
+        assertEquals(ThanksgivingMigrationTest.NO_WINDOWS, log.subList(7, 10), "and revision 26's three: " + log);
+        assertEquals(11, log.size(), "and nothing else but the revision: " + log);
+        assertEquals("Config migration: config_revision 21 → 26.", log.get(10));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -273,13 +275,13 @@ class ShopMigrationTest {
         List<Map<String, Object>> counter24 = rows(at24, PRIZES);
         HomeCraftManagement.migrateConfig(at24, "world");
         assertTrue(ArcadeConfigMigration.sameRows(crate24, rows(at24, CRATE))
-                && ArcadeConfigMigration.sameRows(counter24, rows(at24, PRIZES)), "from 24 only 25's step runs,"
-                + " which touches neither the crate nor the counter");
-        YamlConfiguration at25 = LayoutFixtures.v0372();
-        at25.set("config_revision", 25);
-        String before = at25.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at25, "world"), "no step runs from 25");
-        assertEquals(before, at25.saveToString());
+                && ArcadeConfigMigration.sameRows(counter24, rows(at24, PRIZES)), "from 24 only 25's and 26's steps"
+                + " run, which touch neither the crate nor the counter");
+        YamlConfiguration at26 = LayoutFixtures.v0372();
+        at26.set("config_revision", 26);
+        String before = at26.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at26, "world"), "no step runs from 26");
+        assertEquals(before, at26.saveToString());
 
         YamlConfiguration c = LayoutFixtures.v0372();
         apply(c);

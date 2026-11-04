@@ -16,7 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * appended and never renamed or moved: a renamed one would orphan every line written under its old
  * name ({@code /hcm tokens audit} would stop adding them up). Pinned here: the whole list in order,
  * the six this batch appends (EVENTS-DROPPER-SPEC C1, EVENTS-RECONCILED "Packages"), and that the
- * Weekly Cup's are not games of chance; and the Candy Apple shower's, appended after them (HALLOWEEN-SPEC D16).
+ * Weekly Cup's are not games of chance; the Candy Apple shower's, appended after them (HALLOWEEN-SPEC D16); and
+ * Thanksgiving's three (0.38.6), each its own line in the token history and its own daily cap.
  */
 class TokenSourceTest {
 
@@ -28,7 +29,8 @@ class TokenSourceTest {
                         "GAMES_SNAKE", "GAMES_MATCH", "GAMES_SIMON", "GAMES_WHACK", "GAMES_CONNECT", "GAMES_TICTACTOE",
                         "GAMES_PARKOUR", "GAMES_ELYTRA", "GAMES_BOAT", "GAMES_GOLF", "GAMES_DAILY",
                         "GAMES_DROPPER", "GAMES_RACE_NIGHT", "GAMES_FLOORS",
-                        "GAMES_CUP_ENTRY", "GAMES_CUP_PRIZE", "GAMES_CUP_REFUND", "EVENT_CANDY"),
+                        "GAMES_CUP_ENTRY", "GAMES_CUP_PRIZE", "GAMES_CUP_REFUND", "EVENT_CANDY",
+                        "EVENT_HARVEST", "EVENT_TURKEY", "EVENT_FEAST"),
                 Arrays.stream(TokenService.Source.values()).map(Enum::name).toList(),
                 "a new source goes at the end; an old one is never renamed or moved");
     }
@@ -55,6 +57,25 @@ class TokenSourceTest {
                 assertFalse(s.name().startsWith("GAMES_") && label.contains(banned),
                         s + "'s label must not say '" + banned + "'");
             }
+            assertTrue(s.label().chars().allMatch(c -> c < 0x80), s + "'s label is plain text");
+        }
+    }
+
+    @Test
+    void thanksgivingsSourcesReadByNameWithPlainLabels() {
+        assertSame(TokenService.Source.EVENT_HARVEST, TokenService.Source.of("EVENT_HARVEST"));
+        assertSame(TokenService.Source.EVENT_TURKEY, TokenService.Source.of("EVENT_TURKEY"));
+        assertSame(TokenService.Source.EVENT_FEAST, TokenService.Source.of("EVENT_FEAST"));
+        assertEquals("Harvest Basket", TokenService.Source.EVENT_HARVEST.label());
+        assertEquals("Catch the Turkey", TokenService.Source.EVENT_TURKEY.label());
+        assertEquals("Family Feast", TokenService.Source.EVENT_FEAST.label());
+        for (TokenService.Source s : List.of(TokenService.Source.EVENT_HARVEST, TokenService.Source.EVENT_TURKEY,
+                TokenService.Source.EVENT_FEAST)) {
+            for (String banned : List.of("bet", "wager", "gamble", "casino", "lucky", "jackpot")) {
+                assertFalse(s.label().toLowerCase(java.util.Locale.ROOT).contains(banned),
+                        s + "'s label must not say '" + banned + "'");
+            }
+            assertFalse(GamesDao.CHANCE_SOURCES.contains(s.name()), s + ": nothing is staked");
             assertTrue(s.label().chars().allMatch(c -> c < 0x80), s + "'s label is plain text");
         }
     }

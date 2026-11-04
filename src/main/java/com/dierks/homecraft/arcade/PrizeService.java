@@ -288,10 +288,11 @@ public final class PrizeService {
     /**
      * A collector's season gate: {@code arcade.collectors.on_sale} and today's local date inside its
      * season (both ends included). Out of season it is hidden, can't be bought and can't be given;
-     * the ones players own keep working.
+     * the ones players own keep working. An earned collector (0.38.6, the Pilgrim Hat) is never on sale: an
+     * event hands it over ({@link #grantEarned}), so it has no tile, no price and is never a present.
      */
     static boolean onSale(Prize p, boolean collectorsOnSale, LocalDate today) {
-        return p.collector() != null && collectorsOnSale && p.collector().inSeason(today);
+        return p.collector() != null && !p.collector().earned() && collectorsOnSale && p.collector().inSeason(today);
     }
 
     /**
@@ -1526,13 +1527,43 @@ public final class PrizeService {
             return plugin.looks() != null ? plugin.looks().restoreKeeper(target, p, fromName)
                     : Outcome.fail("That prize can't be given like this.");
         }
+        boolean present = fromName != null && !fromName.isBlank() && !fromName.equalsIgnoreCase(target.getName());
+        return giveCollector(target, p, present ? fromName : null, false);
+    }
+
+    /**
+     * Hand over an earned collector (0.38.6): the Harvest Basket's Pilgrim Hat at its goal, or given back by
+     * {@code /hcm harvest hat}. The same claim and placement as {@link #restore}: it claims the row (found already
+     * there, it goes ahead, so a give-back never counts twice), the player must be home from every game, and a cap
+     * goes on an empty head or into a free bag slot, never on the ground. Never a present. Only a collector marked
+     * {@code earned} is handed over this way; the event that calls it plays its own moment, so this says one line.
+     *
+     * @return what happened; on a failure nothing was given and the claim is undone
+     */
+    public Outcome grantEarned(Player target, String prizeId) {
+        Prize p = prizeId == null ? null : plugin.config().arcade().prize(prizeId);
+        if (p == null || p.collector() == null || !p.collector().earned()) {
+            return Outcome.fail("That prize can't be given like this.");
+        }
+        String refused = restoreRefusal(p, notHere());
+        if (refused != null) {
+            return Outcome.fail(refused);
+        }
+        return giveCollector(target, p, null, true);
+    }
+
+    /**
+     * What {@link #restore} and {@link #grantEarned} share: home from every game, alive, the claim, the cap's room and
+     * placement (or the trail), and the receiver's line. {@code fromName} non-null makes it a present.
+     */
+    private Outcome giveCollector(Player target, Prize p, String fromName, boolean earned) {
         if (!homeFromGames(target)) {
             return Outcome.fail(target.getName() + " is in a game. Try again when they're back.");
         }
         if (target.isDead()) {
             return Outcome.fail(target.getName() + " is respawning. Try again in a moment.");
         }
-        boolean present = fromName != null && !fromName.isBlank() && !fromName.equalsIgnoreCase(target.getName());
+        boolean present = fromName != null;
         ItemStack cap = null;
         long serial = 0;
         if (p.type() == PrizeType.HAT) {
@@ -1579,6 +1610,9 @@ public final class PrizeService {
         }
         if (present) {
             presentMoment(target, fromName, p, placed);
+        } else if (earned) {
+            // the event plays the title, the toast and the firework; this is the line that says where it went
+            target.sendMessage(Text.of("&a" + p.display() + " &ais yours to keep! &7" + where(placed)));
         } else {
             target.sendMessage(Text.of("&a✔ " + p.display() + " &ais yours" + (claimed ? "! &7" : " again! &7")
                     + where(placed)));

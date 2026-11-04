@@ -42,7 +42,7 @@ import java.util.List;
  * the cap she was given, and with one of each for good it could never be bought again.
  *
  * <p>What counts is decided in {@link PrizeSafety}: a prize ({@code hcm:token_prize}) that holds
- * nothing but candy, and, on the ground, is not candy itself. The spawn, despawn and damage handlers
+ * nothing but candy, and, on the ground, is not shower food itself (candy, a Harvest Basket treat). The spawn, despawn and damage handlers
  * run for every item on the server, so they first read the item's read-only data view and return at
  * once without the tag; only a prize has its meta read.
  *
@@ -83,6 +83,25 @@ public final class PrizeSafetyListener implements Listener {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /**
+     * Shower food ({@link PrizeSafety#showerFood}): candy, or a Harvest Basket treat ({@link Keys#HARVEST_ITEM}).
+     * Meant to go when dropped. The prize bundle still takes candy only ({@link #candy}).
+     */
+    static boolean showerFood(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+        boolean harvest = false;
+        if (Keys.HARVEST_ITEM != null) {
+            try {
+                harvest = item.getPersistentDataContainer().has(Keys.HARVEST_ITEM);
+            } catch (RuntimeException e) {
+                harvest = false;
+            }
+        }
+        return PrizeSafety.showerFood(candy(item), harvest);
     }
 
     /** The prize id from the data view, or null. */
@@ -140,7 +159,7 @@ public final class PrizeSafetyListener implements Listener {
     /** {@link PrizeSafety#keepOnGround} for a real item; never a Show Map ({@link PrizeSafety#plainOnGround}). */
     static boolean keepOnGround(ItemStack item) {
         return prize(item) && !PrizeSafety.plainOnGround(prizeId(item))
-                && PrizeSafety.keepOnGround(true, candy(item), contents(item));
+                && PrizeSafety.keepOnGround(true, showerFood(item), contents(item));
     }
 
     /** Never despawns, can't be hurt, and no mob picks it up (a zombie would wear a dropped cap). */

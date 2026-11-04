@@ -1,5 +1,6 @@
 package com.dierks.homecraft.mini;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 
@@ -20,13 +21,25 @@ import java.util.Locale;
  * @param craftable whether it can be crafted at the Mini Workbench (recipe wiring: later)
  * @param tags      free-form drop tags ({@code mining}, {@code fish}, …); a loot source
  *                  may target a tag pool. An untagged Mini never drops from a tag pool.
+ * @param eventOnly a holiday Mini: only event code mints it, between {@code earnFrom} and
+ *                  {@code earnTo}; no pack, crate, Rare Card or wild drop ever gives it
+ *                  (see {@link EventMinis})
+ * @param earnFrom  the first local day an event can give it (null = not set)
+ * @param earnTo    the last local day an event can give it; after it, closed for good (null = not set)
  */
 public record MiniDef(String id, String name, String series, String category, Rarity rarity,
                       MiniType type, String texture, long cap, double price, boolean craftable,
-                      List<String> tags) {
+                      List<String> tags, boolean eventOnly, LocalDate earnFrom, LocalDate earnTo) {
 
     public MiniDef {
         tags = tags == null ? List.of() : List.copyOf(tags);
+    }
+
+    /** An ordinary Mini (not a holiday one): the constructor every pre-0.38.6 call site uses. */
+    public MiniDef(String id, String name, String series, String category, Rarity rarity,
+                   MiniType type, String texture, long cap, double price, boolean craftable,
+                   List<String> tags) {
+        this(id, name, series, category, rarity, type, texture, cap, price, craftable, tags, false, null, null);
     }
 
     /** Pre-tags constructor (kept for the importer / older call sites). */

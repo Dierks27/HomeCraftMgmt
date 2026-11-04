@@ -15,7 +15,8 @@ import java.util.function.Predicate;
  *       bundle holding anything else drops like any other item, or protecting it would make a
  *       keep-inventory, fireproof bag for whatever was put in it.</li>
  *   <li><b>Safe on the ground</b> (never despawns, never burns, no mob takes it): the same, except
- *       candy itself, which is meant to go, and a Show Map (0.38.2), which is made again for free.</li>
+ *       shower food itself ({@link #showerFood}: candy, and the Harvest Basket's treats), which is meant
+ *       to go, and a Show Map (0.38.2), which is made again for free.</li>
  *   <li><b>Owner-bound when dropped:</b> a collector (the Trick-or-Treat Bag included). With one of
  *       each for good, a lost one could never be bought again, so only the one who dropped it can
  *       pick it back up, and no hopper takes it. Other prizes are handed over by dropping them, so they
@@ -45,7 +46,15 @@ public final class PrizeSafety {
         return prize && holdsOnlyCandy(contentsAreCandy);
     }
 
-    /** Safe on the ground: kept on death, and not candy (shower candy is meant to go). */
+    /**
+     * Shower food: a candy apple, or a Harvest Basket treat (0.38.6). It falls every hour and is meant to go
+     * when dropped; without this a dropped pie would lie on the ground for good, unhurt.
+     */
+    static boolean showerFood(boolean candy, boolean harvest) {
+        return candy || harvest;
+    }
+
+    /** Safe on the ground: kept on death, and not shower food ({@code candy}: {@link #showerFood}), which is meant to go. */
     static boolean keepOnGround(boolean prize, boolean candy, List<Boolean> contentsAreCandy) {
         return keepOnDeath(prize, contentsAreCandy) && !candy;
     }
@@ -71,7 +80,8 @@ public final class PrizeSafety {
 
     /**
      * The prize-bundle insert guard (D15, E15): a prize bundle (the Trick-or-Treat Bag, or any bundle that is a
-     * prize) takes only candy. So she can put her candy apples in her bag, and nothing else goes in. A plain
+     * prize) takes only candy. So she can put her candy apples in her bag, and nothing else goes in: not even a
+     * Harvest Basket treat, which is not candy ({@code insertedIsCandy} is the candy key alone). A plain
      * bundle is never refused. Even with a way round this, {@link #keepOnDeath} is false for a bundle holding
      * anything but candy, so nothing gains keep-inventory through it.
      */

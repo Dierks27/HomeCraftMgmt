@@ -1,6 +1,7 @@
 package com.dierks.homecraft.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.mini.EventMinis;
 import com.dierks.homecraft.mini.Grade;
 import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.mini.MiniDef;
@@ -110,9 +111,10 @@ public final class WildDropService {
         if (list == null || list.entries().isEmpty()) {
             return null;
         }
-        // Weighted pick over the entries that can still mint.
+        // Weighted pick over the entries that can still mint; a holiday Mini named in a list never drops.
+        List<Loot.LootEntry> entries = EventMinis.lootEntries(list.entries(), minis::def);
         double total = 0;
-        for (Loot.LootEntry e : list.entries()) {
+        for (Loot.LootEntry e : entries) {
             MiniDef d = minis.def(e.miniId());
             if (d != null && !minis.mintedOut(d)) {
                 total += Math.max(0, e.weight());
@@ -123,7 +125,7 @@ public final class WildDropService {
         }
         double r = ThreadLocalRandom.current().nextDouble() * total;
         MiniDef last = null;
-        for (Loot.LootEntry e : list.entries()) {
+        for (Loot.LootEntry e : entries) {
             MiniDef d = minis.def(e.miniId());
             if (d == null || minis.mintedOut(d)) {
                 continue;

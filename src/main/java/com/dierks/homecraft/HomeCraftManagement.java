@@ -98,10 +98,13 @@ public final class HomeCraftManagement extends JavaPlugin {
      * level 5 is the Long Drop) wherever the owner hasn't changed it, and its halves and Classic Dropper's grow to
      * 64 x 144 x 16 at the same spot ({@link com.dierks.homecraft.games.gen.DropperMixMigration}); the engine empties
      * the old areas.
+     * 26 = Thanksgiving: the Thanksgiving show window, Feast Week at Crate, Crate's six new foods after wheat and the
+     * Holiday Collection's Turkey Mini 2026, each only where the owner has no row with its id; the owner's own rows
+     * stay, with an INFO line, never a WARN ({@link ThanksgivingMigration}).
      * Each of 20, 21, 22, 23, 24 and 25 also refreshes the comments it makes stale, where they are still the plugin's
-     * own words ({@link ShippedComments}).
+     * own words ({@link ShippedComments}); 26 makes none stale.
      */
-    static final int CONFIG_REVISION = 25;
+    static final int CONFIG_REVISION = 26;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -136,13 +139,20 @@ public final class HomeCraftManagement extends JavaPlugin {
      * contradicting the shipped defaults. Revision 4 repairs that. Add a row here and to
      * the bundled config.yml together.
      */
-    private static final java.util.Map<String, int[]> DAILY_CAPS = java.util.Map.of(
-            "cobblestone", new int[] {400, 800},
-            "oak_log", new int[] {160, 320},
-            "wheat", new int[] {120, 240},
-            "iron_ingot", new int[] {40, 80},
-            "gold_ingot", new int[] {20, 40},
-            "diamond", new int[] {10, 20});
+    private static final java.util.Map<String, int[]> DAILY_CAPS = java.util.Map.ofEntries(
+            java.util.Map.entry("cobblestone", new int[] {400, 800}),
+            java.util.Map.entry("oak_log", new int[] {160, 320}),
+            java.util.Map.entry("wheat", new int[] {120, 240}),
+            java.util.Map.entry("iron_ingot", new int[] {40, 80}),
+            java.util.Map.entry("gold_ingot", new int[] {20, 40}),
+            java.util.Map.entry("diamond", new int[] {10, 20}),
+            // 0.38.6: the foods Feast Week moves (config revision 26)
+            java.util.Map.entry("pumpkin", new int[] {60, 120}),
+            java.util.Map.entry("carrot", new int[] {120, 240}),
+            java.util.Map.entry("potato", new int[] {120, 240}),
+            java.util.Map.entry("bread", new int[] {60, 120}),
+            java.util.Map.entry("baked_potato", new int[] {60, 120}),
+            java.util.Map.entry("cooked_chicken", new int[] {40, 80}));
 
     /**
      * The courier crate head textures, mirroring {@code skins.courier_package} in the bundled
@@ -217,6 +227,10 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
     private com.dierks.homecraft.arcade.candy.CandyService candy;
+    /** Thanksgiving (0.38.6): the Harvest Basket (the candy's engine, its own profile), the turkeys and the Feast. */
+    private com.dierks.homecraft.arcade.candy.CandyService harvest;
+    private com.dierks.homecraft.arcade.turkey.TurkeyService turkey;
+    private com.dierks.homecraft.arcade.feast.FeastService feast;
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
@@ -401,6 +415,15 @@ public final class HomeCraftManagement extends JavaPlugin {
         // them for the Trick-or-Treat Bag. Its counts live in player_counters, as the achievements' do.
         this.candy = new com.dierks.homecraft.arcade.candy.CandyService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
+        // Thanksgiving (0.38.6), each only inside its own window: the Harvest Basket is the candy's engine with its
+        // own items, words and Pilgrim Hat; Catch the Turkey gives each player a turkey of their own; the Family
+        // Feast fills the Clubhouse tables from the Feast Pot. Counts and marks live in player_counters too.
+        this.harvest = new com.dierks.homecraft.arcade.candy.CandyService(this,
+                new com.dierks.homecraft.storage.AchievementDao(database),
+                com.dierks.homecraft.arcade.candy.ShowerProfile.harvest());
+        this.turkey = new com.dierks.homecraft.arcade.turkey.TurkeyService(
+                this, new com.dierks.homecraft.storage.AchievementDao(database));
+        this.feast = new com.dierks.homecraft.arcade.feast.FeastService(this);
         // Daily/weekly quests (Phase 11) — repeatable token objectives; no listener,
         // progress is recorded from the existing market/printer/crate/pack hooks.
         this.quests = new com.dierks.homecraft.arcade.QuestService(
@@ -513,6 +536,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeSafetyListener(this), this);
         // The Candy Apple shower: pickups and counting, the treat, the Bedrock taps, and the candy's guards.
         getServer().getPluginManager().registerEvents(candy, this);
+        // Thanksgiving: the basket's treats, the turkeys' taps and guards, the Feast Pot's taps and guards.
+        getServer().getPluginManager().registerEvents(harvest, this);
+        getServer().getPluginManager().registerEvents(turkey, this);
+        getServer().getPluginManager().registerEvents(feast, this);
         // The +1 Home perk. LuckPerms and Essentials load before us (softdepend), so both the
         // tiers and the API are there to read now.
         this.homes = new com.dierks.homecraft.arcade.homes.HomeService(this);
@@ -551,6 +578,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.tokens.start(); // the five-minute streak + playtime tick
         this.looks.start(); // the wardrobe's minute: a run that ends, the sweep, the heads-up
         this.candy.start(); // the Candy Apple shower's 5-tick task, only inside its window
+        this.harvest.start(); // the Harvest Basket's, only inside its own window
+        this.turkey.start(); // the turkeys' 1-second task, only inside its window
+        this.feast.start(); // the Feast Pot's name and the Feast's second, only inside its window
         this.arcade.start();
         this.radar.start(); // the Mini Radar's once-a-second check (arcade.radar sets each radar's cadence)
         this.remotes.start(); // the holograms' pass, the sets of everyone on, and every Show Map's renderer
@@ -697,6 +727,18 @@ public final class HomeCraftManagement extends JavaPlugin {
             candy.stop(); // removes every live candy and boss bar, while the worlds are still up
             candy = null;
         }
+        if (harvest != null) {
+            harvest.stop(); // every live treat and boss bar, while the worlds are still up
+            harvest = null;
+        }
+        if (turkey != null) {
+            turkey.stop(); // every turkey goes, while the worlds are still up
+            turkey = null;
+        }
+        if (feast != null) {
+            feast.stop(); // the Feast Pot's name comes down, before the database closes
+            feast = null;
+        }
         if (tokens != null) {
             tokens.stop();
             tokens = null;
@@ -832,6 +874,15 @@ public final class HomeCraftManagement extends JavaPlugin {
             tokens.start(); // re-arm the streak + playtime tick under any new config
             if (candy != null) {
                 candy.start(); // the shower under the new window and settings (its candy goes)
+            }
+            if (harvest != null) {
+                harvest.start(); // the basket under its new window and settings (its treats go)
+            }
+            if (turkey != null) {
+                turkey.start(); // the turkeys under the new window and settings (live ones go)
+            }
+            if (feast != null) {
+                feast.start(); // the Feast under the new window, edition and goal
             }
             arcade.start();
             quests.start(); // re-arm the quest stat poll under any new config
@@ -1343,6 +1394,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             com.dierks.homecraft.games.gen.DropperMixMigration.apply(c, log);
             // One refresh for both: the slots comment both features make stale is the same comment.
             ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
+        }
+        if (from < 26) {
+            // Thanksgiving: the show window, Feast Week, Crate's new foods and the Turkey Mini, each only where the
+            // owner has no row with its id; the owner's own rows win, quietly. See ThanksgivingMigration.
+            ThanksgivingMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2623,6 +2679,21 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The Candy Apple shower (0.37.1), or null before enable / after disable. */
     public com.dierks.homecraft.arcade.candy.CandyService candy() {
         return candy;
+    }
+
+    /** The Harvest Basket (0.38.6): the candy's engine on its own profile; null before enable / after disable. */
+    public com.dierks.homecraft.arcade.candy.CandyService harvest() {
+        return harvest;
+    }
+
+    /** Catch the Turkey (0.38.6), or null before enable / after disable. */
+    public com.dierks.homecraft.arcade.turkey.TurkeyService turkey() {
+        return turkey;
+    }
+
+    /** The Family Feast (0.38.6), or null before enable / after disable. */
+    public com.dierks.homecraft.arcade.feast.FeastService feast() {
+        return feast;
     }
 
     /** Sound Mufflers, or null if they failed to start. */

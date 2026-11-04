@@ -62,6 +62,22 @@ class PrizeSafetyTest {
         }
     }
 
+    /**
+     * 0.38.6: a Harvest Basket treat is shower food like candy: kept on death, meant to go on the ground (or a
+     * dropped pie would lie there for good, unhurt). The candy bag still takes candy only.
+     */
+    @Test
+    void aHarvestTreatIsMeantToGoAndTheBagRefusesIt() {
+        assertTrue(PrizeSafety.showerFood(false, true), "a treat");
+        assertTrue(PrizeSafety.showerFood(true, false), "candy, as before");
+        assertFalse(PrizeSafety.showerFood(false, false), "any other prize");
+        boolean pie = PrizeSafety.showerFood(false, true);
+        assertTrue(PrizeSafety.keepOnDeath(true, NOTHING), "a pie is kept when she dies, as candy is");
+        assertFalse(PrizeSafety.keepOnGround(true, pie, NOTHING), "a dropped pie despawns");
+        assertTrue(PrizeSafety.refusesInsert(true, false), "the bag refuses a treat: it is not candy");
+        assertFalse(PrizeSafety.ownerBound("harvest_pie_2026"), "a treat is no collector");
+    }
+
     @Test
     void aDroppedCollectorIsBoundToWhoDroppedIt() {
         assertTrue(PrizeSafety.ownerBound("cap_pumpkin_2026"));
@@ -89,7 +105,7 @@ class PrizeSafetyTest {
         String src = java.nio.file.Files.readString(java.nio.file.Path.of(
                 "src/main/java/com/dierks/homecraft/arcade/PrizeSafetyListener.java")).replaceAll("\\s+", " ");
         assertTrue(src.contains("static boolean keepOnGround(ItemStack item) { return prize(item) &&"
-                + " !PrizeSafety.plainOnGround(prizeId(item)) && PrizeSafety.keepOnGround(true, candy(item),"
+                + " !PrizeSafety.plainOnGround(prizeId(item)) && PrizeSafety.keepOnGround(true, showerFood(item),"
                 + " contents(item)); }"), "the spawn, despawn and damage guards all ask it");
     }
 

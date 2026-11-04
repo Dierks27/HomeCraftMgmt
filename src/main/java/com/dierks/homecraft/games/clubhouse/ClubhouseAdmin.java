@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox|generated|rebuild confirm|off}
+ * {@code /hcm games clubhouse status|tp|here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox|feast|generated|rebuild confirm|off}
  * (CLUBHOUSE-SPEC §6), with tab completion.
  *
  * <ul>
@@ -30,6 +30,9 @@ import java.util.Locale;
  *   <li>{@code trophies} and {@code jukebox} (0.38.4): the owner-built room's trophy case (its first frame where
  *       the admin stands, their back to the wall; the row runs to their right) and its jukebox (the real jukebox
  *       the admin stands on). Both optional: without them there is no trophy case and no music.</li>
+ *   <li>{@code feast} (0.38.6): the owner-built room's feast table, where the admin stands on it facing across
+ *       it (ten plates to their right, ten more ahead). Optional: without it the Family Feast shows only at the
+ *       pot.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -45,7 +48,7 @@ final class ClubhouseAdmin implements GameAdmin {
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
-            "generated", "rebuild", "off");
+            "feast", "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -66,7 +69,7 @@ final class ClubhouseAdmin implements GameAdmin {
         switch (sub) {
             case "status" -> out.addAll(status(room, game.visits().size(), closedWhy()));
             case "tp" -> tp(sender, room);
-            case "here", "podium", "board", "trophies", "jukebox" -> {
+            case "here", "podium", "board", "trophies", "jukebox", "feast" -> {
                 if (!(sender instanceof Player p)) {
                     out.add("&cOnly a player can do that - stand in the room first.");
                 } else if (room == null) {
@@ -133,7 +136,10 @@ final class ClubhouseAdmin implements GameAdmin {
         return out;
     }
 
-    /** {@code here}, {@code podium <n>}, {@code board}, {@code trophies}, {@code jukebox}: where the admin stands. */
+    /**
+     * {@code here}, {@code podium <n>}, {@code board}, {@code trophies}, {@code jukebox}, {@code feast}: where the admin
+     * stands.
+     */
     static String place(ClubhouseRoom room, String sub, String[] args, Player p) {
         Location l = p.getLocation();
         String world = l.getWorld() == null ? "" : l.getWorld().getName();
@@ -142,6 +148,7 @@ final class ClubhouseAdmin implements GameAdmin {
             case "here" -> room.here(at);
             case "trophies" -> room.trophies(at);
             case "jukebox" -> room.jukebox(at);
+            case "feast" -> room.feast(at);
             case "board" -> args != null && args.length > 1 ? room.board(args[1].toLowerCase(Locale.ROOT), at)
                     : room.board(at);
             default -> {
@@ -237,8 +244,8 @@ final class ClubhouseAdmin implements GameAdmin {
     /** The usage lines. */
     static final List<String> HELP = List.of(
             "&e/hcm games clubhouse status|tp &7- the Clubhouse: how it is, go and look",
-            "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox &7- use a room"
-                    + " you built (stand where it goes, facing into the room)",
+            "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox|feast &7- use a"
+                    + " room you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse generated|rebuild confirm|off &7- the built room, build it again, switch it off");
 
     @Override

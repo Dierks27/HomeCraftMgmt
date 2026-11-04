@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 25
+config_revision: 26
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -702,6 +702,8 @@ market:
             headline: "Harvest time! The farms are full of wheat." }
         - { id: gift_season, name: "Gift Season", from: "12-10", to: "12-26", percent: { gold_ingot: 4, diamond: 4 },
             headline: "Gift season! Shiny gold and diamonds make great presents." }
+        - { id: feast_week, name: "Feast Week", from: "11-22", to: "11-30", percent: { bread: -4, baked_potato: -4, cooked_chicken: -4, carrot: -4, pumpkin: -4 },
+            headline: "Feast week! Food for the family table costs a little less." }
     real_world:
       # Real commodity prices nudge matching items once a trading day. OFF by default.
       # Needs internet on the game server. If the source is down the market simply
@@ -792,6 +794,63 @@ market:
       full_stock: 6000
       max_daily_sell: 120
       max_daily_buy: 240
+    # Foods for Feast Week (0.38.6). Bread sells for less than 3 wheat, and a baked potato for
+    # less than a potato, at any stock and mood, so cooking to sell here never pays. Delete a row
+    # to stop selling it.
+    - id: pumpkin
+      material: PUMPKIN
+      display_name: "&6Pumpkin"
+      floor: 0.5
+      ceiling: 8.0
+      initial_stock: 1500
+      full_stock: 3000
+      max_daily_sell: 60
+      max_daily_buy: 120
+    - id: carrot
+      material: CARROT
+      display_name: "&6Carrot"
+      floor: 0.3
+      ceiling: 6.0
+      initial_stock: 3000
+      full_stock: 6000
+      max_daily_sell: 120
+      max_daily_buy: 240
+    - id: potato
+      material: POTATO
+      display_name: "&ePotato"
+      floor: 0.3
+      ceiling: 6.0
+      initial_stock: 3000
+      full_stock: 6000
+      max_daily_sell: 120
+      max_daily_buy: 240
+    - id: bread
+      material: BREAD
+      display_name: "&6Bread"
+      floor: 0.5
+      ceiling: 1.9
+      initial_stock: 1500
+      full_stock: 3000
+      max_daily_sell: 60
+      max_daily_buy: 120
+    - id: baked_potato
+      material: BAKED_POTATO
+      display_name: "&6Baked Potato"
+      floor: 0.1
+      ceiling: 0.19
+      initial_stock: 1500
+      full_stock: 3000
+      max_daily_sell: 60
+      max_daily_buy: 120
+    - id: cooked_chicken
+      material: COOKED_CHICKEN
+      display_name: "&fCooked Chicken"
+      floor: 1.0
+      ceiling: 12.0
+      initial_stock: 1000
+      full_stock: 2000
+      max_daily_sell: 40
+      max_daily_buy: 80
     - id: iron_ingot
       material: IRON_INGOT
       display_name: "&fIron Ingot"
@@ -879,6 +938,14 @@ minis:
       rarity: LEGENDARY
       entries:
         - { name: "Golden Idol", category: SYMBOL, tags: [mining], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1YmY2MDM2Mzg2YjJlYjAwZmMyZTYzNWU1NzViNzRlMmI1YTBjNjljYmI1MzY5MWFlZGZkYjZhMGMzNjAwOSJ9fX0=", cap: 5 }
+    # A yearly holiday Mini (0.38.6) is earned only at its own event, never from a pack, crate or drop:
+    #   event_only  true = only event code makes it (never a Card Pack, a crate card, the Rare Card or a wild drop)
+    #   earn_from   the first day it can be earned (YYYY-MM-DD, clock.time_zone, keep the quotes)
+    #   earn_to     the last day; after it, closed for good (owned copies keep working and can be traded)
+    - name: "Holiday Collection"
+      rarity: EPIC
+      entries:
+        - { name: "Turkey Mini 2026", id: turkey_mini_2026, category: HOLIDAY, rarity: EPIC, cap: 20, event_only: true, earn_from: "2026-11-22", earn_to: "2026-11-29", texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjA2NTU1NzA2YjY0MWZkYWY0MzZjMDc2NjNmOTIzYWZjNWVlNzIxNDZmOTAxOTVmYjMzN2I5ZGU3NjY1ODhkIn19fQ==" }
 
   # ---- Grades (Phase 12). Rarity owns a Mini's colour + glint; the GRADE owns the
   # stars: a star suffix on the name ("Chick Mini ★★") and a lore line, never a
@@ -1365,6 +1432,7 @@ arcade:
       - { id: valentines, name: "Valentine's", from: "02-10", to: "02-14", colours: [PINK, RED, WHITE], fades: ["#FFC0CB"], shape: BALL }
       - { id: st_patricks, name: "St Patrick's", from: "03-14", to: "03-17", colours: [LIME, "#1FAF3F", "#FFD700"], fades: ["#CCFFCC"], shape: STAR }
       - { id: independence_day, name: "Independence Day", from: "07-01", to: "07-05", colours: [RED, WHITE, BLUE], fades: [WHITE], shape: BURST }
+      - { id: thanksgiving, name: "Thanksgiving", from: "11-22", to: "11-30", colours: [ORANGE, BROWN, "#FFD700", RED], fades: [YELLOW], shape: BALL_LARGE }
   # Arcade button icons. A blank texture uses the plain material; Bedrock players always see the
   # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
   # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
@@ -1744,6 +1812,76 @@ arcade:
       goal: 31
       # true = admins also see everyone's candy (to help a child find hers). Only its owner can pick it up.
       admins_see_all: false
+    # ---- Thanksgiving: the Harvest Basket (0.38.6). Cornbread, pumpkin pies and baked potatoes fall
+    # around each player in the Overworld of an economy world (never the Nether or the End). Only you see
+    # and pick up your own. Never in a Games world, a game or a race, and never for anyone idle 5+ minutes.
+    # Collect `goal` for a Pilgrim Hat 2026, kept for good (once each). Runs from `from` to `to` (local
+    # dates, clock.time_zone; keep the quotes) and switches itself off after `to`.
+    # Admins: /hcm harvest now|status|clear|hat <player>|add <player> <n>.
+    harvest:
+      enabled: true
+      from: "2026-11-01"
+      to: "2026-11-29"
+      # A shower every this many minutes, counted from local midnight plus offset_minutes (10-120).
+      every_minutes: 60
+      offset_minutes: 40
+      # On the last day (`to`), a shower this often instead (0 = as every_minutes).
+      last_day_every_minutes: 30
+      # Treats per player per shower (1-12), and the chance each is a Golden Pie.
+      apples_per_shower: 3
+      golden_percent: 4
+      # Tokens for each Golden Pie picked up, and the most a player gets from the basket in a local day.
+      golden_tokens: 3
+      daily_token_cap: 6
+      # Treats to collect for the Pilgrim Hat.
+      goal: 26
+      # true = admins also see everyone's treats (to help a child find hers). Only its owner can pick it up.
+      admins_see_all: false
+    # ---- Thanksgiving: Catch the Turkey (0.38.6). Each player gets their own big turkey nearby in the
+    # Overworld of an economy world a few times a day, and once after their first join of the day. Tap it
+    # (hit or use, Java or Bedrock) to catch it: everyone who catches a turkey during a run gets the same
+    # prize, once a run. It never runs away. Never in a Games world, a game or a race, never for anyone
+    # idle 5+ minutes. Switches itself off after `to`. Admins: /hcm turkey now [player]|status|clear.
+    turkey:
+      enabled: true
+      from: "2026-11-22"
+      to: "2026-11-29"
+      # A turkey run every this many minutes, counted from local midnight plus offset_minutes (30-360).
+      every_minutes: 240
+      offset_minutes: 50
+      # How long each run lasts, in minutes (1-10).
+      run_minutes: 3
+      # true = a turkey of your own 90 seconds after your first join of the day.
+      welcome: true
+      # How big the turkey is (1.0-3.0; 1.0 = a plain chicken).
+      scale: 2.0
+      # Tokens for each catch (once a run), and the most a player gets from turkeys in a local day.
+      tokens: 3
+      daily_token_cap: 6
+      # true = each catch also gives a Turkey Feather 2026 keepsake.
+      feather: true
+      # The chance in 100 that a catch also gives a Turkey Mini 2026 (at most one extra a player, while it lasts).
+      mini_chance_percent: 5
+    # ---- Thanksgiving: the Family Feast (0.38.6). Tap the Feast Pot (an admin sets it with
+    # /hcm feast pot) holding food to put it in: one at a time, or sneak to put in the stack. Bread, pies,
+    # cooked meat, baked potatoes, cake, and the Harvest Basket's treats. The whole family fills the
+    # tables in the Clubhouse together. When they are full: a firework show, a "Thankful for" line naming
+    # everyone who helped, and `tokens` and one Turkey Mini 2026 for every helper, once each (late helpers
+    # too, until `to`). Switches itself off after `to`. Admins: /hcm feast pot|status|test|reset confirm.
+    feast:
+      enabled: true
+      from: "2026-11-22"
+      to: "2026-11-29"
+      # The edition's name: its points, markers and reward are kept under it ("test" to try it, then "2026").
+      edition: "2026"
+      # Food points to fill the tables (10-2000). Bread 1, cooked meat 2, pumpkin pie 3, cake 6.
+      goal: 150
+      # The most points one player can add in a local day (0 = no limit), so it fills together.
+      daily_points_per_player: 40
+      # Tokens for every helper when the tables are full, once each (0-100).
+      tokens: 20
+      # true = a helper in Creative is paid too (the visible moment is everyone's either way).
+      creative_helpers_paid: true
 
 # ---------------------------------------------------------------------
 #  Games — play games of chance and skill games for tokens (never dollars).

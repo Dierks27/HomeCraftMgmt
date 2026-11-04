@@ -228,7 +228,13 @@ class ConfigMigrationTest {
             assertEquals(shipped.get(path), onDisk.get(path), path);
             assertEquals(shipped.getComments(path), onDisk.getComments(path), path + "'s comment");
         }
-        assertEquals(leaves.size(), added.size(), "and nothing else: " + added);
+        // and nothing else but 0.38.6's three Thanksgiving sections, which sit beside it
+        int thanksgiving = 0;
+        for (String section : THANKSGIVING_SECTIONS) {
+            thanksgiving += shipped.getConfigurationSection(section).getKeys(false).size();
+        }
+        assertEquals(12 + 12 + 12 + 8, leaves.size() + thanksgiving, "candy, harvest, turkey and feast");
+        assertEquals(leaves.size() + thanksgiving, added.size(), "and nothing else: " + added);
         assertFalse(shipped.getComments("arcade.events").isEmpty(), "the section ships with its block");
         assertEquals(shipped.getComments("arcade.events"), onDisk.getComments("arcade.events"));
 
@@ -239,6 +245,58 @@ class ConfigMigrationTest {
         assertEquals(List.of(), warnings);
         assertEquals(List.of(), HomeCraftManagement.backfillConfig(reread, shipped), "a second pass is a no-op");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(reread, "world"), "and no revision runs");
+    }
+
+    /** 0.38.6's sections under {@code arcade.events}, beside the candy's. */
+    private static final List<String> THANKSGIVING_SECTIONS = List.of(CandyConfig.HARVEST_PATH,
+            "arcade.events.turkey", "arcade.events.feast");
+
+    /**
+     * Thanksgiving's three sections are all new keys, so a 0.38.5 file gets them from the backfill, every leaf with
+     * its comment and each section's explanatory block. Revision 26 is only for the rows in lists.
+     */
+    @Test
+    void the0385FileGetsTheThanksgivingSectionsWithTheirComments() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = bundled();
+        for (String section : THANKSGIVING_SECTIONS) {
+            onDisk.set(section, null); // a 0.38.5 file: the candy only
+        }
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, shipped);
+        List<String> expected = new ArrayList<>();
+        for (String section : THANKSGIVING_SECTIONS) {
+            for (String leaf : shipped.getConfigurationSection(section).getKeys(false)) {
+                String path = section + "." + leaf;
+                expected.add(path);
+                assertEquals(shipped.get(path), onDisk.get(path), path);
+                assertEquals(shipped.getComments(path), onDisk.getComments(path), path + "'s comment");
+            }
+            assertFalse(shipped.getComments(section).isEmpty(), section + " ships with its block");
+            assertEquals(shipped.getComments(section), onDisk.getComments(section), section + "'s block");
+        }
+        assertEquals(expected, added, "exactly the three sections' leaves, in file order");
+        String text = yaml(onDisk.saveToString()).saveToString();
+        assertTrue(text.contains("# ---- Thanksgiving: the Harvest Basket (0.38.6)."));
+        assertTrue(text.contains("# ---- Thanksgiving: Catch the Turkey (0.38.6)."));
+        assertTrue(text.contains("# ---- Thanksgiving: the Family Feast (0.38.6)."));
+        List<String> warnings = new ArrayList<>();
+        YamlConfiguration reread = yaml(onDisk.saveToString());
+        assertEquals(CandyConfig.HARVEST_DEFAULTS, CandyConfig.parse(reread, CandyConfig.HARVEST_PATH,
+                CandyConfig.HARVEST_DEFAULTS, "the Harvest Basket", warnings::add), "the shipped basket");
+        assertEquals(List.of(), warnings);
+        assertEquals(List.of(), HomeCraftManagement.backfillConfig(reread, shipped), "a second pass is a no-op");
+    }
+
+    /** Revision 26 in the ladder: a bundled file at 25 already has every row, so it only stamps the revision. */
+    @Test
+    void revision26OnAFileThatHasTheRowsOnlyStampsTheRevision() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 25);
+        assertEquals(List.of("Config migration: config_revision 25 → 26."),
+                HomeCraftManagement.migrateConfig(onDisk, "world"), "nothing to add, nothing to say");
+        assertEquals(26, onDisk.getInt("config_revision"));
+        assertEquals(bundled().getMapList("market.catalog"), onDisk.getMapList("market.catalog"));
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
     }
 
     /** The Java gate and the shipped YAML must agree, or first boot migrates itself. */
@@ -1518,7 +1576,7 @@ class ConfigMigrationTest {
         assertEquals(List.of(8, 15), onDisk.getList("market.sim.hot.percent"));
         assertEquals(12, onDisk.getStringList("market.sim.headlines.up").size());
         assertEquals(41, onDisk.getStringList("market.sim.same_plural").size());
-        assertEquals(7, onDisk.getMapList("market.sim.seasons.list").size());
+        assertEquals(8, onDisk.getMapList("market.sim.seasons.list").size());
         assertEquals(3, onDisk.getMapList("market.sim.real_world.symbols").size());
 
         assertEquals(catalogBefore, onDisk.getMapList("market.catalog"), "the catalog is untouched");
@@ -1588,7 +1646,7 @@ class ConfigMigrationTest {
         assertEquals(List.of(), warns);
         assertFalse(s.enabled());
         assertEquals(List.of("gold_ingot", "iron_ingot"), s.real().symbols().stream().map(RealSymbol::item).toList());
-        assertEquals(6, s.seasons().list().size());
+        assertEquals(7, s.seasons().list().size(), "the shipped eight less their new_year");
         assertEquals(List.of("Everyone wants {item} at the fair!"), s.headlines().up());
         assertEquals(new SimSettings.Range(5, 10), s.hot().percent());
         assertEquals(2, s.news().maxPerDay(), "the re-added leaf carries the shipped value");

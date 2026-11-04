@@ -14,6 +14,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -215,7 +216,7 @@ class SeasonCalendarTest {
         List<Season> parsed = SeasonCalendar.parse(rows, 4.5, warnings::add);
         assertEquals(List.of(), warnings);
         assertEquals(SHIPPED, parsed);
-        assertEquals(7, parsed.size());
+        assertEquals(8, parsed.size());
     }
 
     @Test
@@ -254,7 +255,8 @@ class SeasonCalendarTest {
         assertEquals(-0.04, SeasonCalendar.effect(parsed, "wheat", at("2026-09-27T12:00"), CHICAGO, 2), EPS);
         assertEquals(0.01, SeasonCalendar.effect(parsed, "oak_log", at("2026-09-27T12:00"), CHICAGO, 2), EPS);
         assertEquals(List.of(), SeasonCalendar.unknownIds(SHIPPED,
-                Set.of("cobblestone", "oak_log", "wheat", "iron_ingot", "gold_ingot", "diamond")));
+                Set.of("cobblestone", "oak_log", "wheat", "iron_ingot", "gold_ingot", "diamond",
+                        "pumpkin", "carrot", "potato", "bread", "baked_potato", "cooked_chicken")));
     }
 
     @Test
@@ -352,5 +354,26 @@ class SeasonCalendarTest {
         assertEquals(null, SeasonCalendar.byTag(SHIPPED, "spooky_week:2026"), "removed from the list");
         assertEquals(null, SeasonCalendar.byTag(SHIPPED, null));
         assertEquals(null, SeasonCalendar.byTag(null, "harvest_time:2026"));
+    }
+
+    @Test
+    void feastWeekIsTheOwnersRowAndFadesInAndOut() {
+        Season feast = shipped("feast_week");
+        assertEquals("Feast Week", feast.name());
+        assertEquals(MonthDay.of(11, 22), feast.from());
+        assertEquals(MonthDay.of(11, 30), feast.to());
+        assertEquals(List.of("bread", "baked_potato", "cooked_chicken", "carrot", "pumpkin"),
+                List.copyOf(feast.percent().keySet()));
+        assertTrue(feast.percent().values().stream().allMatch(v -> v == -4.0), "a little cheaper, under the cap");
+        assertNull(Headlines.textProblem(feast.headline(), true), "a headline the market may print");
+        for (String item : List.of("bread", "baked_potato", "cooked_chicken", "carrot", "pumpkin")) {
+            assertEquals(0.0, effect(item, "2026-11-21T12:00"), item + ": not before the 22nd");
+            assertEquals(-0.04, effect(item, "2026-11-26T12:00"), EPS, item + ": full on Thanksgiving Day");
+            assertEquals(0.0, effect(item, "2026-12-01T00:00"), item + ": over after the 30th");
+        }
+        assertEquals(0.0, effect("wheat", "2026-11-26T12:00"), "wheat is not in it");
+        assertEquals(0.0, effect("potato", "2026-11-26T12:00"), "nor the raw potato");
+        assertEquals(1, SeasonCalendar.active(SHIPPED, at("2026-11-26T12:00"), CHICAGO, 2).size(),
+                "it overlaps no other shipped season");
     }
 }

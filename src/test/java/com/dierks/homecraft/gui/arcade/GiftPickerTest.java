@@ -78,10 +78,10 @@ class GiftPickerTest {
         mixed.add(notGiftable());
         mixed.addAll(Collectors.ROWS);
         assertEquals(List.of("trail_heart", "hat_creeper", "ball_pink", "cap_pumpkin_2026", "trail_leaves_2026",
-                        "cap_santa_2026", "trail_twinkle_2026"),
+                        "cap_santa_2026", "trail_twinkle_2026", "cap_turkey_2026"),
                 GiftPickerMenu.presents(true, mixed).stream().map(Prize::id).toList(),
                 "rented looks (SHOP-V2-SPEC §3.13) and golf balls too; never a boost, a trophy, a perk, nor a "
-                        + "collector marked not giftable");
+                        + "collector marked not giftable (the earned Pilgrim Hat)");
     }
 
     @Test

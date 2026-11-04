@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.mini;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.mini.EventMinis;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.util.Text;
 import net.kyori.adventure.text.Component;
@@ -69,7 +70,7 @@ public final class BinderMenu extends Menu {
             refresh();
         });
         int uniqueOwned = owned.size();
-        int total = plugin.miniService().catalog().size();
+        int total = EventMinis.album(plugin.miniService().catalog()).size();
         set(50, Menus.icon(Material.NETHER_STAR, "&6Collection",
                 "&7Unique cards: &f" + uniqueOwned + " / " + total,
                 "&7Total cards held: &f" + owned.values().stream().mapToInt(Integer::intValue).sum()), null);
@@ -111,7 +112,7 @@ public final class BinderMenu extends Menu {
     }
 
     private void buildAlbum(Map<String, Integer> owned) {
-        List<MiniDef> all = new ArrayList<>(plugin.miniService().catalog());
+        List<MiniDef> all = EventMinis.album(plugin.miniService().catalog());
         int from = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {
             int idx = from + i;

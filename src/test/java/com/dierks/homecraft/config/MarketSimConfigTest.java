@@ -88,6 +88,12 @@ class MarketSimConfigTest {
                 - { id: iron_ingot, material: IRON_INGOT }
                 - { id: gold_ingot, material: GOLD_INGOT }
                 - { id: diamond, material: DIAMOND }
+                - { id: pumpkin, material: PUMPKIN }
+                - { id: carrot, material: CARROT }
+                - { id: potato, material: POTATO }
+                - { id: bread, material: BREAD }
+                - { id: baked_potato, material: BAKED_POTATO }
+                - { id: cooked_chicken, material: COOKED_CHICKEN }
             """;
 
     private static long warnsNaming(List<String> warns, String key) {

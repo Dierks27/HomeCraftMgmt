@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.TokenService;
+import com.dierks.homecraft.arcade.feast.FeastRules;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameAdmin;
@@ -100,6 +101,10 @@ import java.util.logging.Logger;
  * gate's step 0). {@link ClubRoute} holds every fallback: with the Clubhouse off, a course in another
  * world, the restart hold, a rider or a test run, everything is exactly as before.
  *
+ * <p>The Family Feast's tables (0.38.6) show the family's food as it goes in at the Feast Pot in the home world, and
+ * a helper who hasn't seen the full table gets the room's ceremony when they come in ({@link #feast}); the Feast's
+ * own service, on the Arcade side, does the counting and the paying.
+ *
  * <p>Nothing here moves a token, and nothing counts toward a board, quest, achievement or the Cup.
  * It runs inside the framework's guard: a bug switches the Clubhouse off, never a race.
  */
@@ -153,6 +158,10 @@ public final class Clubhouse implements Game, ClubDoor {
     /** 0.38.4: the jukebox corner and the family week; null with no server. */
     private JukeboxCorner jukebox;
     private FamilyWeek familyWeek;
+    /** 0.38.6: the Family Feast's tables; null with no server. When the room's ceremony last played, and its end. */
+    private FeastTable feastTable;
+    private long feastCeremonyAt = Long.MIN_VALUE / 2;
+    private long feastShowUntil;
     private final Cheers cheers = new Cheers();
     private final Map<UUID, Boolean> cheersOn = new HashMap<>();
     /** 0.38.3: who is on their way to a course or a round from here, and their countdowns. */
@@ -348,6 +357,7 @@ public final class Clubhouse implements Game, ClubDoor {
         boards = new ClubBoards(this);
         jukebox = new JukeboxCorner(this);
         familyWeek = new FamilyWeek(this);
+        feastTable = new FeastTable(this);
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -386,6 +396,9 @@ public final class Clubhouse implements Game, ClubDoor {
     private void stopRoom() {
         if (jukebox != null) {
             jukebox.stop(); // the music off and our disc cleared while the world is up, before the room goes
+        }
+        if (feastTable != null) {
+            feastTable.remove();
         }
         if (room != null) {
             room.stop();
@@ -725,6 +738,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (jukebox != null) {
                 jukebox.stop();
             }
+            if (feastTable != null) {
+                feastTable.remove();
+            }
             wasOpen = false;
             return;
         }
@@ -778,6 +794,79 @@ public final class Clubhouse implements Game, ClubDoor {
         if (familyWeek != null) {
             familyWeek.second(now);
         }
+        feast(now);
+    }
+
+    /**
+     * 0.38.6, once a second while the room is open: the Family Feast's tables (while anyone is in), the room
+     * ceremony's bursts, and the ceremony itself when a helper who hasn't seen the full table is in. Its gate is the
+     * family week's: not while closing for a restart or while a photo waits, and a minute between two. The helpers
+     * inside are marked first, then the title for the room, the Thankful line, and 20 seconds of bursts.
+     */
+    private void feast(long now) {
+        if (feastTable == null) {
+            return;
+        }
+        com.dierks.homecraft.arcade.feast.FeastService f = plugin().feast();
+        if (f == null) {
+            feastTable.remove();
+            return;
+        }
+        FeastRules.FeastView v = f.view();
+        if (visits.size() > 0) {
+            feastTable.redraw(room, v);
+        }
+        if (now < feastShowUntil) {
+            feastTable.burst(room, f.colours());
+        }
+        if (!v.open() || !v.done() || visits.size() == 0) {
+            return;
+        }
+        List<UUID> unseen = new ArrayList<>();
+        for (ClubVisits.Visit visit : visits.all()) {
+            if (f.unseenHelper(visit.id())) {
+                unseen.add(visit.id());
+            }
+        }
+        if (!FeastRules.roomCeremonyTurn(room.open(), !unseen.isEmpty(), closingForRestart(), photoPending(),
+                now - feastCeremonyAt >= FeastRules.ROOM_COOL_DOWN_MS)) {
+            return;
+        }
+        for (UUID id : unseen) {
+            f.markRoomSeen(id); // first: a crash never plays it twice
+        }
+        feastCeremonyAt = now;
+        feastShowUntil = now + FeastRules.ROOM_SHOW_MS;
+        feastCeremony(f.thankfulLine());
+    }
+
+    /** The room's Feast ceremony: the title for everyone in the room and the Thankful line (the bursts follow). */
+    private void feastCeremony(String line) {
+        for (ClubVisits.Visit visit : visits.all()) {
+            Player p = online(visit.id());
+            if (p != null) {
+                title(p, com.dierks.homecraft.arcade.feast.FeastService.READY,
+                        com.dierks.homecraft.arcade.feast.FeastService.THANKS);
+                p.sendMessage(Text.of(line));
+            }
+        }
+    }
+
+    /**
+     * {@code /hcm feast test} (0.38.6): the room's Feast ceremony now, when {@code p} is in the Clubhouse, with no
+     * marker. @return whether it played
+     */
+    public static boolean feastTest(GamesService games, Player p) {
+        Clubhouse c = running(games);
+        if (c == null || p == null || !c.visits.in(p.getUniqueId())) {
+            return false;
+        }
+        games.guard(c, () -> {
+            var f = c.plugin().feast();
+            c.feastShowUntil = c.now() + FeastRules.ROOM_SHOW_MS;
+            c.feastCeremony(f == null ? FeastRules.thankfulLine(List.of(p.getName())) : f.thankfulLine());
+        });
+        return true;
     }
 
     /**
@@ -804,6 +893,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (jukebox != null) {
             jukebox.stop();
+        }
+        if (feastTable != null) {
+            feastTable.remove();
         }
         room = newRoom();
         room.start();

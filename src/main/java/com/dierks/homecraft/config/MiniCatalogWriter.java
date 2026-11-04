@@ -1,6 +1,7 @@
 package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.mini.EventMinis;
 import com.dierks.homecraft.mini.MiniDef;
 
 import java.util.ArrayList;
@@ -41,23 +42,33 @@ public final class MiniCatalogWriter {
 
             List<Map<String, Object>> entries = new ArrayList<>();
             for (MiniDef def : entry.getValue()) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("id", def.id());
-                m.put("name", def.name());
-                m.put("category", def.category());
-                m.put("rarity", def.rarity().name());
-                m.put("type", def.type().name());
-                m.put("texture", def.texture() == null ? "" : def.texture());
-                m.put("cap", def.cap());
-                m.put("price", def.price());
-                m.put("craftable", def.craftable());
-                m.put("tags", new ArrayList<>(def.tags()));
-                entries.add(m);
+                entries.add(entry(def));
             }
             seriesMap.put("entries", entries);
             series.add(seriesMap);
         }
 
         plugin.writeConfig("minis.series", series);
+    }
+
+    /**
+     * One Mini's catalog entry, every field written out. A holiday Mini also keeps its
+     * {@code event_only}, {@code earn_from} and {@code earn_to}, so an edit in the Admin Studio
+     * never turns it into an ordinary Mini that packs and crates could give.
+     */
+    public static Map<String, Object> entry(MiniDef def) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", def.id());
+        m.put("name", def.name());
+        m.put("category", def.category());
+        m.put("rarity", def.rarity().name());
+        m.put("type", def.type().name());
+        m.put("texture", def.texture() == null ? "" : def.texture());
+        m.put("cap", def.cap());
+        m.put("price", def.price());
+        m.put("craftable", def.craftable());
+        m.put("tags", new ArrayList<>(def.tags()));
+        EventMinis.writeWindow(def, m);
+        return m;
     }
 }

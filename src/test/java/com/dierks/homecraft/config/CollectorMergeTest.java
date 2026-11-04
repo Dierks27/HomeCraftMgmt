@@ -54,13 +54,15 @@ class CollectorMergeTest {
         List<Prize> merged = PluginConfig.mergeCollectors(List.of(heart), null);
         int k = com.dierks.homecraft.arcade.Keepers.ROWS.size();
         assertEquals(7, k, "the seven Keepers ship (S4)");
-        assertEquals(k + 5, merged.size());
+        assertEquals(k + 7, merged.size());
         assertEquals(com.dierks.homecraft.arcade.Keepers.ROWS, merged.subList(0, k), "the Keepers first");
         assertEquals("cap_pumpkin_2026", merged.get(k).id());
         assertEquals("trail_leaves_2026", merged.get(k + 1).id());
         assertEquals("cap_santa_2026", merged.get(k + 2).id());
         assertEquals("trail_twinkle_2026", merged.get(k + 3).id());
-        assertSame(heart, merged.get(k + 4), "config rows follow, in their order");
+        assertEquals("cap_turkey_2026", merged.get(k + 4).id());
+        assertEquals("cap_pilgrim_2026", merged.get(k + 5).id());
+        assertSame(heart, merged.get(k + 6), "config rows follow, in their order");
     }
 
     @Test
@@ -74,7 +76,7 @@ class CollectorMergeTest {
                 row("trail_heart", PrizeType.TRAIL, 100)), warnings::add);
         merged = merged.subList(com.dierks.homecraft.arcade.Keepers.ROWS.size(), merged.size());
         assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026",
-                        "trail_heart"), merged.stream().map(Prize::id).toList());
+                        "cap_turkey_2026", "cap_pilgrim_2026", "trail_heart"), merged.stream().map(Prize::id).toList());
         assertEquals(250, merged.get(0).costTokens(), "the collector stays the catalogue's");
         assertNotNull(merged.get(0).collector());
         assertEquals(400, merged.get(1).costTokens());

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.clubhouse;
 
+import com.dierks.homecraft.arcade.feast.FeastRules;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Plan;
@@ -19,6 +20,10 @@ import java.util.Set;
  * benches round them, a lantern on each. The south half is open floor: sixteen arrival spots, three
  * or more blocks apart, each facing the podium.
  *
+ * <p><b>The feast tables</b> (0.38.6): two long 5 x 2 tables of orange glass between the podium and the arrival
+ * spots, benches all round, with an aisle between them that runs to the podium. They stay all year as furniture; only
+ * the food on them is seasonal ({@link FeastTable}: item frames on the glass, entities, not in the plan).
+ *
  * <p><b>The jukebox corner</b> (0.38.4): a small pink glass stage in the south-west corner with a jukebox on it
  * and a glass block on top ({@link JukeboxCorner}). The trophy case ({@link TrophyWall}) is a row of item frames,
  * entities, not blocks: nothing of it is in the plan.
@@ -35,9 +40,9 @@ public final class ClubhousePlanner {
 
     /**
      * The planner's version: part of the plan, so a change of the room is a change of plan. 2 (0.38.4): the
-     * jukebox corner.
+     * jukebox corner. 3 (0.38.6): the two feast tables.
      */
-    public static final int ALGO = 2;
+    public static final int ALGO = 3;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -71,6 +76,15 @@ public final class ClubhousePlanner {
     static final int TROPHY_Z0 = 9;
     static final int TROPHY_STEP = 2;
     static final int TROPHY_MAX = ClubBoard.MAX_ROWS;
+    /**
+     * The feast tables (0.38.6): two 5 x 2 glass tables on the floor's layer + 1, at x 10-14 (west) and 17-21 (east),
+     * z 8-9, the aisle x 15-16 between them running north to the podium; a plate (an item frame) over each glass block.
+     */
+    static final int FEAST_WEST_X0 = 10;
+    static final int FEAST_EAST_X0 = 17;
+    static final int FEAST_Z0 = 8;
+    static final int FEAST_LEN = 5;
+    static final int FEAST_PLATE_Y = 2;
 
     // ---- the blocks --------------------------------------------------------------------------------
 
@@ -93,6 +107,7 @@ public final class ClubhousePlanner {
     public static final String TABLE_EAST = "minecraft:lime_stained_glass";
     public static final String STAGE = "minecraft:pink_stained_glass";
     public static final String JUKEBOX = "minecraft:jukebox[has_record=false]";
+    public static final String FEAST_GLASS = "minecraft:orange_stained_glass";
 
     /** A bench: birch stairs, bottom half, their back ("facing") away from the table. */
     static String bench(String facing) {
@@ -200,6 +215,9 @@ public final class ClubhousePlanner {
         // two tables, each with a lantern and four benches round it
         table(b, 5, 13, TABLE_WEST);
         table(b, 25, 13, TABLE_EAST);
+        // the feast tables (0.38.6): two long tables with an aisle to the podium, benches facing the glass
+        longTable(b, FEAST_WEST_X0, FEAST_Z0, FEAST_LEN, FEAST_GLASS);
+        longTable(b, FEAST_EAST_X0, FEAST_Z0, FEAST_LEN, FEAST_GLASS);
         // the jukebox corner (0.38.4): a small stage in the south-west corner, the jukebox on it, glass on top
         for (int dx = 0; dx < 3; dx++) {
             for (int dz = 0; dz < 3; dz++) {
@@ -220,7 +238,8 @@ public final class ClubhousePlanner {
         Box inside = new Box(box.minX() + 1, box.minY() + 1, box.minZ() + 1, box.maxX() - 1, box.minY() + WALL_TOP,
                 box.maxZ() - 1);
         List<String> summary = List.of("the Clubhouse: " + box.describe(), spawns.size() + " arrival spots, a podium "
-                + "of 3, the results board on the north wall, a jukebox in the south-west corner", "plan " + ALGO);
+                + "of 3, the results board on the north wall, two long feast tables, a jukebox in the south-west corner",
+                "plan " + ALGO);
         Plan plan = Plan.of(SLOT, ALGO, 0L, box, b.palette, b.ops, List.of(), List.of(), null, summary, 0);
         return new ClubhouseSite(plan, spawns, podium, board, inside);
     }
@@ -242,6 +261,35 @@ public final class ClubhousePlanner {
         return out;
     }
 
+    /**
+     * The feast tables' plates in {@code box} (0.38.6): {@value FeastRules#CELLS} blocks of air, one over each glass
+     * block, west and east table taken in turn so both fill together; each frame faces up.
+     */
+    public static List<int[]> feastCells(Box box) {
+        List<int[]> out = new ArrayList<>();
+        for (int n = 0; n < 2 * 2 * FEAST_LEN; n++) {
+            int k = n / 2;
+            int x0 = n % 2 == 0 ? FEAST_WEST_X0 : FEAST_EAST_X0;
+            out.add(new int[]{box.minX() + x0 + k % FEAST_LEN, box.minY() + FEAST_PLATE_Y,
+                    box.minZ() + FEAST_Z0 + k / FEAST_LEN});
+        }
+        return out;
+    }
+
+    /**
+     * The feast tables' line in {@code box} (0.38.6): over the aisle between them, a little above the plates, facing
+     * south to the arrival spots.
+     */
+    public static WallBoards.Wall feastLine(Box box) {
+        double x = box.minX() + FEAST_EAST_X0 - 1;              // the aisle's middle: between x 15 and x 16
+        double z = box.minZ() + FEAST_Z0 + 1;                   // the tables' middle: between z 8 and z 9
+        return new WallBoards.Wall(x, box.minY() + 4.0, z, WallBoards.turn(0f), FEAST_LINE_SCALE, FEAST_LINE_WIDTH);
+    }
+
+    /** The feast line's size and wrap: two short lines, readable across the room. */
+    static final float FEAST_LINE_SCALE = 1.5f;
+    static final int FEAST_LINE_WIDTH = 200;
+
     /** Windows: three of every six blocks along a wall (away from the corners). */
     static boolean window(int along) {
         int m = along % 6;
@@ -261,6 +309,24 @@ public final class ClubhousePlanner {
             b.set(x0 + 2, 1, z0 + d, bench("east"));
             b.set(x0 + d, 1, z0 - 1, bench("north"));
             b.set(x0 + d, 1, z0 + 2, bench("south"));
+        }
+    }
+
+    /**
+     * A long glass table, {@code len} x 2, at (x0..x0+len-1, z0..z0+1), with no lantern (its glass carries the plates),
+     * a bench facing it at every side block: {@code 2 * len + 4} seats.
+     */
+    private static void longTable(Builder b, int x0, int z0, int len, String glass) {
+        for (int dx = 0; dx < len; dx++) {
+            for (int dz = 0; dz < 2; dz++) {
+                b.set(x0 + dx, 1, z0 + dz, glass);
+            }
+            b.set(x0 + dx, 1, z0 - 1, bench("north"));
+            b.set(x0 + dx, 1, z0 + 2, bench("south"));
+        }
+        for (int d = 0; d < 2; d++) {
+            b.set(x0 - 1, 1, z0 + d, bench("west"));
+            b.set(x0 + len, 1, z0 + d, bench("east"));
         }
     }
 

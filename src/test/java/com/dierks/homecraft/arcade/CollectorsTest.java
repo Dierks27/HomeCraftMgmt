@@ -47,7 +47,8 @@ class CollectorsTest {
 
     @Test
     void shippedIdsAreAppendOnly() {
-        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026"),
+        assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026", "cap_santa_2026", "trail_twinkle_2026",
+                        "cap_turkey_2026", "cap_pilgrim_2026"),
                 Collectors.SHIPPED_IDS, "a shipped collector id is never removed or renamed: owned trails would vanish");
         assertEquals(Collectors.SHIPPED_IDS, Collectors.ROWS.stream().map(Prize::id).toList(),
                 "every shipped collector has its row, in the order shipped (the counter's order)");
@@ -306,7 +307,11 @@ class CollectorsTest {
         LocalDate nov = LocalDate.of(2026, 11, 15);
         LocalDate dec = LocalDate.of(2026, 12, 15);
         assertEquals(List.of("cap_pumpkin_2026", "trail_leaves_2026"), onSaleOn(oct));
-        assertEquals(List.of("trail_leaves_2026"), onSaleOn(nov), "November: the leaves only");
+        assertEquals(List.of("trail_leaves_2026", "cap_turkey_2026"), onSaleOn(nov),
+                "November: the leaves and the Turkey Hat; the Pilgrim Hat is earned, never sold");
+        assertFalse(onSaleOn(LocalDate.of(2026, 10, 31)).contains("cap_turkey_2026"), "the Turkey Hat waits for"
+                + " November");
+        assertFalse(onSaleOn(LocalDate.of(2026, 12, 1)).contains("cap_turkey_2026"), "and is gone in December");
         assertEquals(List.of("cap_santa_2026", "trail_twinkle_2026"), onSaleOn(dec));
         assertEquals(List.of("trail_twinkle_2026"), onSaleOn(LocalDate.of(2027, 1, 6)));
         assertEquals(List.of(), onSaleOn(LocalDate.of(2027, 1, 7)));
@@ -337,7 +342,7 @@ class CollectorsTest {
         assertEquals("&6", Collectors.seasonColour("Holiday"), "any other season keeps the gold of 0.37.1");
         assertEquals("&6", Collectors.seasonColour(null));
 
-        assertEquals(List.of("Halloween", "Halloween", "Christmas", "Christmas"),
+        assertEquals(List.of("Halloween", "Halloween", "Christmas", "Christmas", "Thanksgiving", "Thanksgiving"),
                 Collectors.ROWS.stream().map(p -> p.collector().season()).toList());
         assertEquals("&6Halloween 2026 collector", Collectors.collectorLine(row("cap_pumpkin_2026").collector()));
         assertEquals("&6Halloween 2026 collector", Collectors.collectorLine(row("trail_leaves_2026").collector()));
@@ -457,10 +462,68 @@ class CollectorsTest {
         assertTrue(Collectors.reserved("candy_x"));
         assertTrue(Collectors.reserved("CANDY_apple_2026"));
         assertTrue(Collectors.reserved("bag_trick_or_treat_x"));
+        assertTrue(Collectors.reserved("harvest_pie_2026"), "the Harvest Basket's treats");
+        assertTrue(Collectors.reserved("Harvest_Golden_Pie_2026"));
+        assertTrue(Collectors.reserved("turkey_feather_2026"), "the Turkey Feather");
+        assertTrue(Collectors.reserved("cap_turkey_2026"));
+        assertTrue(Collectors.reserved("cap_pilgrim_2026"));
+        assertFalse(Collectors.reserved("harvestmoon_cap"), "only the harvest_ prefix, with its underscore");
+        assertFalse(Collectors.reserved("turkey_hat"), "a config row may still be called turkey something");
         assertFalse(Collectors.reserved("candycane_cap"), "only the candy_ prefix, with its underscore");
         assertFalse(Collectors.reserved("trail_heart"));
         assertFalse(Collectors.reserved(null));
         assertEquals("Arcade prize 'candy_x' is one of the plugin's own collectors - your row is skipped "
                 + "(collectors are built in; see arcade.collectors).", Collectors.skipWarning("candy_x"));
+    }
+
+    @Test
+    void theTurkeyHat() {
+        Prize cap = row(Collectors.TURKEY_ID);
+        assertEquals("cap_turkey_2026", cap.id());
+        assertEquals("&6Turkey Hat 2026", cap.display());
+        assertEquals(250, cap.costTokens());
+        assertEquals(PrizeTab.LOOKS, cap.tab(), "a cap: on the Looks tab, not beside the Autumn Leaves trail");
+        assertEquals(PrizeType.HAT, cap.type());
+        assertEquals(LimitPer.LIFETIME, cap.limit().per());
+        assertEquals(1, cap.limit().count());
+        assertTrue(cap.collector().giftable(), "a parent can give it as a present");
+        assertFalse(cap.collector().earned());
+        assertEquals(new CapLook(0x835432, "rib", "redstone"), cap.collector().look(), "brown, a red stripe");
+        assertEquals(LocalDate.of(2026, 11, 1), cap.collector().from());
+        assertEquals(LocalDate.of(2026, 11, 30), cap.collector().to());
+        assertEquals("Thanksgiving", cap.collector().season(), "named, not the plain November 'Holiday'");
+        assertEquals("&6Thanksgiving 2026 collector", Collectors.collectorLine(cap.collector()));
+        assertTrue(PrizeService.onSale(cap, true, LocalDate.of(2026, 11, 26)));
+        assertFalse(PrizeService.onSale(cap, false, LocalDate.of(2026, 11, 26)), "the owner's on_sale switch");
+    }
+
+    @Test
+    void thePilgrimHatIsEarnedNeverSold() {
+        Prize cap = row(Collectors.PILGRIM_ID);
+        assertEquals("cap_pilgrim_2026", cap.id());
+        assertEquals("&6Pilgrim Hat 2026", cap.display());
+        assertEquals(0, cap.costTokens(), "no price: it is never sold");
+        assertEquals(PrizeTab.LOOKS, cap.tab());
+        assertEquals(PrizeType.HAT, cap.type());
+        assertEquals(LimitPer.LIFETIME, cap.limit().per(), "one each, for good");
+        assertTrue(cap.collector().earned());
+        assertFalse(cap.collector().giftable(), "never a present");
+        assertEquals(new CapLook(0x1D1D21, "coast", "gold"), cap.collector().look(), "black, a gold band");
+        assertEquals("&6Thanksgiving 2026 collector", Collectors.collectorLine(cap.collector()));
+        for (int day = 1; day <= 30; day++) {
+            assertFalse(PrizeService.onSale(cap, true, LocalDate.of(2026, 11, day)), "not on sale on " + day + " Nov");
+        }
+        assertTrue(cap.collector().inSeason(LocalDate.of(2026, 11, 26)), "its season is still November");
+    }
+
+    @Test
+    void theOlderConstructorsAreNotEarned() {
+        Collector five = new Collector(2027, LocalDate.of(2027, 4, 1), LocalDate.of(2027, 5, 31), true, null);
+        Collector six = new Collector(2027, LocalDate.of(2027, 4, 1), LocalDate.of(2027, 5, 31), true, null, "Easter");
+        assertFalse(five.earned());
+        assertFalse(six.earned());
+        assertEquals(five, new Collector(2027, LocalDate.of(2027, 4, 1), LocalDate.of(2027, 5, 31), true, null,
+                "Spring", false));
+        assertEquals("Holiday", Collector.seasonOf(LocalDate.of(2026, 11, 1)), "seasonOf is unchanged");
     }
 }

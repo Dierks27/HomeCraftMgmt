@@ -83,6 +83,10 @@ public final class PrinterService {
         if (def == null) {
             return PrintResult.fail("That Card's Mini no longer exists.");
         }
+        // Refused before anything is taken: the mint would refuse it after the filament was used.
+        if (!EventMinis.hasCards(def)) {
+            return PrintResult.fail(def.name() + " is a holiday Mini: only its event gives it.");
+        }
         // The Printer is the mint source, so it honours the Mini cap up front.
         var counts = plugin.miniService().counts(id);
         if (!def.uncapped() && counts.minted() >= def.cap()) {

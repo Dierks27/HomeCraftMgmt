@@ -120,6 +120,16 @@ public final class MiniItems {
      */
     public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, long escaped,
                              String valueText) {
+        return preview(def, style, minted, circulation, escaped, valueText, null);
+    }
+
+    /**
+     * {@link #preview} for a holiday Mini too: {@code eventLine} ("Earn: 22 Nov - 29 Nov 2026" or
+     * "Closed", see {@link EventMinis#museumLine}) takes the place of the Printer line, because
+     * no Card prints one. Null for an ordinary Mini.
+     */
+    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, long escaped,
+                             String valueText, String eventLine) {
         ItemStack item = baseItem(def);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -145,10 +155,16 @@ public final class MiniItems {
             }
             lore.add(Component.empty());
             boolean soldOut = !def.uncapped() && minted >= def.cap();
-            lore.add((soldOut
-                    ? Component.text("Minted out — trade only", NamedTextColor.RED)
-                    : Component.text("Printed from a Card at a Printer", NamedTextColor.YELLOW))
-                    .decoration(TextDecoration.ITALIC, false));
+            if (eventLine != null) {
+                lore.add(Component.text(eventLine, "Closed".equals(eventLine) ? NamedTextColor.RED : NamedTextColor.GOLD)
+                        .decoration(TextDecoration.ITALIC, false));
+            }
+            if (soldOut || eventLine == null) {
+                lore.add((soldOut
+                        ? Component.text("Minted out — trade only", NamedTextColor.RED)
+                        : Component.text("Printed from a Card at a Printer", NamedTextColor.YELLOW))
+                        .decoration(TextDecoration.ITALIC, false));
+            }
             lore.add(Component.text("Click for details", NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
             meta.lore(lore);
             item.setItemMeta(meta);

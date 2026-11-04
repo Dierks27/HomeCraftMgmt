@@ -319,7 +319,8 @@ public final class PrizeItemListener implements Listener {
      * for the machine, as in {@code CustomBlockListener}), a tagged join sign, a Mini's head, placed or wild
      * (the head {@code MiniHeadListener} acts on: its skull carries a Mini), or a placed Arcade Trophy, whose tap
      * opens the Arcade (§5.8). A lookup that fails is "no". Public for the Candy Apple shower's taps (the Bedrock
-     * eat fallback and the bag), which leave a block of ours alone too.
+     * eat fallback and the bag), which leave a block of ours alone too. The Family Feast's pot (0.38.6) is ours as
+     * well, so a tap on it hands food in and never eats a basket treat.
      */
     public static boolean ours(HomeCraftManagement plugin, Block clicked) {
         try {
@@ -328,6 +329,9 @@ public final class PrizeItemListener implements Listener {
                 return true;
             }
             if (JoinSigns.isJoinSign(clicked)) {
+                return true;
+            }
+            if (plugin.feast() != null && plugin.feast().isPot(clicked)) {
                 return true;
             }
             Material type = clicked.getType();

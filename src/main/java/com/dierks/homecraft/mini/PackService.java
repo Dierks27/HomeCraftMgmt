@@ -109,15 +109,12 @@ public final class PackService {
         return out;
     }
 
-    /** Every Mini an odds pack draws from before the cap check: the tag's Minis, or all of them. */
+    /**
+     * Every Mini an odds pack draws from before the cap check: the tag's Minis, or all of them,
+     * never a holiday Mini.
+     */
     private List<MiniDef> candidates(Pack.PackDef def) {
-        List<MiniDef> out = new ArrayList<>();
-        for (MiniDef m : plugin.miniService().catalog()) {
-            if (!def.hasTag() || m.hasTag(def.tag())) {
-                out.add(m);
-            }
-        }
-        return out;
+        return EventMinis.packCandidates(def, plugin.miniService().catalog());
     }
 
     /**

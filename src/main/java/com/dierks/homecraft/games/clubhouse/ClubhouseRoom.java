@@ -67,6 +67,11 @@ public final class ClubhouseRoom {
     public static final String TROPHIES_KEY = META_PREFIX + "hand.trophies";
     public static final String JUKEBOX_KEY = META_PREFIX + "hand.jukebox";
     public static final String WEEK_DONE_KEY = META_PREFIX + "week.done";
+    /**
+     * 0.38.6: the owner-built room's feast table (the first plate's block, where the admin stands on their table; ten
+     * plates to their right, a second row of ten one block ahead).
+     */
+    public static final String FEAST_KEY = META_PREFIX + "hand.feast";
     /** The build's time budget a tick, and the snapshots and chunk loads it may use. */
     static final int BUILD_MS = 3;
     static final int BUILD_SNAPSHOTS = 3;
@@ -142,6 +147,8 @@ public final class ClubhouseRoom {
     /** 0.38.4: the owner-built room's trophy case and jukebox, where set. */
     private Place handTrophies;
     private Place handJukebox;
+    /** 0.38.6: the owner-built room's feast table, where set. */
+    private Place handFeast;
     private BuildJob job;
     private boolean jobScan;
     private long jobStarted;
@@ -198,6 +205,7 @@ public final class ClubhouseRoom {
             }
             handTrophies = Place.of(host.meta(TROPHIES_KEY));
             handJukebox = Place.of(host.meta(JUKEBOX_KEY));
+            handFeast = Place.of(host.meta(FEAST_KEY));
         } catch (Exception e) {
             host.logger().log(Level.WARNING, "Clubhouse: could not read its settings from the database", e);
             waitingFor = "its settings can't be read from the database";
@@ -562,6 +570,20 @@ public final class ClubhouseRoom {
                 + notOnYet();
     }
 
+    /**
+     * {@code /hcm games clubhouse feast} (0.38.6): the owner-built room's feast table. The admin stands on their
+     * table's near corner facing across it: the first plate is the block they stand in, ten run to their right, and
+     * ten more one block ahead. Nothing is placed: the plates are item frames, drawn only during the Family Feast.
+     */
+    public String feast(Place at) {
+        if (!setMeta(FEAST_KEY, at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handFeast = at;
+        return "&aThe feast table starts where you stand: ten plates to your right, ten more in front of them."
+                + notOnYet();
+    }
+
     /** What a wall board is called in the admin's lines. */
     static String wallName(String which) {
         return switch (which) {
@@ -747,6 +769,66 @@ public final class ClubhouseRoom {
         return new int[]{(int) Math.floor(at.x()), (int) Math.floor(at.y()) - 1, (int) Math.floor(at.z())};
     }
 
+    /**
+     * The feast table's plates (0.38.6), {x, y, z} each (the air a plate's frame hangs in, facing up), or {@code null}
+     * for none: the generated room's two tables ({@link ClubhousePlanner#feastCells}), or the owner-built room's two
+     * rows of ten from the recorded spot along the admin's right (only in its world).
+     */
+    public List<int[]> feastCells() {
+        if (!hand) {
+            return site == null ? null : ClubhousePlanner.feastCells(box);
+        }
+        Place at = handFeast;
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        int[] right = right(at.yaw());
+        int[] ahead = ahead(at.yaw());
+        int half = com.dierks.homecraft.arcade.feast.FeastRules.CELLS / 2;
+        List<int[]> out = new ArrayList<>();
+        for (int row = 0; row < 2; row++) {
+            for (int n = 0; n < half; n++) {
+                out.add(new int[]{(int) Math.floor(at.x()) + n * right[0] + row * ahead[0], (int) Math.floor(at.y()),
+                        (int) Math.floor(at.z()) + n * right[1] + row * ahead[1]});
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The feast table's line (0.38.6), or {@code null} for none: the generated room's over the aisle facing the
+     * arrivals ({@link ClubhousePlanner#feastLine}); the owner-built room's two blocks over the middle of the plates,
+     * facing back to where the admin stood.
+     */
+    public WallBoards.Wall feastLine() {
+        if (!hand) {
+            return site == null ? null : ClubhousePlanner.feastLine(box);
+        }
+        Place at = handFeast;
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        int[] right = right(at.yaw());
+        int[] ahead = ahead(at.yaw());
+        double along = (com.dierks.homecraft.arcade.feast.FeastRules.CELLS / 2 - 1) / 2.0;
+        double x = Math.floor(at.x()) + 0.5 + along * right[0] + 0.5 * ahead[0];
+        double z = Math.floor(at.z()) + 0.5 + along * right[1] + 0.5 * ahead[1];
+        return new WallBoards.Wall(x, Math.floor(at.y()) + 2.0, z, WallBoards.turn(WallBoards.snap(at.yaw() + 180f)),
+                ClubhousePlanner.FEAST_LINE_SCALE, ClubhousePlanner.FEAST_LINE_WIDTH);
+    }
+
+    /** The admin's right for a yaw, {dx, dz}: facing south (0) it is west, north (180) east, west (90) north. */
+    static int[] right(float yaw) {
+        float y = WallBoards.snap(yaw);
+        return new int[]{y == 0f ? -1 : y == 180f ? 1 : 0, y == 90f ? -1 : y == -90f ? 1 : 0};
+    }
+
+    /** One block ahead for a yaw, {dx, dz}: south (0) is +z, north (180) -z, west (90) -x, east (-90) +x. */
+    static int[] ahead(float yaw) {
+        float y = WallBoards.snap(yaw);
+        return new int[]{y == 90f ? -1 : y == -90f ? 1 : 0, y == 0f ? 1 : y == 180f ? -1 : 0};
+    }
+
     /** A stored value under {@link #META_PREFIX} (the family week's marker), or {@code null}; a failure throws. */
     String meta(String key) throws Exception {
         return host.meta(key);
@@ -822,6 +904,7 @@ public final class ClubhouseRoom {
             }
             out.add("trophies " + (handTrophies == null ? "not set (optional)" : handTrophies.text())); // 0.38.4
             out.add("jukebox " + (handJukebox == null ? "not set (optional)" : handJukebox.text()));
+            out.add("feast " + (handFeast == null ? "not set (optional)" : handFeast.text())); // 0.38.6
         }
         return out;
     }

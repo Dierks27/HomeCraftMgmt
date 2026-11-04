@@ -90,6 +90,13 @@ commands:
       /hcm hunt spawn [rarity] [player]|status|clear  - admin: the wild hunt
       /hcm candy             - your candy apples, your Trick-or-Treat Bag and the next shower
       /hcm candy now [player]|status|clear|bag <player>|add <player> <n>  - admin: the Candy Apple shower
+      /hcm harvest           - your Harvest Basket treats, your Pilgrim Hat and the next shower
+      /hcm harvest now [player]|status|clear|hat <player>|add <player> <n>  - admin: the Harvest Basket
+      /hcm turkey            - the next turkey run, and your catches today
+      /hcm turkey now [player]|status|clear  - admin: Catch the Turkey (now outside its days is a test run)
+      /hcm feast             - the Family Feast: the table's progress and your gifts
+      /hcm feast pot [clear]|status|test|reset confirm  - admin: the Family Feast (set the Feast Pot you look at)
+      /hcm games clubhouse feast  - admin: an owner-built Clubhouse's feast table (stand on it, facing across)
       /hcm play              - the Games screen (games of chance, cabinets, courses, mini golf)
       /hcm play <game|course> [player]  - open a game or start a course (for another player: admin)
       /hcm play break        - Take a break: your own limits on games of chance

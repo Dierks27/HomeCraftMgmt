@@ -156,6 +156,26 @@ class AccountMoveTest {
         }
     }
 
+    /**
+     * The Harvest Basket (0.38.6): a Bedrock player's count and Pilgrim Hat mark move to their Java account by the
+     * larger value, so a move never resets her count and never offers a second hat.
+     */
+    @Test
+    void theHarvestBasketsCountAndHatMarkMoveByTheLarger() throws Exception {
+        String f = from.toString();
+        String t = to.toString();
+        exec("INSERT INTO player_counters(player, counter, value) VALUES(?,'harvest:2026',27)", f);
+        exec("INSERT INTO player_counters(player, counter, value) VALUES(?,'harvest:2026:hat',1)", f);
+        exec("INSERT INTO player_counters(player, counter, value) VALUES(?,'harvest:2026',3)", t);
+        AccountMoveDao.Plan plan = moves.move(from, to, 5_000, "Old", "New");
+        assertFalse(plan.refused(), plan.overlap().toString());
+        assertEquals(27, one("SELECT value FROM player_counters WHERE player=? AND counter='harvest:2026'", t),
+                "the larger count");
+        assertEquals(1, one("SELECT value FROM player_counters WHERE player=? AND counter='harvest:2026:hat'", t),
+                "her hat mark comes with her: no second hat");
+        assertEquals(0, one("SELECT COUNT(*) FROM player_counters WHERE player=?", f));
+    }
+
     @Test
     void aFailureHalfwayMovesNothing() throws Exception {
         List<String> before = snapshot();

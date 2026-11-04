@@ -30,9 +30,9 @@ import java.util.Map;
  *
  * <p><b>0.36.</b> Fresh Courses is on in a void world called {@code games}: Golf of the Week is live at
  * 7488,160,4096 (an algo-3 Adventure course with ponds, 64 x 16 x 128 halves), Easy, Parkour, Hard,
- * Sky Rings, Tiny Golf and both Droppers are live at their spots, Classic Golf is empty but claimed at
- * 7488,160,4800, the Clubhouse stands at 6080,160,8544, and Ice Boat is switched off with an algo-3
- * preview standing in its half A at 6080,160,5888 (its claim says 128 x 16 x 128).
+ * Tiny Golf and both Droppers are live at their spots (Sky Rings is off here: {@link #OTHERS}), Classic Golf is
+ * empty but claimed at 7488,160,4800, the Clubhouse stands at 6080,160,8544, and Ice Boat is switched off with an
+ * algo-3 preview standing in its half A at 6080,160,5888 (its claim says 128 x 16 x 128).
  *
  * <p><b>The update.</b> The code's shipped areas are v4's (Slots): golf 128 x 16 x 224 at x 8768 and the
  * boat 480 x 176 x 640 at z 2880; config revision 21 has rewritten the untouched origins, which here means
@@ -68,8 +68,12 @@ final class OwnerServer {
     static final Box BOAT_V4_A = Box.sized(6080, 96, 2880, 480, 176, 640);
     static final Box BOAT_V4_B = Box.sized(7136, 96, 2880, 480, 176, 640);
 
-    /** The courses live on the owner's server besides golf. */
-    static final List<String> OTHERS = List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings",
+    /**
+     * The courses live on the owner's server besides golf. They are built by today's engine at today's sizes, so
+     * Sky Rings is left out: its v3 square (x 6080..7679) would stand where 0.36's golf did, which no 0.36 server
+     * ever had. Sky Rings v3's own move is GamesAreaMigrationTest's and LayoutSightTest's.
+     */
+    static final List<String> OTHERS = List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard",
             TINY, "fresh_dropper_easy", "fresh_dropper");
 
     /** The boxes the update may change: the moved areas, old and new. */

@@ -100,14 +100,18 @@ class GrandShowMigrationTest {
         assertCandy(c, 60, 30, 3, "0.38.0");
         assertEquals(bundled.getConfigurationSection(CANDY).getValues(false),
                 c.getConfigurationSection(CANDY).getValues(false), "the whole candy section is the bundled one");
-        assertEquals(24, c.getInt("config_revision"), "on through revision 24 (FireworkRemoteMigrationTest)");
+        assertEquals(25, c.getInt("config_revision"),
+                "on through revisions 24 and 25 (FireworkRemoteMigrationTest; Sky Rings and the Long Drop)");
         assertEquals(List.of(
                 ADDED_ALL,
                 "Config migration: arcade.events.candy - every_minutes 20 → 60, last_day_every_minutes 10 → 30,"
                         + " apples_per_shower 6 → 3 (a gentler Candy Apple shower: a shower an hour, every half hour on"
                         + " the last day, 3 candy apples each).",
                 FireworkRemoteMigrationTest.ADDED_ALL,
-                "Config migration: config_revision 22 → 24."), log, "one INFO each, revision 24's rows, and the revision");
+                FireworkRemoteMigrationTest.RINGS_MOVED,
+                FireworkRemoteMigrationTest.MIX_MOVED,
+                "Config migration: config_revision 22 → 25."), log,
+                "one INFO each, revision 24's rows, revision 25's two, and the revision");
         List<String> warnings = new ArrayList<>();
         assertEquals(CandyConfig.Candy.DEFAULTS, CandyConfig.parse(LayoutFixtures.reread(c), warnings::add),
                 "the shower reads the shipped settings");
@@ -133,9 +137,14 @@ class GrandShowMigrationTest {
                 "no revision-23 step runs from 23, only 24's: " + from23);
         YamlConfiguration at24 = LayoutFixtures.v0380();
         at24.set("config_revision", 24);
-        String before = at24.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at24, "world"), "no step runs from 24");
-        assertEquals(before, at24.saveToString());
+        List<String> from24 = HomeCraftManagement.migrateConfig(at24, "world");
+        assertTrue(from24.stream().noneMatch(l -> l.contains("Firework Show (") || l.contains("candy")),
+                "no revision-23 or 24 step runs from 24, only 25's: " + from24);
+        YamlConfiguration at25 = LayoutFixtures.v0380();
+        at25.set("config_revision", 25);
+        String before = at25.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at25, "world"), "no step runs from 25");
+        assertEquals(before, at25.saveToString());
     }
 
     @Test
@@ -145,7 +154,7 @@ class GrandShowMigrationTest {
         assertEquals(List.of(), warns(log), "nothing the owner changed: " + log);
         assertTrue(ArcadeConfigMigration.sameRows(rows(c), rows(LayoutFixtures.bundled())), "the bundled counter");
         assertCandy(c, 60, 30, 3, "0.37.2");
-        assertEquals("Config migration: config_revision 21 → 24.", log.get(log.size() - 1));
+        assertEquals("Config migration: config_revision 21 → 25.", log.get(log.size() - 1));
     }
 
     // ---- the owner's own values -------------------------------------------------------------------------
@@ -415,11 +424,11 @@ class GrandShowMigrationTest {
         assertNull(HomeCraftManagement.newerConfigWarning(22, ShopMigration.REVISION), "its own file says nothing");
         assertNull(HomeCraftManagement.newerConfigWarning(23, GrandShowMigration.REVISION),
                 "0.38.1's own revision says nothing");
-        assertEquals(HomeCraftManagement.newerConfigWarning(25, 24), HomeCraftManagement.newerConfigWarning(25),
+        assertEquals(HomeCraftManagement.newerConfigWarning(26, 25), HomeCraftManagement.newerConfigWarning(26),
                 "and a newer one's does");
         YamlConfiguration rolledBack = LayoutFixtures.bundled();
-        rolledBack.set("config_revision", 25);
+        rolledBack.set("config_revision", 26);
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(rolledBack, "world"), "no step runs");
-        assertEquals(25, rolledBack.getInt("config_revision"), "and the revision is never lowered");
+        assertEquals(26, rolledBack.getInt("config_revision"), "and the revision is never lowered");
     }
 }

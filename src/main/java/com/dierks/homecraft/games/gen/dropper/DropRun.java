@@ -33,7 +33,11 @@ public final class DropRun {
      */
     private static final int QUIET_KINDS = DropWorld.COLLIDES | 1 << DropWorld.SOLID | 1 << DropWorld.WATER;
 
-    /** Sub-steps a tick: at 2.2 blocks a tick, each is under 0.6, far less than a plate plus a body. */
+    /**
+     * Sub-steps a tick: at 2.2 blocks a tick (a 48-block drop's water) each is under 0.6, and at the Long
+     * Drop's 2.97 (128 blocks) 0.74, both far less than a plate plus a body; the swept box covers the
+     * whole sub-step anyway.
+     */
     public static final int SUB_STEPS = 4;
 
     /** How a fall ended. */

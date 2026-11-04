@@ -101,7 +101,7 @@ public final class DropSim {
      * ledge tick and out of its last: the ground walk after the ground drag (0.118).
      */
     public static final double WALK_OFF_SPEED = GROUND_WALK * GROUND_DRAG;
-    /** The most ticks any fall here is followed (a 48-block drop takes 40). */
+    /** The most ticks any fall here is followed (a 48-block drop takes 40, the Long Drop's 128 takes 71). */
     public static final int MAX_TICKS = 200;
 
     private DropSim() {
@@ -232,6 +232,20 @@ public final class DropSim {
     /** Walk-off {@link #fallTicks}. */
     public static int fallTicks(double depth) {
         return fallTicks(depth, false);
+    }
+
+    /**
+     * How deep the feet are after {@code ticks} walk-off ticks, in whole blocks (rounded down): the
+     * other way round from {@link #fallTicks}. The Long Drop's table spaces its layers in ticks, so
+     * the plates arrive at one beat all the way down, and this turns those ticks back into rows:
+     * 18 ticks is 10 blocks, 19 is 12, 60 is 97, 68 is 120.
+     */
+    public static int depthAfter(int ticks) {
+        Body b = new Body(0, 0, 0, 0, 0, 0);
+        for (int t = 0; t < ticks; t++) {
+            b = b.tick(0, 0);
+        }
+        return (int) Math.floor(-b.y());
     }
 
     /** How far the feet move in the tick that takes them {@code depth} below a walk-off's start. */

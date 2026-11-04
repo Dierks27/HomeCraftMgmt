@@ -53,10 +53,14 @@ final class DropperFixtures {
         return GenSeed.seed(SECRET, DAY + n, slot.id(), 0);
     }
 
-    /** The planner's input for {@code mix} and seed {@code n} in half {@code h}. */
+    /**
+     * The planner's input for {@code mix} and seed {@code n} in half {@code h}: the 0.35 box for an E/M/H
+     * mix (so the old goldens never move), the tall box for one with a Long Drop.
+     */
     static PlanInput input(String mix, int n, char h) {
         Slots.Def slot = slotFor(mix);
-        return new PlanInput(slot, LegacyBoxes.half(slot, h), h, DAY + n, 0, seed(slot, n), mix, 6, 0, null);
+        Box half = mix.contains("X") ? LegacyBoxes.tall(slot, h) : LegacyBoxes.half(slot, h);
+        return new PlanInput(slot, half, h, DAY + n, 0, seed(slot, n), mix, 6, 0, null);
     }
 
     /** The plan for {@code mix} and seed {@code n} in half A (cached). */

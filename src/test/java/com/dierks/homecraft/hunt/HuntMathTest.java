@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HuntMathTest {
 
@@ -38,13 +40,51 @@ class HuntMathTest {
     }
 
     @Test
-    void theRadarBands() {
-        assertEquals(HuntMath.Band.BURNING, HuntMath.band(5));
-        assertEquals(HuntMath.Band.HOT, HuntMath.band(12));
-        assertEquals(HuntMath.Band.HOT, HuntMath.band(31.9));
-        assertEquals(HuntMath.Band.WARM, HuntMath.band(32));
-        assertEquals(HuntMath.Band.COLD, HuntMath.band(64));
-        assertEquals(HuntMath.Band.NONE, HuntMath.band(-1));
+    void theShippedRadarBandsHaveNoBurningSoHotIsTheClosest() {
+        HuntMath.Bands shipped = HuntMath.Bands.SHIPPED;
+        assertEquals(new HuntMath.Bands(0, 32, 64), shipped);
+        assertEquals(HuntMath.Band.HOT, HuntMath.band(0, shipped), "standing on it is Hot, never Burning!");
+        assertEquals(HuntMath.Band.HOT, HuntMath.band(5, shipped));
+        assertEquals(HuntMath.Band.HOT, HuntMath.band(31.9, shipped));
+        assertEquals(HuntMath.Band.WARM, HuntMath.band(32, shipped));
+        assertEquals(HuntMath.Band.WARM, HuntMath.band(63.9, shipped));
+        assertEquals(HuntMath.Band.COLD, HuntMath.band(64, shipped));
+        assertEquals(HuntMath.Band.COLD, HuntMath.band(96, shipped), "where a wild Mini lands at the furthest");
+        assertEquals(HuntMath.Band.NONE, HuntMath.band(-1, shipped));
+    }
+
+    @Test
+    void theOldBandsAreStillThereWhenConfigured() {
+        HuntMath.Bands old = new HuntMath.Bands(12, 32, 64);
+        assertEquals(HuntMath.Band.BURNING, HuntMath.band(5, old));
+        assertEquals(HuntMath.Band.BURNING, HuntMath.band(11.9, old));
+        assertEquals(HuntMath.Band.HOT, HuntMath.band(12, old));
+        assertEquals(HuntMath.Band.HOT, HuntMath.band(31.9, old));
+        assertEquals(HuntMath.Band.WARM, HuntMath.band(32, old));
+        assertEquals(HuntMath.Band.COLD, HuntMath.band(64, old));
+        assertEquals(HuntMath.Band.NONE, HuntMath.band(-1, old));
+    }
+
+    @Test
+    void aChargeReadsForItsSecondsThenIsSpent() {
+        long locked = 1_000_000;
+        assertTrue(HuntMath.charged(locked, 60, locked), "reads the moment it locks on");
+        assertTrue(HuntMath.charged(locked, 60, locked + 59_999));
+        assertFalse(HuntMath.charged(locked, 60, locked + 60_000), "spent at the minute");
+        assertFalse(HuntMath.charged(locked, 60, locked + 300_000));
+        assertTrue(HuntMath.charged(locked, 0, locked + 3_600_000), "0 = until the Mini is caught or gets away");
+    }
+
+    @Test
+    void readingsComeDueEveryIntervalWithHalfASecondOfSlack() {
+        long last = 1_000_000;
+        assertFalse(HuntMath.readingDue(last, 6, last));
+        assertFalse(HuntMath.readingDue(last, 6, last + 5_000), "not after five seconds");
+        assertFalse(HuntMath.readingDue(last, 6, last + 5_499));
+        assertTrue(HuntMath.readingDue(last, 6, last + 5_500), "a once-a-second check a hair early still reads");
+        assertTrue(HuntMath.readingDue(last, 6, last + 6_000));
+        assertFalse(HuntMath.readingDue(last, 2, last + 1_000), "the old two seconds");
+        assertTrue(HuntMath.readingDue(last, 2, last + 2_000));
     }
 
     @Test

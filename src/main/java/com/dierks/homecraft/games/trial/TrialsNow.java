@@ -31,9 +31,16 @@ public final class TrialsNow {
      * @param warmup      in its warm-up (not timed)
      * @param racing      a race (a party race or Race Night)
      * @param done        finished (or parked on a race's stand)
+     * @param rings       an elytra course, whose checkpoints are rings ("ring 7" on the boards)
      */
     public record Run(UUID player, String course, int reached, int checkpoints, long ms, boolean starting,
-                      boolean warmup, boolean racing, boolean done) {
+                      boolean warmup, boolean racing, boolean done, boolean rings) {
+
+        /** A run on a course whose checkpoints are called checkpoints. */
+        public Run(UUID player, String course, int reached, int checkpoints, long ms, boolean starting,
+                   boolean warmup, boolean racing, boolean done) {
+            this(player, course, reached, checkpoints, ms, starting, warmup, racing, done, false);
+        }
     }
 
     /** Every live run now; none while Time Trials is off. */
@@ -49,7 +56,8 @@ public final class TrialsNow {
             out.add(new Run(r.player, r.course.name(), p == null ? 0 : p.reachedCheckpoints(),
                     p == null ? r.course.checkpoints().size() : p.checkpoints(), r.running() ? r.elapsedMs(nanos) : 0,
                     r.phase == TrialRun.Phase.COUNTDOWN && !r.warmup, r.warmup, r.race != null,
-                    r.phase == TrialRun.Phase.DONE || r.phase == TrialRun.Phase.PARKED));
+                    r.phase == TrialRun.Phase.DONE || r.phase == TrialRun.Phase.PARKED,
+                    r.course.kind() == TrialKind.ELYTRA));
         }
         return out;
     }

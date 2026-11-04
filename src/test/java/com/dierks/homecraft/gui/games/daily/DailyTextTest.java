@@ -169,6 +169,20 @@ class DailyTextTest {
     }
 
     @Test
+    void aBonkedRunOnAHardDropperIsToldTheNextStarNeedsNoBonks() {
+        assertEquals("&e★★☆ 2 stars! &7Next star: a run with no bonks under 0:24. &7This week: &69★",
+                DailyText.trialFinish(2, 24_000, 35_000, 9, true),
+                "a 0:22 run with a bonk was already under 0:24: the line says what is still missing");
+        assertEquals("Next star: a run with no bonks under 0:24.", DailyText.trialNext(2, 24_000, 35_000, true),
+                "the result screen's line, the same words");
+        assertEquals("Next star: under 1:10.", DailyText.trialNext(1, 45_000, 70_000, true),
+                "one star: the silver needs no clean run, so the time alone");
+        assertEquals("Top marks!", DailyText.trialNext(3, 45_000, 70_000, true), "three: nothing to ask for");
+        assertEquals(DailyText.trialNext(2, 24_000, 35_000), DailyText.trialNext(2, 24_000, 35_000, false),
+                "every other course reads as before");
+    }
+
+    @Test
     void golfStarsFollowPar() {
         assertEquals("&7★★ in 32 or less · ★★★ in 29 (par) or less", DailyText.starStrokes(29, 9),
                 "par 29 over nine holes: three strokes of room for two stars");

@@ -47,6 +47,8 @@ class KeepPlotPinTest {
         assertTrue(KeepArea.fits(LegacyBoxes.half(Slots.ICE_BOAT, 'A')), "an older Mountain Run's 128 x 16 x 128 fits");
         assertTrue(KeepArea.fits(LegacyBoxes.half(Slots.DAILY_GOLF, 'A')), "and an older golf course");
         assertFalse(KeepArea.fits(Slots.ICE_BOAT.half('A')), "the Mountain Run v2's 480 x 176 x 640 doesn't");
+        assertFalse(KeepArea.fits(Slots.SKY_RINGS.half('A')), "nor Sky Rings v3's 512 x 176 x 512");
+        assertTrue(KeepArea.fits(LegacyBoxes.half(Slots.SKY_RINGS, 'A')), "while an older Sky Rings course fits");
         assertFalse(KeepArea.fits(null), "no half: nothing to keep");
     }
 
@@ -54,6 +56,8 @@ class KeepPlotPinTest {
     void keepingACourseThatDoesntFitSaysWhy() {
         assertEquals("Mountain Run v2 courses are too big to keep; they stay in the archive",
                 KeepService.tooBig(Slots.ICE_BOAT, Slots.ICE_BOAT.half('A')), "the owner's words for the boat");
+        assertEquals("Sky Rings courses are too big to keep; they stay in the archive",
+                KeepService.tooBig(Slots.SKY_RINGS, Slots.SKY_RINGS.half('A')), "and for Sky Rings, the same way");
         assertEquals("it doesn't fit a plot (its area is 256 x 16 x 224; a plot holds 128 x 176 x 320)",
                 KeepService.tooBig(Slots.DAILY_GOLF, Box.sized(0, 0, 0, 256, 16, 224)), "any other: with the sizes");
     }

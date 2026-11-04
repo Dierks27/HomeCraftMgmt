@@ -193,10 +193,11 @@ final class DropperHooks {
     }
 
     /**
-     * The last splash was judged: the bonk line; for a run that counted, the splash title (with its
-     * stars on a Fresh course), and a clean drop tells the achievements ({@code game_dropper_clean}).
+     * The last splash was judged: the bonk line (and, when a gold time earned 2 stars because the run
+     * bonked on a Hard dropper, the line that says why); for a run that counted, the splash title (with
+     * its stars on a Fresh course), and a clean drop tells the achievements ({@code game_dropper_clean}).
      */
-    void finished(Player p, TrialRun run, long ms, boolean counted, int stars) {
+    void finished(Player p, TrialRun run, long ms, boolean counted, int stars, boolean bonkCapped) {
         DropperRun d = run.drop;
         if (d == null) {
             return;
@@ -204,6 +205,9 @@ final class DropperHooks {
         p.sendMessage(Text.of(DropperText.bonks(d.bonks())));
         if (!counted) {
             return; // a test, void or stale run keeps Time Trials' own title, and never a clean drop
+        }
+        if (bonkCapped) {
+            p.sendMessage(Text.of(DropperText.GOLD_BUT_BONK));
         }
         TimeTrials.title(p, DropperText.SPLASH_TITLE, DropperText.splashSubtitle(ms, stars), 50);
         if (d.clean()) {

@@ -59,10 +59,13 @@ public final class Ground {
      * <p>Main thread only, and only with the chunk loaded — every block read here would
      * otherwise pull the chunk in synchronously.
      *
+     * <p>A world with a ceiling has no ground to find this way — the walk would stop on the
+     * Nether's bedrock roof — so every column there reads as no ground. See {@link WorldShape}.
+     *
      * @param maxDepth how far down to look before giving up, in blocks
      */
     public static Column solid(World world, int x, int z, int maxDepth) {
-        if (world == null) {
+        if (world == null || !fromTop(world)) {
             return NO_GROUND;
         }
         try {
@@ -92,6 +95,23 @@ public final class Ground {
         } catch (RuntimeException e) {
             return NO_GROUND;
         }
+    }
+
+    /**
+     * True when the top of this world's columns is the ground, false in a world with a ceiling
+     * (the Nether), where the top is the bedrock roof. See {@link WorldShape}.
+     */
+    public static boolean fromTop(World world) {
+        if (world == null) {
+            return false;
+        }
+        boolean ceiling;
+        try {
+            ceiling = world.hasCeiling();
+        } catch (RuntimeException | LinkageError e) {
+            ceiling = world.getEnvironment() == World.Environment.NETHER;
+        }
+        return WorldShape.groundFromTop(ceiling);
     }
 
     /**

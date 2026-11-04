@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import org.junit.jupiter.api.Test;
 
@@ -38,18 +39,19 @@ class KeepAreaTest {
     @Test
     void plotsFitTheLargestCoursePlusSixteenAndNeverOverlap() {
         KeepArea a = new KeepArea(4096, 128, 5376, 24);
-        assertEquals(128 + 16, KeepArea.PLOT_X, "Sky Rings' 128 wide plus 16");
-        assertEquals(320 + 16, KeepArea.PLOT_Z, "Sky Rings' 320 long plus 16");
-        assertEquals(176, KeepArea.PLOT_Y, "and Sky Rings' height");
+        assertEquals(128 + 16, KeepArea.PLOT_X, "an older Sky Rings' 128 wide plus 16 (pinned)");
+        assertEquals(320 + 16, KeepArea.PLOT_Z, "its 320 long plus 16");
+        assertEquals(176, KeepArea.PLOT_Y, "and its height");
         for (int n = 1; n <= a.maxPlots(); n++) {
             Box p = a.plot(n);
             assertTrue(a.area().contains(p), "plot " + n + " is inside the area");
             for (Slots.Def d : Slots.ALL) {
                 Box b = a.build(n, d);
                 assertEquals(p.minX() + KeepArea.MARGIN, b.minX(), "8 in from the plot's edge");
-                if (d == Slots.ICE_BOAT) {
-                    assertFalse(p.contains(b) || KeepArea.fits(b), "the Mountain Run v2's 480 x 176 x 640 is bigger"
-                            + " than a plot: it can't be kept (it stays in the archive)");
+                if (d == Slots.ICE_BOAT || d == Slots.SKY_RINGS) {
+                    assertFalse(p.contains(b) || KeepArea.fits(b), d.id() + ": the Mountain Run v2's 480 x 176 x 640"
+                            + " and Sky Rings v3's 512 x 176 x 512 are bigger than a plot: they can't be kept (they"
+                            + " stay in the archive)");
                     continue;
                 }
                 assertTrue(p.contains(b) && KeepArea.fits(b), d.id() + " fits plot " + n);
@@ -58,8 +60,12 @@ class KeepAreaTest {
                 assertTrue(p.gap(a.plot(m)) >= 0, "plots " + n + " and " + m + " don't overlap");
             }
         }
-        Box rings1 = a.build(1, Slots.SKY_RINGS);
-        Box rings2 = a.build(2, Slots.SKY_RINGS);
+        int[] old = LegacyBoxes.size(Slots.SKY_RINGS); // the largest course a plot holds: an older Sky Rings one
+        Box rings1 = Box.sized(a.plot(1).minX() + KeepArea.MARGIN, 128, a.plot(1).minZ() + KeepArea.MARGIN, old[0],
+                old[1], old[2]);
+        Box rings2 = Box.sized(a.plot(2).minX() + KeepArea.MARGIN, 128, a.plot(2).minZ() + KeepArea.MARGIN, old[0],
+                old[1], old[2]);
+        assertTrue(KeepArea.fits(rings1) && a.plot(1).contains(rings1), "an older Sky Rings course fits a plot");
         assertTrue(rings1.gap(rings2) >= 16, "two kept courses side by side are 16 apart");
         assertThrows(IllegalArgumentException.class, () -> a.plot(25), "there is no plot 25");
         assertThrows(IllegalArgumentException.class, () -> a.plot(0), "nor plot 0");

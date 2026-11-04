@@ -67,9 +67,9 @@ public final class GenCopy {
         return List.of("SKY RINGS", "Walk off, then", "press JUMP", "to fly!");
     }
 
-    /** Sky Rings' second tower sign: where to fly. */
-    public static List<String> ringsHow() {
-        return List.of("Fly through", "every ring,", "follow the", "rainbow!");
+    /** Sky Rings' second tower sign: the rockets for the whole run, and what a white ring means. */
+    public static List<String> ringsHow(int rockets) {
+        return List.of(rockets + " rockets for", "the whole run.", "White ring = up", "fire a rocket!");
     }
 
     /** A golf tee sign: "HOLE 3" / "Par 3" / "Hit the ball" / "to the flag!". */
@@ -300,7 +300,18 @@ public final class GenCopy {
      * / "Step off and" / "fall into the" / "WATER!".
      */
     public static List<String> dropperLevel(int level, int levels) {
-        return List.of("LEVEL " + level + " of " + levels, "Step off and", "fall into the", "WATER!");
+        return dropperLevel(level, levels, false);
+    }
+
+    /**
+     * A Dropper level's sign; for the Long Drop (an X level, 128 blocks down through plates whose
+     * holes keep sliding sideways) it says what to do instead: "LEVEL 5 of 5" / "THE LONG DROP" /
+     * "steer all the" / "way down!".
+     */
+    public static List<String> dropperLevel(int level, int levels, boolean longDrop) {
+        String head = "LEVEL " + level + " of " + levels;
+        return longDrop ? List.of(head, "THE LONG DROP", "steer all the", "way down!")
+                : List.of(head, "Step off and", "fall into the", "WATER!");
     }
 
     // ---- chat, titles and tiles ----------------------------------------------------------------
@@ -749,7 +760,8 @@ public final class GenCopy {
     /** Every sign, with sample values, for the copy test. */
     public static List<List<String>> everySign() {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
-                parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
+                parkourStart("hard"), finish(), ringsStart(), ringsHow(8), ringsHow(11), boatStart(2), boatRun(),
+                boatHop(),
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(),
                 boatSnowyBend(), boatSnowDrift(), boatSplit(), boatIceCave(), boatForest(), boatRoadStart("easy"),
                 boatRoadStart("medium"), boatRoadStart("hard"),
@@ -766,6 +778,7 @@ public final class GenCopy {
         for (int levels = 1; levels <= 5; levels++) {
             for (int level = 1; level <= levels; level++) {
                 out.add(dropperLevel(level, levels));
+                out.add(dropperLevel(level, levels, true));
             }
         }
         return out;

@@ -62,8 +62,9 @@ class RegionsTest {
             }
         }
         Slots.Def rings = Slots.SKY_RINGS;
-        assertEquals("x 6080..6207, y 128..303, z 4096..4415", rings.half('A').describe(), "the spec's table, half A");
-        assertEquals(6784, rings.half('B').minX(), "and half B, 576 past half A");
+        assertEquals("x 6080..6591, y 128..303, z 4096..4607", rings.half('A').describe(),
+                "the spec's table, half A (Sky Rings v3's 512 x 512 square)");
+        assertEquals(7168, rings.half('B').minX(), "and half B, 576 past half A");
     }
 
     // ---- named extra boxes (EVENTS-DROPPER-SPEC §B.3.2) ---------------------------------------------

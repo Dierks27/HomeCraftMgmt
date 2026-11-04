@@ -80,8 +80,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -161,8 +164,14 @@ public final class TimeTrials implements Game {
     static final long WAIT_TICKS = 60;
     /** Moved by someone else and not sent back within this long: send it back now. */
     static final long SUSPEND_TICKS = 20;
-    /** Rockets in the elytra kit, topped up at every checkpoint. */
+    /** Rockets in a hand-built elytra course's kit, back to this many at every checkpoint. */
     static final int ROCKETS = 3;
+    /** Sky Rings' word on a ring's title for a glide after it: no rocket. */
+    static final String LEG_GLIDE = "glide";
+    /** For a climb after it (a white ring above): one rocket, fired early, nose up. */
+    static final String LEG_CLIMB = "CLIMB: rocket, nose up";
+    /** For a level leg after it: a fast flyer makes it with none, a slow one burns one. */
+    static final String LEG_LEVEL = "level: fast or rocket";
     /** Where the elytra kit's rockets go. */
     static final int ROCKET_SLOT = 1;
     /** The result screen waits up to this many checks, this far apart, for the player to be home. */
@@ -212,6 +221,8 @@ public final class TimeTrials implements Game {
 
     /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
     private final PreviewTests previews = new PreviewTests();
+    /** Sky Rings: the rings' chunks held while someone flies them. */
+    private final RingChunks ringChunks = new RingChunks(RingChunks.server(() -> games().plugin()));
     /** MOUNTAIN-V21-SPEC D17: how far Ice Boats really fly off a Mountain Run's drops (it measures, nothing more). */
     private final FlightRecorder flights;
     /** D18: the snow block's data for the landing's puff, made on first use (no server in a test). */
@@ -274,9 +285,15 @@ public final class TimeTrials implements Game {
      * @param cadence   the words the screen uses ({@link GenCopy#words}): the set's length in days
      *                  ("this week", "today"), or {@link GenCopy#CLASSIC} for a recalled course
      * @param code      the course's code ("HARD-40"), or {@code null}
+     * @param cleanNeeded whether the next star needs a run with no bonks ({@link TrialFinish.Summary#cleanNeeded})
      */
     public record Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence,
-                        String code) {
+                        String code, boolean cleanNeeded) {
+
+        /** A set's run whose next star is a matter of time alone. */
+        public Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence, String code) {
+            this(board, stars, weekStars, goldMs, silverMs, cadence, code, false);
+        }
 
         /** A weekly set with no code (the shape before cadences). */
         public Daily(String board, int stars, long weekStars, long goldMs, long silverMs) {
@@ -484,6 +501,7 @@ public final class TimeTrials implements Game {
             drops.end(run, p);
         }
         runs.clear();
+        ringChunks.releaseAll();
         boats.clear();
         cache = null;
         lastTick = 0;
@@ -757,7 +775,7 @@ public final class TimeTrials implements Game {
         Long best = best(viewer, c.id());
         GamesDao.ScoreRow record = record(c.id());
         List<String> lore = new ArrayList<>();
-        for (String line : c.kind().rules()) {
+        for (String line : rulesFor(c)) {
             lore.add("&7" + line);
         }
         lore.add(recordLine(record, viewer));
@@ -795,7 +813,7 @@ public final class TimeTrials implements Game {
         } else {
             lore.add("&7" + GenCopy.schedule(cadence, DailyLookup.edition(g).rebuildDay(), null) + ".");
         }
-        for (String line : c.kind().rules()) {
+        for (String line : rulesFor(c)) {
             lore.add("&7" + line);
         }
         lore.add(DailyText.starTimes(t.goldMs(), t.silverMs()));
@@ -1141,7 +1159,8 @@ public final class TimeTrials implements Game {
     private void arm(Player p, TrialRun run, boolean seatHere) {
         Course course = run.course;
         boolean test = run.test;
-        giveKit(p, course.kind(), run.fromClub);
+        giveKit(p, course, run.fromClub);
+        ringChunks.arm(p.getUniqueId(), course); // Sky Rings: its rings in memory before they come into view
         p.setFallDistance(0f);
         if (course.kind() == TrialKind.BOAT && seatHere) {
             seat(p, run, p.getLocation());
@@ -1151,6 +1170,7 @@ public final class TimeTrials implements Game {
         int n = course.checkpoints().size();
         p.sendMessage(Text.of(course.kind() == TrialKind.DROPPER ? DropperText.ready(DropperLayout.levels(course))
                 : n == 0 ? "&7Get to the finish. Ready..."
+                : course.elytra() != null ? ringsReady(course)
                 : "&7Reach " + TrialText.checkpoints(n) + " in order, then the finish. Ready..."));
         if (course.kind() == TrialKind.DROPPER) {
             run.drop = drops.start(p, run); // not collidable, and the practice drop's offer
@@ -1162,7 +1182,8 @@ public final class TimeTrials implements Game {
      * The course kit; {@code fromClub} (0.38.3) says under Leave game where its second click goes (back to the
      * Clubhouse for a run handed out from it, else home: {@code ClubhouseText.leaveLore}).
      */
-    void giveKit(Player p, TrialKind kind, boolean fromClub) {
+    void giveKit(Player p, Course course, boolean fromClub) {
+        TrialKind kind = course.kind();
         if (kind == TrialKind.DROPPER) {
             drops.giveKit(p, DropperRun.Kit.DROP, fromClub);
             return;
@@ -1173,7 +1194,7 @@ public final class TimeTrials implements Game {
         KitItems.put(inv, 0, KitItems.item(this, "checkpoint", Material.RECOVERY_COMPASS, "&eBack to checkpoint",
                 "&7Takes you back to your last checkpoint.", "&7The clock keeps running."));
         if (kind == TrialKind.ELYTRA) {
-            KitItems.put(inv, ROCKET_SLOT, rockets());
+            KitItems.put(inv, ROCKET_SLOT, rockets(course, kitRockets(course)));
             ItemStack wings = KitItems.item(this, "elytra", Material.ELYTRA, "&bElytra", "&7Glide through the rings.");
             ItemMeta meta = wings.getItemMeta();
             if (meta != null) {
@@ -1187,21 +1208,120 @@ public final class TimeTrials implements Game {
         inv.setHeldItemSlot(0);
     }
 
-    private ItemStack rockets() {
+    /** {@code amount} of the kit's rockets, with {@code course}'s lore. */
+    private ItemStack rockets(Course course, int amount) {
         ItemStack r = KitItems.item(this, "firework", Material.FIREWORK_ROCKET, "&6Rockets &7- click while gliding",
-                "&7A boost while you glide.", "&7You get " + ROCKETS + " more at every ring.");
-        r.setAmount(ROCKETS);
+                rocketLore(course).toArray(new String[0]));
+        r.setAmount(amount);
         return r;
     }
 
-    /** Top the rockets back up to {@value #ROCKETS}. */
-    private void refillRockets(Player p) {
+    /**
+     * The rockets a run starts with: Sky Rings' budget for the whole course, else {@value #ROCKETS} (a hand-built
+     * elytra course, which fills them back at every ring).
+     */
+    static int kitRockets(Course course) {
+        return course.elytra() != null ? course.elytra().rockets() : ROCKETS;
+    }
+
+    /** The rocket stack's lore: Sky Rings says it is all there is; a hand-built course that it comes back. */
+    static List<String> rocketLore(Course course) {
+        if (course.elytra() != null) {
+            return List.of("&7" + course.elytra().rockets() + " for the whole course.", "&7No refills at the rings.",
+                    "&7Back to checkpoint gives you only what you still need.");
+        }
+        return List.of("&7A boost while you glide.", "&7Back to " + ROCKETS + " at every ring.");
+    }
+
+    /**
+     * The rockets every timed run starts on, whatever came before it: Sky Rings' whole budget; 0 elsewhere (a
+     * hand-built elytra course fills them back at every ring, and the other kinds have none).
+     */
+    static int goRockets(Course course) {
+        return course.kind() == TrialKind.ELYTRA && course.elytra() != null ? kitRockets(course) : 0;
+    }
+
+    /**
+     * Sky Rings: the stack back to the whole budget ({@link #goRockets}) as a timed run starts, so nothing spent
+     * before it carries in: a warm-up's flying and its resets' top-ups, a race's grid, the last race of a Race
+     * Night. Called back at the start for the 3-2-1 ({@link #toStart}), at a race's re-grid
+     * ({@code RaceMode.regrid}) and at every Go, solo or raced. Nothing on any other course.
+     */
+    void fullRockets(Player p, Course course) {
+        topUp(p, course, goRockets(course));
+    }
+
+    /** Whether reaching a ring fills the rockets back: only on an elytra course without Sky Rings' budget. */
+    static boolean refillsAtRings(Course course) {
+        return course.kind() == TrialKind.ELYTRA && course.elytra() == null;
+    }
+
+    /**
+     * What going back to checkpoint {@code last} (-1 = the start) tops Sky Rings' rockets up to: what the rest
+     * of the course still needs from there ({@code need[last + 1]}), never above it; 0 without a budget.
+     */
+    static int topUpTo(Course course, int last) {
+        Course.Elytra e = course.elytra();
+        if (e == null || e.need().isEmpty()) {
+            return 0;
+        }
+        int i = Math.max(0, Math.min(last + 1, e.need().size() - 1));
+        return Math.max(0, e.need().get(i));
+    }
+
+    /** Whether {@code it} is this game's kit rocket stack. */
+    private boolean kitRocket(ItemStack it) {
+        return "firework".equals(KitItems.action(it)) && id().equals(KitItems.gameId(it));
+    }
+
+    /** Top the rockets back up to {@value #ROCKETS} (a hand-built elytra course). */
+    private void refillRockets(Player p, Course course) {
         PlayerInventory inv = p.getInventory();
-        refill(KitItems.slots(inv), inv.getSize(), it -> "firework".equals(KitItems.action(it))
-                && id().equals(KitItems.gameId(it)), it -> {
-                    it.setAmount(ROCKETS);
-                    return it;
-                }, this::rockets);
+        refill(KitItems.slots(inv), inv.getSize(), this::kitRocket, it -> {
+            it.setAmount(ROCKETS);
+            return it;
+        }, () -> rockets(course, ROCKETS));
+    }
+
+    /** Sky Rings: top the rockets up to {@code floor} if the player has fewer, never above what they hold. */
+    private void topUp(Player p, Course course, int floor) {
+        PlayerInventory inv = p.getInventory();
+        topUp(KitItems.slots(inv), inv.getSize(), this::kitRocket, ItemStack::getAmount, (it, n) -> {
+            it.setAmount(n);
+            return it;
+        }, n -> rockets(course, n), floor);
+    }
+
+    /** The kit rockets the player holds now, wherever they are. */
+    int rocketsLeft(Player p) {
+        PlayerInventory inv = p.getInventory();
+        return rocketsLeft(KitItems.slots(inv), inv.getSize(), this::kitRocket, ItemStack::getAmount);
+    }
+
+    /** The rockets in {@code inv}: every kit rocket stack's {@code amount}, added up. */
+    static <I> int rocketsLeft(KitItems.Slots<I> inv, int size, Predicate<I> rockets, ToIntFunction<I> amount) {
+        int n = 0;
+        for (int i = 0; i < size; i++) {
+            I it = inv.get(i);
+            if (!inv.empty(it) && rockets.test(it)) {
+                n += amount.applyAsInt(it);
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Sky Rings' reset: the rocket stack raised to {@code floor} where it is when it holds fewer, a fresh one of
+     * {@code floor} in {@link #ROCKET_SLOT} when there is none (as {@link #refill} puts it), and nothing at all
+     * when it already holds that many or {@code floor} is 0. So a reset never gives more than the rest of the
+     * course needs, and a player who saved rockets keeps them.
+     */
+    static <I> void topUp(KitItems.Slots<I> inv, int size, Predicate<I> rockets, ToIntFunction<I> amount,
+                          BiFunction<I, Integer, I> withAmount, IntFunction<I> fresh, int floor) {
+        if (floor <= 0 || rocketsLeft(inv, size, rockets, amount) >= floor) {
+            return;
+        }
+        refill(inv, size, rockets, it -> withAmount.apply(it, floor), () -> fresh.apply(floor));
     }
 
     /**
@@ -1244,6 +1364,7 @@ public final class TimeTrials implements Game {
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
                 drops.end(run, p);
+                ringChunks.release(run.player);
                 continue;
             }
             if (stall != null && run.running()) {
@@ -1307,6 +1428,7 @@ public final class TimeTrials implements Game {
             toStart(p, run);
             return;
         }
+        fullRockets(p, run.course); // Sky Rings: Go on the whole budget, whatever the 3-2-1 saw
         run.progress = new Progress(run.course, here, System.nanoTime());
         run.goNanos = run.progress.startNanos();
         run.phase = TrialRun.Phase.RUNNING;
@@ -1362,7 +1484,8 @@ public final class TimeTrials implements Game {
         }
         if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0 && run.ticks >= run.barHold) {
             p.sendActionBar(Text.of(run.warmup ? warmups.bar(run, now) // WP-R1 (D3)
-                    : run.drop != null ? run.drop.clockLine(System.nanoTime()) : clockLine(run)));
+                    : run.drop != null ? run.drop.clockLine(System.nanoTime())
+                    : clockLine(run, run.course.elytra() != null ? rocketsLeft(p) : -1)));
         }
     }
 
@@ -1523,14 +1646,24 @@ public final class TimeTrials implements Game {
         return out;
     }
 
-    /** "0:21.4 · 2/5 checkpoints", or "on to the finish!". */
-    private static String clockLine(TrialRun run) {
+    /** "0:21.4 · 2/5 checkpoints", or "on to the finish!"; {@code rockets} for Sky Rings, else -1. */
+    private static String clockLine(TrialRun run, int rockets) {
         String time = TrialText.time(run.elapsedMs(System.nanoTime()));
-        int got = run.progress.reachedCheckpoints();
-        int of = run.progress.checkpoints();
-        String where = got >= of ? "on to the finish!" : got + "/" + of + " checkpoints";
+        String where = clockWhere(run.course, run.progress.reachedCheckpoints(), run.progress.checkpoints(), rockets);
         String head = run.test ? "&dTest &e" : run.voided != null ? "&c" : "&e";
         return head + time + " &7· " + where + (run.voided != null ? " &8(won't count)" : "");
+    }
+
+    /**
+     * The clock line's part after the time: "2/5 checkpoints" or "on to the finish!"; on an elytra course
+     * "7/19 rings"; on Sky Rings "on to the gold ring!" after the last, and the rockets held, "7/19 rings ·
+     * 5 rockets" ({@code rockets} -1: not said).
+     */
+    static String clockWhere(Course course, int got, int of, int rockets) {
+        boolean budget = course.elytra() != null;
+        String where = got >= of ? (budget ? "on to the gold ring!" : "on to the finish!")
+                : got + "/" + of + (course.kind() == TrialKind.ELYTRA ? " rings" : " checkpoints");
+        return budget && rockets >= 0 ? where + " &7· &6" + rocketCount(rockets) : where;
     }
 
     // ---- moves ------------------------------------------------------------------------------
@@ -1782,8 +1915,8 @@ public final class TimeTrials implements Game {
 
     private void reached(Player p, TrialRun run, int index) {
         announce(p, run, index);
-        if (run.course.kind() == TrialKind.ELYTRA) {
-            refillRockets(p);
+        if (refillsAtRings(run.course)) { // Sky Rings hands out the whole run's rockets at the start, none here
+            refillRockets(p, run.course);
         }
     }
 
@@ -1799,8 +1932,9 @@ public final class TimeTrials implements Game {
                 + Splits.deltaText(run.bestSplits, Splits.soFar(run), index, run.race != null, run.warmup); // 0.38.4
         float pitch = 1.4f + 0.4f * (index + 1) / Math.max(1, of);
         if (BoatHype.loud(run.course, index)) {
-            title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time,
-                    25);
+            String next = nextLeg(run.course, index);
+            title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time
+                    + (next.isEmpty() ? "" : " &7- &f" + next), 25);
             ping(p, pitch);
             return;
         }
@@ -1822,6 +1956,45 @@ public final class TimeTrials implements Game {
      */
     static String checkpointBig(Course c, int index) {
         return BoatHype.checkpointTitle(c, index);
+    }
+
+    /**
+     * Sky Rings: what the leg after checkpoint {@code index} (0-based) is, for that ring's title, from the course's
+     * {@code legs} ({@link #LEG_GLIDE}, {@link #LEG_CLIMB}, {@link #LEG_LEVEL}); {@code ""} on any other course.
+     */
+    static String nextLeg(Course c, int index) {
+        if (c == null || c.elytra() == null || index < 0 || index >= c.elytra().legs().length()) {
+            return "";
+        }
+        return switch (c.elytra().legs().charAt(index)) {
+            case 'G' -> LEG_GLIDE;
+            case 'L' -> LEG_CLIMB;
+            case 'F' -> LEG_LEVEL;
+            default -> "";
+        };
+    }
+
+    /**
+     * Sky Rings' line as a run is armed: "Fly 19 rings in order, then the gold ring. 8 rockets for the whole run,
+     * none at the rings."
+     */
+    static String ringsReady(Course c) {
+        return "&7Fly " + c.checkpoints().size() + " rings in order, then the gold ring. " + kitRockets(c)
+                + " rockets for the whole run, none at the rings.";
+    }
+
+    /**
+     * A course's rules for its screens: its kind's, with an elytra course's rockets line told as this course
+     * hands them out (Sky Rings: the whole run's, and what a white ring means).
+     */
+    public static List<String> rulesFor(Course c) {
+        List<String> rules = c.kind().rules();
+        if (c.kind() != TrialKind.ELYTRA || c.elytra() == null || rules.size() < 2) {
+            return rules;
+        }
+        List<String> out = new ArrayList<>(rules);
+        out.set(1, kitRockets(c) + " rockets for the whole run: a white ring means climb.");
+        return List.copyOf(out);
     }
 
     /** The run's own teleport arrived (moves count again from there); anyone else's suspends it. */
@@ -1910,17 +2083,43 @@ public final class TimeTrials implements Game {
         if (at == null || !move(p, run, at)) {
             return false;
         }
+        int had = -1;
+        int have = -1;
         if (run.course.kind() == TrialKind.ELYTRA) {
-            refillRockets(p);
+            if (run.course.elytra() != null) { // Sky Rings: up to what the rest needs, never above
+                had = rocketsLeft(p);
+                topUp(p, run.course, topUpTo(run.course, last));
+                have = rocketsLeft(p);
+            } else {
+                refillRockets(p, run.course);
+            }
             Location here = p.getLocation();
             if (last >= 0 && here.getWorld() != null && here.getWorld().equals(at.getWorld())
                     && here.distance(at) < 1) {
                 p.setGliding(true); // a ring hangs in the air: carry on gliding from it
             }
         }
-        p.sendActionBar(Text.of(last >= 0 ? "&eBack to checkpoint " + (last + 1) : "&eBack to the start"));
+        p.sendActionBar(Text.of(backLine(run.course, last, had, have)));
         ping(p, 0.8f);
         return true;
+    }
+
+    /**
+     * The action bar after going back to checkpoint {@code last} (-1 = the start): "Back to checkpoint 3", or on
+     * Sky Rings "Back to ring 7 · 5 rockets", the count only when the top-up changed it ({@code had} to
+     * {@code have}).
+     */
+    static String backLine(Course course, int last, int had, int have) {
+        if (course.elytra() == null) {
+            return last >= 0 ? "&eBack to checkpoint " + (last + 1) : "&eBack to the start";
+        }
+        return (last >= 0 ? "&eBack to ring " + (last + 1) : "&eBack to the start")
+                + (have != had && have >= 0 ? " &7· &6" + rocketCount(have) : "");
+    }
+
+    /** "1 rocket", "5 rockets". */
+    static String rocketCount(int n) {
+        return n + (n == 1 ? " rocket" : " rockets");
     }
 
     /**
@@ -1939,13 +2138,17 @@ public final class TimeTrials implements Game {
         return c != null && c.generated() && c.kind() == TrialKind.ELYTRA;
     }
 
-    /** Back to the start for another countdown. */
+    /**
+     * Back to the start for another countdown. On Sky Rings the stack is full again too: a warm-up's flying
+     * (and its resets' top-ups) never carries into the timed run.
+     */
     void toStart(Player p, TrialRun run) {
         Location at = backTo(run, -1);
         if (at != null) {
             run.lastReset = Bukkit.getCurrentTick();
             move(p, run, at);
         }
+        fullRockets(p, run.course);
     }
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */
@@ -2076,6 +2279,7 @@ public final class TimeTrials implements Game {
         }
         String jump = bestJump(flightsEnd(run, true)); // D17, D18
         run.phase = TrialRun.Phase.DONE;
+        ringChunks.release(run.player); // Sky Rings: flown, its rings needn't stay in memory for this run
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
         TimeTrialsSettings s = settings();
@@ -2114,10 +2318,10 @@ public final class TimeTrials implements Game {
             }
             case COUNTED -> summary = settleCounted(p, run, ms, verdict);
         }
-        drops.finished(p, run, ms, verdict.counts(), summary.stars()); // bonks, the splash, a clean drop
+        drops.finished(p, run, ms, verdict.counts(), summary.stars(), summary.bonkCapped()); // bonks, the splash, a clean drop
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
-                tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
+                tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code, summary.cleanNeeded());
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
                 summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily,
                 run.drop == null ? -1 : run.drop.bonks());
@@ -2222,7 +2426,7 @@ public final class TimeTrials implements Game {
         }
         return new TrialFinish.Run(c.id(), c.name(), ms, today(), weekKey(), c.id().equals(courseOfWeek()),
                 featured(c.id()), s.firstClearFor(c.tier().id()), s.weeklyBestBonus(), s.courseOfWeekBonus(),
-                featuredBonus(), daily);
+                featuredBonus(), daily, run.drop == null ? -1 : run.drop.bonks(), c.tier());
     }
 
     /** Where a counted run is recorded and paid: the scores, the finish lines, the capped rewards. */
@@ -2267,10 +2471,10 @@ public final class TimeTrials implements Game {
             }
 
             @Override
-            public void stars(int stars, GamesDao.StarsAdded added) {
+            public void stars(int stars, GamesDao.StarsAdded added, boolean cleanNeeded) {
                 GenTag t = run.course.gen();
                 p.sendMessage(Text.of(DailyText.trialFinish(stars, t == null ? 0 : t.goldMs(),
-                        t == null ? 0 : t.silverMs(), added == null ? -1 : added.weekTotal())));
+                        t == null ? 0 : t.silverMs(), added == null ? -1 : added.weekTotal(), cleanNeeded)));
             }
 
             @Override
@@ -2380,6 +2584,7 @@ public final class TimeTrials implements Game {
             removeBoat(run, player);
             drops.end(run, player);
         }
+        ringChunks.release(player.getUniqueId());
     }
 
     /** Race mode's server side (WP-R1). */

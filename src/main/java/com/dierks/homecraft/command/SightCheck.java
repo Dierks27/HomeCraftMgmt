@@ -3,6 +3,7 @@ package com.dierks.homecraft.command;
 import com.dierks.homecraft.games.event.RaceTrack;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Sight;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.storage.EventDao;
@@ -159,6 +160,9 @@ public final class SightCheck {
         }
         int view = f.view();
         out.add(GamesCheck.Line.ok("View distance used: " + view + " (" + f.viewWhy() + ")"));
+        if (hasRings(f.places())) {
+            out.add(ringsView(view));
+        }
         Map<Sight.Spot, Place> of = new IdentityHashMap<>();
         List<Sight.Spot> spots = new ArrayList<>();
         for (Place p : f.places()) {
@@ -194,6 +198,34 @@ public final class SightCheck {
             out.add(GamesCheck.Line.warn("...and " + more + " more pair" + (more == 1 ? "" : "s")
                     + " of places that can see each other", "the same fixes; run the check again after the ones above"));
         }
+    }
+
+    /** The view distance Sky Rings needs: its legs run up to 120 blocks, and view 8 sends 9 chunks (144). */
+    static final int RINGS_VIEW = 8;
+    /** The view distance Sky Rings is best at: the ring after next is in sight too. */
+    static final int RINGS_VIEW_BEST = 10;
+
+    /** Whether Sky Rings or Classic Sky Rings is among the places (its halves). */
+    static boolean hasRings(List<Place> places) {
+        for (Place p : places) {
+            if (p.half() && (Slots.SKY_RINGS.id().equals(p.id()) || Slots.CLASSIC_RINGS.id().equals(p.id()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether Sky Rings' next ring is in sight at view distance {@code view}: "Sky Rings legs up to 120 need view
+     * distance 8 or more (you have 10); 10 recommended", a WARN under 8 (a ring is blocks, seen only once its chunk
+     * is sent).
+     */
+    static GamesCheck.Line ringsView(int view) {
+        String what = "Sky Rings legs up to 120 need view distance " + RINGS_VIEW + " or more (you have " + view + "); "
+                + RINGS_VIEW_BEST + " recommended";
+        return view >= RINGS_VIEW ? GamesCheck.Line.ok(what) : GamesCheck.Line.warn(what + " - the next ring can be"
+                + " out of sight", "set view-distance=" + RINGS_VIEW_BEST + " in server.properties (or the Games world's"
+                + " view-distance in spigot.yml)");
     }
 
     /**

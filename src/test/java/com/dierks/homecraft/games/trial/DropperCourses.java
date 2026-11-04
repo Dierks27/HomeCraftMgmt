@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -68,7 +69,9 @@ final class DropperCourses {
         Slots.Def slot = "EEE".equals(mix) ? Slots.EASY_DROPPER : Slots.FRESH_DROPPER;
         long day = 20_000 + n;
         try {
-            return new DropperPlanner().plan(new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', day, 0,
+            // a mix with a Long Drop (X) needs the taller box; the others keep the 64-tall one, so nothing moves
+            Box half = mix.indexOf('X') >= 0 ? LegacyBoxes.tall(slot, 'A') : LegacyBoxes.half(slot, 'A');
+            return new DropperPlanner().plan(new PlanInput(slot, half, 'A', day, 0,
                     GenSeed.seed(0x5EC12E7L, day, slot.id(), 0), mix, 6, 0, null));
         } catch (GenFailed e) {
             throw new AssertionError("the dropper " + mix + "/" + n + " should plan: " + e.getMessage(), e);

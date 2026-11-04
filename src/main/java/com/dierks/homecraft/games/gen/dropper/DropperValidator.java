@@ -44,13 +44,16 @@ import java.util.List;
  *   <li><b>Palette lint:</b> full cubes only ({@link DropBlocks#allowed}), and water only as a still
  *       source.</li>
  *   <li><b>Signs:</b> one per level, inside the half, on the wall over its ledge facing into the
- *       shaft, reading "LEVEL i of n" in GenCopy's rules.</li>
+ *       shaft, reading "LEVEL i of n" in GenCopy's rules (the Long Drop's own lines on an X level).</li>
  * </ol>
  */
 public final class DropperValidator {
 
-    /** The most blocks a Dropper plan may place. */
-    public static final int MAX_OPS = 20_000;
+    /**
+     * The most blocks a Dropper plan may place: five Long Drops in a 144-tall half are about 33k (the
+     * walls are most of it), the shipped EEMHX about 18k.
+     */
+    public static final int MAX_OPS = 40_000;
     /** How a level's witness is written in the summary: {@code "level 2 witness: S7 -*"}. */
     public static final String WITNESS_PREFIX = "level %d witness: ";
     /** How a TWIN layer's second witness is written. */
@@ -195,7 +198,7 @@ public final class DropperValidator {
                     + " air beside or under it: pools must be sealed");
         }
         // 9: signs
-        out.addAll(signProblems(plan, c, n));
+        out.addAll(signProblems(plan, c, tiers));
         // 1, 2, 3, 5: each level
         List<DropProgram> witnesses = programs(plan, WITNESS_PREFIX, n);
         List<DropProgram> twins = programs(plan, TWIN_PREFIX, n);
@@ -236,17 +239,14 @@ public final class DropperValidator {
         // the tier's shape
         int drop = v.ledgeTop() - v.surfaceY();
         if (drop != tier.drop()) {
-            out.add(name + " drops " + drop + " to its water; a " + tier.name().toLowerCase() + " level drops "
-                    + tier.drop());
+            out.add(name + " drops " + drop + " to its water; " + aTier(tier) + " level drops " + tier.drop());
         }
         int poolSize = (int) Math.rint(2 * DropMarks.halfWidth(v.pool()));
         if (poolSize != tier.pool()) {
-            out.add(name + "'s pool is " + poolSize + " a side; a " + tier.name().toLowerCase() + " pool is "
-                    + tier.pool());
+            out.add(name + "'s pool is " + poolSize + " a side; " + aTier(tier) + " pool is " + tier.pool());
         }
         if (v.layerRows().size() != tier.layers()) {
-            out.add(name + " has " + v.layerRows().size() + " layers; a " + tier.name().toLowerCase() + " level has "
-                    + tier.layers());
+            out.add(name + " has " + v.layerRows().size() + " layers; " + aTier(tier) + " level has " + tier.layers());
         }
         if (!v.layerRows().isEmpty()) {
             int lowest = v.layerRows().get(v.layerRows().size() - 1);
@@ -297,6 +297,12 @@ public final class DropperValidator {
             out.add(name + ": " + (misses.size() - MISS_LINES) + " more pilots miss");
         }
         return out;
+    }
+
+    /** "a hard", "an extreme": the tier's name with its article, for the shape messages. */
+    private static String aTier(DropRules.Level tier) {
+        String word = tier.name().toLowerCase();
+        return ("aeiou".indexOf(word.charAt(0)) >= 0 ? "an " : "a ") + word;
     }
 
     /** Rules 1 and 5 for one witness. */
@@ -426,8 +432,9 @@ public final class DropperValidator {
         return out;
     }
 
-    /** Rule 9: one sign a level, over its ledge, facing in, "LEVEL i of n". */
-    private static List<String> signProblems(Plan plan, Course c, int n) {
+    /** Rule 9: one sign a level, over its ledge, facing in, "LEVEL i of n" (the Long Drop's own words on an X). */
+    private static List<String> signProblems(Plan plan, Course c, List<DropRules.Level> tiers) {
+        int n = tiers.size();
         List<String> out = new ArrayList<>();
         Box half = plan.half();
         for (SignText s : plan.signs()) {
@@ -444,7 +451,7 @@ public final class DropperValidator {
         }
         for (int i = 0; i < n; i++) {
             Course.Mark ledge = DropMarks.ledgeOf(c, i);
-            List<String> want = DropperPlanner.signLines(i + 1, n);
+            List<String> want = DropperPlanner.signLines(i + 1, n, tiers.get(i));
             boolean found = false;
             for (SignText s : plan.signs()) {
                 double dx = ledge.x() - (s.x() + 0.5);

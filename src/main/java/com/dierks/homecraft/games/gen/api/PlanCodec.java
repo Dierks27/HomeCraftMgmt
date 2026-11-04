@@ -71,6 +71,11 @@ import java.util.zip.GZIPOutputStream;
  * it, and never further from {@link #MAX_BYTES}. {@link #encode(Plan, int)} writes a version asked
  * for by name (golden tests pin version 1's bytes through it).
  *
+ * <p><b>Version 3</b> ({@value #V3}) is version 2 with Sky Rings' rocket budget
+ * ({@link Course#elytra}) after the trial course: a flag, then the rockets, the need list and the
+ * leg letters. It is written only for a course that carries a budget, so every other row's bytes
+ * are exactly version 2's; a version-1 or version-2 row reads back with no budget.
+ *
  * <p><b>Never throws on junk.</b> {@link #decode} answers {@link Read}: a plan, or why the row
  * can't be read (not gzip, too big, the wrong magic or version, cut short, trailing bytes, a value
  * no plan can hold, or blocks that don't match the stored hash). Every list and run is bounded by
@@ -80,8 +85,13 @@ import java.util.zip.GZIPOutputStream;
  */
 public final class PlanCodec {
 
-    /** The payload version {@link #encode} writes: blocks as columns of runs. */
+    /** The payload version {@link #encode} writes for a plan without a rocket budget: blocks as columns of runs. */
     public static final int VERSION = 2;
+    /**
+     * Version 2 plus Sky Rings' rocket budget after the trial course ({@link Course#elytra}): written only
+     * when the course carries one, so every other row's bytes stay exactly version 2's.
+     */
+    public static final int V3 = 3;
     /** The first payload version: 14 bytes a block. Still read, and written when asked for by name. */
     public static final int V1 = 1;
     /** An archived plan is never inflated past this (a Mountain Run v2 is ~1-2 MB in version 2). */
@@ -139,21 +149,34 @@ public final class PlanCodec {
      */
     public static byte[] payload(Plan p) {
         whole(p);
+        if (hasBudget(p)) {
+            return write(p, V3, columns(p.ops()));
+        }
         byte[] columns = columns(p.ops());
         return columns.length <= 4L + (long) V1_OP_BYTES * p.ops().size() ? write(p, VERSION, columns)
                 : write(p, V1, null);
     }
 
-    /** The payload in version {@code version}: {@link #V1} or {@link #VERSION}. */
+    /** The payload in version {@code version}: {@link #V1}, {@link #VERSION} or {@link #V3}. */
     public static byte[] payload(Plan p, int version) {
         whole(p);
         if (version == V1) {
             return write(p, V1, null);
         }
-        if (version == VERSION) {
-            return write(p, VERSION, columns(p.ops()));
+        if (version == VERSION || version == V3) {
+            return write(p, version, columns(p.ops()));
         }
         throw new IllegalArgumentException("plan format " + version + " isn't one this writes");
+    }
+
+    /** Whether the plan's course carries a rocket budget, which only version {@link #V3} holds. */
+    private static boolean hasBudget(Plan p) {
+        return p.course() instanceof PlannedTrial t && t.course().elytra() != null;
+    }
+
+    /** Whether {@code version} is one this reads. */
+    private static boolean known(int version) {
+        return version == V1 || version == VERSION || version == V3;
     }
 
     private static void whole(Plan p) {
@@ -221,7 +244,7 @@ public final class PlanCodec {
             o.writeUTF(p.hash());
             if (p.course() instanceof PlannedTrial t) {
                 o.writeByte(TRIAL);
-                trial(o, t);
+                trial(o, t, version);
             } else if (p.course() instanceof PlannedGolf g) {
                 o.writeByte(GOLF);
                 golf(o, g);
@@ -303,7 +326,7 @@ public final class PlanCodec {
         varint(o, (v << 1) ^ (v >> 63));
     }
 
-    private static void trial(DataOutputStream o, PlannedTrial t) throws IOException {
+    private static void trial(DataOutputStream o, PlannedTrial t, int version) throws IOException {
         Course c = t.course();
         o.writeUTF(c.id());
         o.writeUTF(c.kind().id());
@@ -338,6 +361,18 @@ public final class PlanCodec {
         o.writeBoolean(c.pinned());
         o.writeInt(c.rev());
         o.writeLong(t.refMs());
+        if (version >= V3) {
+            // Sky Rings' rocket budget (version 3 and on)
+            o.writeBoolean(c.elytra() != null);
+            if (c.elytra() != null) {
+                o.writeInt(c.elytra().rockets());
+                o.writeInt(c.elytra().need().size());
+                for (int n : c.elytra().need()) {
+                    o.writeInt(n);
+                }
+                o.writeUTF(c.elytra().legs());
+            }
+        }
     }
 
     private static void golf(DataOutputStream o, PlannedGolf g) throws IOException {
@@ -429,7 +464,7 @@ public final class PlanCodec {
             byte[] magic = new byte[MAGIC.length];
             in.readFully(magic);
             int version = in.readUnsignedByte();
-            if (!java.util.Arrays.equals(magic, MAGIC) || (version != V1 && version != VERSION)) {
+            if (!java.util.Arrays.equals(magic, MAGIC) || !known(version)) {
                 return null;
             }
             return new Head(in.readUTF(), in.readInt(), in.readLong(), box(in));
@@ -467,7 +502,7 @@ public final class PlanCodec {
                 return Read.bad("it isn't an archived plan");
             }
             int version = in.readUnsignedByte();
-            if (version != V1 && version != VERSION) {
+            if (!known(version)) {
                 return Read.bad("it was written in plan format " + version + ", which this version can't read");
             }
             String slot = in.readUTF();
@@ -502,7 +537,7 @@ public final class PlanCodec {
             long work = in.readLong();
             String hash = in.readUTF();
             PlannedCourse course = switch (in.readByte()) {
-                case TRIAL -> trial(in);
+                case TRIAL -> trial(in, version);
                 case GOLF -> golf(in);
                 default -> throw new IllegalArgumentException("its course is of no known kind");
             };
@@ -605,7 +640,7 @@ public final class PlanCodec {
         return v;
     }
 
-    private static PlannedTrial trial(DataInputStream in) throws IOException {
+    private static PlannedTrial trial(DataInputStream in, int version) throws IOException {
         String id = in.readUTF();
         TrialKind kind = TrialKind.of(in.readUTF());
         if (kind == null) {
@@ -629,8 +664,17 @@ public final class PlanCodec {
         boolean pinned = in.readBoolean();
         int rev = in.readInt();
         long refMs = in.readLong();
+        Course.Elytra elytra = null;
+        if (version >= V3 && in.readBoolean()) {
+            int rockets = in.readInt();
+            List<Integer> need = new ArrayList<>();
+            for (int i = count(in); i > 0; i--) {
+                need.add(in.readInt());
+            }
+            elytra = new Course.Elytra(rockets, need, in.readUTF());
+        }
         return new PlannedTrial(new Course(id, kind, name, tier, world, start, cps, finish, fallY, minSeconds, enabled,
-                pinned, rev), refMs);
+                pinned, rev, null, elytra), refMs);
     }
 
     private static PlannedGolf golf(DataInputStream in) throws IOException {

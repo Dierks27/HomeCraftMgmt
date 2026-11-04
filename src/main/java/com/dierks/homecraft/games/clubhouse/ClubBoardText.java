@@ -91,6 +91,11 @@ public final class ClubBoardText {
         return "checkpoint " + n;
     }
 
+    /** "ring 7": how far a run on an elytra course (Sky Rings) is. */
+    public static String ring(int n) {
+        return "ring " + n;
+    }
+
     /** "hole 4". */
     public static String hole(int n) {
         return "hole " + n;
@@ -101,7 +106,7 @@ public final class ClubBoardText {
         return "&7and " + n + " more";
     }
 
-    /** "&amp;fSam &amp;7- &amp;eSky Rings &amp;7- checkpoint 3 &amp;7- &amp;f0:41": who, the game, how far, how long. */
+    /** "&amp;fSam &amp;7- &amp;eSky Rings &amp;7- ring 7 &amp;7- &amp;f0:41": who, the game, how far, how long. */
     public static String playing(String name, String what, String where, long ms) {
         return "&f" + name(name) + " &7- &e" + course(what) + (where == null || where.isBlank() ? "" : " &7- " + where)
                 + (ms > 0 ? " &7- &f" + clock(ms) : "");

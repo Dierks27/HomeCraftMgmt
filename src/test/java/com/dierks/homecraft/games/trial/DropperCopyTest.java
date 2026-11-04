@@ -89,14 +89,17 @@ class DropperCopyTest {
         assertEquals(List.of("LEVEL 2 of 5", "Step off and", "fall into the", "WATER!"), GenCopy.dropperLevel(2, 5),
                 "the spec's sign");
         assertEquals(GenCopy.dropperLevel(3, 3), DropperPlanner.signLines(3, 3), "the planner writes GenCopy's words");
+        assertEquals(List.of("LEVEL 5 of 5", "THE LONG DROP", "steer all the", "way down!"),
+                GenCopy.dropperLevel(5, 5, true), "the Long Drop's sign");
         List<List<String>> signs = new ArrayList<>();
-        for (String mix : List.of("EEE", "EEMMH", "HHHHH")) {
+        for (String mix : List.of("EEE", "EEMMH", "HHHHH", "EEMHX")) {
             Plan p = DropperCourses.plan(mix, 4);
             for (SignText s : p.signs()) {
                 signs.add(s.lines());
             }
             assertEquals(mix.length(), p.signs().size(), mix + ": one sign a level");
         }
+        assertTrue(signs.contains(GenCopy.dropperLevel(5, 5, true)), "the EEMHX plan's level 5 carries the Long Drop's");
         for (List<String> sign : signs) {
             assertTrue(sign.size() <= 4, "at most 4 lines: " + sign);
             for (String line : sign) {

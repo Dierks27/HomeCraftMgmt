@@ -77,9 +77,13 @@ class GenCopyTest {
         assertNull(GenCopy.golfTeeFeature(null, 1, 2), "nor nothing");
         for (List<String> sign : List.of(GenCopy.boatRun(), GenCopy.boatFinalDrop(), GenCopy.boatSandPit(),
                 GenCopy.boatSnowyBend(), GenCopy.boatSnowDrift(),
-                GenCopy.golfTee(18, 6, GenCopy.TeeFeature.TERRACES))) {
+                GenCopy.golfTee(18, 6, GenCopy.TeeFeature.TERRACES), GenCopy.dropperLevel(5, 5, true),
+                GenCopy.dropperLevel(1, 1, true))) {
             assertTrue(GenCopy.everySign().contains(sign), "every new sign is in the copy test's list: " + sign);
         }
+        assertEquals(List.of("LEVEL 5 of 5", "THE LONG DROP", "steer all the", "way down!"),
+                GenCopy.dropperLevel(5, 5, true), "the Long Drop's sign says what to do");
+        assertEquals(GenCopy.dropperLevel(2, 5), GenCopy.dropperLevel(2, 5, false), "any other level keeps its words");
     }
 
     @Test

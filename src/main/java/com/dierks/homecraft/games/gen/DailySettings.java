@@ -208,12 +208,48 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      *
      * @param gold   {@code easy}, {@code medium}, {@code hard} → factor
      * @param silver the same
+     * @param rings  Sky Rings' own factors ({@code stars.rings}), for Sky Rings and Classic Sky Rings on
+     *               every tier, or {@code null} for none (they take their tier's then)
      */
-    public record Stars(Map<String, Double> gold, Map<String, Double> silver) {
+    public record Stars(Map<String, Double> gold, Map<String, Double> silver, Rings rings) {
+
+        /**
+         * Sky Rings' shipped factors: its expert time is the autopilot's flown lap, so easy's shared 2.0 and 3.0
+         * would give every clean run three stars.
+         */
+        public static final Rings SHIPPED_RINGS = new Rings(1.4, 2.0);
 
         public Stars {
             gold = Collections.unmodifiableMap(new LinkedHashMap<>(gold));
             silver = Collections.unmodifiableMap(new LinkedHashMap<>(silver));
+        }
+
+        /** Factors per tier only, with no Sky Rings factors of its own. */
+        public Stars(Map<String, Double> gold, Map<String, Double> silver) {
+            this(gold, silver, null);
+        }
+
+        /**
+         * Sky Rings' own gold and silver factors. Silver is never faster than gold.
+         *
+         * @param gold   the gold factor
+         * @param silver the silver factor
+         */
+        public record Rings(double gold, double silver) {
+        }
+
+        /** The gold factor for a course of slot {@code def} at {@code tier}: Sky Rings' own when set. */
+        public double gold(Slots.Def def, String tier) {
+            return ringsFor(def) ? rings.gold() : gold(tier);
+        }
+
+        /** The silver factor for a course of slot {@code def} at {@code tier}: Sky Rings' own when set. */
+        public double silver(Slots.Def def, String tier) {
+            return ringsFor(def) ? rings.silver() : silver(tier);
+        }
+
+        private boolean ringsFor(Slots.Def def) {
+            return rings != null && def != null && Slots.RINGS.equals(def.generator());
         }
 
         /** The gold factor for {@code tier} (medium's for an unknown one). */
@@ -469,7 +505,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
         return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
                 20, 35, true, null, TokenBalance.FRESH_DAILY_CAP, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
-                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped(),
+                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8), Stars.SHIPPED_RINGS), Rewards.shipped(), slots,
+                Archive.shipped(),
                 true);
     }
 
@@ -909,7 +946,27 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             gold.put(tier, gf);
             silver.put(tier, sf);
         }
-        return new Stars(gold, silver);
+        return new Stars(gold, silver, rings(n, d.rings()));
+    }
+
+    /**
+     * {@code stars.rings}: Sky Rings' own gold and silver factors. Missing, they read as {@code d} like every
+     * other key (the backfill writes them back anyway); set to a tier's own, Sky Rings is starred like any
+     * course. A value out of range is clamped like a tier's, with one WARN.
+     */
+    private static Stars.Rings rings(GamesConfig.Node stars, Stars.Rings d) {
+        if (stars.raw("rings") == null) {
+            return d;
+        }
+        Stars.Rings shipped = d == null ? Stars.SHIPPED_RINGS : d;
+        GamesConfig.Node r = stars.child("rings");
+        double gf = r.num("gold", shipped.gold(), 1.0, 10.0);
+        double sf = r.num("silver", shipped.silver(), 1.0, 20.0);
+        if (sf < gf) {
+            r.warn(r.key("silver") + " " + sf + " is faster than the gold time (" + gf + ") - using " + gf);
+            sf = gf;
+        }
+        return new Stars.Rings(gf, sf);
     }
 
     /**
@@ -1089,6 +1146,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                 out.add("stars." + kind + "." + tier);
             }
         }
+        out.addAll(List.of("stars.rings.gold", "stars.rings.silver"));
         for (Slots.Def d : Slots.ALL) {
             String p = "slots." + d.id() + ".";
             out.add(p + "enabled");

@@ -39,11 +39,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reroll, a new board, the old blocks left standing, a Dropper's water guarded until drained by hand):
  * that is what the guard is for, and the scenario oracle ({@link LayoutScenarios#legacyProblem}) sees
  * exactly what the engine sees.
+ *
+ * <p>The Dropper since the Long Drop: its halves are 144 tall, so its 0.35 claim (64 tall) reads as resized
+ * at the same spot. The guard keeps the spot; the engine records the old claim as an old area and empties it
+ * by itself, water first (an INFO, never the "claimed at another place" WARN); being off, nothing is built.
  */
 class LegacyLayoutEngineTest {
 
-    /** A parkour course and Sky Rings, built in 0.35 and running. */
-    private static final List<String> ON = List.of("fresh_parkour_easy", "fresh_rings");
+    /**
+     * Two parkour courses, built in 0.35 and running. (Sky Rings grew with Sky Rings v3, so like golf it takes its
+     * new spot in both decisions and never keeps 0.35's: LayoutGuardResizedTest.)
+     */
+    private static final List<String> ON = List.of("fresh_parkour_easy", "fresh_parkour");
     /** A Dropper 0.35 claimed and then switched off, its pools still standing (water: drain first if moved). */
     private static final Slots.Def DROPPER = Slots.FRESH_DROPPER;
     private static final String W = GenKit.WORLD;
@@ -165,8 +172,20 @@ class LegacyLayoutEngineTest {
             assertEquals(LayoutScenarios.Install.claim035(Slots.of(id)), host.store.meta(GenAdminKeys.claim(id)),
                     id + ": the claim is left exactly as 0.35 wrote it");
         }
-        assertTrue(report(DROPPER.id()).claimed(), "the switched-off Dropper is still claimed where its pools stand");
-        assertNull(host.store.meta(GenAdminKeys.old(DROPPER.id())), "so no old region is left to guard and drain");
+        assertFalse(report(DROPPER.id()).claimed(), "the switched-off Dropper's 64-tall claim no longer covers its"
+                + " 144-tall halves at the same spot");
+        String old = host.store.meta(GenAdminKeys.old(DROPPER.id()));
+        assertNotNull(old, "so its old area is recorded");
+        assertTrue(old.startsWith(LayoutScenarios.Install.claim035(DROPPER) + "|emptied@"),
+                "exactly 0.35's claim, and emptied by itself (water first): " + old);
+        assertTrue(host.logs.stream().anyMatch(r -> r.getLevel() == Level.INFO && r.getMessage().contains(
+                "emptying fresh_dropper's old area") && r.getMessage().contains("y 160..223")
+                && r.getMessage().contains("the pools first")), "said as an old area emptied by itself (an off course"
+                + " gets no 'area changed' line of its own): " + host.logs.stream().map(r -> r.getMessage()).toList());
+        assertTrue(host.logs.stream().noneMatch(r -> r.getLevel() == Level.WARNING && r.getMessage().contains(
+                "fresh_dropper")), "and never as claimed at another place: " + host.logs.stream()
+                .map(r -> r.getMessage()).toList());
+        assertEquals(0, host.world().count(LegacyBoxes.tall(DROPPER, 'A')), "being off, nothing is built there");
     }
 
     @Test
@@ -183,9 +202,12 @@ class LegacyLayoutEngineTest {
             assertFalse(report(id).claimed(), id + ": the 0.35 claim doesn't cover the wider shape");
         }
         assertFalse(report(DROPPER.id()).claimed(), "nor the Dropper's");
-        assertEquals(LayoutScenarios.Install.claim035(DROPPER), host.store.meta(GenAdminKeys.old(DROPPER.id())),
-                "whose old halves, pools and all, would be guarded until someone empties them (tidy)");
-        assertTrue(moveWarnings() >= ON.size() + 1, "each is said as a region claimed elsewhere, the path that rerolls: "
-                + host.logs.stream().map(r -> r.getMessage()).toList());
+        String old = host.store.meta(GenAdminKeys.old(DROPPER.id()));
+        assertTrue(old != null && old.startsWith(LayoutScenarios.Install.claim035(DROPPER)),
+                "whose old halves, pools and all, are recorded as an old area: " + old);
+        assertTrue(old.contains("|emptied@"), "a claim of an older size is emptied by itself, water first (as the"
+                + " guarded start does too: the Dropper grew): " + old);
+        assertTrue(moveWarnings() >= ON.size(), "each course is said as a region claimed elsewhere, the path that"
+                + " rerolls: " + host.logs.stream().map(r -> r.getMessage()).toList());
     }
 }

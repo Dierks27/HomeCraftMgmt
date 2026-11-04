@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -131,7 +132,7 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen rebuild <course> &7- check and repair the current course (same seed)",
                 "&e/hcm games gen on|off <course> &7- open or close one (its blocks stay)",
                 "&e/hcm games gen tier <course> <easy|medium|hard> &7- its difficulty from the next build",
-                "&e/hcm games gen mix <golf course|dropper> <E, M and H> &7- the holes or levels from the next build",
+                "&e/hcm games gen mix <golf course|dropper> <E, M and H; a dropper X too> &7- the holes or levels from the next build",
                 "&e/hcm games gen pin <course> <seed|live> [days] &7- keep a good course; unpin to let it change",
                 "&e/hcm games gen tp <course> [live|idle] &7- go and look",
                 "&e/hcm games gen claim <course|plot n> [confirm] &7- count what is in a new area; confirm clears"
@@ -324,7 +325,8 @@ public final class GenAdmin implements GameAdmin {
                     return;
                 }
                 if (arg == null) {
-                    say(sender, "&cUsage: /hcm games gen " + verb + " " + id + " " + (def.mixed()
+                    say(sender, "&cUsage: /hcm games gen " + verb + " " + id + " " + (def.dropper()
+                            ? "<" + DropRules.letters(def.sizeY()) + ", like " + def.tierOrMix() + ">" : def.mixed()
                             ? "<E, M and H, like " + def.tierOrMix() + ">" : "<easy|medium|hard>"));
                     return;
                 }

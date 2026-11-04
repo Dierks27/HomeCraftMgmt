@@ -105,8 +105,9 @@ class LegacyFallbackTest {
     void anUnplacedCoursesPlaceholderIsNeverTakenForWhereItStands() {
         FileConfiguration c = kept();
         c.set("games.fresh.slots." + GOLF + ".origin", "somewhere");
-        // the keep area moved onto the new shipped spot of Golf of the Week, which nothing stands at here
-        c.set("games.fresh.keep.area", List.of(7488, 128, 4096));
+        // the keep area (one plot) moved onto the new shipped spot of Golf of the Week, which nothing stands at here
+        c.set("games.fresh.keep.area", List.of(8768, 128, 4096));
+        c.set("games.fresh.keep.max_plots", 1);
         List<String> warns = new ArrayList<>();
         DailySettings st = fresh(c, warns);
         // (the fixture is 0.35's file before revision 20, so its Falling Floors' 1/2/3 under a cap of 3 have a WARN
@@ -120,7 +121,7 @@ class LegacyFallbackTest {
         c.set("games.fresh.slots." + GOLF + ".origin", "somewhere");
         st = fresh(c, new ArrayList<>());
         assertEquals(List.of(), com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(
-                        com.dierks.homecraft.games.gen.api.Box.sized(7488, 160, 4096, 32, 16, 32), st, List.of(), null, null),
+                        com.dierks.homecraft.games.gen.api.Box.sized(8768, 160, 4096, 32, 16, 32), st, List.of(), null, null),
                 "nor is a room's box there (the Clubhouse's and the arena's checks count every course, on or off)");
     }
 

@@ -99,10 +99,11 @@ class ArchiveSettingsTest {
         Object[] rings = {"classics.slots.fresh_classic_rings", Map.of("origin", List.of(16_384, 128, 16_384),
                 "half_gap", 32)};
         warns.clear();
-        assertNotNull(with("keep.area", List.of(16_384, 128, 16_384 + 320 + 4), warns, rings).archive().keepProblem(),
+        int deep = Slots.CLASSIC_RINGS.sizeZ();
+        assertNotNull(with("keep.area", List.of(16_384, 128, 16_384 + deep + 4), warns, rings).archive().keepProblem(),
                 "4 blocks past Classic Sky Rings is too close (16 are needed)");
         warns.clear();
-        assertNull(with("keep.area", List.of(16_384, 128, 16_384 + 320 + 16), warns, rings).archive().keepProblem(),
+        assertNull(with("keep.area", List.of(16_384, 128, 16_384 + deep + 16), warns, rings).archive().keepProblem(),
                 "16 past is fine");
         assertEquals(List.of(), warns, "without a WARN");
         warns.clear();

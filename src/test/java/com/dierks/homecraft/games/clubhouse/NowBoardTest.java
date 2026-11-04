@@ -55,6 +55,11 @@ class NowBoardTest {
         assertEquals("racing", NowBoard.runWhere(false, false, true, false, 0, 0), "a race");
         assertEquals("racing, checkpoint 1", NowBoard.runWhere(false, false, true, false, 1, 3), "and how far");
         assertEquals("finished", NowBoard.runWhere(false, false, false, true, 3, 3), "done");
+        assertEquals("ring 7", NowBoard.runWhere(false, false, false, false, 7, 19, true), "an elytra course: rings");
+        assertEquals("racing, ring 1", NowBoard.runWhere(false, false, true, false, 1, 19, true), "raced too");
+        assertEquals("&fSam &7- &eSky Rings &7- ring 7 &7- &f0:41", NowBoard.text(NowBoard.rows(
+                List.of(new TrialsNow.Run(SAM, "Sky Rings", 7, 19, 41_900, false, false, false, false, true)),
+                List.of(), List.of(), NAMES::get)).split("\n")[1], "on the board");
         List<NowBoard.Playing> done = NowBoard.rows(
                 List.of(new TrialsNow.Run(SAM, "Sky Rings", 3, 3, 60_000, false, false, false, true)), List.of(),
                 List.of(), NAMES::get);

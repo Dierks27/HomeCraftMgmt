@@ -65,7 +65,7 @@ public final class PlanShift {
         Course.Mark finish = c.finish() == null ? null : mark(c.finish(), dx, dy, dz);
         Double fall = c.fallY() == null ? null : c.fallY() + dy;
         return new Course(c.id(), c.kind(), c.name(), c.tier(), c.world(), start, cps, finish, fall, c.minSeconds(),
-                c.enabled(), c.pinned(), c.rev(), c.gen());
+                c.enabled(), c.pinned(), c.rev(), c.gen(), c.elytra());
     }
 
     /** A golf course moved by (dx, dy, dz): every tee, cup and bound corner. */

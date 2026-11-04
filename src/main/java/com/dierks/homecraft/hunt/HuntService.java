@@ -348,12 +348,6 @@ public final class HuntService {
         return best;
     }
 
-    /** How warm a player is: the radar band for the nearest live spawn in their world. */
-    public HuntMath.Band distanceBand(Player player) {
-        Hunt h = nearest(player);
-        return h == null ? HuntMath.Band.NONE : HuntMath.band(distance(player.getLocation(), h));
-    }
-
     private static double distance(Location at, Hunt h) {
         double dx = at.getX() - (h.x + 0.5);
         double dy = at.getY() - h.y;
@@ -421,13 +415,20 @@ public final class HuntService {
         return nextTarget;
     }
 
-    /** Whether a player can have a Mini appear near them at all (cooldown aside). */
+    /**
+     * Whether a player can have a Mini appear near them at all (cooldown aside).
+     *
+     * <p>Not in a world with a ceiling: the ground search starts at the top of the world, which
+     * in the Nether is the bedrock roof. A player there is passed over without a roll, so no
+     * cooldown is spent; Minis that drop from Nether mobs are not affected.
+     */
     private boolean eligible(Player p) {
         if (p == null || !p.isOnline()) {
             return false;
         }
         GameMode gm = p.getGameMode();
-        return (gm == GameMode.SURVIVAL || gm == GameMode.ADVENTURE) && plugin.sandbox().allowed(p.getWorld());
+        return (gm == GameMode.SURVIVAL || gm == GameMode.ADVENTURE) && plugin.sandbox().allowed(p.getWorld())
+                && Ground.fromTop(p.getWorld());
     }
 
     // ---- spawning --------------------------------------------------------------------
@@ -530,6 +531,9 @@ public final class HuntService {
         if (asRoll) {
             return spawnForRoll(target, def, grade, finish) ? null : "Found no ground to put it on (tried "
                     + SPOT_ATTEMPTS + " spots " + n.minDistance() + "–" + n.maxDistance() + " blocks out).";
+        }
+        if (!Ground.fromTop(target.getWorld())) {
+            return target.getName() + " is in a world with a ceiling (the Nether): no wild Mini there.";
         }
         Hunt h = spawn(target, def, grade, finish);
         return h == null ? "Found no ground to put it on near " + target.getName()

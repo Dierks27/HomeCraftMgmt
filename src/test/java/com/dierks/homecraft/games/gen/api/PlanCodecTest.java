@@ -63,6 +63,23 @@ class PlanCodecTest {
     }
 
     @Test
+    void aRocketBudgetRoundTripsInVersionThreeAndOnlyThen() {
+        Plan plain = trialPlan();
+        assertEquals(PlanCodec.VERSION, PlanCodec.payload(plain)[4], "a course without a budget is written as version 2");
+        Course c = ((PlannedTrial) plain.course()).course().withElytra(new Course.Elytra(8, List.of(6, 6, 5, 0), "GLG"));
+        Plan rings = Plan.of(plain.slot(), 3, plain.seed(), plain.half(), plain.palette(), plain.ops(), plain.signs(),
+                plain.keepClear(), new PlannedTrial(c, 58_000L), plain.summary(), plain.work());
+        byte[] payload = PlanCodec.payload(rings);
+        assertEquals(PlanCodec.V3, payload[4], "one with a budget as version 3");
+        PlanCodec.Read read = PlanCodec.decode(PlanCodec.encode(rings));
+        assertTrue(read.ok(), "and it reads back: " + read.problem());
+        assertEquals(rings, read.plan(), "budget and all");
+        assertEquals(c.elytra(), ((PlannedTrial) read.plan().course()).course().elytra(), "rockets, need and legs");
+        assertEquals(PlanCodec.V3, PlanCodec.payload(plain, PlanCodec.V3)[4], "version 3 can be asked for by name");
+        assertEquals(plain, PlanCodec.decode(PlanCodec.encode(plain, PlanCodec.V3)).plan(), "and holds no budget then");
+    }
+
+    @Test
     void aPlanRoundTripsExactlyTrialAndGolf() {
         for (Plan p : List.of(trialPlan(), golfPlan())) {
             PlanCodec.Read read = PlanCodec.decode(PlanCodec.encode(p));
@@ -96,7 +113,7 @@ class PlanCodecTest {
     @Test
     void junkIsReportedAsUnreadableAndNeverThrows() throws Exception {
         assertUnreadable(null, "nothing stored");
-        for (int version : new int[]{PlanCodec.V1, PlanCodec.VERSION}) {
+        for (int version : new int[]{PlanCodec.V1, PlanCodec.VERSION, PlanCodec.V3}) {
             junkOf(version);
         }
     }
@@ -112,10 +129,10 @@ class PlanCodecTest {
         wrongMagic[0] = 'X';
         assertUnreadable(gzip(wrongMagic), "the wrong magic");
         byte[] newer = payload.clone();
-        newer[4] = PlanCodec.VERSION + 1;
-        PlanCodec.Read v3 = PlanCodec.decode(gzip(newer));
-        assertFalse(v3.ok(), "a newer format is never guessed at");
-        assertTrue(v3.problem().contains("format " + (PlanCodec.VERSION + 1)), "and says which: " + v3.problem());
+        newer[4] = PlanCodec.V3 + 1;
+        PlanCodec.Read v4 = PlanCodec.decode(gzip(newer));
+        assertFalse(v4.ok(), "a newer format is never guessed at");
+        assertTrue(v4.problem().contains("format " + (PlanCodec.V3 + 1)), "and says which: " + v4.problem());
         byte[] older = payload.clone();
         older[4] = 0;
         assertUnreadable(gzip(older), "a format before the first");

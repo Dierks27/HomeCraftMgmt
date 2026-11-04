@@ -38,6 +38,7 @@ class ClubBoardTextTest {
                 ClubBoardText.pick("Hard Parkour", 5),
                 ClubBoardText.cup("River Run", "Sam", 71_500),
                 ClubBoardText.playing("Sam", "Sky Rings", "checkpoint 3", 41_000),
+                ClubBoardText.playing("Sam", "Sky Rings", ClubBoardText.ring(7), 41_000),
                 ClubBoardText.playing("Lee", "Tiny Golf", "hole 4", 0),
                 ClubBoardText.playing("Ana", ClubBoardText.IN_CLUBHOUSE, null, 0),
                 ClubBoardText.runs(12), ClubBoardText.tokens(145), ClubBoardText.bestGolf("Tiny Golf", 24, -2),
@@ -59,6 +60,9 @@ class ClubBoardTextTest {
         }
         assertEquals("Sam - Sky Rings - checkpoint 3 - 0:41",
                 Text.plain(ClubBoardText.playing("Sam", "Sky Rings", "checkpoint 3", 41_000)), "the owner's example");
+        assertEquals("Sam - Sky Rings - ring 7 - 0:41",
+                Text.plain(ClubBoardText.playing("Sam", "Sky Rings", ClubBoardText.ring(7), 41_000)),
+                "an elytra course counts rings");
         assertEquals("Tiny Golf - Lee 24 (par)", Text.plain(ClubBoardText.golfRecord("Tiny Golf", "Lee", 24, 0)),
                 "par in words, as the results board says it");
     }

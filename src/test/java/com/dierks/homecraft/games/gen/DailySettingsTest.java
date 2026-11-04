@@ -105,6 +105,7 @@ class DailySettingsTest {
         assertTrue(s.dailyCap() >= wt.get(0) + wt.get(1), "which holds both goals in one day");
         assertEquals(2.0, s.stars().gold("easy"), 1e-9, "gold on easy is twice the expert time");
         assertEquals(1.8, s.stars().silver("hard"), 1e-9, "silver on hard is 1.8 times");
+        assertEquals(new DailySettings.Stars.Rings(1.4, 2.0), s.stars().rings(), "Sky Rings' own: gold 1.4, silver 2.0");
         for (Slots.Def d : Slots.ALL) {
             DailySettings.SlotConfig c = s.slot(d.id());
             assertEquals(DailySettings.SlotConfig.shipped(d), c, d.id() + " ships as its definition says");
@@ -286,6 +287,8 @@ class DailySettingsTest {
         clamps.put("budget.pause_above_mspt", 5);
         clamps.put("stars.gold.hard", 0.5);
         clamps.put("stars.silver.easy", 1.5);
+        clamps.put("stars.rings.gold", 0.5);
+        clamps.put("stars.rings.silver", 1.2);
         clamps.put("rewards.clear_weekly.fresh_tiny_golf", 500);
         clamps.put("rewards.clear_daily.fresh_golf", -1);
         clamps.put("star_goals.weekly_tokens", List.of(1, 200));
@@ -300,9 +303,36 @@ class DailySettingsTest {
         }
         DailySettings s = with("stars.silver.easy", 1.5, new ArrayList<>());
         assertEquals(2.0, s.stars().silver("easy"), 1e-9, "silver is never faster than gold");
+        assertEquals(1.4, with("stars.rings.silver", 1.2, new ArrayList<>()).stars().rings().silver(), 1e-9,
+                "Sky Rings' silver neither");
         assertArrayEquals(new int[]{4096, 160, 4096}, with("slots.fresh_parkour_easy.origin",
                 List.of(4100, 160, 4111), new ArrayList<>()).slot("fresh_parkour_easy").origin(),
                 "an origin off the grid is rounded down");
+    }
+
+    @Test
+    void skyRingsOwnStarFactorsAreReadForItAndItsClassicOnly() throws Exception {
+        DailySettings s = parse(shipped(), new ArrayList<>());
+        DailySettings.Stars stars = s.stars();
+        for (String tier : Slots.TIERS) {
+            assertEquals(1.4, stars.gold(Slots.SKY_RINGS, tier), 1e-9, tier + ": Sky Rings' own gold on every tier");
+            assertEquals(2.0, stars.silver(Slots.SKY_RINGS, tier), 1e-9, tier + ": and silver");
+        }
+        assertEquals(1.4, stars.gold(Slots.CLASSIC_RINGS, "easy"), 1e-9, "Classic Sky Rings too");
+        assertEquals(2.0, stars.gold(Slots.DAILY_PARKOUR_EASY, "easy"), 1e-9, "never another course");
+        assertEquals(1.25, stars.gold(Slots.DAILY_PARKOUR_HARD, "hard"), 1e-9, "on any tier");
+
+        Map<String, Object> fresh = shipped();
+        ((Map<?, ?>) fresh.get("stars")).remove("rings");
+        List<String> warns = new ArrayList<>();
+        DailySettings without = parse(fresh, warns);
+        assertEquals(List.of(), warns, "taken out: no WARN");
+        assertEquals(DailySettings.Stars.SHIPPED_RINGS, without.stars().rings(), "and read as shipped, like any key");
+        DailySettings.Stars none = new DailySettings.Stars(stars.gold(), stars.silver());
+        assertEquals(2.0, none.gold(Slots.SKY_RINGS, "easy"), 1e-9, "with none, Sky Rings takes its tier's");
+        assertEquals(1.8, none.silver(Slots.SKY_RINGS, "hard"), 1e-9, "on every tier");
+        assertTrue(DailySettings.KEYS.containsAll(List.of("stars.rings.gold", "stars.rings.silver")),
+                "both are known keys config.yml ships");
     }
 
     @Test

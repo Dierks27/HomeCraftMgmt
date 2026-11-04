@@ -18,9 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The legacy guard's v4 entries ({@link LayoutGuard#RESIZED}): Golf of the Week, Classic Golf and the Ice
- * Boat are bigger from v4 on, so neither decision keeps their 0.35 spot or shape (a 128-wide golf half at
- * 0.35's spot would overlap Tiny Golf's 0.35 box). Each takes its shipped spot and the default gap in both
+ * The legacy guard's grown entries ({@link LayoutGuard#RESIZED}): Golf of the Week, Classic Golf and the Ice
+ * Boat are bigger from v4 on, and Sky Rings and Classic Sky Rings from Sky Rings v3 on, so neither decision keeps
+ * their 0.35 spot or shape (a 128-wide golf half at 0.35's spot would overlap Tiny Golf's 0.35 box, a 512-wide
+ * rings half Classic Parkour's). Each takes its shipped spot and the default gap in both
  * decisions; an owner's own readable spot stays (the slot grows in place there), with no 0.35 gap added.
  */
 class LayoutGuardResizedTest {
@@ -34,14 +35,18 @@ class LayoutGuardResizedTest {
     }
 
     @Test
-    void theThreeGrownPlacesAreTheResizedOnes() {
-        assertEquals(Set.of("fresh_golf", "fresh_classic_golf", "fresh_boat"), LayoutGuard.RESIZED, "golf's two and the boat");
+    void theFiveGrownPlacesAreTheResizedOnes() {
+        assertEquals(Set.of("fresh_golf", "fresh_classic_golf", "fresh_boat", "fresh_rings", "fresh_classic_rings"),
+                LayoutGuard.RESIZED, "golf's two, the boat and Sky Rings' two");
         for (Area a : LayoutGuard.AREAS) {
             assertEquals(LayoutGuard.RESIZED.contains(a.id()), a.resized(), a.id());
         }
         assertEquals(List.of(8768, 160, 4096), area("fresh_golf").shipped(), "golf's shipped spot is Col G's");
         assertEquals(List.of(6080, 96, 2880), area("fresh_boat").shipped(), "the boat's is north");
         assertEquals(List.of(4864, 160, 4096), area("fresh_golf").legacy(), "0.35's table is frozen as it was");
+        assertEquals(List.of(6080, 128, 4096), area("fresh_rings").shipped(), "Sky Rings' is where it was: it grew there");
+        assertEquals(List.of(1760, 128, 3328), area("fresh_classic_rings").shipped(), "Classic Sky Rings' is west");
+        assertEquals(List.of(4096, 128, 4352), area("fresh_rings").legacy(), "and 0.35's rings spot is still 0.35's");
     }
 
     @Test

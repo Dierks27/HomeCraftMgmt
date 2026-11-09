@@ -1156,6 +1156,53 @@ final class SessionCore<P, I> {
     }
 
     /**
+     * {@link #teleport(Object, Place)}, and {@code arrived} told how it went once it has (0.38.7): at once for
+     * a loaded spot, else when the async move lands or fails, a tick or more later. It is told only while
+     * it is still the same session in the same game and ref; a session that ended, or went to another game,
+     * meanwhile is someone else's to place, and nothing is said. Never told when this returns false.
+     *
+     * <p>For a game that must not start until the player is there: golf's hole 1 from the Clubhouse, whose
+     * tee is usually in a chunk nobody has loaded, so the move is async and lands ticks later.
+     *
+     * @return whether the teleport was made (or, for an unloaded chunk, started)
+     */
+    boolean teleport(P p, Place to, Consumer<Boolean> arrived) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null || s.phase != Session.Phase.ACTIVE || to == null || !to.world().equals(s.world)) {
+            return false;
+        }
+        long token = s.token;
+        String gameId = s.gameId;
+        String ref = s.ref;
+        Consumer<Boolean> tell = ok -> {
+            Live cur = live.get(id);
+            if (arrived != null && cur != null && cur.token == token && cur.phase == Session.Phase.ACTIVE
+                    && java.util.Objects.equals(gameId, cur.gameId) && java.util.Objects.equals(ref, cur.ref)) {
+                arrived.accept(ok);
+            }
+        };
+        if (port.loaded(to)) {
+            boolean[] ok = {false};
+            go(p, to, true, done -> ok[0] = done);
+            if (!ok[0]) {
+                disarm(id, to);
+                return false;
+            }
+            tell.accept(true);
+            return true;
+        }
+        go(p, to, false, done -> {
+            boolean landed = Boolean.TRUE.equals(done);
+            if (!landed) {
+                disarm(id, to);
+            }
+            tell.accept(landed);
+        });
+        return true;
+    }
+
+    /**
      * A game holds a session player in place (the 3-2-1 on a spawn or at a start) by sending a move
      * back to {@code at}, where it began. The server makes that a PLUGIN teleport, which unarmed reads
      * as someone else's short hop: a void a tick later, and on the last tick of the hold that is the Go

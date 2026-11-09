@@ -158,13 +158,12 @@ public final class GolfRounds {
             }
         }
         // WP-CH: "Play again together" for a member waiting in the Clubhouse, and (0.38.3) any round started there
+        // 0.38.7: hole 1 starts once they are at its tee, never while the trip there is still on its way
         Boolean fromClub = ClubGolf.fromClubhouse(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()),
-                player, golf, course.id(), start, (q, at) -> games().sessions().teleport(q, at),
-                q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r));
+                player, golf, course.id(), start, (q, at, arrived) -> games().sessions().teleport(q, at, arrived),
+                q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r),
+                q -> games().guard(golf, () -> begin(q, course, look, maxOverPar, group, group == null)));
         if (fromClub != null) {
-            if (fromClub) {
-                begin(player, course, look, maxOverPar, group, group == null);
-            }
             return fromClub;
         }
         Refusal refusal = games().canOpen(player, golf);
@@ -275,9 +274,10 @@ public final class GolfRounds {
     /**
      * Run {@code then} once the hole's chunks are loaded: at once when they are (the player stands at
      * the tee: the usual case), else after each missing one has come in asynchronously. A chunk is never
-     * loaded here on the main thread: "Play again together" from the Clubhouse starts hole 1 while the
-     * player's own teleport is still on its way, hundreds of blocks from a tee nobody has loaded, and
-     * World.getChunkAt would stall the server on a disk read there.
+     * loaded here on the main thread: a tee can be hundreds of blocks from the player in a chunk nobody has
+     * loaded, and World.getChunkAt would stall the server on a disk read there. (Until 0.38.7 a hand-out
+     * from the Clubhouse started hole 1 while the player's own teleport was still on its way; it now waits
+     * for them to arrive, {@link ClubGolf#fromClubhouse}, and this stays the backstop.)
      */
     static void whenLoaded(ChunkLoader chunks, GolfCourse.Hole h, Runnable then) {
         java.util.List<int[]> missing = new ArrayList<>();
@@ -352,6 +352,7 @@ public final class GolfRounds {
         if (teleport) {
             games().sessions().teleport(p, new Location(world, h.tee().x(), h.tee().y(), h.tee().z(), h.tee().yaw(), 0));
         }
+        r.view.freshForBedrock(); // 0.38.7: a new hole sends a Bedrock player the stand afresh
         show(p, r);
         int n = r.run.hole() + 1;
         p.showTitle(Title.title(Text.of("&dHole " + n), Text.of("&7Par " + h.par()

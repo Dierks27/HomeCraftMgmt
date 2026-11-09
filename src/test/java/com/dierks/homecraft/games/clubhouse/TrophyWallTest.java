@@ -13,7 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The trophy case's rows (0.38.4): the courses' records first, then golf's, cut to the board's rows; names and
- * courses cut as the boards cut them; the line over each; and the way a frame hangs for each yaw.
+ * courses cut as the boards cut them; the label over each, three short lines that never reach the next frame's
+ * (Java: narrower than the step; Bedrock: every other label higher, all under My stats); and the way a frame hangs
+ * for each yaw.
  */
 class TrophyWallTest {
 
@@ -33,11 +35,34 @@ class TrophyWallTest {
         assertEquals(new TrophyWall.Trophy("Tiny Golf", "A Very Long P...", "24 (-2)", true), rows.get(6),
                 "then golf, the name cut as the boards cut it");
         assertEquals("Big Golf", rows.get(7).course(), "the eighth is golf's second; the third is cut off");
-        assertEquals("&6Course 0 &f1:00.0 &7- Sam", TrophyWall.line(rows.get(0)), "the line over it");
-        assertEquals("Tiny Golf 24 (-2) - A Very Long P...", Text.plain(TrophyWall.line(rows.get(6))));
+        assertEquals("&6Course 0\n&f1:00.0\n&7Sam", TrophyWall.line(rows.get(0)), "the label over it: three lines");
+        assertEquals("Tiny Golf\n24 (-2)\nA Very Long P...", Text.plain(TrophyWall.line(rows.get(6))));
         assertTrue(TrophyWall.rows(null).isEmpty(), "nothing read yet: no trophies");
         assertTrue(TrophyWall.rows(new FameBoard.Fame(List.of(), null, null, 0, List.of(), List.of(), List.of()))
                 .isEmpty(), "no records: no trophies");
+    }
+
+    @Test
+    void aLabelNeverReachesItsNeighbour() {
+        assertTrue(TrophyWall.width() < ClubhousePlanner.TROPHY_STEP,
+                "Java: the widest line wraps before the next frame: " + TrophyWall.width());
+        FameBoard.Fame worst = new FameBoard.Fame(List.of(), null, null, 0, List.of(),
+                List.of(new FameBoard.CourseTime("W".repeat(40), "W".repeat(40), 3_599_900)), List.of());
+        String[] lines = Text.plain(TrophyWall.line(TrophyWall.rows(worst).get(0))).split("\n");
+        assertEquals(TrophyWall.LINES, lines.length, "course, score, holder");
+        // Bedrock: a name tag at full size, about 7 px for the widest letter; labels at one height are two steps apart
+        for (String l : lines) {
+            assertTrue(l.length() <= ClubBoardText.COURSE_MAX, "short: " + l);
+            assertTrue(l.length() * 7 * WallBoards.PX < 2 * ClubhousePlanner.TROPHY_STEP, "a name tag clears: " + l);
+        }
+        assertEquals(TrophyWall.lift(0), TrophyWall.lift(2), 1e-9, "the even slots at one height");
+        assertEquals(TrophyWall.lift(1), TrophyWall.lift(7), 1e-9, "the odd slots at another");
+        assertEquals(TrophyWall.LINE_UP + TrophyWall.STAGGER, TrophyWall.lift(1), 1e-9, "every other label higher");
+        double tag = TrophyWall.LINES * WallBoards.LINE_PX * WallBoards.PX; // three lines at full size
+        assertTrue(TrophyWall.lift(0) + tag < TrophyWall.lift(1), "a raised label clears the one under it");
+        assertTrue(ClubhousePlanner.TROPHY_Y + TrophyWall.lift(1) + tag < WallBoards.BOTTOM,
+                "and ends under the My stats board");
+        assertTrue(TrophyWall.lift(0) > 1, "over the frame's block");
     }
 
     @Test

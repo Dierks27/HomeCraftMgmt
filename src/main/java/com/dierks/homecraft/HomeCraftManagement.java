@@ -258,6 +258,8 @@ public final class HomeCraftManagement extends JavaPlugin {
             backfillConfig();
         }
         Keys.init(this);
+        com.dierks.homecraft.util.Bedrock.logTo(getLogger());
+        com.dierks.homecraft.util.Bedrock.state(); // 0.38.7: the first lookup logs found, missing or failing, once
 
         this.config = new PluginConfig(this);
         this.config.load();

@@ -26,8 +26,9 @@ import java.util.UUID;
  *
  * <p><b>A round alone</b> (0.38.3, the owner: "go to the clubhouse when click into a game"): its Start
  * goes through the Clubhouse first ({@link #lobby}, {@code solo_first}), it is handed out from there
- * to hole 1 ({@link #fromClubhouse}), its end comes back there with its own scorecard, and Leave game
- * partway goes back there too ({@link #leftToClub}). Every fallback is {@link ClubRoute}'s.
+ * to hole 1 ({@link #fromClubhouse}; 0.38.7: hole 1 starts once they are at its tee), its end comes back
+ * there with its own scorecard, and Leave game partway goes back there too ({@link #leftToClub}). Every
+ * fallback is {@link ClubRoute}'s.
  */
 public final class ClubGolf {
 
@@ -83,6 +84,18 @@ public final class ClubGolf {
         }
     }
 
+    /** What a player handed out to hole 1 reads when the trip there failed (back in the Clubhouse, or home). */
+    static final String NO_TEE = "Couldn't take you to hole 1 right now.";
+
+    /**
+     * The session's own teleport to hole 1, told when it has landed (0.38.7): {@code arrived} gets whether
+     * they got there, at once or ticks later, and never when this returns false (it didn't start).
+     */
+    @FunctionalInterface
+    interface Trip {
+        boolean go(Player p, org.bukkit.Location to, java.util.function.Consumer<Boolean> arrived);
+    }
+
     /**
      * "Play again together" for a member waiting in the Clubhouse (the checklist pass: a group that ended
      * there could never play again), and (0.38.3) any round alone started there: their Clubhouse session is
@@ -90,13 +103,19 @@ public final class ClubGolf {
      * gate asked again, then the session's own teleport to hole 1. On any failure they are handed back to
      * the Clubhouse.
      *
+     * <p>Hole 1 starts ({@code onArrival}) only once they are at its tee (0.38.7). The tee is usually in a
+     * chunk nobody has loaded, so the trip is async and lands ticks later; before, hole 1 started at once,
+     * and its ball could appear on the very tick a Bedrock player was still landing, a spawn their client
+     * lost for the whole round. A trip that fails on the way hands them back the same way ({@link #arrived}).
+     *
      * @return {@code null} when they aren't waiting in the Clubhouse (the usual entry applies), else
      *         whether they are on their way to hole 1
      */
     static Boolean fromClubhouse(ClubDoor club, Player p, com.dierks.homecraft.games.Game golf, String courseId,
-                                 org.bukkit.Location tee, java.util.function.BiPredicate<Player, org.bukkit.Location> teleport,
+                                 org.bukkit.Location tee, Trip teleport,
                                  java.util.function.Function<Player, com.dierks.homecraft.games.Refusal> gate,
-                                 java.util.function.BiConsumer<Player, com.dierks.homecraft.games.Refusal> tell) {
+                                 java.util.function.BiConsumer<Player, com.dierks.homecraft.games.Refusal> tell,
+                                 java.util.function.Consumer<Player> onArrival) {
         String world = tee == null || tee.getWorld() == null ? null : tee.getWorld().getName();
         if (p == null || !waiting(club, p.getUniqueId(), world)) {
             return null;
@@ -106,12 +125,28 @@ public final class ClubGolf {
             return false;
         }
         com.dierks.homecraft.games.Refusal why = gate.apply(p);
-        if (why != null || !teleport.test(p, tee)) {
+        if (why != null || !teleport.go(p, tee, ok -> arrived(club, p, ok, tell, onArrival))) {
             club.handBack(p, ClubVisits.Kind.GOLF);
-            tell.accept(p, why != null ? why : com.dierks.homecraft.games.Refusal.of("Couldn't take you to hole 1 right now."));
+            tell.accept(p, why != null ? why : com.dierks.homecraft.games.Refusal.of(NO_TEE));
             return false;
         }
         return true;
+    }
+
+    /**
+     * The trip to hole 1 is over (0.38.7): there, hole 1 starts; not there, they go back to the Clubhouse
+     * (home when it can't take them: {@link ClubDoor#handBack}) and read why, where before the round started
+     * anyway, wherever they were.
+     */
+    static void arrived(ClubDoor club, Player p, boolean ok,
+                        java.util.function.BiConsumer<Player, com.dierks.homecraft.games.Refusal> tell,
+                        java.util.function.Consumer<Player> onArrival) {
+        if (ok) {
+            onArrival.accept(p);
+            return;
+        }
+        club.handBack(p, ClubVisits.Kind.GOLF);
+        tell.accept(p, com.dierks.homecraft.games.Refusal.of(NO_TEE));
     }
 
     /**

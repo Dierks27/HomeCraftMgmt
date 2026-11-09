@@ -756,6 +756,53 @@ class SessionCoreTest {
     }
 
     @Test
+    void aGamesTeleportIsToldWhenItLandsOnlyWhileItIsStillTheSameSessionAndGame() throws Exception {
+        play();
+        List<Boolean> told = new java.util.ArrayList<>();
+        assertTrue(core.teleport(alice, Place.of("games", 150, 80, 150), told::add), "a loaded spot");
+        assertEquals(List.of(true), told, "same tick: told at once");
+
+        server.chunksLoaded = false; // a tee nobody has loaded: the move is async
+        told.clear();
+        Place tee = Place.of("games", 700, 80, 700);
+        assertTrue(core.teleport(alice, tee, told::add), "started");
+        assertTrue(told.isEmpty(), "still on the way: nothing said yet");
+        server.arrive(server.trips.size() - 1);
+        assertEquals(tee, alice.place, "landed");
+        assertEquals(List.of(true), told, "and told so");
+
+        told.clear();
+        assertTrue(core.teleport(alice, Place.of("games", 800, 80, 800), told::add));
+        server.fail(server.trips.size() - 1);
+        assertEquals(List.of(false), told, "a move that failed on the way is told too");
+
+        told.clear();
+        assertTrue(core.teleport(alice, Place.of("games", 900, 80, 900), told::add));
+        int trip = server.trips.size() - 1;
+        assertTrue(core.passTo(alice, "golf", "meadow", new FakeServer.Game("golf")), "handed to another game");
+        server.arrive(trip);
+        assertTrue(told.isEmpty(), "another game's session now: the old game hears nothing");
+
+        assertFalse(core.teleport(alice, Place.of("world", 0, 64, 0), told::add), "never to another world");
+        server.syncTeleportsWork = false;
+        server.chunksLoaded = true;
+        assertFalse(core.teleport(alice, Place.of("games", 150, 80, 150), told::add), "a same-tick move that failed");
+        assertTrue(told.isEmpty(), "not started: never told");
+    }
+
+    @Test
+    void aGamesTeleportStillOnItsWayWhenTheSessionEndsIsNeverTold() throws Exception {
+        play();
+        server.chunksLoaded = false;
+        List<Boolean> told = new java.util.ArrayList<>();
+        assertTrue(core.teleport(alice, Place.of("games", 700, 80, 700), told::add));
+        int trip = server.trips.size() - 1;
+        core.leave(alice, EndReason.COMMAND);
+        server.fail(trip);
+        assertTrue(told.isEmpty(), "the session ended meanwhile: the game hears nothing");
+    }
+
+    @Test
     void aGamesOwnTeleportIsRecognisedAndBecomesTheSafePoint() throws Exception {
         play();
         Place checkpoint = Place.of("games", 150, 80, 150);

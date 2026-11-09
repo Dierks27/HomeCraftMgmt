@@ -150,6 +150,8 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     long now = 1_790_000_000_000L;
     boolean stopping;
     boolean syncTeleportsWork = true;
+    /** Whether a teleport's destination chunk is loaded (false: the session's teleports go async). */
+    boolean chunksLoaded = true;
     final Set<String> worlds = new HashSet<>(Set.of("world", "games", "nether"));
     final Set<String> gamesWorlds = new HashSet<>(Set.of("games"));
     final List<Trip> trips = new ArrayList<>();
@@ -269,7 +271,7 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
 
     @Override
     public boolean loaded(Place place) {
-        return true;
+        return chunksLoaded;
     }
 
     @Override

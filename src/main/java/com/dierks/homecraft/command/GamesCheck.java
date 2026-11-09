@@ -2,6 +2,7 @@ package com.dierks.homecraft.command;
 
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.gen.engine.Regions;
+import com.dierks.homecraft.util.Bedrock;
 import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.ArrayList;
@@ -25,7 +26,8 @@ import java.util.regex.Pattern;
  * <p>The checks, in order: the {@code games.enabled} switch; the economy worlds exist; each Games
  * world is loaded, not an economy world and in adventure mode (Multiverse's setting, when it can be
  * read); Multiverse-Inventories gives the Games worlds a group of their own, puts every economy world in one
- * group (the Mailbox opens in each of them) and keeps no per-game-mode profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
+ * group (the Mailbox opens in each of them) and keeps no per-game-mode profiles; Floodgate is found for
+ * Bedrock players (0.38.7); {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
  * the cadence, every area inside the world and clear of hand-built courses and each other, the
  * claims and foreign blocks, the next change, each course live or why not, the keep area and the
  * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); the Clubhouse; what players can
@@ -263,6 +265,16 @@ public final class GamesCheck {
         /** Multiverse-Inventories, or {@code null} when it isn't installed. */
         MvInv mvInventories();
 
+        /** Floodgate as this server sees it ({@link Bedrock#state}); {@code null} skips the line. */
+        default Bedrock.State bedrock() {
+            return null;
+        }
+
+        /** Whether a player with a Floodgate-style UUID was unknown to Floodgate here ({@link Bedrock#unknownFloodgateIds}). */
+        default boolean bedrockUnknownIds() {
+            return false;
+        }
+
         /** {@code games.restart_times} as written. */
         List<Object> restartTimes();
 
@@ -323,6 +335,7 @@ public final class GamesCheck {
         List<String> worlds = new ArrayList<>();
         section(out, "the Games worlds", () -> worlds.addAll(gamesWorlds(f, economy, out)));
         section(out, "Multiverse-Inventories", () -> inventories(f.mvInventories(), worlds, economy, out));
+        section(out, "Bedrock players", () -> bedrock(f.bedrock(), f.bedrockUnknownIds(), out)); // 0.38.7
         section(out, "games.restart_times", () -> restarts(f, out));
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
         section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
@@ -759,6 +772,30 @@ public final class GamesCheck {
                         + "solid within half a block under " + (one ? "it" : "them") + "), so a player reaches "
                         + (one ? "it" : "each") + " only within its radius of that spot in the air",
                 "try it on foot with /hcm games course " + c.id() + " test, or set it again standing on its pad");
+    }
+
+    /**
+     * Bedrock players (0.38.7): whether Floodgate is found here, and whether a player with a Floodgate UUID
+     * was unknown to it (the proxy's data isn't reaching this server). Either way a Floodgate-style UUID
+     * still counts as Bedrock, so a WARN here is about Floodgate's setup, not a broken game.
+     */
+    static void bedrock(Bedrock.State state, boolean unknownIds, List<Line> out) {
+        if (state == null) {
+            return;
+        }
+        switch (state) {
+            case FOUND -> out.add(unknownIds
+                    ? Line.warn("Floodgate is found, but a player with a Floodgate UUID was unknown to it (they still"
+                    + " count as Bedrock)", "on the proxy set Floodgate's send-floodgate-data: true and use the same"
+                    + " key.pem here and there, then restart")
+                    : Line.ok("Floodgate is found: Bedrock players get the Bedrock golf ball and icons"));
+            case NOT_INSTALLED -> out.add(Line.ok("Floodgate isn't installed here: only players with a Floodgate UUID"
+                    + " count as Bedrock"));
+            case NOT_READY, FAILING -> out.add(Line.warn("Floodgate is installed but its API "
+                    + (state == Bedrock.State.NOT_READY ? "isn't ready" : "can't be reached")
+                    + " (tried again every few seconds; players with a Floodgate UUID still count as Bedrock)",
+                    "look for Floodgate's error in the console, then run the check again"));
+        }
     }
 
     /** Race Night's rows (EVENTS-DROPPER-SPEC §A.11): nothing when it isn't there. */

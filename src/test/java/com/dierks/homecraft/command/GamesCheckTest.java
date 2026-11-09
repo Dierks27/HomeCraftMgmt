@@ -539,6 +539,34 @@ class GamesCheckTest {
     }
 
     @Test
+    void bedrockSaysWhetherFloodgateIsFoundAndWarnsWhenTheProxysDataIsMissing() {
+        Good good = new Good();
+        assertTrue(GamesCheck.run(good).stream().noneMatch(l -> l.what().contains("Floodgate")),
+                "no Floodgate fact: no line");
+
+        List<Line> out = new ArrayList<>();
+        GamesCheck.bedrock(com.dierks.homecraft.util.Bedrock.State.FOUND, false, out);
+        assertEquals(Status.OK, out.getLast().status(), out.toString());
+        assertTrue(out.getLast().what().contains("Floodgate is found"), out.toString());
+
+        GamesCheck.bedrock(com.dierks.homecraft.util.Bedrock.State.FOUND, true, out);
+        assertEquals(Status.WARN, out.getLast().status(), "found, but a Floodgate UUID it didn't know");
+        assertTrue(out.getLast().fix().contains("send-floodgate-data") && out.getLast().fix().contains("key.pem"),
+                out.getLast().fix());
+
+        GamesCheck.bedrock(com.dierks.homecraft.util.Bedrock.State.NOT_INSTALLED, false, out);
+        assertEquals(Status.OK, out.getLast().status(), "no Floodgate is a choice, not a fault");
+
+        for (com.dierks.homecraft.util.Bedrock.State s : List.of(com.dierks.homecraft.util.Bedrock.State.NOT_READY,
+                com.dierks.homecraft.util.Bedrock.State.FAILING)) {
+            GamesCheck.bedrock(s, false, out);
+            assertEquals(Status.WARN, out.getLast().status(), s.name());
+            assertTrue(out.getLast().what().contains("still count as Bedrock"), out.getLast().what());
+        }
+        assertEquals(5, out.size(), "one line each");
+    }
+
+    @Test
     void itOnlyReadsAndItsWordsAreClean() throws Exception {
         for (Method m : GamesCheck.Facts.class.getDeclaredMethods()) {
             assertFalse(m.getReturnType() == void.class, m.getName() + ": every fact is a question, never an action");

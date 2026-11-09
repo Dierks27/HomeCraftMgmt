@@ -29,29 +29,51 @@ import java.util.UUID;
 
 /**
  * The trophy case (0.38.4; the owner: a trophy case on a Clubhouse wall): one item frame per all-time record,
- * from the Fame board's list (the courses first, then golf), at most {@value #MAX} of them, each with a one-line
- * text display over it ("Sky Rings 1:02.4 - Sam"). A gold ingot for a course's record, a golf ball (the Games
- * screen's golf icon, a snowball) for a golf course's. In the generated room the frames hang on the west wall's
+ * from the Fame board's list (the courses first, then golf), at most {@value #MAX} of them, each with a label over
+ * it: the course, the score and who holds it, a short line each. A gold ingot for a course's record, a golf ball (the
+ * Games screen's golf icon, a snowball) for a golf course's. In the generated room the frames hang on the west wall's
  * skirting under the My stats board ({@link ClubhousePlanner#trophyFrames}); in an owner-built one from the
- * {@code trophies} spot along the admin's right.
+ * {@code trophies} spot along the admin's right. Either way they are {@value ClubhousePlanner#TROPHY_STEP} blocks
+ * apart.
+ *
+ * <p><b>Labels that never touch</b> (0.38.7; they ran into each other as one jumble when the case was full). On
+ * Java a label is drawn at {@value #SCALE}x and wraps at {@value #LINE_WIDTH} px, so its widest line is
+ * {@link #width()} blocks, less than the step: it never reaches the next frame's label. Bedrock keeps neither (Geyser
+ * draws a text display as a name tag, full size, turned to the viewer), only the line breaks, so the lines are short
+ * (a course and a name are cut as the boards cut them) and every other label hangs {@value #STAGGER} block higher
+ * ({@link #lift}): labels at one height are two steps apart, and a raised one still ends well under My stats.
  *
  * <p>Nothing to tap: a frame is fixed (it can't be turned, popped or taken), drops nothing, and like every board
  * is a game entity ({@link WorldEntities#tag}): never saved with its chunk, swept at every start, so a crash or a
- * reload leaves nothing. It is redrawn from the boards' cache once a second while anyone is in, writing only when
+ * reload leaves nothing, and a new jar's labels are drawn fresh where the old ones were. It is redrawn from the boards' cache once a second while anyone is in, writing only when
  * a row changed, an entity went (a chunk unloaded; it is made again when it loads: asked, never loaded) or a slot
- * moved or turned (an owner set the trophies spot again: {@link #moved}, the boards' rule). Bedrock draws item
- * frames and a text display (as a name tag) natively.
+ * moved or turned (an owner set the trophies spot again: {@link #moved}, the boards' rule); a label's height
+ * follows its slot, so a slot drawn again stands where the old one stood. Bedrock draws item frames and a text
+ * display (as a name tag) natively.
  *
- * <p>The rows are pure ({@link #rows}, {@link #line}); the rest talks to the world.
+ * <p>The rows and the label's size and place are pure ({@link #rows}, {@link #line}, {@link #width},
+ * {@link #lift}); the rest talks to the world.
  */
 final class TrophyWall {
 
     /** At most this many trophies (the Fame board's rows). */
     static final int MAX = ClubBoard.MAX_ROWS;
-    /** The line's size and where it hangs: over the frame, a little into the room. */
-    static final float SCALE = 0.75f;
+    /**
+     * The label's size on Java and where its lines wrap (px): at most {@link #width()} blocks wide, under the
+     * frames' step. Geyser ignores both.
+     */
+    static final float SCALE = 0.6f;
+    static final int LINE_WIDTH = 120;
+    /** Where a label hangs: its bottom edge this far over its frame's block, a little into the room. */
     static final double LINE_UP = 1.15;
     static final double LINE_OUT = 0.5;
+    /**
+     * How much higher every other label hangs, so labels at one height are two frames apart: more than three lines
+     * of a Bedrock name tag (0.75 of a block), so a raised label clears the one under it.
+     */
+    static final double STAGGER = 1.0;
+    /** The lines of a label: the course, the score, who holds it. */
+    static final int LINES = 3;
 
     /** One trophy: the course, who holds its record, the score as shown, and whether it is golf's. */
     record Trophy(String course, String holder, String score, boolean golf) {
@@ -93,9 +115,23 @@ final class TrophyWall {
         return out;
     }
 
-    /** "&amp;6Sky Rings &amp;f1:02.4 &amp;7- Sam": the line over a trophy. */
+    /**
+     * "&amp;6Sky Rings\n&amp;f1:02.4\n&amp;7Sam": the label over a trophy, {@value #LINES} short lines (the course
+     * and the name already cut by {@link #rows}), so it stays narrow on Bedrock too, where only the line breaks are
+     * kept.
+     */
     static String line(Trophy t) {
-        return ClubBoardText.trophyLine(t.course(), t.score(), t.holder());
+        return "&6" + t.course() + "\n&f" + t.score() + "\n&7" + t.holder();
+    }
+
+    /** The widest a label is drawn on Java (blocks): its wrap width and the background's pixel each side, scaled. */
+    static double width() {
+        return (LINE_WIDTH + 2) * WallBoards.PX * SCALE;
+    }
+
+    /** How high slot {@code slot}'s label hangs over its frame's block: the odd slots {@value #STAGGER} higher. */
+    static double lift(int slot) {
+        return slot % 2 == 0 ? LINE_UP : LINE_UP + STAGGER;
     }
 
     /** The item in a trophy's frame: a gold ingot for a course, a golf ball for golf, named. */
@@ -160,11 +196,11 @@ final class TrophyWall {
             if (s != null) {
                 take(s);
             }
-            shown.put(i, spawn(w, at, yaw, t));
+            shown.put(i, spawn(w, at, yaw, t, lift(i)));
         }
     }
 
-    private Shown spawn(World w, int[] at, float yaw, Trophy t) {
+    private Shown spawn(World w, int[] at, float yaw, Trophy t, double up) {
         ItemFrame frame = w.spawn(new Location(w, at[0] + 0.5, at[1] + 0.5, at[2] + 0.5), ItemFrame.class, f -> {
             WorldEntities.tag(f, game, null);
             f.setFacingDirection(facing(yaw), true);
@@ -173,11 +209,12 @@ final class TrophyWall {
             f.setItemDropChance(0f);
         });
         BlockFace out = facing(yaw);
-        Location l = new Location(w, at[0] + 0.5 + out.getModX() * LINE_OUT, at[1] + LINE_UP,
+        Location l = new Location(w, at[0] + 0.5 + out.getModX() * LINE_OUT, at[1] + up,
                 at[2] + 0.5 + out.getModZ() * LINE_OUT, WallBoards.snap(yaw), 0f);
         TextDisplay line = w.spawn(l, TextDisplay.class, e -> {
             WorldEntities.tag(e, game, null);
             e.setBillboard(Display.Billboard.FIXED);
+            e.setLineWidth(LINE_WIDTH); // a long word wraps before it reaches the next label (Java)
             e.setRotation(WallBoards.snap(yaw), 0f);
             e.setTransformation(new Transformation(new Vector3f(), new Quaternionf(),
                     new Vector3f(SCALE, SCALE, SCALE), new Quaternionf()));

@@ -17,6 +17,8 @@ import org.bukkit.util.Transformation;
 import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,6 +31,8 @@ import java.util.UUID;
  *       and shown to each Bedrock player near it — who get the display hidden instead (Geyser
  *       can't draw display entities).</li>
  * </ul>
+ * A Bedrock player in range is sent the stand afresh for a few passes ({@link BedrockSends}, 0.38.7): Paper
+ * sends a shown entity only once, and a client that lost that spawn (mid-teleport) never saw the ball.
  * Both are {@link WorldEntities#tag tagged} and never saved with the chunk, so a crash can't leave
  * a ball behind: anything tagged is swept at start and whenever a chunk loads. If a chunk unload
  * takes them anyway, the next move puts them back.
@@ -59,6 +63,8 @@ final class BallView {
     private final boolean block;
     private ItemDisplay display;
     private ArmorStand stand;
+    /** The Bedrock players near the stand, and how often each has been sent it (0.38.7). */
+    private final BedrockSends sends = new BedrockSends();
 
     BallView(HomeCraftManagement plugin, Game game, UUID owner, ItemStack look) {
         this.plugin = plugin;
@@ -87,23 +93,41 @@ final class BallView {
         stand.teleport(feet);
     }
 
-    /** Show the stand (and hide the display) for Bedrock players near the ball. */
+    /**
+     * Show the stand (and hide the display) for Bedrock players near the ball: their first pass shows it,
+     * the next few send it afresh (hidden, then shown: a show alone sends nothing once it is on), as
+     * {@link BedrockSends} says.
+     */
     void showToBedrock() {
         if (display == null || stand == null || !stand.isValid()) {
             return;
         }
         Location here = stand.getLocation();
+        Set<UUID> near = new HashSet<>();
         for (Player p : here.getWorld().getPlayers()) {
             if (p.getLocation().distanceSquared(here) <= BEDROCK_RANGE * BEDROCK_RANGE && Bedrock.is(p)) {
-                p.showEntity(plugin, stand);
+                near.add(p.getUniqueId());
+                BedrockSends.Send send = sends.pass(p.getUniqueId());
+                if (send == BedrockSends.Send.RESEND) {
+                    p.hideEntity(plugin, stand);
+                }
+                if (send != BedrockSends.Send.NONE) {
+                    p.showEntity(plugin, stand);
+                }
                 p.hideEntity(plugin, display);
             }
         }
+        sends.retain(near); // out of range: sent afresh when they come back
     }
 
-    /** Whether the ball is showing. */
+    /** A new hole: the stand is sent afresh to Bedrock players on the next passes. */
+    void freshForBedrock() {
+        sends.clear();
+    }
+
+    /** Whether the ball is showing: both its display and its stand (a lost stand comes back too, 0.38.7). */
     boolean shown() {
-        return display != null && display.isValid();
+        return display != null && display.isValid() && stand != null && stand.isValid();
     }
 
     /** Take the ball away. */
@@ -112,10 +136,12 @@ final class BallView {
         removeQuietly(stand);
         display = null;
         stand = null;
+        sends.clear();
     }
 
     private void spawn(Location at, Location feet) {
         World world = at.getWorld();
+        sends.clear(); // a new stand: nobody has it yet
         display = world.spawn(at, ItemDisplay.class, d -> {
             WorldEntities.tag(d, game, owner);
             d.setItemStack(look);
@@ -145,8 +171,13 @@ final class BallView {
         showToBedrock();
     }
 
+    /**
+     * Gone for good, unless it already is. A ball whose chunk unloaded is already gone (Paper removes it with
+     * the chunk, and it is never saved), so nothing is left to remove here; a tagged one that comes back is
+     * taken by the sweep when its chunk loads ({@link WorldEntities}).
+     */
     private static void removeQuietly(Entity e) {
-        if (e != null && e.isValid()) {
+        if (e != null && !e.isDead()) {
             e.remove();
         }
     }

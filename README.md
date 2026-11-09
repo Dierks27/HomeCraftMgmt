@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.6-thanksgiving`
+- **Version:** `0.38.7-golf-and-trophies`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -244,6 +244,13 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.6 from 0.38.7:** the jar alone (0.38.7 changes no schema and no config revision). Trophy
+labels are redrawn at the next start as one line again, and an owner-built trophy row goes back to frames
+side by side (the spot you set is kept and used as before). Floodgate goes back to being asked once: if it
+isn't ready at that moment, every player counts as Java until the next restart, and a Bedrock player's
+golf ball can again go missing for a round. Hole 1 from the Clubhouse no longer waits for the player to
+arrive. Nothing is lost.
 
 **Back to 0.38.5 from 0.38.6:** the jar alone (0.38.5 reads revision 26 and runs nothing, with one WARN;
 0.38.6 changes no schema). The Harvest Basket, the turkey and the Feast stop, and the Thanksgiving
@@ -2781,7 +2788,9 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   itself stays in your collection, untouched. The choice is remembered. With neither it's a plain
   white ball, and so is a picked Mini you no longer own. **A bought ball shows on both editions**;
   otherwise a Bedrock player's ball is a white block (Bedrock can't draw head textures reliably). A
-  ball's look never changes how it rolls.
+  ball's look never changes how it rolls. A Bedrock player sees their ball only when this server
+  knows they are on Bedrock: `/hcm games check`'s Bedrock players line says whether Floodgate answers,
+  and what to fix on the proxy when it doesn't (0.38.7).
 - **Playing.** Start takes you to hole 1's tee with only the kit: five clubs (Tap, Putt, Chip,
   Swing and Drive, power 1 to 5), Go to my ball, Reset ball (+1 stroke), Scorecard and Leave game
   (click twice). Any click with a club putts the ball the way you look, once it's still and you're
@@ -4233,12 +4242,18 @@ every race and round works exactly as before**.
   round "changed while played" is never a record.
 - **The trophy case (0.38.4).** A row of item frames on the west wall under My stats, one per
   all-time record on the Fame board's list (the courses first, then golf): a gold ingot for a
-  course's record, a golf ball for a golf course's, each with a one-line sign over it ("Sky Rings
-  1:02.4 - Sam"). At most 8 (the board's rows). Nothing to tap: a frame can't be turned, popped or
-  taken, and like the boards it is redrawn from the boards' cache (read every 30 s while anyone is
-  in) and swept at every start, so a crash leaves nothing behind. Owner-built rooms: stand where the
-  first frame goes, your back to the wall, facing into the room, and run `/hcm games clubhouse
-  trophies`; the row runs to your right. Without it there is no trophy case (nothing fails).
+  course's record, a golf ball for a golf course's, each with a label over it in three short lines:
+  the course, the time or score, and who holds it (0.38.7; before, one long line that ran into the
+  next label). Every other label hangs a block higher, so labels never touch, on Bedrock too, where
+  they show as name tags. At most 8 (the board's rows). Nothing to tap: a frame can't be turned,
+  popped or taken, and like the boards it is redrawn from the boards' cache (read every 30 s while
+  anyone is in) and swept at every start, so a crash leaves nothing behind. Owner-built rooms: stand
+  where the first frame goes, your back to the wall, facing into the room, and run `/hcm games
+  clubhouse trophies`; the row runs to your right, **a frame every other block, so eight frames need
+  15 blocks of wall** (0.38.7; before, the frames were side by side over 8 blocks). Without it there
+  is no trophy case (nothing fails). **A room set up before 0.38.7:** the same spot now reaches 15
+  blocks, and nothing checks the wall, so walk it: if the row would run past a corner, into a side
+  wall or across a doorway, stand further left and run `trophies` again.
 - **The jukebox corner (0.38.4).** A small pink glass stage in the south-west corner with a real
   jukebox on it (glass on top, so nothing can stand on it). Tap the jukebox, Java or Bedrock, or tap
   **Songs** on the Games screen's Together tab while you are inside, and a Songs screen lists every
@@ -4369,7 +4384,8 @@ every race and round works exactly as before**.
   `board stats` (my stats). They're optional: a wall with no board set shows nothing. `/hcm games
   clubhouse status` lists them. A results board set before 0.38.3 keeps the way you faced then, so if
   it faces the wall, set it again. The trophy case and the jukebox (0.38.4) are set the same way:
-  `trophies` where the first frame goes (your back to the wall; the row runs to your right) and
+  `trophies` where the first frame goes (your back to the wall; the row runs to your right, a frame
+  every other block, 15 blocks for eight) and
   `jukebox` standing on a real jukebox, and `feast` (0.38.6) standing on the feast table facing across it
   (ten plates to your right, ten ahead); all optional, and status lists them as "not set (optional)". Nothing is built or guarded then. `/hcm games clubhouse generated`
   goes back.
@@ -4458,8 +4474,10 @@ revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONF
     burst over the podium, the chat line. With `solo_after` off: a burst where you finish.
 24. Run the same course twice: the second run shows +/- at each checkpoint and the sentence at the
     line. Never in a party race.
-25. The trophy frames under My stats: one per record, the right item and line; a new record shows up
-    within half a minute of landing back in the room. On Bedrock the lines are name tags.
+25. The trophy frames under My stats: one per record, the right item, and a label of three short lines
+    (course, time or score, who holds it), every other label a block higher, none touching; a new
+    record shows up within half a minute of landing back in the room. On Bedrock the labels are name
+    tags, and they don't touch either.
 26. Tap the jukebox: pick a record, hear it; pick another, "Next: ..."; Quiet, and the block is empty
     again. Pick a record and let it run out (or restart the server while it plays): the block is empty
     afterwards; `/hcm games clubhouse status` after a restart shows the room built and checked.
@@ -4467,7 +4485,9 @@ revision bump: the backfill adds the four 0.38.3 keys with their comments (`CONF
     My stats count them, never more than 10 a day. After the week turns, with two of last week's top
     three in the room: the podium, "Photo time!", the firework over 1st and the "Last week:" line,
     once.
-28. Owner-built room: `/hcm games clubhouse trophies` and `jukebox`; status lists both.
+28. Owner-built room: `/hcm games clubhouse trophies` and `jukebox`; status lists both. The trophy row
+    puts a frame every other block (15 blocks for eight): every frame and label on the wall, none past
+    a corner, in a side wall or across a doorway.
 <!-- ---- end the Clubhouse ---- -->
 
 ### Commands
@@ -4797,7 +4817,11 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
    API, then read from Multiverse-Core 5's `worlds.yml`; when Multiverse can't say, it tells you to
    check `/mv info <world>`); Multiverse-Inventories gives the Games worlds a group of their own and
    keeps no per-game-mode profiles (read from its `groups.yml` and `config.yml`; when they can't be
-   read, what to check by hand); `games.restart_times` reads, with the next restart and hold; Fresh
+   read, what to check by hand); Bedrock players (0.38.7: OK when Floodgate is found or isn't
+   installed; a WARN when its API isn't ready or can't be reached, with "look for Floodgate's error in
+   the console", or when a player with a Floodgate UUID was unknown to Floodgate here, fixed on the
+   proxy: set Floodgate's `send-floodgate-data: true`, use the same `key.pem` on the proxy and here,
+   and restart); `games.restart_times` reads, with the next restart and hold; Fresh
    Courses (on and how often, every area inside the world border and height and clear of hand-built
    courses and the other areas, each claimed, empty, or with foreign blocks and how many, the next
    change, each course live or why not, the keep area and the Classics); Falling Floors (its box fits

@@ -26,8 +26,10 @@ import java.util.logging.Logger;
  *
  * <p>An API that isn't ready yet, or fails to load, is tried again after {@value #RETRY_MS} ms
  * instead of being given up on for good (before 0.38.7 one miss made every player Java until the
- * restart, silently). Found, missing or failing is logged once; {@link #statusLine()} says which,
- * for the start-up log and {@code /hcm games check}.
+ * restart, silently). The lookup itself logs what it found: found or missing once, at INFO; not
+ * ready and failing each once, as a WARN, the first failure with its exception. The plugin makes
+ * that first lookup at enable ({@link #state()}), so the start-up log says it once, and
+ * {@code /hcm games check} asks {@link #state()} again.
  */
 public final class Bedrock {
 
@@ -79,7 +81,7 @@ public final class Bedrock {
         return LIVE.unknownId();
     }
 
-    /** The start-up log's line: {@link #line} for this server. */
+    /** {@link #line} for this server now (the lookup logs on its own: this only says it). */
     public static String statusLine() {
         return line(state(), unknownFloodgateIds());
     }
@@ -122,7 +124,9 @@ public final class Bedrock {
         private volatile State state = State.NOT_READY;
         private volatile Object api;
         private volatile Method isFloodgatePlayer;
-        private final AtomicBoolean warnedReach = new AtomicBoolean();
+        /** Warned once each: a not-ready API says nothing of why, so it must never use up the failing warning. */
+        private final AtomicBoolean warnedNotReady = new AtomicBoolean();
+        private final AtomicBoolean warnedFailing = new AtomicBoolean();
         private final AtomicBoolean warnedCall = new AtomicBoolean();
         private final AtomicBoolean warnedId = new AtomicBoolean();
 
@@ -204,11 +208,12 @@ public final class Bedrock {
             }
         }
 
-        /** Not this time: tried again after {@link #RETRY_MS}, said once. */
+        /** Not this time: tried again after {@link #RETRY_MS}; said once for each of the two reasons. */
         private void retry(State why, Throwable e) {
             state = why;
             nextTry = clock.getAsLong() + RETRY_MS;
-            if (warnedReach.compareAndSet(false, true)) {
+            AtomicBoolean warned = why == State.FAILING ? warnedFailing : warnedNotReady;
+            if (warned.compareAndSet(false, true)) {
                 log.log(Level.WARNING, line(why, false) + "; trying again", e);
             }
         }

@@ -171,7 +171,11 @@ final class BallView {
         showToBedrock();
     }
 
-    /** Gone for good: also one that isn't valid now only because its chunk unloaded (0.38.7). */
+    /**
+     * Gone for good, unless it already is. A ball whose chunk unloaded is already gone (Paper removes it with
+     * the chunk, and it is never saved), so nothing is left to remove here; a tagged one that comes back is
+     * taken by the sweep when its chunk loads ({@link WorldEntities}).
+     */
     private static void removeQuietly(Entity e) {
         if (e != null && !e.isDead()) {
             e.remove();

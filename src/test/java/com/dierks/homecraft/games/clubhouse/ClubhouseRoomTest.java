@@ -376,7 +376,9 @@ class ClubhouseRoomTest {
         List<int[]> frames = r.trophyFrames();
         assertEquals(8, frames.size(), "eight frames");
         assertArrayEquals(new int[]{110, 71, -31}, frames.get(0), "the first where the admin stood");
-        assertArrayEquals(new int[]{109, 71, -31}, frames.get(1), "facing south, the row runs west (their right)");
+        assertArrayEquals(new int[]{108, 71, -31}, frames.get(1),
+                "facing south, the row runs west (their right), a frame every other block");
+        assertArrayEquals(new int[]{110 - 2 * 7, 71, -31}, frames.get(7), "eight frames over 15 blocks");
         assertEquals(0f, r.trophyYaw(), 0.001f, "the frames face the way they faced");
         assertArrayEquals(new int[]{95, 70, -26}, r.jukeboxBlock(), "the block under their feet");
         assertTrue(GenMetaDao.allowed(ClubhouseRoom.TROPHIES_KEY) && GenMetaDao.allowed(ClubhouseRoom.JUKEBOX_KEY)
@@ -388,8 +390,8 @@ class ClubhouseRoomTest {
         for (float[] way : new float[][]{{180f, 1, 0}, {90f, 0, -1}, {-90f, 0, 1}, {-2f, -1, 0}}) {
             later.trophies(new ClubhouseRoom.Place("games", 10, 71, 10, way[0]));
             int[] second = later.trophyFrames().get(1);
-            assertEquals(10 + (int) way[1], second[0], "yaw " + way[0] + ": x");
-            assertEquals(10 + (int) way[2], second[2], "yaw " + way[0] + ": z");
+            assertEquals(10 + 2 * (int) way[1], second[0], "yaw " + way[0] + ": x");
+            assertEquals(10 + 2 * (int) way[2], second[2], "yaw " + way[0] + ": z");
         }
         host.meta.put(ClubhouseRoom.TROPHIES_KEY, "hub;1;2;3;0");
         host.meta.put(ClubhouseRoom.JUKEBOX_KEY, "hub;1;2;3;0");

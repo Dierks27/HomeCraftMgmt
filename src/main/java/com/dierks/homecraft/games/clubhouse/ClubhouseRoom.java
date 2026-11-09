@@ -546,14 +546,15 @@ public final class ClubhouseRoom {
 
     /**
      * {@code /hcm games clubhouse trophies} (0.38.4): where the owner-built room's trophy case starts: the first
-     * frame hangs on the block the admin stands in, their back to the wall, and the row runs to their right.
+     * frame hangs on the block the admin stands in, their back to the wall, and the row runs to their right, a frame
+     * every other block (0.38.7: 15 blocks for eight frames).
      */
     public String trophies(Place at) {
         if (!setMeta(TROPHIES_KEY, at.text())) {
             return "&cThat can't be saved to the database right now.";
         }
         handTrophies = at;
-        return "&aThe trophy case starts where you stand and runs to your right." + notOnYet();
+        return "&aThe trophy case starts where you stand and runs to your right, a frame every other block." + notOnYet();
     }
 
     /**
@@ -723,7 +724,8 @@ public final class ClubhouseRoom {
     /**
      * The trophy case's frame positions (0.38.4), {x, y, z} each, or {@code null} for none: the generated room's
      * west wall ({@link ClubhousePlanner#trophyFrames}), or the owner-built room's row from the recorded spot
-     * along the admin's right (only in its world).
+     * along the admin's right (only in its world). Both {@value ClubhousePlanner#TROPHY_STEP} blocks apart (0.38.7;
+     * the owner-built row's frames were side by side, and their labels ran into each other).
      */
     public List<int[]> trophyFrames() {
         if (!hand) {
@@ -739,8 +741,9 @@ public final class ClubhouseRoom {
         int dz = yaw == 90f ? -1 : yaw == -90f ? 1 : 0;
         List<int[]> out = new ArrayList<>();
         for (int n = 0; n < ClubhousePlanner.TROPHY_MAX; n++) {
-            out.add(new int[]{(int) Math.floor(at.x()) + n * dx, (int) Math.floor(at.y()),
-                    (int) Math.floor(at.z()) + n * dz});
+            int step = n * ClubhousePlanner.TROPHY_STEP;
+            out.add(new int[]{(int) Math.floor(at.x()) + step * dx, (int) Math.floor(at.y()),
+                    (int) Math.floor(at.z()) + step * dz});
         }
         return out;
     }

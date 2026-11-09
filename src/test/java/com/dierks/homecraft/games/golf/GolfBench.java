@@ -182,12 +182,10 @@ public final class GolfBench implements GolfGroups.Port {
         SessionBench.Spot t = tee(c, 1);
         Location start = new Location(world(c.world()), t.x(), t.y(), t.z());
         Boolean fromClub = ClubGolf.fromClubhouse(door, p, golf, c.id(), start,
-                (q, at) -> rail.teleport(q.getUniqueId(), new SessionBench.Spot(c.world(), at.getX(), at.getY(),
-                        at.getZ())), q -> games.canOpen(q, golf), (q, r) -> games.tell(q, r));
+                (q, at, arrived) -> rail.teleport(q.getUniqueId(), new SessionBench.Spot(c.world(), at.getX(), at.getY(),
+                        at.getZ()), arrived), q -> games.canOpen(q, golf), (q, r) -> games.tell(q, r),
+                q -> begin(q, c, group)); // hole 1 once they are at the tee (0.38.7)
         if (fromClub != null) {
-            if (fromClub) {
-                begin(p, c, group);
-            }
             return fromClub;
         }
         String why = rail.enter(player, golf, c.id(), t, q -> begin(q, c, group));

@@ -148,6 +148,16 @@ final class GamesCheckLive implements GamesCheck.Facts {
     }
 
     @Override
+    public com.dierks.homecraft.util.Bedrock.State bedrock() {
+        return com.dierks.homecraft.util.Bedrock.state();
+    }
+
+    @Override
+    public boolean bedrockUnknownIds() {
+        return com.dierks.homecraft.util.Bedrock.unknownFloodgateIds();
+    }
+
+    @Override
     public List<Object> restartTimes() {
         return GamesCheck.restartTimes(plugin.getConfig()); // the owner's value, never the jar's in its place
     }

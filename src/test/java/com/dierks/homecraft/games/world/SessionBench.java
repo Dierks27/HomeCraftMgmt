@@ -258,6 +258,11 @@ public final class SessionBench {
         return core.teleport(b(id), to.place());
     }
 
+    /** A game's teleport told when it lands (0.38.7): the session's real arrival path. */
+    public boolean teleport(UUID id, Spot to, java.util.function.Consumer<Boolean> arrived) {
+        return core.teleport(b(id), to.place(), arrived);
+    }
+
     public void leave(UUID id, EndReason why) {
         core.leave(b(id), why);
     }

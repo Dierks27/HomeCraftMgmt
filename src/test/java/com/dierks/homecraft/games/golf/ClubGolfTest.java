@@ -235,30 +235,30 @@ class ClubGolfTest {
         List<UUID> moved = new ArrayList<>();
         door.in.put(SAM, ClubVisits.Kind.GOLF); // the group's last round ended in the Clubhouse
         assertTrue(ClubGolf.waiting(door, SAM, "games"), "waiting there: the host's Start may take them");
-        Boolean went = ClubGolf.fromClubhouse(door, sam, null, "meadow", tee("games"), (p, at) -> moved.add(p.getUniqueId()),
-                p -> null, (p, r) -> told.add(r.message()));
+        Boolean went = ClubGolf.fromClubhouse(door, sam, null, "meadow", tee("games"),
+                (p, at, arrived) -> moved.add(p.getUniqueId()), p -> null, (p, r) -> told.add(r.message()), p -> { });
         assertEquals(Boolean.TRUE, went, "on their way to hole 1");
         assertEquals(List.of(SAM), door.handedOut, "their Clubhouse session handed to golf, in place");
         assertEquals(List.of(SAM), moved, "then the session's own teleport to the first tee");
         assertTrue(told.isEmpty(), "nothing to say");
 
-        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> true, p -> null,
-                (p, r) -> told.add(r.message())), "not in the Clubhouse: the usual entry");
+        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at, arrived) -> true,
+                p -> null, (p, r) -> told.add(r.message()), p -> { }), "not in the Clubhouse: the usual entry");
         door.in.put(AVA, ClubVisits.Kind.GOLF);
-        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("other"), (p, at) -> true, p -> null,
-                (p, r) -> told.add(r.message())), "a course in another world: the usual entry (a session teleport stays"
-                + " in its world)");
+        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("other"), (p, at, arrived) -> true,
+                p -> null, (p, r) -> told.add(r.message()), p -> { }), "a course in another world: the usual entry (a"
+                + " session teleport stays in its world)");
         assertFalse(ClubGolf.waiting(door, AVA, "other"), "so the Start doesn't count them as free");
 
-        Boolean refused = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> true,
+        Boolean refused = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at, arrived) -> true,
                 p -> com.dierks.homecraft.games.Refusal.of("You can't play golf right now."),
-                (p, r) -> told.add(r.message()));
+                (p, r) -> told.add(r.message()), p -> { });
         assertEquals(Boolean.FALSE, refused, "the gate said no");
         assertEquals(List.of(AVA), door.handedBack, "handed back to the Clubhouse, never left between the two");
         assertTrue(told.getLast().contains("can't play golf"), told.toString());
 
-        Boolean noTee = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> false,
-                p -> null, (p, r) -> told.add(r.message()));
+        Boolean noTee = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at, arrived) -> false,
+                p -> null, (p, r) -> told.add(r.message()), p -> { });
         assertEquals(Boolean.FALSE, noTee, "the teleport failed");
         assertEquals(List.of(AVA, AVA), door.handedBack, "back in the Clubhouse again");
         assertTrue(door.in.containsKey(AVA), "still in it");
@@ -344,17 +344,58 @@ class ClubGolfTest {
         List<UUID> moved = new ArrayList<>();
         List<String> told = new ArrayList<>();
         Boolean went = ClubGolf.fromClubhouse(door, player(SAM), null, "tiny", tee("games"),
-                (p, at) -> moved.add(p.getUniqueId()), p -> null, (p, r) -> told.add(r.message()));
+                (p, at, arrived) -> moved.add(p.getUniqueId()), p -> null, (p, r) -> told.add(r.message()), p -> { });
         assertEquals(Boolean.TRUE, went, "a round alone from the Clubhouse: on their way to hole 1");
         assertEquals(List.of(SAM), door.handedOut, "handed out, in place");
         assertEquals(List.of(SAM), moved, "the session's own teleport to the first tee");
         door.in.put(AVA, ClubVisits.Kind.VISIT);
-        Boolean failed = ClubGolf.fromClubhouse(door, player(AVA), null, "tiny", tee("games"), (p, at) -> false,
-                p -> null, (p, r) -> told.add(r.message()));
+        Boolean failed = ClubGolf.fromClubhouse(door, player(AVA), null, "tiny", tee("games"), (p, at, arrived) -> false,
+                p -> null, (p, r) -> told.add(r.message()), p -> { });
         assertEquals(Boolean.FALSE, failed, "the teleport failed");
         assertEquals(List.of(AVA), door.handedBack, "handed back to the Clubhouse");
         assertEquals(ClubVisits.Kind.GOLF, door.in.get(AVA), "still in it");
         assertTrue(told.getLast().contains("hole 1"), told.toString());
+    }
+
+    @Test
+    void holeOneFromTheClubhouseStartsOnlyOnceTheyAreAtItsTee() {
+        Door door = new Door();
+        door.in.put(SAM, ClubVisits.Kind.VISIT);
+        List<Consumer<Boolean>> trips = new ArrayList<>();
+        List<UUID> started = new ArrayList<>();
+        List<String> told = new ArrayList<>();
+        Boolean went = ClubGolf.fromClubhouse(door, player(SAM), null, "tiny", tee("games"),
+                (p, at, arrived) -> trips.add(arrived), p -> null, (p, r) -> told.add(r.message()),
+                p -> started.add(p.getUniqueId()));
+        assertEquals(Boolean.TRUE, went, "on their way: the tee's chunk isn't loaded, so the trip lands ticks later");
+        assertTrue(started.isEmpty(), "hole 1 waits: no ball while they are still landing");
+        trips.getFirst().accept(true);
+        assertEquals(List.of(SAM), started, "at the tee: hole 1 starts");
+        assertTrue(door.handedBack.isEmpty() && told.isEmpty(), "nobody handed back, nothing to say");
+
+        door.in.put(AVA, ClubVisits.Kind.VISIT);
+        assertEquals(Boolean.TRUE, ClubGolf.fromClubhouse(door, player(AVA), null, "tiny", tee("games"),
+                (p, at, arrived) -> trips.add(arrived), p -> null, (p, r) -> told.add(r.message()),
+                p -> started.add(p.getUniqueId())), "on their way");
+        trips.getLast().accept(false);
+        assertEquals(List.of(SAM), started, "never got there: no round");
+        assertEquals(List.of(AVA), door.handedBack, "back to the Clubhouse, where before the round started anyway");
+        assertTrue(door.in.containsKey(AVA), "in it again");
+        assertEquals(List.of(ClubGolf.NO_TEE), told, "told why, plainly");
+    }
+
+    @Test
+    void aTeeInALoadedChunkStartsHoleOneOnTheSameTick() {
+        Door door = new Door();
+        door.in.put(SAM, ClubVisits.Kind.VISIT);
+        List<UUID> started = new ArrayList<>();
+        Boolean went = ClubGolf.fromClubhouse(door, player(SAM), null, "tiny", tee("games"), (p, at, arrived) -> {
+            arrived.accept(true); // the session's same-tick teleport
+            return true;
+        }, p -> null, (p, r) -> { }, p -> started.add(p.getUniqueId()));
+        assertEquals(Boolean.TRUE, went, "there already");
+        assertEquals(List.of(SAM), started, "hole 1 at once, as before");
+        assertTrue(door.handedBack.isEmpty(), "nobody handed back");
     }
 
     @Test

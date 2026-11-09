@@ -272,6 +272,24 @@ public final class WorldSessions {
     }
 
     /**
+     * {@link #teleport(Player, Location)}, and {@code arrived} told whether they got there once they have (at
+     * once for a loaded chunk, else when the async move lands or fails), on the main thread, only while it
+     * is still the same session in the same game (0.38.7: golf's hole 1 from the Clubhouse waits for it).
+     * Never told when this returns false.
+     *
+     * @return whether the teleport was made (or, for an unloaded chunk, started)
+     */
+    public boolean teleport(Player player, Location to, Consumer<Boolean> arrived) {
+        if (player == null) {
+            return false;
+        }
+        Place place = BukkitPort.place(to);
+        boolean[] made = {false};
+        port().safely("a game's teleport", () -> made[0] = core().teleport(player, place, arrived));
+        return made[0];
+    }
+
+    /**
      * Hold a session player where they stand, free to look around (a 3-2-1 on a spawn or at a start): a
      * move that changed position goes back to where it began, with the new look. This is the ONLY way a
      * game changes a move's {@code to} (HoldSessionTest holds the games to it). The server turns a

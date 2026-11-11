@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.7-golf-and-trophies`
+- **Version:** `0.38.8-site-feeds`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -74,8 +74,8 @@ and the How It Works **Guide**.
 ### The Arcade — tokens buy fun
 Tokens are **earned by playing and never become dollars**.
 - **Earning:** a login streak, playtime, three daily and two weekly **quests** (drawn per
-  player from a pool: fishing, farming, cooking, mining, biomes, deliveries…), **26
-  achievements**, wild hunts and Card trade-in.
+  player from a pool: fishing, farming, cooking, mining, biomes, deliveries…), **39
+  achievements** (13 of them for the Games), wild hunts and Card trade-in.
   - Days roll over at **local midnight** (`clock.time_zone`).
   - Every token change is written to an auditable ledger.
 - **The hub:** one screen with your **Wallet**, the games, the Prize Counter, the crates and
@@ -244,6 +244,12 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.7 from 0.38.8:** the jar alone (0.38.8 changes no schema and no config revision; it only
+adds keys to the website feeds). `/api/market` loses `department` and `departments`, `/api/minis` loses
+`eventOnly`, `earnFrom` and `earnTo`, and `/api/arcade` loses `rules`, `clubhouse`, `holidays` and the Ice
+Boat's `fresh.track`; the website goes back to its own built-in table and defaults for each. Nothing in
+game changes, and nothing is lost.
 
 **Back to 0.38.6 from 0.38.7:** the jar alone (0.38.7 changes no schema and no config revision). Trophy
 labels are redrawn at the next start as one line again, and an owner-built trophy row goes back to frames
@@ -904,6 +910,7 @@ tonight!".
 | Valentine's, 10-14 Feb | pink, red, white | balls |
 | St Patrick's, 14-17 Mar | greens and gold | stars |
 | Independence Day, 1-5 Jul | red, white, blue | bursts |
+| Thanksgiving, 22-30 Nov | orange, brown, gold, red | big balls |
 
 A show takes the look of the day it starts (in `clock.time_zone`) and keeps it to its end. They are
 `arcade.holiday_shows` in config.yml: change the dates or colours (dye names or `"#RRGGBB"`, in
@@ -1128,7 +1135,7 @@ Never a Keeper ("Keepers can't be given."), a perk, a trophy or a boost.
 | `arcade.launcher.material`, `arcade.launcher.name` | `DROPPER`, `"&6Firework Launcher"` | the Firework Launcher's block and name (0.38.1): a `DROPPER` or a `DISPENSER` (anything else is read as `DROPPER`, with one WARN) |
 | `arcade.launcher.per_player` | `15` (0.38.2; `3` before) | launchers one player (admins too) may have placed at once (1-30; 1-10 before) |
 | `arcade.launcher.range` | `32` | how far from whoever uses a Mega show with nothing linked its launchers may stand (8-64 blocks) |
-| `arcade.holiday_shows` | six windows, `enabled: true` | the holiday shows (0.38.2): each window's `id`, `name`, `from`/`to` (`"MM-DD"`), `colours`, `fades` and `shape` ([above](#the-firework-remote-and-the-bigger-shows-0382)) |
+| `arcade.holiday_shows` | seven windows, `enabled: true` | the holiday shows (0.38.2): each window's `id`, `name`, `from`/`to` (`"MM-DD"`), `colours`, `fades` and `shape` ([above](#the-firework-remote-and-the-bigger-shows-0382)) |
 | `skins.firework_launcher` | `""` | a head texture makes the launcher a head instead of a dropper |
 | `games.everyday_cap` | `0` (off) | all arcade goals (each game's daily challenge) together, a day; `15` stops a grinder out-earning everyone ([below](#the-token-shops-economy-038)) |
 | `trade.*` | | [the trade window](#the-trade-window-038) |
@@ -5439,7 +5446,9 @@ feeds have no whitespace; the examples are spread out to read.
     "change24h": 0.90,
     "history":    [ { "t": 1790000000000, "p": 2.38,   "s": 4150 } ],
     "history7d":  [ { "t": 1790000000000, "p": 2.3125, "s": 4020 } ],
-    "history30d": [ { "t": 1790000000000, "p": 2.1,    "s": 3900 } ] } ] }
+    "history30d": [ { "t": 1790000000000, "p": 2.1,    "s": 3900 } ],
+    "department": "Materials" } ],
+  "departments": [ "Blocks", "Materials", "Food", "Tools", "Combat", "Redstone", "Collectibles", "Misc" ] }
 ```
 
 | Field | Meaning |
@@ -5450,6 +5459,8 @@ feeds have no whitespace; the examples are spread out to read.
 | `history` | The newest 96 snapshots, **oldest first**: 48 hours at the shipped `market.price_history.interval_minutes: 30`. `t` epoch ms, `p` price then (two decimals), `s` stock then. |
 | `history7d` | **New.** One point per hour, up to 168 (7 days), oldest first. Same point shape. |
 | `history30d` | **New.** One point per six hours, up to 120 (30 days), oldest first. Same point shape. |
+| `department` | **New in 0.38.8.** The Store / Market tab the item sits under in game: a name from `marketplace.departments`, colour codes stripped, from the same classifier the tabs use (so a `marketplace.category_overrides` entry moves it on the site too). After the history arrays and before the live market's fields (`usual`…). |
+| `departments` | **New in 0.38.8.** Top level, after `items` (before `live`): the `marketplace.departments` names in tab order, colour codes stripped, blanks and repeats dropped. Every item's `department` is one of them. All configured names are listed, also one that holds no item right now (in game an empty tab is hidden) and a ninth or later one (in game it gets no tab). |
 
 Everything that was in the feed before 0.32 is still there, in the same order and written
 byte for byte the same (a test pins it against the old builder). About the two long arrays:
@@ -5479,7 +5490,11 @@ byte for byte the same (a test pins it against the old builder). About the two l
 { "generatedAt": 1790000000000,
   "minis": [ { "id": "blue_amethyst", "name": "Blue Amethyst", "rarity": "COMMON",
     "category": "MISC", "series": "…", "cap": 50, "printed": 12, "soldOut": false,
-    "skin": "https://textures.minecraft.net/texture/<hex>" } ] }
+    "skin": "https://textures.minecraft.net/texture/<hex>" },
+             { "id": "turkey_mini_2026", "name": "Turkey Mini 2026", "rarity": "EPIC",
+    "category": "HOLIDAY", "series": "Holiday Collection", "cap": 20, "printed": 3, "soldOut": false,
+    "skin": "https://textures.minecraft.net/texture/<hex>",
+    "eventOnly": true, "earnFrom": 1795327200000, "earnTo": 1796018399999 } ] }
 ```
 
 | Field | Meaning |
@@ -5491,6 +5506,8 @@ byte for byte the same (a test pins it against the old builder). About the two l
 | `cap` / `printed` | `cap` is `-1` for uncapped. `printed` is how many have been minted so far (`mini_counts.minted`). |
 | `soldOut` | Capped and `printed >= cap`. |
 | `skin` | The Mini's Base64 `texture` decoded to its `textures.SKIN.url`, forced to `https://`. Sent only when it is exactly `https://textures.minecraft.net/texture/<hex>` (the one shape the site accepts); missing or undecodable, the field is left out. |
+| `eventOnly` | **New in 0.38.8.** Only on a holiday Mini (`event_only: true` in the catalog), and then always `true`: it is earned at its own event and never comes from a Card Pack, a Card, the Mini Printer, a crate or a wild drop. An ordinary Mini has no such key and is written byte for byte as before. |
+| `earnFrom` / `earnTo` | **New in 0.38.8.** With `eventOnly`: the first and the last millisecond it can be earned, epoch ms. They are the first millisecond of its `earn_from` day and the last of its `earn_to` day **in `clock.time_zone`** (the example is 22 Nov 00:00 to 29 Nov 23:59:59.999 in America/Chicago), so format them in the server's zone (it is in `/api/arcade`'s `rules.freshSet.zone` while Fresh Courses is on), not the visitor's. Both are left out when a date is missing or they are back to front (such a Mini can't be earned at all). |
 
 **No player data of any kind:** no owners, holders, provenance, UUIDs or balances. Counts only.
 
@@ -5605,6 +5622,39 @@ ignores them is unaffected; every existing field is unchanged:
 
 `holder` anywhere (a record, a cabinet's best, a `top` row, `freshHistory`) follows the one rule
 above: only while `arcade_show_names` is `true`, and no name is even looked up while it is `false`.
+
+**Rules, the Clubhouse and holidays (0.38.8).** Three more top-level keys, after `achievements`, and
+one more field on the Ice Boat's `fresh`. All optional; every older field is where it was and is
+written the same (the website's second handoff, `HCM-SITE-FEEDS-2.md`). The example is the shipped
+config's:
+
+```json
+"rules": { "skillDailyCap": 60, "chanceDailyLimit": 100, "featuredBonus": 5,
+           "cabinets": { "creeper_sweeper": { "milestone": 5, "daily": 5, "dailyCap": 15 },
+                         "connect_four":    { "daily": 5, "dailyCap": 5 }, "…": "…" },
+           "trials": { "firstFinish": { "easy": 10, "medium": 15, "hard": 25, "extreme": 50 }, "dailyCap": 40 },
+           "golf": { "firstFinish": 15, "parOrBetter": 5, "holeInOne": 3, "dailyCap": 50 },
+           "cup": { "entry": 10 },
+           "freshSet": { "everyDays": 7, "at": "Mon 04:00", "zone": "America/Chicago" },
+           "restarts": [ "04:00", "16:00" ] },
+"clubhouse": { "open": true },
+"holidays": [ { "id": "thanksgiving_2026", "name": "Thanksgiving",
+                "from": 1795327200000, "to": 1796104799999 } ]
+```
+
+| Field | Meaning |
+|---|---|
+| `rules` | The reward amounts and caps the site prints, each written from the settings the games pay by, so a change in `config.yml` reaches the site at the next refresh after `/hcm reload`. Whole numbers of tokens. **What is switched off is left out:** a number that is 0, the part of a game that is closed, and the whole object while the games are off. Always in the order shown |
+| `rules.skillDailyCap` / `chanceDailyLimit` / `featuredBonus` | `games.skill_daily_cap` (all skill games together, a player a day), `games.chance_daily_tokens` (the most a player can put into all games of chance a day; absent at 0 = no limit) and `games.featured_bonus` (Today's pick) |
+| `rules.cabinets` | One object per open cabinet, by its `games[]` id: `milestone` (tokens for each medal, once ever), `daily` (the daily challenge) and `dailyCap` (the most that game pays a player a day). **Per cabinet, not one object, because they don't pay alike:** the six solo cabinets ship 5 / 5 / 15, Connect Four and Tic-Tac-Toe have no medals and ship `daily` 5, `dailyCap` 5 |
+| `rules.trials` | `firstFinish` by tier (`games.trials.first_clear`: a hand-built course's first finish, once ever, not counted toward a cap) and `dailyCap` (`games.trials.daily_cap`). A Fresh course's first-finish tokens are `games.fresh.rewards` and are not in the feed |
+| `rules.golf` | `firstFinish` (`first_clear`), `parOrBetter` (`par_reward`, once per course per day), `holeInOne` (`hole_in_one_reward`, once per hole per day) and `dailyCap` |
+| `rules.cup` | `entry`: `games.cup.entry`, the tokens to enter one course's Weekly Cup. Absent while `games.cup.enabled` is false or Time Trials is closed (a Cup already running still shows its own `cup.entry` on its course) |
+| `rules.freshSet` | When a new set of Fresh Courses goes up: `everyDays` (`games.fresh.cadence` in days), `at` (`"Mon 04:00"`: the weekday and `rebuild_at` when the cadence is whole weeks, else the time alone, `"04:00"`) and `zone` (`clock.time_zone`). Only while Fresh Courses is running. The exact next change is still each course's `daily.nextAt` |
+| `rules.restarts` | `games.restart_times`, sorted, `"HH:mm"` in `clock.time_zone`; absent when the list is empty |
+| `clubhouse` | `{"open": true}` only while the Clubhouse's room is there and takes visitors (the games on, `games.clubhouse.enabled`, the room built and checked). Absent otherwise. Never a head count |
+| `fresh.track` | On the Ice Boat's entry (`fresh_boat`) while it is a Mountain Run v2: `"Winding Road"` or `"Slalom"`, this set's track, after `cadenceDays`. Absent on every other course |
+| `holidays` | The holiday windows (`arcade.holiday_shows`) running today or starting within 14 days, soonest first: `{id, name, from, to}`. `id` is the window's id and the year this one starts in (`new_year_2026` runs over 1 Jan 2027); `from` / `to` are the first millisecond of its first day and the last of its last, in `clock.time_zone`. Names and dates only. Absent with `arcade.holiday_shows.enabled: false`, with `arcade.enabled: false`, and when none is near. These are the calendar's holidays (the ones the firework shows dress up for); a dated event such as the Harvest Basket can start earlier and is not listed |
 
 ### The feed token
 

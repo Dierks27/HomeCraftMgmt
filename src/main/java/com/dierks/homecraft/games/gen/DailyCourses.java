@@ -228,6 +228,7 @@ public final class DailyCourses implements Game {
         if (e == null) {
             return;
         }
+        out.rule("freshSet", freshSet(ed));
         for (Slots.Def d : Slots.ALL) {
             FreshFeed.Fresh f = e.fresh(d.id());
             if (f != null) {
@@ -243,6 +244,27 @@ public final class DailyCourses implements Game {
         if (out.wantsHistory()) { // only the website's feed: the archive costs two queries a course
             out.freshHistory(e.freshHistory(out.showNames()));
         }
+    }
+
+    /**
+     * When a new set goes up, for the website's {@code rules.freshSet}: {@code everyDays} (the cadence),
+     * {@code at} ({@code "Mon 04:00"} when the sets change on one weekday, that is a cadence of whole
+     * weeks; else the time alone, {@code "04:00"}) and {@code zone} ({@code clock.time_zone}).
+     */
+    static java.util.Map<String, Object> freshSet(Edition ed) {
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("everyDays", ed.cadenceDays());
+        String at = String.format(java.util.Locale.ROOT, "%02d:%02d", ed.rollover().getHour(),
+                ed.rollover().getMinute());
+        if (ed.cadenceDays() % 7 == 0) {
+            java.time.DayOfWeek day = ed.rebuildDay() != null ? ed.rebuildDay() : ed.weekStart();
+            if (day != null) {
+                at = day.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + at;
+            }
+        }
+        out.put("at", at);
+        out.put("zone", ed.zone().getId());
+        return out;
     }
 
     @Override

@@ -106,6 +106,7 @@ public final class SimonSays extends CabinetGame {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, LOWER_IS_BETTER);
         out.cabinet(id(), name(), Scores.CLASSIC, UNIT, LOWER_IS_BETTER, record == null ? null : record.score(),
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+        rules(out);
     }
 
     @Override

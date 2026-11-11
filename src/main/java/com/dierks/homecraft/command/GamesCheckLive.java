@@ -686,6 +686,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 g == null ? null : com.dierks.homecraft.web.MarketDashboardServer.topBoards(g));
         String error = null;
         if (g != null && g.config().enabled()) {
+            feed.common(g.config().common());
             for (Game game : g.games()) {
                 if (!g.enabled(game)) {
                     continue;
@@ -699,7 +700,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
             }
         }
         if (error != null) {
-            return new GamesCheck.Web(true, token, error, feed.size(), 0);
+            return new GamesCheck.Web(true, token, error, feed.rows().size(), 0);
         }
         try {
             PluginConfig.Arcade arcade = plugin.config().arcade();
@@ -732,11 +733,13 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 }
                 List<ArcadeFeed.AchievementRow> achievements = plugin.achievements() == null ? List.of()
                         : ArcadeFeed.achievements(plugin.achievements().all());
+                feed.holidays(ArcadeFeed.holidays(plugin.config().holidayShows(), plugin.clock().today(),
+                        plugin.clock().zone()));
                 json = feed.json(now, null, scratch, prizes, packs, achievements);
             }
-            return new GamesCheck.Web(true, token, null, feed.size(), json.getBytes(StandardCharsets.UTF_8).length);
+            return new GamesCheck.Web(true, token, null, feed.rows().size(), json.getBytes(StandardCharsets.UTF_8).length);
         } catch (RuntimeException | LinkageError e) {
-            return new GamesCheck.Web(true, token, e.toString(), feed.size(), 0);
+            return new GamesCheck.Web(true, token, e.toString(), feed.rows().size(), 0);
         }
     }
 

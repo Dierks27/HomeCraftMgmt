@@ -110,6 +110,7 @@ public final class CreeperSweeper extends CabinetGame {
         GamesDao.ScoreRow record = games().scores().record(id(), FEED_BOARD, true);
         out.cabinet(id(), name(), FEED_BOARD, "ms", true, record == null ? null : record.score(),
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+        rules(out);
     }
 
     /** Each level keeps its own all-time board (easy, normal, hard): a leaderboard display may show any. */

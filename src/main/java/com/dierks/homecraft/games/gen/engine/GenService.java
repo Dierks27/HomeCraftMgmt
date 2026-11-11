@@ -5595,8 +5595,11 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return null;
             }
             Long to = pinnedForever(s) ? null : target(s).endsAt();
+            // The Ice Boat's Mountain Run v2 is the Winding Road or the Slalom, read off the seed as everywhere else.
+            String track = Slots.BOAT.equals(s.def.generator()) && BoatPlanner.mountain(s.half('A'))
+                    && s.live.algo() >= MountainValidator.FIRST_ALGO ? BoatStyle.of(s.live.seed()).title() : null;
             return new FreshFeed.Fresh(row.code(), FreshFeed.shortSeed(row.seed()), row.startsAt(), to,
-                    s.live.cadence());
+                    s.live.cadence(), track);
         } catch (SQLException | RuntimeException e) {
             return null;
         }

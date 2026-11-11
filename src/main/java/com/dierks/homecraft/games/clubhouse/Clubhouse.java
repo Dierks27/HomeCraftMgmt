@@ -328,6 +328,14 @@ public final class Clubhouse implements Game, ClubDoor {
         return admin;
     }
 
+    /** {@code "clubhouse":{"open":true}} on the website's feed, only while visitors may come in. */
+    @Override
+    public void feed(com.dierks.homecraft.games.FeedWriter out) {
+        if (ready()) {
+            out.clubhouse(true);
+        }
+    }
+
     @Override
     public List<String> statusLines() {
         ClubhouseRoom r = room;

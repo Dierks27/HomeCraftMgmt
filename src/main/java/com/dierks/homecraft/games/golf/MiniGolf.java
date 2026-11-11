@@ -274,6 +274,13 @@ public final class MiniGolf implements Game {
      */
     @Override
     public void feed(FeedWriter out) {
+        MiniGolfSettings s = settings();
+        java.util.Map<String, Object> rules = new java.util.LinkedHashMap<>();
+        rules.put("firstFinish", s.firstClear());
+        rules.put("parOrBetter", s.parReward());
+        rules.put("holeInOne", s.holeInOneReward());
+        rules.put("dailyCap", s.dailyCap());
+        out.rule("golf", rules); // what a round pays, from the settings it pays by
         for (GolfCourse c : playable()) {
             GamesDao.ScoreRow record = record(c.id());
             Integer strokes = record == null ? null : (int) record.score();

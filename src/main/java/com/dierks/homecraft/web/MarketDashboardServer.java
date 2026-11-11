@@ -352,6 +352,9 @@ public final class MarketDashboardServer {
         MarketService market = plugin.market();
         refreshLongHistory(market, now);
         List<MarketFeed.Row> rows = new ArrayList<>();
+        // The same classifier as the Store and Market tabs, so the site's tabs are the server's.
+        com.dierks.homecraft.marketplace.Categorizer departments =
+                new com.dierks.homecraft.marketplace.Categorizer(plugin);
         for (MarketItem item : market.catalog()) {
             MarketState state = market.state(item.id());
             if (state == null) {
@@ -367,10 +370,12 @@ public final class MarketDashboardServer {
                     market.buyPrice(item.id()), market.sellPrice(item.id()),
                     state.stock(), item.fullStock(), change24h(chrono, price, now), chrono,
                     history7d.get(item.id()), history30d.get(item.id()),
-                    live == null ? null : live.items().get(item.id())));
+                    live == null ? null : live.items().get(item.id()),
+                    departments.department(item.material())));
         }
         return MarketFeed.json(cfg != null ? cfg.title() : "Crate Market", now,
-                cfg != null ? cfg.refreshSeconds() : 30, rows, live == null ? null : live.extras());
+                cfg != null ? cfg.refreshSeconds() : 30, rows, plugin.config().marketplace().departments(),
+                live == null ? null : live.extras());
     }
 
     /**
@@ -529,7 +534,7 @@ public final class MarketDashboardServer {
         if (minis == null) {
             return MinisFeed.json(now, null, null);
         }
-        return MinisFeed.json(now, minis.catalog(), minis.printedCounts());
+        return MinisFeed.json(now, minis.catalog(), minis.printedCounts(), plugin.clock().zone());
     }
 
     /**
@@ -581,6 +586,8 @@ public final class MarketDashboardServer {
 
         List<ArcadeFeed.AchievementRow> achievements = plugin.achievements() == null ? List.of()
                 : ArcadeFeed.achievements(plugin.achievements().all());
+        feed.holidays(ArcadeFeed.holidays(plugin.config().holidayShows(), plugin.clock().today(),
+                plugin.clock().zone()));
         return feed.json(now, featured, scratch, prizes, packs, achievements);
     }
 
@@ -613,6 +620,7 @@ public final class MarketDashboardServer {
         if (games == null || !games.config().enabled()) {
             return null;
         }
+        feed.common(games.config().common());
         for (Game game : games.games()) {
             if (!games.enabled(game)) {
                 continue;

@@ -42,6 +42,13 @@ import java.util.Set;
  *       {@value NewsFeed#MARKET_NEWS_LIMIT} newest from the last 7 days, the same shape as
  *       {@code /api/news} ({@link NewsFeed}).</li>
  * </ul>
+ *
+ * <p><b>Departments (0.38.8).</b> Each item ends with {@code "department"}: the Store and Market tab
+ * it sits under, a name from {@code marketplace.departments} with its colour codes stripped, after
+ * its history arrays and before its live-market fields. The top level carries
+ * {@code "departments":[…]}, the configured names in tab order, after {@code "items"} and before
+ * {@code "live"}. A row without a department and an empty list write nothing, and the output is
+ * then byte for byte the feed as it was.
  */
 public final class MarketFeed {
 
@@ -127,18 +134,31 @@ public final class MarketFeed {
      * @param history7d  hourly points over the last 7 days (omitted from the JSON when empty)
      * @param history30d 6-hourly points over the last 30 days (omitted from the JSON when empty)
      * @param sim        the live market's fields, or {@code null} (none written)
+     * @param department the Store / Market tab it sits under (a {@code marketplace.departments} name; colour
+     *                   codes are stripped when written), or {@code null} or blank (not written)
      */
     public record Row(String id, String name, String material, double price, double buy, double sell,
                       long stock, long maxStock, double change24h,
                       List<PriceHistoryDao.Snapshot> history,
                       List<PriceHistoryDao.Snapshot> history7d,
                       List<PriceHistoryDao.Snapshot> history30d,
-                      SimInfo sim) {
+                      SimInfo sim, String department) {
 
         public Row {
             history = history == null ? List.of() : List.copyOf(history);
             history7d = history7d == null ? List.of() : List.copyOf(history7d);
             history30d = history30d == null ? List.of() : List.copyOf(history30d);
+        }
+
+        /** A row without a department — the 0.33 shape. */
+        public Row(String id, String name, String material, double price, double buy, double sell,
+                   long stock, long maxStock, double change24h,
+                   List<PriceHistoryDao.Snapshot> history,
+                   List<PriceHistoryDao.Snapshot> history7d,
+                   List<PriceHistoryDao.Snapshot> history30d,
+                   SimInfo sim) {
+            this(id, name, material, price, buy, sell, stock, maxStock, change24h, history, history7d, history30d,
+                    sim, null);
         }
 
         /** A row without live-market fields — the 0.32 shape. */
@@ -148,7 +168,7 @@ public final class MarketFeed {
                    List<PriceHistoryDao.Snapshot> history7d,
                    List<PriceHistoryDao.Snapshot> history30d) {
             this(id, name, material, price, buy, sell, stock, maxStock, change24h, history, history7d, history30d,
-                    null);
+                    null, null);
         }
     }
 
@@ -194,6 +214,17 @@ public final class MarketFeed {
      * {@code null}, exactly {@link #json(String, long, int, List)}.
      */
     public static String json(String title, long generatedAt, int refreshSeconds, List<Row> rows, Extras extras) {
+        return json(title, generatedAt, refreshSeconds, rows, null, extras);
+    }
+
+    /**
+     * The whole feed with the department tabs: {@code "departments":[…]} after {@code "items"} (before the
+     * live market's fields), the names in the order given with colour codes stripped; blank names and
+     * repeats (any case) are dropped, and a {@code null} or empty list writes nothing. Each row's own
+     * {@code department} is written whether or not it is in the list.
+     */
+    public static String json(String title, long generatedAt, int refreshSeconds, List<Row> rows,
+                              List<String> departments, Extras extras) {
         int count = rows == null ? 0 : rows.size();
         StringBuilder sb = new StringBuilder(Math.max(4096, 256 + count * 1024));
         sb.append('{');
@@ -215,6 +246,11 @@ public final class MarketFeed {
             }
         }
         sb.append(']');
+        List<String> tabs = departments(departments);
+        if (!tabs.isEmpty()) {
+            sb.append(",\"departments\":");
+            ids(sb, tabs);
+        }
         if (extras != null) {
             extras(sb, extras, generatedAt);
         }
@@ -243,10 +279,30 @@ public final class MarketFeed {
             sb.append(",\"history30d\":");
             points(sb, row.history30d(), true);
         }
+        String department = Json.plain(row.department()).trim();
+        if (!department.isEmpty()) {
+            sb.append(",\"department\":").append(Json.string(department));
+        }
         if (row.sim() != null) {
             sim(sb, row.sim(), generatedAt);
         }
         sb.append('}');
+    }
+
+    /** The tab names to publish: colour codes stripped, trimmed, no blanks, no repeats (any case), in order. */
+    static List<String> departments(List<String> names) {
+        List<String> out = new ArrayList<>();
+        if (names == null) {
+            return out;
+        }
+        Set<String> seen = new java.util.HashSet<>();
+        for (String name : names) {
+            String plain = Json.plain(name).trim();
+            if (!plain.isEmpty() && seen.add(plain.toLowerCase(java.util.Locale.ROOT))) {
+                out.add(plain);
+            }
+        }
+        return out;
     }
 
     /** {@code ,"usual":…,"moodPct":…[,"status":…[,"statusEndsAt":…]][,"events":[…]]} */

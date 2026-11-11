@@ -117,6 +117,7 @@ public final class ConnectFour extends CabinetGame {
         GamesDao.ScoreRow record = games().scores().record(id(), BOARD, false);
         out.cabinet(id(), name(), BOARD, UNIT, false, record == null ? null : record.score(),
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+        rules(out);
     }
 
     @Override

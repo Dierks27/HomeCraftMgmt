@@ -444,6 +444,15 @@ public final class TimeTrials implements Game {
      */
     @Override
     public void feed(FeedWriter out) {
+        TimeTrialsSettings s = settings();
+        java.util.Map<String, Object> firstFinish = new java.util.LinkedHashMap<>();
+        for (Tier tier : Tier.values()) {
+            firstFinish.put(tier.id(), s.firstClearFor(tier.id()));
+        }
+        java.util.Map<String, Object> rules = new java.util.LinkedHashMap<>();
+        rules.put("firstFinish", firstFinish);
+        rules.put("dailyCap", s.dailyCap());
+        out.rule("trials", rules); // what a course pays, from the settings it pays by
         List<Course> open = new ArrayList<>(openCourses());
         open.sort(Comparator.comparing(Course::id));
         for (Course c : open) {

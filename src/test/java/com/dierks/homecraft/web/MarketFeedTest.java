@@ -527,4 +527,57 @@ class MarketFeedTest {
         sb.append('"');
         return sb.toString();
     }
+
+    // ---- departments (0.38.8) -------------------------------------------------------------
+
+    @Test
+    void theDepartmentFollowsTheHistoryArraysAndComesBeforeTheLiveFields() {
+        MarketFeed.Row plain = new MarketFeed.Row("iron_ingot", "Iron Ingot", "IRON_INGOT", 25.12, 26.38, 23.86,
+                512, 2048, 11.7, List.of(snap(T, 25.12, 512)), null, List.of(snap(T, 25.12, 512)), null, "&6Materials");
+        assertEquals("{\"title\":\"Crate Market\",\"generatedAt\":1790000000000,\"refreshSeconds\":30,"
+                + "\"items\":[{\"id\":\"iron_ingot\",\"name\":\"Iron Ingot\",\"material\":\"IRON_INGOT\","
+                + "\"price\":25.12,\"buy\":26.38,\"sell\":23.86,\"stock\":512,\"maxStock\":2048,"
+                + "\"change24h\":11.70,\"history\":[{\"t\":1790000000000,\"p\":25.12,\"s\":512}],"
+                + "\"history30d\":[{\"t\":1790000000000,\"p\":25.12,\"s\":512}],\"department\":\"Materials\"}],"
+                + "\"departments\":[\"Blocks\",\"Materials\",\"Misc\"]}",
+                MarketFeed.json("Crate Market", T, 30, List.of(plain), List.of("Blocks", "&6Materials", "Misc"), null),
+                "the tab's name without its colour codes, then the tabs in order");
+
+        MarketFeed.Row live = new MarketFeed.Row("iron_ingot", "Iron Ingot", "IRON_INGOT", 25.12, 26.38, 23.86,
+                512, 2048, 11.7, List.of(snap(T, 25.12, 512)), null, null, ironSim(List.of()), "Materials");
+        String json = MarketFeed.json("x", T, 30, List.of(live), List.of("Blocks", "Materials"),
+                new MarketFeed.Extras(List.of("iron_ingot"), List.of(), null, List.of()));
+        assertEquals(List.of("id", "name", "material", "price", "buy", "sell", "stock", "maxStock", "change24h",
+                        "history", "department", "usual", "moodPct", "status", "statusEndsAt"),
+                new ArrayList<>(items(json).get(0).keySet()));
+        assertTrue(json.contains("}],\"departments\":[\"Blocks\",\"Materials\"],\"live\":true,"),
+                "departments sits after items and before live: " + json);
+    }
+
+    @Test
+    void withoutDepartmentsTheFeedIsByteForByteTheOldOne() {
+        List<MarketFeed.Row> rows = List.of(iron(List.of(snap(T, 2.4, 4200)), null, null));
+        String old = MarketFeed.json("Crate Market", T, 30, rows);
+        assertEquals(old, MarketFeed.json("Crate Market", T, 30, rows, null, null));
+        assertEquals(old, MarketFeed.json("Crate Market", T, 30, rows, List.of(), null));
+        assertEquals(old, MarketFeed.json("Crate Market", T, 30, rows, List.of("", "  ", "&f"), null),
+                "names with nothing in them are no tabs");
+        assertFalse(old.contains("department"));
+        assertNull(iron(null, null, null).department(), "the older rows have none");
+
+        MarketFeed.Row blank = new MarketFeed.Row("iron_ingot", "&fIron &lIngot", "IRON_INGOT", 2.4, 2.52, 2.28,
+                4200, 10000, 0.9, List.of(snap(T, 2.4, 4200)), null, null, null, " &f ");
+        assertEquals(old, MarketFeed.json("Crate Market", T, 30, List.of(blank)), "a blank department is not written");
+    }
+
+    @Test
+    void theTabListDropsBlanksAndRepeatsAndKeepsItsOrder() {
+        List<String> names = new ArrayList<>(List.of("Blocks", " Food ", "blocks", "", "&cCombat"));
+        names.add(null);
+        assertEquals(List.of("Blocks", "Food", "Combat"), MarketFeed.departments(names));
+        assertEquals(List.of(), MarketFeed.departments(null));
+        String json = MarketFeed.json("x", T, 30, null, names, null);
+        assertTrue(json.endsWith("\"items\":[],\"departments\":[\"Blocks\",\"Food\",\"Combat\"]}"), json);
+        strict(json);
+    }
 }

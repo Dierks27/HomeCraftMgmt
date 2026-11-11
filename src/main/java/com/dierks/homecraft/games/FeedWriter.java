@@ -158,6 +158,26 @@ public interface FeedWriter {
     default void starChart(String weekIso, Long best, String holder) {
     }
 
+    // ---- the rules and the Clubhouse (0.38.8) -----------------------------------------------------
+
+    /**
+     * One part of the website's top-level {@code rules} object: the reward amounts and caps a game
+     * pays by, written from the same settings it plays with, so the site never prints a shipped
+     * default the owner has changed. {@code path} is the key, with dots for a part inside a part
+     * ({@code "trials"}, {@code "cabinets.snake"}); {@code value} is a whole number, text, or a map
+     * or list of those. No player data. A number of 0 or less means "switched off" and is left out
+     * by the writer, as is a part with nothing left in it. Writing a path again replaces it.
+     */
+    default void rule(String path, Object value) {
+    }
+
+    /**
+     * The Clubhouse, for the website's Clubhouse section: called by the Clubhouse itself, with
+     * {@code true}, only while its room is there and visitors may come in.
+     */
+    default void clubhouse(boolean open) {
+    }
+
     // ---- Race Night and Falling Floors (EVENTS-DROPPER-SPEC §A.7, §B.3.4) ------------------------
 
     /**

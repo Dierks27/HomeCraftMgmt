@@ -183,6 +183,19 @@ public abstract class CabinetGame implements Game {
      * A Classic run ended: record the score on {@code board}, pay any milestone reached for the
      * first time, and today's featured bonus if this is today's pick.
      */
+    /**
+     * This cabinet's part of the website's {@code rules} ({@code cabinets.<id>}): the tokens a milestone and
+     * the daily challenge pay and its daily cap, from the settings it pays by. The writer leaves out what is 0.
+     */
+    protected void rules(com.dierks.homecraft.games.FeedWriter out) {
+        CabinetSettings s = cabinetSettings();
+        java.util.Map<String, Object> rules = new java.util.LinkedHashMap<>();
+        rules.put("milestone", s.milestoneReward());
+        rules.put("daily", s.dailyReward());
+        rules.put("dailyCap", s.dailyCap());
+        out.rule("cabinets." + id(), rules);
+    }
+
     public Finish finishClassic(Player player, String board, long score, boolean lowerIsBetter) {
         return finishClassic(player, board, score, score, lowerIsBetter);
     }

@@ -1174,4 +1174,156 @@ class ArcadeFeedTest {
         assertEquals("{\"generatedAt\":1790000000000,\"games\":[{\"id\":\"falling_floors\",\"name\":\"Falling Floors\","
                 + "\"kind\":\"arena\"}]}", plain.json(T, null, null, null, null, null), "no shape, no board: just its head");
     }
+
+    // ---- the rules, the Clubhouse and the holidays (0.38.8) --------------------------------
+
+    private static Map<String, Object> ordered(Object... kv) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) {
+            out.put((String) kv[i], kv[i + 1]);
+        }
+        return out;
+    }
+
+    /** Every game's rules as the shipped config.yml has them, written out of order. */
+    private static ArcadeFeed shippedRules() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.rule("freshSet", ordered("everyDays", 7, "at", "Mon 04:00", "zone", "America/Chicago"));
+        feed.rule("cup", Map.of("entry", 10));
+        feed.rule("golf", ordered("firstFinish", 15, "parOrBetter", 5, "holeInOne", 3, "dailyCap", 50));
+        feed.rule("trials", ordered("firstFinish", ordered("easy", 10, "medium", 15, "hard", 25, "extreme", 50),
+                "dailyCap", 40));
+        feed.rule("cabinets.snake", ordered("milestone", 5, "daily", 5, "dailyCap", 15));
+        feed.rule("cabinets.connect_four", ordered("milestone", 0, "daily", 5, "dailyCap", 5));
+        feed.common(com.dierks.homecraft.config.GamesConfig.Common.defaults());
+        return feed;
+    }
+
+    @Test
+    void theGoldenRulesObjectFromTheShippedConfig() {
+        assertEquals("{\"generatedAt\":1790000000000,\"rules\":{\"skillDailyCap\":60,\"chanceDailyLimit\":100,"
+                + "\"featuredBonus\":5,"
+                + "\"cabinets\":{\"snake\":{\"milestone\":5,\"daily\":5,\"dailyCap\":15},"
+                + "\"connect_four\":{\"daily\":5,\"dailyCap\":5}},"
+                + "\"trials\":{\"firstFinish\":{\"easy\":10,\"medium\":15,\"hard\":25,\"extreme\":50},\"dailyCap\":40},"
+                + "\"golf\":{\"firstFinish\":15,\"parOrBetter\":5,\"holeInOne\":3,\"dailyCap\":50},"
+                + "\"cup\":{\"entry\":10},"
+                + "\"freshSet\":{\"everyDays\":7,\"at\":\"Mon 04:00\",\"zone\":\"America/Chicago\"},"
+                + "\"restarts\":[\"04:00\",\"16:00\"]}}",
+                shippedRules().json(T, null, null, null, null, null),
+                "one order whatever order the games wrote in; a cabinet without milestones has no milestone");
+        MarketFeedTest.strict(shippedRules().json(T, null, null, null, null, null));
+    }
+
+    @Test
+    void withoutRulesClubhouseOrHolidaysTheFeedIsAsItWas() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.cabinet("snake", "Snake", "classic", "apples", false, 41L, null);
+        String old = feed.json(T, null, ArcadeFeed.scratch(shippedLotto(), 137), null, null, null);
+        feed.rule("cup", Map.of("entry", 0));
+        feed.rule("cabinets.snake", ordered("milestone", 0, "daily", -1));
+        feed.rule("restarts", List.of());
+        feed.rule("golf", null);
+        feed.rule(" ", 5);
+        feed.rule("half", 2.5);
+        feed.rule("flag", true);
+        feed.holidays(null);
+        feed.holidays(List.of(new ArcadeFeed.HolidayRow("", "Nameless", 1, 2),
+                new ArcadeFeed.HolidayRow("x_2026", "Back to front", 2, 1)));
+        assertEquals(old, feed.json(T, null, ArcadeFeed.scratch(shippedLotto(), 137), null, null, null),
+                "everything switched off or unreadable: no rules, no clubhouse, no holidays");
+        assertFalse(old.contains("rules") || old.contains("clubhouse") || old.contains("holidays"));
+    }
+
+    @Test
+    void whatIsSwitchedOffIsLeftOutOfTheRules() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.common(new com.dierks.homecraft.config.GamesConfig.Common(true, List.of("games"), List.of(), 600, 0, 250,
+                45, "auto", 0, List.of(), 5, List.of(), List.of(), 7));
+        feed.rule("golf", ordered("firstFinish", 15, "parOrBetter", 0, "holeInOne", 3, "dailyCap", 50));
+        assertEquals("{\"generatedAt\":1790000000000,\"rules\":{\"skillDailyCap\":45,"
+                + "\"golf\":{\"firstFinish\":15,\"holeInOne\":3,\"dailyCap\":50}}}",
+                feed.json(T, null, null, null, null, null),
+                "no chance limit, no featured bonus, no restarts, no par reward: none of them is written");
+        new ArcadeFeed(false).common(null); // no games config: nothing, and no throw
+    }
+
+    @Test
+    void theRulesNeverCarryAPersonAndFollowATruncate() {
+        ArcadeFeed feed = new ArcadeFeed(true);
+        feed.rule("cup", ordered("entry", 10, "winner", STEVE, "holder", 5, "note", STEVE_UUID));
+        assertEquals("{\"generatedAt\":1790000000000,\"rules\":{\"cup\":{\"entry\":10}}}",
+                feed.json(T, null, null, null, null, null), "even with names on");
+        int mark = feed.size();
+        feed.rule("golf", Map.of("dailyCap", 50));
+        feed.clubhouse(true);
+        feed.truncate(mark);
+        assertEquals("{\"generatedAt\":1790000000000,\"rules\":{\"cup\":{\"entry\":10}}}",
+                feed.json(T, null, null, null, null, null), "a game that threw takes its rules and its room with it");
+        feed.rule("cup", Map.of("entry", 12));
+        feed.rule("extra", "&aText");
+        assertEquals("{\"generatedAt\":1790000000000,\"rules\":{\"cup\":{\"entry\":12},\"extra\":\"Text\"}}",
+                feed.json(T, null, null, null, null, null), "a second write replaces; an unknown key goes last");
+    }
+
+    @Test
+    void theClubhouseAndTheHolidaysCloseTheFeed() {
+        ArcadeFeed feed = shippedRules();
+        feed.clubhouse(true);
+        feed.holidays(List.of(new ArcadeFeed.HolidayRow("thanksgiving_2026", "&6Thanksgiving", 1_795_327_200_000L,
+                1_796_104_799_999L)));
+        String json = feed.json(T, null, ArcadeFeed.scratch(shippedLotto(), 137), null, null,
+                List.of(new ArcadeFeed.AchievementRow("a", "A", "d", 5)));
+        assertTrue(json.endsWith("\"restarts\":[\"04:00\",\"16:00\"]},\"clubhouse\":{\"open\":true},"
+                + "\"holidays\":[{\"id\":\"thanksgiving_2026\",\"name\":\"Thanksgiving\",\"from\":1795327200000,"
+                + "\"to\":1796104799999}]}"), json);
+        assertTrue(json.indexOf("\"achievements\"") < json.indexOf("\"rules\""), "after every older key");
+        MarketFeedTest.strict(json);
+
+        ArcadeFeed closed = new ArcadeFeed(false);
+        closed.clubhouse(false);
+        assertEquals("{\"generatedAt\":1790000000000}", closed.json(T, null, null, null, null, null),
+                "no room, or one nobody can come into: no clubhouse key");
+    }
+
+    @Test
+    void theHolidaysAreTheWindowsRunningOrWithinFourteenDays() {
+        java.time.ZoneId chicago = java.time.ZoneId.of("America/Chicago");
+        com.dierks.homecraft.arcade.HolidayShows shipped = com.dierks.homecraft.arcade.HolidayShows.SHIPPED;
+        assertEquals(List.of(new ArcadeFeed.HolidayRow("thanksgiving_2026", "Thanksgiving", 1_795_327_200_000L,
+                        1_796_104_799_999L)),
+                ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 11, 11), chicago),
+                "22 Nov is 11 days off: its first millisecond to 30 Nov's last, in Chicago");
+        assertEquals(List.of(), ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 11, 7), chicago),
+                "15 days off is too far");
+        assertEquals(1, ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 11, 8), chicago).size(), "14 is not");
+        assertEquals(1, ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 11, 30), chicago).size(),
+                "still running on its last day");
+        assertEquals(List.of(), ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 12, 1), chicago),
+                "over the day after");
+        assertEquals(List.of(new ArcadeFeed.HolidayRow("christmas_2026", "Christmas", 1_797_573_600_000L,
+                        1_798_351_199_999L),
+                new ArcadeFeed.HolidayRow("new_year_2026", "New Year", 1_798_696_800_000L, 1_798_869_599_999L)),
+                ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2026, 12, 20), chicago),
+                "one running and one coming, soonest first");
+        assertEquals(List.of(new ArcadeFeed.HolidayRow("new_year_2026", "New Year", 1_798_696_800_000L,
+                        1_798_869_599_999L)),
+                ArcadeFeed.holidays(shipped, java.time.LocalDate.of(2027, 1, 1), chicago),
+                "a window over New Year keeps the id of the year it started in");
+        assertEquals(List.of(), ArcadeFeed.holidays(com.dierks.homecraft.arcade.HolidayShows.OFF,
+                java.time.LocalDate.of(2026, 11, 25), chicago), "the shows are off: no calendar");
+        assertEquals(List.of(), ArcadeFeed.holidays(null, java.time.LocalDate.of(2026, 11, 25), chicago));
+        assertEquals(List.of(), ArcadeFeed.holidays(shipped, null, chicago));
+    }
+
+    @Test
+    void theIceBoatsTrackRidesOnItsFreshObject() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.course("fresh_boat", "Ice Boat", "boat", "medium", null, null, null);
+        feed.fresh("fresh_boat", new com.dierks.homecraft.games.gen.engine.FreshFeed.Fresh("BOAT-7", "0a", 1, 2L, 7,
+                "Winding Road"));
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":[{\"id\":\"fresh_boat\",\"name\":\"Ice Boat\","
+                + "\"kind\":\"boat\",\"tier\":\"medium\",\"fresh\":{\"code\":\"BOAT-7\",\"seed\":\"0a\",\"from\":1,\"to\":2,"
+                + "\"cadenceDays\":7,\"track\":\"Winding Road\"}}]}", feed.json(T, null, null, null, null, null));
+    }
 }

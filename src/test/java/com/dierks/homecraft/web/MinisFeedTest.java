@@ -1,5 +1,7 @@
 package com.dierks.homecraft.web;
 
+import java.time.ZoneId;
+import java.time.LocalDate;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniType;
 import com.dierks.homecraft.mini.Rarity;
@@ -197,5 +199,60 @@ class MinisFeedTest {
         }
         assertFalse(json.contains("250"), "not even the mint price's value");
         assertFalse(json.contains("mining"), "nor a tag's");
+    }
+
+    // ---- holiday Minis (0.38.8) ------------------------------------------------------------
+
+    private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+
+    /** The Turkey Mini 2026 as config.yml ships it (no texture here). */
+    private static MiniDef turkey(LocalDate from, LocalDate to) {
+        return new MiniDef("turkey_mini_2026", "Turkey Mini 2026", "Holiday Collection", "HOLIDAY", Rarity.EPIC,
+                MiniType.HEAD, "", 20, 0, false, List.of(), true, from, to);
+    }
+
+    @Test
+    void aHolidayMiniSaysSoWithItsFirstAndLastMillisecond() {
+        MiniDef turkey = turkey(LocalDate.of(2026, 11, 22), LocalDate.of(2026, 11, 29));
+        assertEquals("{\"generatedAt\":1790000000000,\"minis\":["
+                + "{\"id\":\"turkey_mini_2026\",\"name\":\"Turkey Mini 2026\",\"rarity\":\"EPIC\",\"category\":\"HOLIDAY\","
+                + "\"series\":\"Holiday Collection\",\"cap\":20,\"printed\":3,\"soldOut\":false,"
+                + "\"eventOnly\":true,\"earnFrom\":1795327200000,\"earnTo\":1796018399999},"
+                + "{\"id\":\"blue_amethyst\",\"name\":\"Blue Amethyst\",\"rarity\":\"COMMON\",\"category\":\"MISC\","
+                + "\"series\":\"Gems\",\"cap\":-1,\"printed\":0,\"soldOut\":false}]}",
+                MinisFeed.json(T, List.of(turkey, amethyst()), Map.of("turkey_mini_2026", 3L), CHICAGO),
+                "22 Nov 00:00 to 29 Nov 23:59:59.999 in Chicago; the ordinary Mini beside it is as it always was");
+
+        JsonObject withSkin = minis(MinisFeed.json(T, List.of(new MiniDef("t", "T", "S", "HOLIDAY", Rarity.EPIC,
+                MiniType.HEAD, IDOL_TEXTURE, 20, 0, false, List.of(), true, LocalDate.of(2026, 11, 22),
+                LocalDate.of(2026, 11, 22))), Map.of(), CHICAGO)).get(0);
+        assertEquals(List.of("id", "name", "rarity", "category", "series", "cap", "printed", "soldOut", "skin",
+                "eventOnly", "earnFrom", "earnTo"), new ArrayList<>(withSkin.keySet()), "after skin");
+        assertEquals(86_400_000L - 1, withSkin.get("earnTo").getAsLong() - withSkin.get("earnFrom").getAsLong(),
+                "a one-day window is that whole day");
+    }
+
+    @Test
+    void anOrdinaryMiniHasNoneOfTheHolidayKeys() {
+        String old = MinisFeed.json(T, List.of(idol(), amethyst()), Map.of("golden_idol", 5L));
+        assertEquals(old, MinisFeed.json(T, List.of(idol(), amethyst()), Map.of("golden_idol", 5L), CHICAGO),
+                "byte for byte the feed as it was");
+        assertFalse(old.contains("eventOnly") || old.contains("earnFrom") || old.contains("earnTo"));
+        // dates on a Mini that is not event_only are ignored, as the plugin ignores them
+        MiniDef dated = new MiniDef("d", "D", "S", "MISC", Rarity.RARE, MiniType.HEAD, "", 5, 1, false, List.of(),
+                false, LocalDate.of(2026, 11, 22), LocalDate.of(2026, 11, 29));
+        assertFalse(MinisFeed.json(T, List.of(dated), Map.of(), CHICAGO).contains("earn"));
+    }
+
+    @Test
+    void aHolidayMiniWithoutAUsableWindowCarriesEventOnlyAlone() {
+        String tail = "\"soldOut\":false,\"eventOnly\":true}]}";
+        LocalDate a = LocalDate.of(2026, 11, 22);
+        LocalDate b = LocalDate.of(2026, 11, 29);
+        assertTrue(MinisFeed.json(T, List.of(turkey(null, b)), Map.of(), CHICAGO).endsWith(tail), "no earn_from");
+        assertTrue(MinisFeed.json(T, List.of(turkey(a, null)), Map.of(), CHICAGO).endsWith(tail), "no earn_to");
+        assertTrue(MinisFeed.json(T, List.of(turkey(b, a)), Map.of(), CHICAGO).endsWith(tail), "back to front");
+        assertTrue(MinisFeed.json(T, List.of(turkey(a, b)), Map.of(), null).endsWith(tail), "no zone to date it in");
+        assertTrue(MinisFeed.json(T, List.of(turkey(a, b)), Map.of()).endsWith(tail), "the older call has no zone");
     }
 }

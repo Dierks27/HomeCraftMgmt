@@ -121,6 +121,12 @@ class FreshFeedTest {
         assertEquals("{\"code\":\"HARD-40\",\"seed\":\"3f2a9c01b7de\",\"from\":1790000000000,\"cadenceDays\":7}",
                 new FreshFeed.Fresh("HARD-40", "3f2a9c01b7de", 1_790_000_000_000L, null, 7).json(),
                 "pinned forever: no to");
+        assertEquals("{\"code\":\"BOAT-7\",\"seed\":\"3f2a9c01b7de\",\"from\":1790000000000,\"cadenceDays\":7,"
+                + "\"track\":\"Slalom\"}", new FreshFeed.Fresh("BOAT-7", "3f2a9c01b7de", 1_790_000_000_000L, null, 7,
+                "Slalom").json(), "the Ice Boat's track goes last");
+        assertEquals(new FreshFeed.Fresh("HARD-40", "3f2a9c01b7de", 1_790_000_000_000L, null, 7).json(),
+                new FreshFeed.Fresh("HARD-40", "3f2a9c01b7de", 1_790_000_000_000L, null, 7, " ").json(),
+                "no track, or a blank one: written as before");
         assertEquals("{\"code\":\"HARD-40\",\"from\":1795000000000,\"to\":1795604800000}",
                 new FreshFeed.Classic("HARD-40", 1_795_000_000_000L, 1_795_604_800_000L).json(), "a recall's window");
         assertEquals("{\"code\":\"HARD-40\",\"from\":1795000000000}", new FreshFeed.Classic("HARD-40",

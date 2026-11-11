@@ -84,10 +84,24 @@ public final class FreshFeed {
     public record Record(Long ms, Integer strokes, long at, String holder) {
     }
 
-    /** A generated course's {@code fresh} object. */
-    public record Fresh(String code, String seed, long from, Long to, int cadenceDays) {
+    /**
+     * A generated course's {@code fresh} object.
+     *
+     * @param track for the Ice Boat's Mountain Run v2, which of its two tracks this set is
+     *              ({@code "Winding Road"} or {@code "Slalom"}); {@code null} or blank for every
+     *              other course (not written)
+     */
+    public record Fresh(String code, String seed, long from, Long to, int cadenceDays, String track) {
 
-        /** {@code {"code":…,"seed":…,"from":…,"to":…,"cadenceDays":…}} ({@code to} left out when {@code null}). */
+        /** A course without a track: every one but the Ice Boat's Mountain Run v2. */
+        public Fresh(String code, String seed, long from, Long to, int cadenceDays) {
+            this(code, seed, from, to, cadenceDays, null);
+        }
+
+        /**
+         * {@code {"code":…,"seed":…,"from":…,"to":…,"cadenceDays":…,"track":…}} ({@code to} and {@code track}
+         * left out when {@code null}).
+         */
         public String json() {
             StringBuilder sb = new StringBuilder("{");
             field(sb, "code", code);
@@ -97,6 +111,9 @@ public final class FreshFeed {
                 field(sb, "to", to);
             }
             field(sb, "cadenceDays", (long) cadenceDays);
+            if (track != null && !track.isBlank()) {
+                field(sb, "track", track);
+            }
             return sb.append('}').toString();
         }
     }

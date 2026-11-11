@@ -210,6 +210,10 @@ public final class WeeklyCup implements Game {
         if (trials == null || !games().enabled(trials)) {
             return;
         }
+        CupSettings s = settings();
+        if (s.enabled()) { // a Cup that takes no new entries has no entry to print
+            out.rule("cup", java.util.Map.of("entry", s.entry()));
+        }
         for (Course c : trials.openCourses()) {
             try {
                 CupDesk.View v = desk().view(c, null);

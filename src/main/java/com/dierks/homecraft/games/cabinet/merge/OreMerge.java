@@ -104,6 +104,7 @@ public final class OreMerge extends CabinetGame {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, false);
         out.cabinet(id(), name(), Scores.CLASSIC, "points", false, record == null ? null : record.score(),
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+        rules(out);
     }
 
     @Override

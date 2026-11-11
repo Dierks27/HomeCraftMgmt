@@ -109,6 +109,7 @@ public final class Snake extends CabinetGame {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, false);
         out.cabinet(id(), name(), Scores.CLASSIC, "apples", false, record == null ? null : record.score(),
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+        rules(out);
     }
 
     @Override

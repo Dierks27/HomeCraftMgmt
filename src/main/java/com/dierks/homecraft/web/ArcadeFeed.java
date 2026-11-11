@@ -1,6 +1,8 @@
 package com.dierks.homecraft.web;
 
 import com.dierks.homecraft.arcade.ArcadeService;
+import com.dierks.homecraft.arcade.HolidayShows;
+import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.RtpLimits;
@@ -36,7 +38,7 @@ import java.util.regex.Pattern;
  *
  * <pre>{"generatedAt":ms[,"games":[…]][,"featured":{"game":…,"until":ms}][,"starChart":{…}]
  * [,"freshHistory":[…]][,"events":{…}][,"jackpots":[{"game":"scratch_ticket","tokens":N}]][,"prizes":[…]]
- * [,"packs":[…]][,"achievements":[…]]}</pre>
+ * [,"packs":[…]][,"achievements":[…]][,"rules":{…}][,"clubhouse":{"open":true}][,"holidays":[…]]}</pre>
  *
  * <p><b>How the games get in.</b> This class is the games' {@link FeedWriter}: the server hands one
  * instance to every open game's {@code Game.feed}, each game writes its entries from the SAME
@@ -106,6 +108,19 @@ import java.util.regex.Pattern;
  * {@code season:{key,name,until,top?}} (E3's {@code top}, read from its board). A state the site
  * doesn't know is not published; empty parts are left out, and the whole object while it has
  * nothing. {@code racers} is only ever a count.
+ *
+ * <p><b>The rules, the Clubhouse and the holidays (0.38.8)</b>, after everything older, so every older
+ * key is where it was. {@code rules}: the reward amounts and caps the site prints, each written from
+ * the settings the games pay by ({@link FeedWriter#rule}, {@link #common}), in this order:
+ * {@code skillDailyCap}, {@code chanceDailyLimit}, {@code featuredBonus}, {@code cabinets:{<id>:
+ * {milestone?,daily?,dailyCap?}}} (one per open cabinet: they don't all pay alike), {@code trials:
+ * {firstFinish:{easy,medium,hard,extreme},dailyCap}}, {@code golf:{firstFinish,parOrBetter,holeInOne,
+ * dailyCap}}, {@code cup:{entry}}, {@code freshSet:{everyDays,at,zone}}, {@code restarts:["04:00",…]}.
+ * Whole numbers only; a number of 0 or less is "switched off" and is left out, and so is a part with
+ * nothing left in it, a closed game's part, and the whole object while it is empty.
+ * {@code clubhouse:{"open":true}} only while the Clubhouse's room takes visitors.
+ * {@code holidays:[{id,name,from,to}]} ({@link #holidays}): the holiday windows running now or
+ * starting within {@value #HOLIDAY_AHEAD_DAYS} days, names and dates only.
  *
  * <p><b>Omission.</b> {@code generatedAt} is always first; every other key is written with a
  * leading comma only when it has something in it, so an empty or switched-off section is absent,
@@ -320,6 +335,32 @@ public final class ArcadeFeed implements FeedWriter {
     private record CupPart(String id, Cup cup) {
     }
 
+    /** One part of {@code rules} ({@link FeedWriter#rule}). */
+    private record RulePart(String path, Object value) {
+    }
+
+    /** The Clubhouse takes visitors ({@link FeedWriter#clubhouse}). */
+    private record ClubhousePart(boolean open) {
+    }
+
+    /**
+     * One holiday on the calendar.
+     *
+     * @param id   the window's id and the year it starts in ({@code thanksgiving_2026})
+     * @param name its name ({@code Thanksgiving})
+     * @param from the first millisecond of its first local day
+     * @param to   the last millisecond of its last local day
+     */
+    public record HolidayRow(String id, String name, long from, long to) {
+    }
+
+    /** {@code holidays} lists a holiday from this many days before it starts. */
+    public static final int HOLIDAY_AHEAD_DAYS = 14;
+
+    /** The order {@code rules} is written in; any other key follows, in the order it was written. */
+    private static final List<String> RULE_ORDER = List.of("skillDailyCap", "chanceDailyLimit", "featuredBonus",
+            "cabinets", "trials", "golf", "cup", "freshSet", "restarts");
+
     /** The states a live night and a past night may be published with (§A.7). */
     private static final Set<String> LIVE_STATES = Set.of("open", "racing", "break", "results");
     private static final Set<String> RECENT_STATES = Set.of("done", "called_off");
@@ -337,6 +378,7 @@ public final class ArcadeFeed implements FeedWriter {
     private StarChart starChart;
     /** The Weekly Cup's parts by course id, gathered by {@link #json} before the entries are written. */
     private Map<String, Cup> cups = new HashMap<>();
+    private List<HolidayRow> holidays = List.of();
 
     /** @param showNames {@code web.dashboard.arcade_show_names}: whether records carry a holder */
     public ArcadeFeed(boolean showNames) {
@@ -435,6 +477,43 @@ public final class ArcadeFeed implements FeedWriter {
         }
     }
 
+    @Override
+    public void rule(String path, Object value) {
+        if (!blank(path) && value != null) {
+            writes.add(new RulePart(path.trim(), value));
+        }
+    }
+
+    @Override
+    public void clubhouse(boolean open) {
+        writes.add(new ClubhousePart(open));
+    }
+
+    /**
+     * The rules every game shares, from {@code games:}'s common keys: {@code skillDailyCap}
+     * ({@code skill_daily_cap}), {@code chanceDailyLimit} ({@code chance_daily_tokens}; 0 = off, left out),
+     * {@code featuredBonus} ({@code featured_bonus}) and {@code restarts} ({@code restart_times} as
+     * {@code "HH:mm"}, sorted; none = left out). The server calls it while the games are on.
+     */
+    public void common(GamesConfig.Common common) {
+        if (common == null) {
+            return;
+        }
+        rule("skillDailyCap", common.skillDailyCap());
+        rule("chanceDailyLimit", common.chanceDailyTokens());
+        rule("featuredBonus", common.featuredBonus());
+        List<String> restarts = new ArrayList<>();
+        for (java.time.LocalTime t : common.restartTimes()) {
+            restarts.add(String.format(Locale.ROOT, "%02d:%02d", t.getHour(), t.getMinute()));
+        }
+        rule("restarts", restarts);
+    }
+
+    /** The holidays to publish ({@link #holidays(HolidayShows, java.time.LocalDate, java.time.ZoneId)}); null = none. */
+    public void holidays(List<HolidayRow> rows) {
+        holidays = rows == null ? List.of() : List.copyOf(rows);
+    }
+
     /** How many rows each {@code top} list has at most ({@code games.feed_top}). */
     public int topSize() {
         return topSize;
@@ -515,8 +594,12 @@ public final class ArcadeFeed implements FeedWriter {
         cups = new HashMap<>();
         List<FreshFeed.Entry> history = List.of();
         Events events = null;
+        Map<String, Object> rules = new LinkedHashMap<>();
+        boolean clubhouse = false;
         for (Object w : writes) {
             switch (w) {
+                case RulePart r -> putRule(rules, r.path(), r.value());
+                case ClubhousePart c -> clubhouse = c.open();
                 case BoardRef b -> refs.put(key(b.id()), b);
                 case FreshPart f -> fresh.put(key(f.id()), f.fresh());
                 case ClassicPart c -> classics.put(key(c.id()), c.classic());
@@ -603,8 +686,138 @@ public final class ArcadeFeed implements FeedWriter {
         }
         array(sb, "achievements", out);
 
+        String rulesJson = rulesJson(rules);
+        if (rulesJson != null) {
+            sb.append(",\"rules\":").append(rulesJson);
+        }
+        if (clubhouse) {
+            sb.append(",\"clubhouse\":{\"open\":true}");
+        }
+        out = new ArrayList<>();
+        for (HolidayRow h : holidays) {
+            String id = h == null ? "" : Json.plain(h.id());
+            String name = h == null ? "" : Json.plain(h.name());
+            if (!blank(id) && !blank(name) && h.to() >= h.from()) {
+                out.add("{\"id\":" + Json.string(id) + ",\"name\":" + Json.string(name) + ",\"from\":" + h.from()
+                        + ",\"to\":" + h.to() + "}");
+            }
+        }
+        array(sb, "holidays", out);
+
         sb.append('}');
         return sb.toString();
+    }
+
+    // ---- the rules (0.38.8) ---------------------------------------------------------------------
+
+    /** Put {@code value} at {@code path} ({@code "cabinets.snake"}), making the parts on the way. */
+    @SuppressWarnings("unchecked")
+    private static void putRule(Map<String, Object> rules, String path, Object value) {
+        String[] keys = path.split("\\.");
+        Map<String, Object> at = rules;
+        for (int i = 0; i < keys.length - 1; i++) {
+            Object next = at.get(keys[i]);
+            if (!(next instanceof LinkedHashMap<?, ?>)) {
+                next = new LinkedHashMap<String, Object>();
+                at.put(keys[i], next);
+            }
+            at = (Map<String, Object>) next;
+        }
+        at.put(keys[keys.length - 1], value);
+    }
+
+    /** The {@code rules} object in {@link #RULE_ORDER}, or {@code null} when nothing in it is switched on. */
+    private static String rulesJson(Map<String, Object> rules) {
+        Map<String, Object> ordered = new LinkedHashMap<>();
+        for (String key : RULE_ORDER) {
+            if (rules.containsKey(key)) {
+                ordered.put(key, rules.get(key));
+            }
+        }
+        for (Map.Entry<String, Object> e : rules.entrySet()) {
+            ordered.putIfAbsent(e.getKey(), e.getValue());
+        }
+        return ruleValue(ordered);
+    }
+
+    /**
+     * A rule as JSON, or {@code null} to leave it out: a whole number above 0, text (colour codes
+     * stripped, not blank, never UUID-shaped), or a map or list with something left in it. A key
+     * that names a person is never written. Anything else (a fraction, a boolean, an object) is not
+     * a rule.
+     */
+    private static String ruleValue(Object v) {
+        if (v instanceof CharSequence s) {
+            String text = Json.plain(s.toString());
+            return text.isBlank() || UUID_TEXT.matcher(text).matches() ? null : Json.string(text);
+        }
+        if (v instanceof Integer || v instanceof Long || v instanceof Short || v instanceof Byte) {
+            long n = ((Number) v).longValue();
+            return n > 0 ? Long.toString(n) : null;
+        }
+        if (v instanceof Map<?, ?> m) {
+            StringBuilder sb = new StringBuilder("{");
+            for (Map.Entry<?, ?> e : ordered(m).entrySet()) {
+                String key = e.getKey() == null ? "" : Json.plain(String.valueOf(e.getKey()));
+                String item = blank(key) || personal(key) ? null : ruleValue(e.getValue());
+                if (item != null) {
+                    sb.append(sb.length() > 1 ? "," : "").append(Json.string(key)).append(':').append(item);
+                }
+            }
+            return sb.length() > 1 ? sb.append('}').toString() : null;
+        }
+        if (v instanceof Iterable<?> list) {
+            StringBuilder sb = new StringBuilder("[");
+            for (Object o : list) {
+                String item = ruleValue(o);
+                if (item != null) {
+                    sb.append(sb.length() > 1 ? "," : "").append(item);
+                }
+            }
+            return sb.length() > 1 ? sb.append(']').toString() : null;
+        }
+        return null;
+    }
+
+    /**
+     * The holidays on the calendar for the website's "Now on the server" line: each
+     * {@code arcade.holiday_shows} window that is running on {@code today} or starts within
+     * {@value #HOLIDAY_AHEAD_DAYS} days, soonest first (ties in config order). The windows come
+     * round every year, so each is dated for this occurrence: {@code id} is the window's id and the
+     * year it starts in ({@code thanksgiving_2026}; New Year over 31 Dec - 1 Jan is
+     * {@code new_year_2026}), {@code from} the first millisecond of its first day and {@code to}
+     * the last of its last, in {@code zone}. Empty while the shows are off. Names and dates only.
+     */
+    public static List<HolidayRow> holidays(HolidayShows shows, java.time.LocalDate today, java.time.ZoneId zone) {
+        List<HolidayRow> out = new ArrayList<>();
+        if (shows == null || !shows.enabled() || today == null || zone == null) {
+            return out;
+        }
+        Set<String> seen = new HashSet<>();
+        for (HolidayShows.Window w : shows.windows()) {
+            if (w == null || w.theme() == null || w.from() == null || w.to() == null || blank(w.theme().id())) {
+                continue;
+            }
+            // The occurrence that started last year (still running over New Year), this year's, then next year's.
+            for (int year = today.getYear() - 1; year <= today.getYear() + 1; year++) {
+                java.time.LocalDate from = w.from().atYear(year);
+                java.time.LocalDate to = w.to().atYear(year);
+                if (to.isBefore(from)) {
+                    to = w.to().atYear(year + 1);
+                }
+                if (today.isAfter(to) || from.isAfter(today.plusDays(HOLIDAY_AHEAD_DAYS))) {
+                    continue;
+                }
+                String id = w.theme().id().trim().toLowerCase(Locale.ROOT) + "_" + year;
+                if (seen.add(id)) {
+                    out.add(new HolidayRow(id, w.theme().name(),
+                            from.atStartOfDay(zone).toInstant().toEpochMilli(),
+                            to.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1));
+                }
+            }
+        }
+        out.sort(java.util.Comparator.comparingLong(HolidayRow::from));
+        return out;
     }
 
     private String entry(GameRow row, Map<String, BoardRef> refs, Map<String, FreshFeed.Fresh> fresh,

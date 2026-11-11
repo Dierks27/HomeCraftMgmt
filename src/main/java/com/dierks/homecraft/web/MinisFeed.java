@@ -2,6 +2,8 @@ package com.dierks.homecraft.web;
 
 import com.dierks.homecraft.mini.MiniDef;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
@@ -14,14 +16,22 @@ import java.util.Optional;
  *
  * <p>One entry per {@link MiniDef}, in catalog (config) order:
  * <pre>{"generatedAt":ms,"minis":[{"id":…,"name":…,"rarity":…,"category":…,"series":…,
- * "cap":N,"printed":N,"soldOut":B[,"skin":"https://textures.minecraft.net/texture/…"]},…]}</pre>
+ * "cap":N,"printed":N,"soldOut":B[,"skin":"https://textures.minecraft.net/texture/…"]
+ * [,"eventOnly":true[,"earnFrom":ms,"earnTo":ms]]},…]}</pre>
  * <ul>
  *   <li>{@code name} and {@code series} with legacy colour codes stripped;</li>
  *   <li>{@code rarity} the enum name ({@code COMMON} … {@code LEGENDARY});</li>
  *   <li>{@code category} upper-case, {@code MISC} when blank;</li>
  *   <li>{@code cap} {@code -1} for uncapped; {@code printed} the mint tally, never negative;</li>
  *   <li>{@code soldOut} — see {@link #soldOut};</li>
- *   <li>{@code skin} only when the texture holds a usable skin URL ({@link MiniSkin}).</li>
+ *   <li>{@code skin} only when the texture holds a usable skin URL ({@link MiniSkin});</li>
+ *   <li>{@code eventOnly} (0.38.8) only on a holiday Mini ({@code event_only: true}: earned at its own
+ *       event, never from a pack, a Card, the Printer or a drop), always {@code true}; with it
+ *       {@code earnFrom} and {@code earnTo}, the first and the last millisecond it can be earned
+ *       (its {@code earn_from} day's first and its {@code earn_to} day's last, in
+ *       {@code clock.time_zone}). The two dates are left out together when either is not set, they
+ *       are back to front, or the builder was given no zone. An ordinary Mini has none of the
+ *       three, and is written byte for byte as before.</li>
  * </ul>
  *
  * <p><b>Privacy:</b> catalog facts and counts only. Nothing here can name a player — no
@@ -53,6 +63,14 @@ public final class MinisFeed {
      * @param printed     Mini id → copies minted so far; a missing (or {@code null}) entry is 0
      */
     public static String json(long generatedAt, Collection<MiniDef> defs, Map<String, Long> printed) {
+        return json(generatedAt, defs, printed, null);
+    }
+
+    /**
+     * The feed with a holiday Mini's earn dates as epoch milliseconds in {@code zone}
+     * ({@code clock.time_zone}); with a {@code null} zone a holiday Mini carries {@code eventOnly} alone.
+     */
+    public static String json(long generatedAt, Collection<MiniDef> defs, Map<String, Long> printed, ZoneId zone) {
         int count = defs == null ? 0 : defs.size();
         StringBuilder sb = new StringBuilder(Math.max(1024, 64 + count * 256));
         sb.append('{');
@@ -68,14 +86,14 @@ public final class MinisFeed {
                     sb.append(',');
                 }
                 first = false;
-                mini(sb, def, printedCount(printed, def.id()));
+                mini(sb, def, printedCount(printed, def.id()), zone);
             }
         }
         sb.append("]}");
         return sb.toString();
     }
 
-    private static void mini(StringBuilder sb, MiniDef def, long printed) {
+    private static void mini(StringBuilder sb, MiniDef def, long printed, ZoneId zone) {
         long cap = def.cap() < 0 ? -1 : def.cap();
         sb.append('{');
         sb.append("\"id\":").append(Json.string(def.id())).append(',');
@@ -90,7 +108,21 @@ public final class MinisFeed {
         if (skin.isPresent()) {
             sb.append(",\"skin\":").append(Json.string(skin.get()));
         }
+        if (def.eventOnly()) {
+            sb.append(",\"eventOnly\":true");
+            LocalDate from = def.earnFrom();
+            LocalDate to = def.earnTo();
+            if (zone != null && from != null && to != null && !to.isBefore(from)) {
+                sb.append(",\"earnFrom\":").append(dayStart(from, zone));
+                sb.append(",\"earnTo\":").append(dayStart(to.plusDays(1), zone) - 1);
+            }
+        }
         sb.append('}');
+    }
+
+    /** The first millisecond of a local day. */
+    private static long dayStart(LocalDate day, ZoneId zone) {
+        return day.atStartOfDay(zone).toInstant().toEpochMilli();
     }
 
     private static String category(String raw) {

@@ -180,6 +180,24 @@ Type `/hcm feast` to see how full the table is.
 
 The basket and the turkey only come in the normal world, never the Nether or the End.
 
+## Graves
+
+When you die, your things don't lie on the ground. Everything you were carrying, and your
+experience, waits for you in a **grave** where you fell: your own head with your name over it. Chat
+tells you where it is, and when you come back you have a **compass** that points to it (lost it?
+`/hcm graves compass`). `/hcm graves` lists your graves.
+
+Walk back and **right-click it**. Everything goes back where it was: your armor back on, your
+hotbar in the same order. If your bag is full, the rest lands at your feet. **Sneak and
+right-click** to take things one at a time instead.
+
+Only you can open your grave (and the admins, who can also give it back to you from anywhere if
+something goes wrong). Nothing can break it, blow it up or wash it away, and it waits for you
+through restarts. If you die somewhere awkward, in lava, in mid-air or off the edge of the world,
+the grave goes on solid ground close by, or where you last stood safely. Prizes stay with you as
+always. Some players keep everything when they die and never get a grave: that's set by the
+server's owner.
+
 ## Minis
 
 1. **Open a Card Pack.** Buy one on the PC's Card Packs site or in the Arcade, then right-click it. You get **one Card**.

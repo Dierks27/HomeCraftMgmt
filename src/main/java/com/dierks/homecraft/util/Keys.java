@@ -161,6 +161,11 @@ public final class Keys {
     /** On a Courier delivery villager: the id of the job it is the recipient for (Long). */
     public static NamespacedKey COURIER_JOB;
 
+    /** On a grave's head block and its name-tag stands: the grave's row id in {@code graves} (Long). */
+    public static NamespacedKey GRAVE;
+    /** On a grave compass: the id of the grave it points at (Long). It crumbles once that grave is closed. */
+    public static NamespacedKey GRAVE_COMPASS;
+
     /**
      * On a Courier package item: the id of the job it belongs to (Long).
      *
@@ -243,6 +248,8 @@ public final class Keys {
         MINI_RENDER = new NamespacedKey(plugin, "mini_render");
         EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
         COURIER_JOB = new NamespacedKey(plugin, "courier_job");
+        GRAVE = new NamespacedKey(plugin, "grave");
+        GRAVE_COMPASS = new NamespacedKey(plugin, "grave_compass");
         COURIER_PACKAGE = new NamespacedKey(plugin, "courier_package");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
         WILD_GRADE = new NamespacedKey(plugin, "wild_grade");

@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 26
+config_revision: 27
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -321,9 +321,9 @@ courier:
   package:
     enabled: true
     name: "&6Delivery Crate"
-    # Dropped on death by default: the grave is the recovery path, and losing it is
-    # a real consequence rather than a bug. Turn this on to be kinder to the
-    # younger players.
+    # Dropped on death by default: losing it is a real consequence rather than a
+    # bug, and it lies where you died to be picked back up (a grave never takes a
+    # package). Turn this on to be kinder to the younger players.
     keep_on_death: false
     # What losing the crate costs, as a multiple of what the run would have paid on
     # foot. At 1.0 a lost crate cancels the run out: you walked it for nothing.
@@ -1268,6 +1268,39 @@ sound_muffler:
   default_radius: 8             # blocks in each direction a new muffler reaches (a 17x17x17 box)
   max_radius: 16                # the most a player can set (hard limit 32)
   default_quiet_percent: 25     # the volume "Quieter" starts at; players pick 50/25/10%
+
+# ---------------------------------------------------------------------
+#  Graves (0.39.0)
+#  When a player dies, everything that would fall on the ground, and their
+#  experience, goes into a grave at the spot instead: their own head on the
+#  ground with their name over it. Right-click it to get everything back,
+#  into the slots it came from (armor on, hotbar where it was); sneak +
+#  right-click to take things one at a time. Only the owner and admins can
+#  open one. A grave can't be broken, blown up, pushed, flooded or grown
+#  over, and survives restarts: what is in it is kept in the database, the
+#  head is only a marker. /hcm graves lists yours.
+#  After the respawn a compass points the way back to the grave.
+#  A death that keeps the inventory (the keep_inventory gamerule, as in
+#  fairyhub, or Essentials' keepinv) still makes a grave from the inventory,
+#  so everyone walks back for their things; set keep_inventory_makes_grave
+#  to false to let those deaths keep everything instead, or list a world in
+#  disabled_worlds (fairyhub is listed: its gamerule keeps everything).
+#  A player with the hcm.graves.keep permission keeps everything, items and
+#  levels, and never gets a grave (for a young player):
+#    lp user <name> permission set hcm.graves.keep true
+#  No grave in a game session or a world listed below. Arcade prizes, game
+#  kit items and courier packages are never put in a grave: their own rules
+#  decide (prizes are kept, packages follow courier.package.keep_on_death).
+# ---------------------------------------------------------------------
+graves:
+  enabled: true                 # false: deaths drop their things on the ground, as without graves
+  xp_percent: 100               # how much of a player's experience goes in the grave (0-100)
+  unlock_after_minutes: 0       # after this long anyone may open a grave; 0 = never (owner and admins only)
+  expire_after_hours: 0         # after this long a grave's things drop on the ground where it stands; 0 = never
+  sneak_opens_menu: true        # sneak + right-click opens the grave screen (take things one at a time)
+  keep_inventory_makes_grave: true   # a keep-inventory death still makes a grave (false: those deaths keep everything)
+  compass: true                 # a compass to the grave after the respawn (/hcm graves compass gives another)
+  disabled_worlds: [fairyhub]   # worlds where a death makes no grave: fairyhub's keep_inventory gamerule keeps everything there
 
 # ---------------------------------------------------------------------
 #  The Copper Golem Brush (0.38.4)

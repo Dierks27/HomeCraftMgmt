@@ -45,6 +45,8 @@ public final class AccountMoveDao {
         m.put("placed_blocks", "a block standing in the world stays its placer's (an admin can break it)");
         m.put("displays", "an economy display standing in the world");
         m.put("sound_mufflers", "a Sound Muffler standing in the world");
+        m.put("graves", "a grave standing in the world stays its owner's: /hcm graves restore <id> <player> gives one"
+                + " to the new account");
         m.put("mini_listings", "a Display Case listing belongs to its block: take it back before the move");
         m.put("mini_vending_listings", "a Vending listing belongs to its machine: take it back before the move");
         m.put("pallet_listings", "a Pallet listing belongs to its block: take it back before the move");

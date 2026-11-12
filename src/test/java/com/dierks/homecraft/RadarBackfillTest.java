@@ -65,7 +65,7 @@ class RadarBackfillTest {
 
     @Test
     void theRevisionDoesNotMove() {
-        assertEquals(26, HomeCraftManagement.CONFIG_REVISION, "the radar rides the backfill, not a new revision"
-                + " (26 is Thanksgiving's, ThanksgivingMigrationTest)");
+        assertEquals(27, HomeCraftManagement.CONFIG_REVISION, "the radar rides the backfill, not a new revision"
+                + " (26 is Thanksgiving's, ThanksgivingMigrationTest; 27 graves', GravesMigrationTest)");
     }
 }

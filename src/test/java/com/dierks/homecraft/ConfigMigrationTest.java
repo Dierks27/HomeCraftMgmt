@@ -287,14 +287,17 @@ class ConfigMigrationTest {
         assertEquals(List.of(), HomeCraftManagement.backfillConfig(reread, shipped), "a second pass is a no-op");
     }
 
-    /** Revision 26 in the ladder: a bundled file at 25 already has every row, so it only stamps the revision. */
+    /**
+     * Revisions 26 and 27 in the ladder: a bundled file at 25 already has every row and this version's comments, so
+     * they only stamp the revision.
+     */
     @Test
     void revision26OnAFileThatHasTheRowsOnlyStampsTheRevision() throws Exception {
         YamlConfiguration onDisk = bundled();
         onDisk.set("config_revision", 25);
-        assertEquals(List.of("Config migration: config_revision 25 → 26."),
+        assertEquals(List.of("Config migration: config_revision 25 → 27."),
                 HomeCraftManagement.migrateConfig(onDisk, "world"), "nothing to add, nothing to say");
-        assertEquals(26, onDisk.getInt("config_revision"));
+        assertEquals(27, onDisk.getInt("config_revision"));
         assertEquals(bundled().getMapList("market.catalog"), onDisk.getMapList("market.catalog"));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
     }

@@ -69,6 +69,8 @@ import java.util.function.Predicate;
  *       another plugin owns {@code /trade}; see {@link TradeCommand}. (hcm.trade.use)</li>
  *   <li>{@code /hcm trades [player] [n]}, {@code /hcm trades show <id>}, {@code /hcm trades settle <id>
  *       release|void [player] [confirm]} — the trade log, and a trade the server didn't see finish. (admin)</li>
+ *   <li>{@code /hcm graves} — your graves (hcm.graves.use); {@code /hcm graves list|tp|open|restore|remove ...} — run
+ *       them; see {@link GravesCommand}. (hcm.graves.admin)</li>
  * </ul>
  *
  * <p>Each subcommand checks its own permission — the command node itself is ungated, so
@@ -92,6 +94,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private final LooksCommand looksCommand;
     /** {@code /hcm trade …} (as {@code /trade}) and {@code /hcm trades …} (the trade log). */
     private final TradeCommand tradeCommand;
+    /** {@code /hcm graves …} (graves). */
+    private final GravesCommand gravesCommand;
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -99,6 +103,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         this.gamesCommand = new GamesCommand(plugin);
         this.looksCommand = new LooksCommand(plugin);
         this.tradeCommand = new TradeCommand(plugin);
+        this.gravesCommand = new GravesCommand(plugin);
     }
 
     @Override
@@ -320,6 +325,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             case "trade" -> tradeCommand.trade(sender, TradeCommand.rest(args));
             case "trades" -> tradeCommand.trades(sender, args);
+            case "graves", "grave" -> gravesCommand.handle(sender, args);
             case "museum" -> handleMuseum(sender, args);
             case "hunt" -> handleHunt(sender, args);
             case "candy" -> handleCandy(sender, args);
@@ -1875,6 +1881,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (!sender.hasPermission("hcm.admin") && sender.hasPermission("hcm.arcade.use")) {
             sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back"));
         }
+        if (sender.hasPermission(com.dierks.homecraft.graves.GraveService.USE)) {
+            sender.sendMessage(Text.of("&e/hcm graves &7- your graves: where your things are waiting"));
+        }
+        if (sender.hasPermission(com.dierks.homecraft.graves.GraveService.ADMIN)) {
+            sender.sendMessage(Text.of("&e/hcm graves list|tp|open|restore|remove &7- run the graves"));
+        }
         for (String line : gamesCommand.helpLines(sender)) {
             sender.sendMessage(Text.of(line));
         }
@@ -2313,6 +2325,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission("hcm.admin")) {
                 addMatches(out, args[0], "trades");
             }
+            if (sender.hasPermission(com.dierks.homecraft.graves.GraveService.USE)
+                    || sender.hasPermission(com.dierks.homecraft.graves.GraveService.ADMIN)) {
+                addMatches(out, args[0], "graves");
+            }
+        } else if (List.of("graves", "grave").contains(args[0].toLowerCase(Locale.ROOT))) {
+            out.addAll(gravesCommand.complete(sender, args));
         } else if (List.of("play", "leave", "games").contains(args[0].toLowerCase(Locale.ROOT))) {
             out.addAll(gamesCommand.complete(sender, args));
         } else if (List.of("looks", "look", "account").contains(args[0].toLowerCase(Locale.ROOT))) {

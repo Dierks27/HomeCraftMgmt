@@ -1004,6 +1004,8 @@ public final class PluginConfig {
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
     private SoundMuffler soundMuffler = new SoundMuffler(true, new BlockDef(Material.WHITE_WOOL, "&fSound Muffler"), 8, 16, 25);
+    /** Graves ({@code graves:}, 0.39.0). */
+    private com.dierks.homecraft.graves.GraveSettings graves = com.dierks.homecraft.graves.GraveSettings.DEFAULTS;
     private Launcher launcher = Launcher.DEFAULTS;
     private Radar radar = Radar.DEFAULTS;
     private com.dierks.homecraft.arcade.HolidayShows holidayShows = com.dierks.homecraft.arcade.HolidayShows.SHIPPED;
@@ -1086,6 +1088,11 @@ public final class PluginConfig {
     /** The Sound Muffler block and its limits. */
     public SoundMuffler soundMuffler() {
         return soundMuffler;
+    }
+
+    /** Graves ({@code graves:}, 0.39.0): HCM's own death storage. */
+    public com.dierks.homecraft.graves.GraveSettings graves() {
+        return graves;
     }
 
     /** The Firework Launcher block, how many a player may have placed, and a Mega show's range (0.38.1). */
@@ -1480,6 +1487,8 @@ public final class PluginConfig {
 
         // ---- Sound Muffler ----
         this.soundMuffler = readSoundMuffler(c);
+        // ---- Graves (0.39.0): absent (a start whose backfill didn't run) = the shipped graves ----
+        this.graves = com.dierks.homecraft.graves.GraveSettings.read(c.getConfigurationSection("graves"), log::warning);
         // ---- The Firework Launcher (0.38.1) ----
         this.launcher = readLauncher(c);
         // ---- The Mini Radar: absent (a start whose backfill didn't run) = the shipped radar ----
@@ -1640,8 +1649,8 @@ public final class PluginConfig {
      *
      * <p>Not a safety net for anything the plugin tracks itself — those are checked against the
      * database. This is for things only the world knows about: a player head out in a field is
-     * either somebody's decoration or a death-storage grave, and neither should spend an hour
-     * behind a wall.
+     * either somebody's decoration or a death-storage grave (HCM's own graves, 0.39.0, are player
+     * heads), and neither should spend an hour behind a wall.
      */
     private java.util.Set<Material> readAvoidBlocks(FileConfiguration c) {
         java.util.Set<Material> out = java.util.EnumSet.noneOf(Material.class);

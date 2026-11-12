@@ -115,6 +115,12 @@ commands:
       /hcm trades [player] [n]  - admin: the last trades, one line each
       /hcm trades show <id>  - admin: one trade in full, and its Mailbox rows
       /hcm trades settle <id> release|void [player] [confirm]  - admin: a trade the server didn't see finish
+      /hcm graves            - your graves: where your things are waiting after a death
+      /hcm graves compass [id]  - a compass to your grave (if you lost the one you got)
+      /hcm graves list [player]  - admin: every open grave, or one player's
+      /hcm graves tp|open <id>  - admin: go to a grave; look in one and take what you need
+      /hcm graves restore <id> [player]  - admin: give a grave's things to its owner (or a player), wherever they are
+      /hcm graves remove <id> [--delete] [confirm]  - admin: take a grave away (its things drop there, or are deleted)
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.
@@ -143,6 +149,7 @@ permissions:
       hcm.games.play: true
       hcm.games.chance: true
       hcm.games.admin: true
+      hcm.graves.admin: true
       hcm.market.order: true
       hcm.market.buy: true
       hcm.market.limit.bypass: true
@@ -272,3 +279,21 @@ permissions:
       Trade site). Nothing leaves a bag until both press Ready; money can go in except with
       an Arcade prize; tokens never.
     default: true
+  hcm.graves.use:
+    description: >-
+      Graves: when you die, your things and experience wait for you in a grave at the spot;
+      right-click it to get them back. /hcm graves lists yours. Without it a death drops
+      everything on the ground, as without graves.
+    default: true
+  hcm.graves.keep:
+    description: >-
+      Keep everything when you die, items and levels, and never get a grave (for a young
+      player who should simply keep their things). Not given to ops by default: grant it
+      per player, e.g. lp user <name> permission set hcm.graves.keep true.
+    default: false
+  hcm.graves.admin:
+    description: >-
+      Run the graves: open anyone's grave, /hcm graves list|tp|open|restore|remove.
+    default: op
+    children:
+      hcm.graves.use: true

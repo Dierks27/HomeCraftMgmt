@@ -135,7 +135,7 @@ public final class PrizeSafety {
     /**
      * Move every element of {@code from} that matches into {@code to}, in order, and return how many
      * moved. A moved element is no longer in {@code from}, so a second call moves nothing: an item is
-     * never both dropped (where a grave plugin would copy it) and kept.
+     * never both dropped and kept.
      */
     static <T> int moveIf(List<T> from, List<T> to, Predicate<? super T> matches) {
         int moved = 0;
@@ -153,7 +153,7 @@ public final class PrizeSafety {
     /**
      * The death guard: take out of {@code drops} each guarded element that is also in {@code kept}
      * (equal, one drop for each kept copy), and return how many went. Such a stack would be kept AND
-     * dropped, where a grave plugin would copy it: another plugin put it back after it was moved.
+     * dropped: another plugin put it back after it was moved.
      */
     static <T> int dropKeptTwice(List<T> drops, List<T> kept, Predicate<? super T> guarded) {
         List<T> unmatched = new ArrayList<>(kept);

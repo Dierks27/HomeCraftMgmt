@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.38.8-site-feeds`
+- **Version:** `0.39.0-graves`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -132,6 +132,13 @@ single sound, including ones it has just heard nearby. Then pick how much: **Qui
 also stops the rumble of minecarts rolling and the buzz of bees flying. Needs **ProtocolLib**
 (silencing the minecarts and bees themselves works without it).
 
+### Graves — your things wait where you fell
+Die, and everything you'd have dropped, plus your experience, waits in a grave at the spot: your head
+with your name over it, and a compass in your bag points the way. Right-click it and it all goes back
+where it was, armor on and hotbar in order. A player with `hcm.graves.keep` simply keeps everything.
+Only you (and admins) can open it, and nothing can break, blow up, flood or duplicate it. HCM's own, in
+place of GravesX. See [Graves](#graves-0390).
+
 ### The Copper Golem Brush — tell a Copper Golem which chests are its
 A special brush. Tap a Copper Golem with it, tap the chests it may use, tap the golem again.
 From then on that golem still takes from any copper chest but puts things only into its own
@@ -244,6 +251,13 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.38.8 from 0.39.0:** **first have every open grave emptied** (`/hcm graves list`; each
+owner right-clicks theirs, or `/hcm graves restore <id>`): 0.38.8 doesn't know graves, so a grave left
+open is a plain player head in the world and its things stay in the database where 0.38.8 can't reach
+them (they come back with the upgrade). Then the jar alone: 0.38.8 reads schema v40 and config revision
+27 with one WARN each and runs nothing; the `graves:` section is ignored. Put GravesX back if deaths
+should keep making graves while rolled back.
 
 **Back to 0.38.7 from 0.38.8:** the jar alone (0.38.8 changes no schema and no config revision; it only
 adds keys to the website feeds). `/api/market` loses `department` and `departments`, `/api/minis` loses
@@ -6341,6 +6355,124 @@ config revision stays 24.
    so nothing should show; say if TPS dips.
 <!-- ---- end the Copper Golem Brush ---- -->
 
+## Graves (0.39.0)
+
+HCM's own death storage, in place of **GravesX**. When you die, everything that would fall on the
+ground, and your experience, waits for you in a grave where you fell.
+
+### What happens when you die
+- A **grave** appears at the spot: your own head on the ground, with "*your name*'s grave" and how
+  long ago over it. Chat tells you where: `Your things are in a grave at lilahs_world 120, 64, -38.`
+  `/hcm graves` lists all of yours.
+- **Everything** that would have dropped goes in it, plus your experience (`graves.xp_percent`,
+  100 by default). Nothing lies on the ground as well: a stack is in the grave or on the ground,
+  never both. With nothing to drop and no experience, there is no grave and no message.
+- **Where:** at the spot when a grave can go there (air, grass, flowers, a snow layer, water).
+  Otherwise the nearest good spot close by, looking up first: inside a block it goes on top; in mid-air
+  it goes down to the ground; in lava it goes on the nearest dry ground beside it; at the build limit it
+  comes down. A death in the **void** puts it where you last stood safely (else the world's spawn). It
+  never replaces a chest or any container, a sign, a bed, a portal, a block HCM placed, another grave, or
+  anything inside a Courier delivery building. It is placed **even in a claim or region where you can't
+  build**: losing your things at a claim edge is worse than a grave in someone's yard, and an admin can
+  move it.
+- **A compass** to the grave is in your bag after you respawn ("Compass to Lilah's grave"). It points
+  at the grave (in another world it spins; its text says which world) and crumbles once you have your
+  things back. Lost it? `/hcm graves compass`. It's only a pointer: a death deletes it, nothing can be
+  crafted from it, and a stale one crumbles in any bag or chest it's seen in. `graves.compass: false`
+  turns it off.
+- **Keep-inventory deaths still make a grave.** When the death would keep your inventory (the
+  `keep_inventory` gamerule, as in **fairyhub**, or Essentials' `keepinv`), the grave is made from your
+  inventory instead, with your levels, so everyone walks back for their things.
+  `graves.keep_inventory_makes_grave: false` lets those deaths keep everything again; listing a world in
+  `graves.disabled_worlds` does the same for that world only. **fairyhub** is listed there by default, so
+  its gamerule keeps everything there as before.
+- **Keep everything: `hcm.graves.keep`.** A player with this permission (a young player who should
+  simply keep their things) keeps everything when they die, items and levels, anywhere, and never gets
+  a grave: `lp user <name> permission set hcm.graves.keep true`. It isn't given to ops by default.
+- **No grave** inside a game session (the Games revive you there), in a world listed in
+  `graves.disabled_worlds`, or with `graves.enabled: false`. Those deaths go as they did before graves.
+- **Never in a grave:** Arcade prizes (kept when you die, as since 0.37.1), game kit items (a game
+  takes them back) and courier packages (they drop, or come back with `courier.package.keep_on_death`).
+  Their own rules decide, as before graves.
+
+### Getting your things back
+- **Right-click the grave.** Everything goes back into the slots it came from: armor back on, the off
+  hand and the hotbar where they were. If you've filled a slot since, that stack goes anywhere in your
+  bag; what doesn't fit drops at your feet. Your experience comes back too, and the grave is gone.
+- **Sneak + right-click** opens the grave screen instead, to take stacks one at a time (or the
+  experience, or everything). `graves.sneak_opens_menu: false` turns that off.
+- **Only you and admins** can open your grave. `graves.unlock_after_minutes` (0 = never, the default)
+  lets anyone loot it after that long.
+- **Nothing can come out twice.** Each way out of a grave empties it in the database *before*
+  anything is handed over, and only while it still holds what is being taken: a double-click, two
+  players at once, a screen left open while the grave was emptied, a quit or a server stop mid-loot
+  give each stack once. One player at a time can have a grave's screen open.
+
+### A grave can't be lost
+- It **can't be broken** (by anyone: admins use `/hcm graves remove`), blown up (creepers, TNT, beds,
+  withers; and Towny's explosion regen never sees it), pushed or pulled by a piston, washed out by
+  water or lava, taken by an enderman or a wither, landed on by a falling block, or grown over by a tree.
+  A head has no inventory, so hoppers have nothing to take.
+- What a grave holds lives in the **database** (`graves`, schema v40), never only in the world. The
+  head and the name tags are markers, put back whenever the chunk loads, so a restart, an unloaded chunk
+  or a head lost to WorldEdit loses nothing (`/hcm graves restore` reaches it from anywhere).
+- **Expiry** is off by default (`graves.expire_after_hours: 0`). When it's on, an expired grave's
+  things drop on the ground where it stood (never deleted), and its owner is told at their next login.
+
+### Commands
+| Command | Permission | What it does |
+|---|---|---|
+| `/hcm graves` | `hcm.graves.use` | Your graves: id, world, place, age, stacks |
+| `/hcm graves compass [id]` | `hcm.graves.use` | A new compass to your newest grave (or that one), in place of one you lost |
+| `/hcm graves list [player]` | `hcm.graves.admin` | Every open grave, or one player's |
+| `/hcm graves tp <id>` | `hcm.graves.admin` | Go to a grave |
+| `/hcm graves open <id>` | `hcm.graves.admin` | The grave screen from anywhere: see it, take what's needed |
+| `/hcm graves restore <id> [player]` | `hcm.graves.admin` | Everything in it straight to its owner (into the original slots) or another player, wherever they are, if they're online: the "it glitched" fix |
+| `/hcm graves remove <id> [--delete]` | `hcm.graves.admin` | Take a grave away; asks for `confirm` within 15 seconds. Its things drop on the ground there, or with `--delete` are deleted |
+
+An admin right-clicking someone else's grave gets the grave screen, never a whole grave in their
+own bag. Every grave made, emptied, restored, expired or removed is a line in the console.
+
+### Permissions
+`hcm.graves.use` (default **true**): get a grave, loot your own, `/hcm graves`. Without it a death
+drops everything on the ground, as without graves. `hcm.graves.keep` (default **false**, not given to
+ops): keep everything when you die and never get a grave. `hcm.graves.admin` (default **op**, a child
+of `hcm.admin`): every admin subcommand, and opening anyone's grave.
+
+### Owner knobs (`graves`)
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | `false`: deaths drop their things on the ground, as without graves |
+| `xp_percent` | `100` | How much of a player's experience goes in the grave (0-100); the rest is lost |
+| `unlock_after_minutes` | `0` | After this long anyone may open a grave; 0 = never (owner and admins only) |
+| `expire_after_hours` | `0` | After this long a grave's things drop on the ground where it stands; 0 = never |
+| `sneak_opens_menu` | `true` | Sneak + right-click opens the grave screen |
+| `keep_inventory_makes_grave` | `true` | A keep-inventory death (the gamerule, Essentials) still makes a grave, from the inventory; `false`: those deaths keep everything |
+| `compass` | `true` | A compass to the grave after the respawn |
+| `disabled_worlds` | `[fairyhub]` | Worlds where a death makes no grave (fairyhub's `keep_inventory` gamerule then keeps everything there) |
+
+Who keeps everything is HCM's `hcm.graves.keep`, never Essentials' permissions: with
+`keep_inventory_makes_grave` on, an Essentials keep-inventory death makes a grave anyway, but take
+`essentials.keepinv` and `essentials.keepxp` off the groups all the same (below), so the two plugins
+never disagree.
+
+### Switching over from GravesX
+1. **Before installing:** have everyone loot any open GravesX graves (HCM doesn't import them).
+2. Install the new jar and restart. The log says `Graves: on, 0 open grave(s).`
+3. Remove GravesX: stop the server, move `GravesX.jar` out of `plugins/`, start.
+4. LuckPerms, so deaths are grave deaths and not keep-inventory deaths:
+   `lp group default permission unset essentials.keepinv`,
+   `lp group default permission unset essentials.keepxp`,
+   `lp group default permission unset graves.keepinventory.bypass`.
+5. Give whoever should simply keep everything the keep permission:
+   `lp user <name> permission set hcm.graves.keep true`.
+6. Test: die with a stack of something cheap in the main world, read the chat line, follow the compass,
+   right-click and count the stack (the compass crumbles). Die in fairyhub (in `graves.disabled_worlds` by
+   default): no grave, things kept by its gamerule. Then, as the player with `hcm.graves.keep`: no grave,
+   everything kept.
+
+---
+
 ## Permissions
 
 | Node | Default | Grants |
@@ -6367,6 +6499,9 @@ config revision stays 24.
 | `hcm.guide.use` | all | `/hcm guide` — How It Works |
 | `hcm.trade.use` | all | The trade window (0.38): `/trade`, `/hcm trade`, the crouch gesture and the PC's Trade site. Without it a player can't trade and can't be asked |
 | `hcm.muffler.use` | all | Place a Sound Muffler and change what your own mufflers hush (anyone may look; admins may change any) |
+| `hcm.graves.use` | all | Graves (0.39.0): get a grave when you die, loot your own, `/hcm graves`. Without it a death drops everything on the ground |
+| `hcm.graves.keep` | nobody | Keep everything when you die, items and levels, and never get a grave (grant it per player; not given to ops) |
+| `hcm.graves.admin` | op | Run the graves: open anyone's grave, `/hcm graves list\|tp\|open\|restore\|remove` (a child of `hcm.admin`) |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 
 ---
@@ -6391,6 +6526,9 @@ src/main/java/com/dierks/homecraft/
   muffler/                     Sound Mufflers: groups, picks, the box maths (pure, unit-tested),
                                the service, and the one ProtocolLib class
   gui/muffler/                 the muffler's menu and its sound lists
+  graves/                      graves: placement, the rules, the slots and restore plan (pure,
+                               unit-tested), the service and its listener
+  gui/graves/                  the grave screen
   games/                       the Games framework: the catalog, the play gate, Take a break,
                                crash-safe rounds, skill rewards, scores, invites, today's pick,
                                join signs, the RTP band

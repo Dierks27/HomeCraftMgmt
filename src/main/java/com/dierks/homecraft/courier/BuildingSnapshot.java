@@ -169,7 +169,8 @@ public final class BuildingSnapshot {
      * carry a chest's contents, so a region holding one must not be touched — somebody's
      * unclaimed storage is still somebody's. And {@code avoid} names block types that are
      * usually a marker for something the plugin cannot see: a player head out in a field is
-     * either a decoration or a death-storage grave (GravesX and friends), and burying either
+     * either a decoration or a death-storage grave (HCM's own graves are player heads too, and a
+     * grave is never placed inside a standing site: {@code GraveService.grid}), and burying either
      * behind a wall for the length of a delivery is not worth the reroll it costs to move.
      *
      * <p>Returns a description rather than a boolean so a server that keeps refusing to build

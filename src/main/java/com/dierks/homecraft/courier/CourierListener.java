@@ -169,10 +169,11 @@ public final class CourierListener implements Listener {
     /**
      * Whether the crate survives death.
      *
-     * <p>Dropping it is the default, and deliberately so: the grave is the recovery path, and
-     * losing it for good is a real consequence rather than a bug. {@code keep_on_death} exists
-     * because this is a family server and the younger players should not lose a delivery to a
-     * creeper they never saw.
+     * <p>Dropping it is the default, and deliberately so: losing it is a real consequence rather
+     * than a bug, and the dropped crate is there to be picked back up. It drops on the ground even
+     * with graves (0.39.0): a grave never takes a courier package ({@code GraveService.ownHandling}),
+     * so this setting alone decides. {@code keep_on_death} exists because this is a family server and
+     * the younger players should not lose a delivery to a creeper they never saw.
      */
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {

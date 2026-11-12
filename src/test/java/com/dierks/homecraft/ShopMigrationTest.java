@@ -101,7 +101,7 @@ class ShopMigrationTest {
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
         assertEquals(List.of(), warns(log), "nothing the owner changed: no WARN");
         assertCounterAndCrateAreBundled(c, "0.37.2");
-        assertEquals(26, c.getInt("config_revision"), "and on through revisions 23, 24, 25 and 26"
+        assertEquals(27, c.getInt("config_revision"), "and on through revisions 23, 24, 25, 26 and 27"
                 + " (GrandShowMigrationTest, FireworkRemoteMigrationTest; Sky Rings and the Long Drop;"
                 + " ThanksgivingMigrationTest)");
         List<String> counter = log.stream().filter(l -> l.startsWith("Config migration: Prize Counter - ")).toList();
@@ -118,7 +118,7 @@ class ShopMigrationTest {
                 log.subList(5, 7), "and revision 25's two: " + log);
         assertEquals(ThanksgivingMigrationTest.NO_WINDOWS, log.subList(7, 10), "and revision 26's three: " + log);
         assertEquals(11, log.size(), "and nothing else but the revision: " + log);
-        assertEquals("Config migration: config_revision 21 → 26.", log.get(10));
+        assertEquals("Config migration: config_revision 21 → 27.", log.get(10));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -277,11 +277,11 @@ class ShopMigrationTest {
         assertTrue(ArcadeConfigMigration.sameRows(crate24, rows(at24, CRATE))
                 && ArcadeConfigMigration.sameRows(counter24, rows(at24, PRIZES)), "from 24 only 25's and 26's steps"
                 + " run, which touch neither the crate nor the counter");
-        YamlConfiguration at26 = LayoutFixtures.v0372();
-        at26.set("config_revision", 26);
-        String before = at26.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at26, "world"), "no step runs from 26");
-        assertEquals(before, at26.saveToString());
+        YamlConfiguration at27 = LayoutFixtures.v0372();
+        at27.set("config_revision", 27);
+        String before = at27.saveToString();
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at27, "world"), "no step runs from 27");
+        assertEquals(before, at27.saveToString());
 
         YamlConfiguration c = LayoutFixtures.v0372();
         apply(c);

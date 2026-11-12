@@ -101,10 +101,13 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 26 = Thanksgiving: the Thanksgiving show window, Feast Week at Crate, Crate's six new foods after wheat and the
      * Holiday Collection's Turkey Mini 2026, each only where the owner has no row with its id; the owner's own rows
      * stay, with an INFO line, never a WARN ({@link ThanksgivingMigration}).
-     * Each of 20, 21, 22, 23, 24 and 25 also refreshes the comments it makes stale, where they are still the plugin's
-     * own words ({@link ShippedComments}); 26 makes none stale.
+     * 27 = graves: the new {@code graves:} section comes with the backfill; the step refreshes the one comment graves
+     * make wrong, {@code courier.package.keep_on_death}'s "the grave is the recovery path" (a grave never takes a
+     * package), where it is still the plugin's own words ({@link GravesMigration}).
+     * Each of 20, 21, 22, 23, 24, 25 and 27 also refreshes the comments it makes stale, where they are still the
+     * plugin's own words ({@link ShippedComments}); 26 makes none stale.
      */
-    static final int CONFIG_REVISION = 26;
+    static final int CONFIG_REVISION = 27;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -234,6 +237,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
+    /** Graves (0.39.0): HCM's own death storage. Null only if they failed to start. */
+    private com.dierks.homecraft.graves.GraveService graves;
     /** The Games (0.35). Null until it is built, or if it failed to start; callers null-check. */
     private com.dierks.homecraft.games.GamesService games;
     /**
@@ -452,6 +457,23 @@ public final class HomeCraftManagement extends JavaPlugin {
                 new com.dierks.homecraft.courier.BuildingService(
                         this, new com.dierks.homecraft.storage.CourierSiteDao(database),
                         new com.dierks.homecraft.storage.TrackedGroundDao(database)));
+
+        // Graves (0.39.0) — a death's drops and experience wait in a grave at the spot, in place of GravesX. Built after
+        // the Courier (a grave never goes inside a delivery building). Its death handler runs at MONITOR, after every
+        // other priority whatever order the listeners are registered in (GraveListener's comment has the sequence).
+        try {
+            this.graves = new com.dierks.homecraft.graves.GraveService(
+                    this, new com.dierks.homecraft.storage.GraveDao(database));
+            this.graves.start();
+            getServer().getPluginManager().registerEvents(new com.dierks.homecraft.graves.GraveListener(graves), this);
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE,
+                    "Could not start graves - deaths drop their things on the ground as they would without them.", e);
+            if (this.graves != null) {
+                this.graves.stop();
+            }
+            this.graves = null;
+        }
 
         // Sound Mufflers — a block that hushes the sounds you pick near it. The hushing itself goes
         // through ProtocolLib (a soft dependency); without it mufflers still place and save.
@@ -770,6 +792,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             soundMufflers.stop(); // unhooks ProtocolLib before the database goes
             soundMufflers = null;
         }
+        if (graves != null) {
+            graves.stop(); // the name tags come down; every grave stays whole in its row and its head in the world
+            graves = null;
+        }
         if (displayService != null) {
             displayService.stop();
             displayService = null;
@@ -894,6 +920,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (soundMufflers != null) {
             soundMufflers.reload(); // on/off and the range limits
+        }
+        if (graves != null) {
+            graves.reload(); // on/off, the unlock and expiry times, the worlds
         }
         if (games != null) {
             try {
@@ -1401,6 +1430,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             // Thanksgiving: the show window, Feast Week, Crate's new foods and the Turkey Mini, each only where the
             // owner has no row with its id; the owner's own rows win, quietly. See ThanksgivingMigration.
             ThanksgivingMigration.apply(c, log);
+        }
+        if (from < 27) {
+            // Graves: the graves: section is the backfill's; the courier package's keep_on_death comment no longer says
+            // the grave is its recovery path, where the owner hasn't edited it. See GravesMigration.
+            GravesMigration.apply(c);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2718,6 +2752,11 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.courier.CourierService courier() {
         return courier;
+    }
+
+    /** Graves (0.39.0), or null if they failed to start. */
+    public com.dierks.homecraft.graves.GraveService graves() {
+        return graves;
     }
 
     /**

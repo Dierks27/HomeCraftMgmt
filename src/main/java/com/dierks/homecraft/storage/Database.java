@@ -1041,6 +1041,31 @@ public final class Database {
                 at     INTEGER NOT NULL,
                 PRIMARY KEY (player, course, layout)
             )
+            """,
+            // v40 — graves (0.39.0, HCM-GRAVES §3): one row per grave. items is GraveItems.encode, one line per stack
+            //   (n:slot:Base64), emptied in the same write that hands it out (GraveDao), so the row, never the world,
+            //   is what a grave holds. xp is experience points. state is OPEN while anything is in it, then LOOTED,
+            //   RESTORED, EXPIRED or REMOVED (closed rows stay, with closed_at and closed_by, as the record). notice
+            //   = 1 while the owner has a message waiting about it. One open grave a block.
+            """
+            CREATE TABLE IF NOT EXISTS graves (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner      TEXT    NOT NULL,
+                owner_name TEXT    NOT NULL DEFAULT '',
+                world      TEXT    NOT NULL,
+                x          INTEGER NOT NULL,
+                y          INTEGER NOT NULL,
+                z          INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                xp         INTEGER NOT NULL DEFAULT 0,
+                items      TEXT    NOT NULL DEFAULT '',
+                state      TEXT    NOT NULL DEFAULT 'OPEN',
+                closed_at  INTEGER NOT NULL DEFAULT 0,
+                closed_by  TEXT    NOT NULL DEFAULT '',
+                notice     INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_graves_owner ON graves (owner, state);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_graves_open_spot ON graves (world, x, y, z) WHERE state = 'OPEN'
             """
     };
 

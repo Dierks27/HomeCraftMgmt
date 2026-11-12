@@ -173,8 +173,9 @@ public final class PrizeSafetyListener implements Listener {
 
     /**
      * Prizes stay with you. LOW runs after the Games' LOWEST revive, which cancels the death (so this
-     * skips), and long before a grave plugin's MONITOR: a grave is built from the drops, and a kept
-     * prize has left them, so it is never in a grave and never copied.
+     * skips), and long before the grave ({@link com.dierks.homecraft.graves.GraveListener#onDeath}, MONITOR):
+     * a grave is built from the drops, and a kept prize has left them, so it is never in a grave and never
+     * copied. (The grave also never takes a prize itself: {@code GraveService.ownHandling}.)
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
@@ -186,8 +187,9 @@ public final class PrizeSafetyListener implements Listener {
 
     /**
      * The guard: a prize that is kept AND back in the drops (another plugin put it there after LOW)
-     * would be copied into a grave. HIGHEST runs before a grave plugin's MONITOR, so it leaves the
-     * drops here, with one warning naming the case.
+     * would be both kept and dropped. HIGHEST runs before the grave's MONITOR
+     * ({@link com.dierks.homecraft.graves.GraveListener#onDeath}), so it leaves the drops here, with one
+     * warning naming the case.
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDeathGuard(PlayerDeathEvent event) {

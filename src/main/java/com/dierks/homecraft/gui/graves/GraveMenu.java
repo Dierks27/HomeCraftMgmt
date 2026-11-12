@@ -80,14 +80,16 @@ public final class GraveMenu extends Menu {
                 refreshOrClose();
             });
         }
-        set(45, Menus.icon(Material.PAPER, "&f" + g.ownerName() + "'s grave",
+        // 45 and 53 are left for page arrows (NavAnchorTest), 49 is the way out.
+        set(46, Menus.icon(Material.PAPER, "&f" + g.ownerName() + "'s grave",
                 "&7" + GraveService.where(g),
                 "&7" + graves.ageOf(g) + " ago",
                 "&7" + g.stacks() + " stack" + (g.stacks() == 1 ? "" : "s")
                         + (entries.size() > SHOWN ? " &8(take some to see the rest)" : ""),
                 "", "&8Click a stack to take it."), null);
         boolean own = g.owner().equals(viewer.getUniqueId());
-        set(49, Menus.icon(Material.CHEST, "&aTake everything",
+        set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> viewer.closeInventory());
+        set(48, Menus.icon(Material.CHEST, "&aTake everything",
                 own ? "&7Back into the slots it came from." : "&7Into your bag.",
                 "&7What won't fit drops at your feet."), e -> {
             if (!graves.takeAllFromScreen(viewer, id)) {
@@ -96,7 +98,7 @@ public final class GraveMenu extends Menu {
             viewer.closeInventory();
         });
         if (g.xp() > 0) {
-            set(53, Menus.icon(Material.EXPERIENCE_BOTTLE, "&aTake the experience", "&7" + g.xp() + " xp"), e -> {
+            set(50, Menus.icon(Material.EXPERIENCE_BOTTLE, "&aTake the experience", "&7" + g.xp() + " xp"), e -> {
                 if (!graves.takeXp(viewer, id)) {
                     Sounds.refused(viewer);
                 }

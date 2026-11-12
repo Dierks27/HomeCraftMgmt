@@ -1284,8 +1284,9 @@ sound_muffler:
 #  fairyhub, or Essentials' keepinv) still makes a grave from the inventory,
 #  so everyone walks back for their things; set keep_inventory_makes_grave
 #  to false to let those deaths keep everything instead, or list a world in
-#  disabled_worlds. A player with the hcm.graves.keep permission keeps
-#  everything, items and levels, and never gets a grave (for a young player):
+#  disabled_worlds (fairyhub is listed: its gamerule keeps everything).
+#  A player with the hcm.graves.keep permission keeps everything, items and
+#  levels, and never gets a grave (for a young player):
 #    lp user <name> permission set hcm.graves.keep true
 #  No grave in a game session or a world listed below. Arcade prizes, game
 #  kit items and courier packages are never put in a grave: their own rules
@@ -1299,7 +1300,7 @@ graves:
   sneak_opens_menu: true        # sneak + right-click opens the grave screen (take things one at a time)
   keep_inventory_makes_grave: true   # a keep-inventory death still makes a grave (false: those deaths keep everything)
   compass: true                 # a compass to the grave after the respawn (/hcm graves compass gives another)
-  disabled_worlds: []           # worlds where a death makes no grave (things drop as without graves)
+  disabled_worlds: [fairyhub]   # worlds where a death makes no grave: fairyhub's keep_inventory gamerule keeps everything there
 
 # ---------------------------------------------------------------------
 #  The Copper Golem Brush (0.38.4)

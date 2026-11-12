@@ -752,7 +752,7 @@ HCM's own death storage (0.39.0), in place of the GravesX plugin, which glitched
 
 **Expiry and admin.** `expire_after_hours` (0 = never, shipped): an expired grave is claimed `EXPIRED` with a notice, its stacks and experience dropped where it stood (its chunk loaded for it, two a refresh), and the owner told at once or at their next login. `/hcm graves restore <id> [player]` claims it `RESTORED` and gives it straight to an online player (the owner into their slots); `remove <id> [--delete]` (confirm within 15 s) claims it `REMOVED` and drops or deletes. Closed rows stay as the record (state, `closed_at`, `closed_by`). `AccountMoveDao` names `graves` as not moved: a grave stays its owner's.
 
-**Config** (`graves:`): `enabled` true, `xp_percent` 100, `unlock_after_minutes` 0, `expire_after_hours` 0, `sneak_opens_menu` true, `keep_inventory_makes_grave` true, `compass` true, `disabled_worlds` []. The section comes with the backfill; **config revision 27** (`GravesMigration`) refreshes `courier.package.keep_on_death`'s comment ("the grave is the recovery path" is no longer true: a grave never takes a package) where it is still the shipped text (`ShippedComments`).
+**Config** (`graves:`): `enabled` true, `xp_percent` 100, `unlock_after_minutes` 0, `expire_after_hours` 0, `sneak_opens_menu` true, `keep_inventory_makes_grave` true, `compass` true, `disabled_worlds` [fairyhub] (its keep_inventory gamerule keeps everything there). The section comes with the backfill; **config revision 27** (`GravesMigration`) refreshes `courier.package.keep_on_death`'s comment ("the grave is the recovery path" is no longer true: a grave never takes a package) where it is still the shipped text (`ShippedComments`).
 
 ## 4. Configuration Schema (sketch)
 ```yaml

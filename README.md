@@ -6384,7 +6384,8 @@ ground, and your experience, waits for you in a grave where you fell.
   `keep_inventory` gamerule, as in **fairyhub**, or Essentials' `keepinv`), the grave is made from your
   inventory instead, with your levels, so everyone walks back for their things.
   `graves.keep_inventory_makes_grave: false` lets those deaths keep everything again; listing a world in
-  `graves.disabled_worlds` does the same for that world only.
+  `graves.disabled_worlds` does the same for that world only. **fairyhub** is listed there by default, so
+  its gamerule keeps everything there as before.
 - **Keep everything: `hcm.graves.keep`.** A player with this permission (a young player who should
   simply keep their things) keeps everything when they die, items and levels, anywhere, and never gets
   a grave: `lp user <name> permission set hcm.graves.keep true`. It isn't given to ops by default.
@@ -6448,7 +6449,7 @@ of `hcm.admin`): every admin subcommand, and opening anyone's grave.
 | `sneak_opens_menu` | `true` | Sneak + right-click opens the grave screen |
 | `keep_inventory_makes_grave` | `true` | A keep-inventory death (the gamerule, Essentials) still makes a grave, from the inventory; `false`: those deaths keep everything |
 | `compass` | `true` | A compass to the grave after the respawn |
-| `disabled_worlds` | `[]` | Worlds where a death makes no grave |
+| `disabled_worlds` | `[fairyhub]` | Worlds where a death makes no grave (fairyhub's `keep_inventory` gamerule then keeps everything there) |
 
 Who keeps everything is HCM's `hcm.graves.keep`, never Essentials' permissions: with
 `keep_inventory_makes_grave` on, an Essentials keep-inventory death makes a grave anyway, but take
@@ -6466,9 +6467,9 @@ never disagree.
 5. Give whoever should simply keep everything the keep permission:
    `lp user <name> permission set hcm.graves.keep true`.
 6. Test: die with a stack of something cheap in the main world, read the chat line, follow the compass,
-   right-click and count the stack (the compass crumbles). Die in fairyhub: a grave there too, unless
-   fairyhub is in `graves.disabled_worlds`. Then, as the player with `hcm.graves.keep`: no grave, everything
-   kept.
+   right-click and count the stack (the compass crumbles). Die in fairyhub (in `graves.disabled_worlds` by
+   default): no grave, things kept by its gamerule. Then, as the player with `hcm.graves.keep`: no grave,
+   everything kept.
 
 ---
 

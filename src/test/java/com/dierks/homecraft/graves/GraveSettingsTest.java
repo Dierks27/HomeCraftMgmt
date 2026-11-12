@@ -34,7 +34,8 @@ class GraveSettingsTest {
         assertEquals(100, d.xpPercent());
         assertEquals(0, d.unlockAfterMinutes(), "never: owner and admins only");
         assertEquals(0, d.expireAfterHours(), "off by default");
-        assertEquals(Set.of(), d.disabledWorlds());
+        assertEquals(Set.of("fairyhub"), d.disabledWorlds(), "fairyhub keeps its keep_inventory gamerule");
+        assertTrue(d.worldDisabled("fairyhub"));
         assertTrue(d.keepInventoryMakesGrave(), "everyone walks back for their things");
         assertTrue(d.compass());
     }

@@ -26,8 +26,9 @@ public record GraveSettings(boolean enabled, int xpPercent, int unlockAfterMinut
                             Set<String> disabledWorlds, boolean sneakOpensMenu, boolean keepInventoryMakesGrave,
                             boolean compass) {
 
-    /** The shipped values. */
-    public static final GraveSettings DEFAULTS = new GraveSettings(true, 100, 0, 0, Set.of(), true, true, true);
+    /** The shipped values: fairyhub, whose keep_inventory gamerule keeps everything there, makes no graves. */
+    public static final GraveSettings DEFAULTS = new GraveSettings(true, 100, 0, 0, Set.of("fairyhub"), true, true,
+            true);
 
     public GraveSettings {
         disabledWorlds = Set.copyOf(disabledWorlds);

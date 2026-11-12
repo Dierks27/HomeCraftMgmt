@@ -10,44 +10,70 @@ public final class GraveRules {
     private GraveRules() {
     }
 
-    /** Why a death makes no grave, or {@link #MAKE} when it does. */
+    /** Why a death makes no grave, or {@link #MAKE} / {@link #MAKE_FROM_INVENTORY} when it does. */
     public enum Decision {
-        /** A grave is made (if there is anything to put in it). */
+        /** A grave is made from the drops (if there is anything to put in it). */
         MAKE,
+        /**
+         * A keep-inventory death (the gamerule, Essentials) of a player without {@code hcm.graves.keep}, with
+         * {@code graves.keep_inventory_makes_grave}: the grave is made from the inventory itself, which the death then
+         * doesn't keep. They still walk back for their things.
+         */
+        MAKE_FROM_INVENTORY,
+        /** The player has {@code hcm.graves.keep}: they keep everything, items and levels, and no grave is made. */
+        KEPT,
         /** {@code graves.enabled} is false: the death goes as it did before graves. */
         OFF,
         /** The world is in {@code graves.disabled_worlds}. */
         WORLD_OFF,
         /** The death was cancelled (a game's revive, another plugin). */
         CANCELLED,
-        /** The event keeps the inventory (the {@code keep_inventory} gamerule, or another plugin). */
+        /**
+         * The event keeps the inventory (the {@code keep_inventory} gamerule, or another plugin) and
+         * {@code graves.keep_inventory_makes_grave} is false.
+         */
         KEEP_INVENTORY,
         /** A death inside a game session: the Games handle it (KitGuardListener, SessionCore). */
         GAME_SESSION
     }
 
     /**
-     * Whether a death makes a grave. Keep-inventory comes from the event itself, so fairyhub's gamerule still
-     * works; HCM never reads Essentials' permissions for it.
+     * Whether a death makes a grave, and from what.
+     *
+     * @param keeps                  the player has {@code hcm.graves.keep}: they keep everything, never a grave
+     * @param keepInventory          the event keeps the inventory (the gamerule, Essentials' keepinv)
+     * @param keepInventoryMakesGrave {@code graves.keep_inventory_makes_grave}: such a death still makes a grave,
+     *                               from the inventory
      */
     public static Decision decide(boolean enabled, boolean worldDisabled, boolean cancelled, boolean keepInventory,
-                                  boolean inGameSession) {
+                                  boolean inGameSession, boolean keeps, boolean keepInventoryMakesGrave) {
         if (!enabled) {
             return Decision.OFF;
         }
         if (cancelled) {
             return Decision.CANCELLED;
         }
-        if (keepInventory) {
-            return Decision.KEEP_INVENTORY;
-        }
         if (inGameSession) {
             return Decision.GAME_SESSION;
+        }
+        if (keeps) {
+            return Decision.KEPT;
         }
         if (worldDisabled) {
             return Decision.WORLD_OFF;
         }
+        if (keepInventory) {
+            return keepInventoryMakesGrave ? Decision.MAKE_FROM_INVENTORY : Decision.KEEP_INVENTORY;
+        }
         return Decision.MAKE;
+    }
+
+    /**
+     * Whether a player with {@code hcm.graves.keep} keeps everything at this death (set early, at LOWEST, so every
+     * later death listener sees a keep-inventory death): graves on, and not a game session (the Games handle those).
+     */
+    public static boolean keepsEverything(boolean enabled, boolean inGameSession, boolean keeps) {
+        return enabled && keeps && !inGameSession;
     }
 
     /** Nothing to keep: no grave and no message. */

@@ -35,6 +35,8 @@ class GraveSettingsTest {
         assertEquals(0, d.unlockAfterMinutes(), "never: owner and admins only");
         assertEquals(0, d.expireAfterHours(), "off by default");
         assertEquals(Set.of(), d.disabledWorlds());
+        assertTrue(d.keepInventoryMakesGrave(), "everyone walks back for their things");
+        assertTrue(d.compass());
     }
 
     @Test
@@ -51,6 +53,8 @@ class GraveSettingsTest {
         c.set("graves.expire_after_hours", -1);
         c.set("graves.disabled_worlds", List.of("FairyHub", " sky ", ""));
         c.set("graves.sneak_opens_menu", false);
+        c.set("graves.keep_inventory_makes_grave", false);
+        c.set("graves.compass", false);
         List<String> warnings = new ArrayList<>();
         GraveSettings s = GraveSettings.read(c.getConfigurationSection("graves"), warnings::add);
         assertFalse(s.enabled());
@@ -58,6 +62,8 @@ class GraveSettingsTest {
         assertEquals(0, s.unlockAfterMinutes());
         assertEquals(0, s.expireAfterHours());
         assertFalse(s.sneakOpensMenu());
+        assertFalse(s.keepInventoryMakesGrave());
+        assertFalse(s.compass());
         assertEquals(3, warnings.size());
         assertTrue(s.worldDisabled("fairyhub"), "world names compare without case");
         assertTrue(s.worldDisabled("Sky"));

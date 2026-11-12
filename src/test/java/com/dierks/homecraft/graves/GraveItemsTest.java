@@ -48,6 +48,30 @@ class GraveItemsTest {
         assertEquals(List.of("torch"), drops);
     }
 
+    @Test
+    void aKeepInventoryGraveIsMadeFromTheInventorySlotBySlot() {
+        List<String> inv = inventory();
+        inv.set(0, "sword");
+        inv.set(3, "prize:cap");
+        inv.set(7, "compass:4");
+        inv.set(20, "vanishing-boots");
+        inv.set(38, "chestplate");
+        inv.set(40, "package:9");
+        GraveItems.FromInventory<String> fi = GraveItems.fromInventory(inv, s -> false,
+                s -> s.startsWith("prize:") || s.startsWith("package:"),
+                s -> s.startsWith("compass:") || s.startsWith("vanishing"));
+        assertEquals(List.of(new Slotted<>(0, "sword"), new Slotted<>(38, "chestplate")), fi.toGrave(),
+                "each with the slot it was in");
+        assertEquals(List.of("prize:cap", "package:9"), fi.toKeep(), "kept, as the keep-inventory death would");
+    }
+
+    @Test
+    void aPluginsCopyInTheDropsIsTakenOutOnce() {
+        List<String> drops = new ArrayList<>(List.of("sword", "dirt", "sword"));
+        assertEquals(1, GraveItems.removeEqualOnce(drops, List.of("sword"), String::equals));
+        assertEquals(List.of("dirt", "sword"), drops, "one for one: the second sword is its own stack");
+    }
+
     // ---- which slot each came from ----------------------------------------------------------------------
 
     @Test

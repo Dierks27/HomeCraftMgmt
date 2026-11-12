@@ -106,6 +106,51 @@ public final class GraveItems {
         return out;
     }
 
+    /** A grave made from the inventory itself: what goes in it (with each slot), and what the death keeps. */
+    public record FromInventory<I>(List<Slotted<I>> toGrave, List<I> toKeep) {
+    }
+
+    /**
+     * A keep-inventory death that still makes a grave ({@code graves.keep_inventory_makes_grave}): the inventory, slot
+     * by slot. {@code ownHandling} stacks (prizes, kit items, courier packages) are kept, as the keep-inventory death
+     * would have kept them; {@code gone} stacks (a grave compass, a Curse of Vanishing item) are neither kept nor put in
+     * the grave, as in any death; everything else goes in the grave with its slot. Each stack is in exactly one place.
+     */
+    public static <I> FromInventory<I> fromInventory(List<I> inventory, java.util.function.Predicate<I> empty,
+                                                     java.util.function.Predicate<I> ownHandling,
+                                                     java.util.function.Predicate<I> gone) {
+        List<Slotted<I>> grave = new ArrayList<>();
+        List<I> keep = new ArrayList<>();
+        for (int slot = 0; slot < inventory.size() && slot < SLOTS; slot++) {
+            I item = inventory.get(slot);
+            if (item == null || empty.test(item) || gone.test(item)) {
+                continue;
+            }
+            if (ownHandling.test(item)) {
+                keep.add(item);
+            } else {
+                grave.add(new Slotted<>(slot, item));
+            }
+        }
+        return new FromInventory<>(grave, keep);
+    }
+
+    /** For each of {@code taken}, the first equal stack still in {@code drops} is removed; returns how many went. */
+    public static <I> int removeEqualOnce(List<I> drops, List<I> taken, BiPredicate<I, I> same) {
+        int removed = 0;
+        for (I t : taken) {
+            for (var it = drops.iterator(); it.hasNext(); ) {
+                I d = it.next();
+                if (d != null && same.test(d, t)) {
+                    it.remove();
+                    removed++;
+                    break;
+                }
+            }
+        }
+        return removed;
+    }
+
     /** The stacks of {@code drops} that are in {@code taken} (by identity), removed from {@code drops}. */
     public static <I> int removeTaken(List<I> drops, Set<I> taken) {
         int removed = 0;

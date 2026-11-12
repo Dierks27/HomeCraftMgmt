@@ -46,6 +46,10 @@ import java.util.logging.Level;
 /**
  * Graves (0.39.0, HCM-GRAVES): HCM's own death storage, in place of GravesX.
  *
+ * <p><b>Who keeps everything</b> ({@link #KEEP}, decided at LOWEST by {@link #keepIfAllowed}): no grave, ever. A
+ * keep-inventory death of anyone else (the gamerule, Essentials) still makes a grave, from the inventory, while
+ * {@code graves.keep_inventory_makes_grave}. A compass to the grave comes with the respawn ({@link GraveCompass}).
+ *
  * <p><b>Made at the end of the death</b> ({@link GraveListener#onDeath}, MONITOR): every HCM filter has run by
  * then (the Games' revive at LOWEST, prizes kept at LOW, courier packages kept at NORMAL, the prize guard at
  * HIGHEST), so the grave takes only what really is about to fall on the ground, and takes it out of the drops in the
@@ -63,6 +67,8 @@ public final class GraveService {
     public static final String USE = "hcm.graves.use";
     /** Every admin subcommand, and opening anyone's grave. */
     public static final String ADMIN = "hcm.graves.admin";
+    /** Keep everything when you die, items and levels, and never get a grave (default false, ops included). */
+    public static final String KEEP = "hcm.graves.keep";
 
     /** How often the markers, the name tags' age and expiry are seen to (ticks). */
     private static final long REFRESH_TICKS = 20L * 20;
@@ -88,6 +94,8 @@ public final class GraveService {
     private final Map<UUID, Location> safe = new HashMap<>();
     /** Graves whose block was taken by something else: warned once. */
     private final Set<Long> warnedBlocked = new HashSet<>();
+    /** The grave each player's last death made, for the compass at their respawn. */
+    private final Map<UUID, Long> compassDue = new HashMap<>();
 
     private BukkitTask refreshTask;
     private BukkitTask safeTask;
@@ -227,16 +235,39 @@ public final class GraveService {
     public void onDeath(PlayerDeathEvent event) {
         Player p = event.getEntity();
         GraveSettings s = settings();
-        GraveRules.Decision d = GraveRules.decide(s.enabled(), s.worldDisabled(p.getWorld().getName()),
-                event.isCancelled(), event.getKeepInventory(), inGameSession(p));
-        if (d != GraveRules.Decision.MAKE || !p.hasPermission(USE)) {
+        if (!s.enabled() || event.isCancelled()) {
+            return;
+        }
+        // A grave compass is only a pointer: a death deletes it (never kept twice, never in a grave), and the grave this
+        // death makes gets a new one at the respawn.
+        event.getDrops().removeIf(GraveCompass::is);
+        GraveRules.Decision d = GraveRules.decide(true, s.worldDisabled(p.getWorld().getName()), false,
+                event.getKeepInventory(), inGameSession(p), p.hasPermission(KEEP), s.keepInventoryMakesGrave());
+        boolean fromInventory = d == GraveRules.Decision.MAKE_FROM_INVENTORY;
+        if ((d != GraveRules.Decision.MAKE && !fromInventory) || !p.hasPermission(USE)) {
             return;
         }
         List<ItemStack> drops = event.getDrops();
-        List<ItemStack> take = GraveItems.take(drops, i -> i.getType().isAir() || i.getAmount() <= 0,
-                GraveService::ownHandling);
+        List<ItemStack> take;
+        List<GraveItems.Slotted<ItemStack>> slottedFromInventory = null;
+        List<ItemStack> keepToo = List.of();
+        if (fromInventory) {
+            // The death keeps the inventory (the gamerule, Essentials): the grave is made from the inventory itself, and
+            // the death then keeps only what is never a grave's (prizes, kit items, packages).
+            GraveItems.FromInventory<ItemStack> fi = GraveItems.fromInventory(Arrays.asList(p.getInventory().getContents()),
+                    i -> i.getType().isAir() || i.getAmount() <= 0, GraveService::ownHandling,
+                    i -> GraveCompass.is(i) || vanishes(i));
+            slottedFromInventory = fi.toGrave();
+            keepToo = fi.toKeep();
+            take = new ArrayList<>();
+            for (GraveItems.Slotted<ItemStack> si : slottedFromInventory) {
+                take.add(si.item());
+            }
+        } else {
+            take = GraveItems.take(drops, i -> i.getType().isAir() || i.getAmount() <= 0, GraveService::ownHandling);
+        }
         int xp = GraveRules.xpToStore(GraveRules.totalXp(p.getLevel(), p.getExp()), s.xpPercent(),
-                event.getKeepLevel());
+                !fromInventory && event.getKeepLevel());
         if (GraveRules.empty(take.size(), xp)) {
             return;
         }
@@ -248,8 +279,8 @@ public final class GraveService {
                     p.getLocation().getBlockZ()) + " - their things drop on the ground as they would without graves.");
             return;
         }
-        List<ItemStack> inventory = Arrays.asList(p.getInventory().getContents());
-        List<GraveItems.Slotted<ItemStack>> slotted = GraveItems.assignSlots(inventory, take, ItemStack::equals);
+        List<GraveItems.Slotted<ItemStack>> slotted = fromInventory ? slottedFromInventory
+                : GraveItems.assignSlots(Arrays.asList(p.getInventory().getContents()), take, ItemStack::equals);
         List<GraveItems.Entry> entries = new ArrayList<>(slotted.size());
         List<ItemStack> stored = new ArrayList<>(slotted.size());
         int n = 0;
@@ -276,10 +307,21 @@ public final class GraveService {
                     + "drop on the ground as they would without graves.", e);
             return;
         }
-        // Written: now, and only now, out of the drops.
-        GraveItems.removeTaken(drops, GraveItems.identitySet(stored));
-        if (!event.getKeepLevel()) {
-            event.setDroppedExp(0); // the grave holds xp_percent of it; no orbs as well
+        // Written: now, and only now, out of the drops (or, from the inventory, out of what the death keeps).
+        if (fromInventory) {
+            event.setKeepInventory(false);
+            event.getItemsToKeep().addAll(keepToo);
+            GraveItems.removeEqualOnce(drops, stored, ItemStack::equals); // a plugin's copy in the drops, if any
+            event.setKeepLevel(false);
+            event.setNewLevel(0);
+            event.setNewExp(0);
+            event.setNewTotalExp(0);
+            event.setDroppedExp(0);
+        } else {
+            GraveItems.removeTaken(drops, GraveItems.identitySet(stored));
+            if (!event.getKeepLevel()) {
+                event.setDroppedExp(0); // the grave holds xp_percent of it; no orbs as well
+            }
         }
         Grave g = new Grave(id, p.getUniqueId(), p.getName(), world.getName(), spot.x(), spot.y(), spot.z(), created,
                 xp, entries, Grave.OPEN, 0L, "", false);
@@ -295,6 +337,65 @@ public final class GraveService {
                 + " stack(s), " + xp + " xp).");
         p.sendMessage(Text.of("&7Your things are in a grave at &f" + where(g) + "&7. Right-click it to get them back."));
         p.sendMessage(Text.of("&8/hcm graves &7lists your graves."));
+        if (s.compass()) {
+            compassDue.put(p.getUniqueId(), id);
+        }
+    }
+
+    /**
+     * At LOWEST: a player with {@code hcm.graves.keep} keeps everything (items and levels) and drops nothing, so every
+     * later death listener sees a keep-inventory death (prizes and packages stay where they are) and no grave is made.
+     * A game session's death is the Games' to handle and is left alone.
+     */
+    public void keepIfAllowed(PlayerDeathEvent event) {
+        Player p = event.getEntity();
+        if (!GraveRules.keepsEverything(settings().enabled(), inGameSession(p), p.hasPermission(KEEP))) {
+            return;
+        }
+        event.setKeepInventory(true);
+        event.setKeepLevel(true);
+        event.getDrops().clear();
+        event.setDroppedExp(0);
+    }
+
+    /** A Curse of Vanishing item: gone at any death, never in a grave. */
+    private static boolean vanishes(ItemStack item) {
+        try {
+            return item.containsEnchantment(org.bukkit.enchantments.Enchantment.VANISHING_CURSE);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    // ---- the compass ----------------------------------------------------------------------------------
+
+    /** After the respawn: the compass to the grave this death made, if it is still there. */
+    public void respawned(Player p) {
+        Long id = compassDue.remove(p.getUniqueId());
+        Grave g = id == null ? null : open.get(id);
+        if (g == null || !settings().compass()) {
+            return;
+        }
+        giveCompass(p, g);
+    }
+
+    /** A compass to {@code g} (any other compass to it in the bag goes first, so there is only ever one). */
+    public boolean giveCompass(Player p, Grave g) {
+        ItemStack compass = GraveCompass.of(g);
+        if (compass == null) {
+            return false;
+        }
+        GraveCompass.removeFrom(p.getInventory(), id -> id == g.id());
+        giveAnywhere(p, List.of(compass));
+        p.sendMessage(Text.of("&7Follow the &6compass &7to your grave."));
+        return true;
+    }
+
+    /** Grave compasses whose grave is closed crumble, in {@code inv}. */
+    public void crumble(org.bukkit.inventory.Inventory inv) {
+        if (inv != null) {
+            GraveCompass.removeFrom(inv, id -> !open.containsKey(id));
+        }
     }
 
     /** Prizes, game kit items and courier packages: their own modules decide, never the grave. */
@@ -571,8 +672,11 @@ public final class GraveService {
         }
     }
 
-    /** Every refresh: expiry, then the heads and name tags of graves in loaded chunks. */
+    /** Every refresh: expiry, then the heads and name tags of graves in loaded chunks, then stale compasses. */
     private void refresh() {
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            crumble(p.getInventory());
+        }
         GraveSettings s = settings();
         long now = now();
         int loads = 0;
@@ -705,6 +809,11 @@ public final class GraveService {
     private void closeGrave(Grave g) {
         forget(g.id());
         removeMarker(g);
+        Player owner = Bukkit.getPlayer(g.owner());
+        if (owner != null) {
+            GraveCompass.removeFrom(owner.getInventory(), id -> id == g.id());
+        }
+        compassDue.values().removeIf(id -> id == g.id());
         UUID viewer = viewers.remove(g.id());
         Player v = viewer == null ? null : Bukkit.getPlayer(viewer);
         if (v != null && v.getOpenInventory().getTopInventory().getHolder(false)

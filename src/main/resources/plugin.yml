@@ -116,6 +116,7 @@ commands:
       /hcm trades show <id>  - admin: one trade in full, and its Mailbox rows
       /hcm trades settle <id> release|void [player] [confirm]  - admin: a trade the server didn't see finish
       /hcm graves            - your graves: where your things are waiting after a death
+      /hcm graves compass [id]  - a compass to your grave (if you lost the one you got)
       /hcm graves list [player]  - admin: every open grave, or one player's
       /hcm graves tp|open <id>  - admin: go to a grave; look in one and take what you need
       /hcm graves restore <id> [player]  - admin: give a grave's things to its owner (or a player), wherever they are
@@ -284,6 +285,12 @@ permissions:
       right-click it to get them back. /hcm graves lists yours. Without it a death drops
       everything on the ground, as without graves.
     default: true
+  hcm.graves.keep:
+    description: >-
+      Keep everything when you die, items and levels, and never get a grave (for a young
+      player who should simply keep their things). Not given to ops by default: grant it
+      per player, e.g. lp user <name> permission set hcm.graves.keep true.
+    default: false
   hcm.graves.admin:
     description: >-
       Run the graves: open anyone's grave, /hcm graves list|tp|open|restore|remove.

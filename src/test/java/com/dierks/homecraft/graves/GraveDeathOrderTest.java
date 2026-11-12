@@ -34,6 +34,14 @@ class GraveDeathOrderTest {
     }
 
     @Test
+    void keepingEverythingIsDecidedFirst() throws Exception {
+        EventHandler keep = handler(GraveListener.class, "onDeathKeep");
+        assertEquals(EventPriority.LOWEST, keep.priority(),
+                "hcm.graves.keep makes a keep-inventory death before prizes, packages or the grave read it");
+        assertTrue(keep.ignoreCancelled());
+    }
+
+    @Test
     void everyHcmFilterRunsBeforeIt() throws Exception {
         assertEquals(EventPriority.LOWEST, handler(KitGuardListener.class, "onDeath").priority(),
                 "the Games' revive cancels a game death first");

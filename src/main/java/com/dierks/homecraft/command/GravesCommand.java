@@ -23,6 +23,8 @@ import java.util.Map;
  *
  * <ul>
  *   <li>{@code /hcm graves}: your own open graves (world, place, age, stacks). {@code hcm.graves.use}.</li>
+ *   <li>{@code /hcm graves compass [id]}: a compass to your newest grave (or that one), in place of one you lost.
+ *       {@code hcm.graves.use}.</li>
  *   <li>{@code /hcm graves list [player]}: every open grave, or one player's. {@code hcm.graves.admin}.</li>
  *   <li>{@code /hcm graves tp <id>}: go to a grave.</li>
  *   <li>{@code /hcm graves open <id>}: the grave screen, from anywhere (see and take).</li>
@@ -35,7 +37,7 @@ import java.util.Map;
 public final class GravesCommand {
 
     /** The admin verbs, in the order help and tab completion list them. */
-    static final List<String> VERBS = List.of("list", "tp", "open", "restore", "remove");
+    static final List<String> VERBS = List.of("compass", "list", "tp", "open", "restore", "remove");
     /** How long a {@code remove} waits for its {@code confirm}. */
     static final long CONFIRM_MS = 15_000L;
 
@@ -62,6 +64,10 @@ public final class GravesCommand {
             mine(sender, graves);
             return;
         }
+        if (verb.equals("compass")) {
+            compass(sender, graves, args.length >= 3 ? args[2] : null);
+            return;
+        }
         if (!sender.hasPermission(GraveService.ADMIN)) {
             sender.sendMessage(Text.of("&cYou don't have permission."));
             return;
@@ -85,6 +91,7 @@ public final class GravesCommand {
 
     private void help(CommandSender sender) {
         sender.sendMessage(Text.of("&e/hcm graves &7- your graves"));
+        sender.sendMessage(Text.of("&e/hcm graves compass [id] &7- a compass to your grave"));
         sender.sendMessage(Text.of("&e/hcm graves list [player] &7- every open grave, or one player's"));
         sender.sendMessage(Text.of("&e/hcm graves tp <id> &7- go to a grave"));
         sender.sendMessage(Text.of("&e/hcm graves open <id> &7- look in a grave, take what you need"));
@@ -116,6 +123,40 @@ public final class GravesCommand {
         p.sendMessage(Text.of("&6Your graves &7(" + mine.size() + ") &8- right-click one to get your things back"));
         for (Grave g : mine) {
             p.sendMessage(Text.of(graves.line(g, false)));
+        }
+        p.sendMessage(Text.of("&8Lost the compass? &7/hcm graves compass"));
+    }
+
+    /** A compass to your newest open grave, or to the one named (yours; an admin's: anyone's). */
+    private void compass(CommandSender sender, GraveService graves, String idArg) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage(Text.of("&cOnly players can carry a compass."));
+            return;
+        }
+        if (!p.hasPermission(GraveService.USE) && !p.hasPermission(GraveService.ADMIN)) {
+            p.sendMessage(Text.of("&cYou don't have permission."));
+            return;
+        }
+        Grave target = null;
+        if (idArg != null) {
+            Long id = id(idArg);
+            Grave g = id == null ? null : graves.openGrave(id);
+            if (g != null && (g.owner().equals(p.getUniqueId()) || p.hasPermission(GraveService.ADMIN))) {
+                target = g;
+            }
+        } else {
+            for (Grave g : graves.openGraves()) {
+                if (g.owner().equals(p.getUniqueId())) {
+                    target = g; // oldest first: the last one is the newest
+                }
+            }
+        }
+        if (target == null) {
+            p.sendMessage(Text.of(idArg == null ? "&7You have no graves." : "&cNo grave of yours #" + idArg + "."));
+            return;
+        }
+        if (!graves.giveCompass(p, target)) {
+            p.sendMessage(Text.of("&cThat grave's world isn't loaded."));
         }
     }
 
@@ -266,6 +307,10 @@ public final class GravesCommand {
     public List<String> complete(CommandSender sender, String[] args) {
         List<String> out = new ArrayList<>();
         if (!sender.hasPermission(GraveService.ADMIN)) {
+            if (args.length == 2 && "compass".startsWith(args[1].toLowerCase(Locale.ROOT))
+                    && sender.hasPermission(GraveService.USE)) {
+                out.add("compass");
+            }
             return out;
         }
         if (args.length == 2) {

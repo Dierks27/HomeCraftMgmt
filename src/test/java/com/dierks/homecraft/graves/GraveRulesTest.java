@@ -17,28 +17,50 @@ class GraveRulesTest {
     private static final long MIN = 60_000L;
     private static final long HOUR = 60 * MIN;
 
+    /** decide(enabled, worldDisabled, cancelled, keepInventory, inGameSession, keeps, keepInventoryMakesGrave). */
     @Test
     void aNormalDeathMakesAGrave() {
-        assertEquals(Decision.MAKE, GraveRules.decide(true, false, false, false, false));
+        assertEquals(Decision.MAKE, GraveRules.decide(true, false, false, false, false, false, true));
     }
 
     @Test
-    void keepInventoryMakesNoGrave() {
-        // fairyhub's keep_inventory gamerule: the event says keep, so no grave and nothing taken.
-        assertEquals(Decision.KEEP_INVENTORY, GraveRules.decide(true, false, false, true, false));
+    void aKeepInventoryDeathStillMakesAGraveFromTheInventory() {
+        // fairyhub's gamerule or Essentials' keepinv: everyone still walks back for their things.
+        assertEquals(Decision.MAKE_FROM_INVENTORY, GraveRules.decide(true, false, false, true, false, false, true));
+    }
+
+    @Test
+    void keepInventoryMakesNoGraveWhenTheOwnerSaysSo() {
+        assertEquals(Decision.KEEP_INVENTORY, GraveRules.decide(true, false, false, true, false, false, false));
+        assertEquals(Decision.WORLD_OFF, GraveRules.decide(true, true, false, true, false, false, true),
+                "a disabled world (fairyhub listed there) keeps the gamerule's keep");
+    }
+
+    @Test
+    void aPlayerWhoKeepsEverythingNeverGetsAGrave() {
+        assertEquals(Decision.KEPT, GraveRules.decide(true, false, false, false, false, true, true));
+        assertEquals(Decision.KEPT, GraveRules.decide(true, false, false, true, false, true, true),
+                "whatever the gamerule");
+        assertTrue(GraveRules.keepsEverything(true, false, true));
+        assertFalse(GraveRules.keepsEverything(true, false, false), "everyone else");
+        assertFalse(GraveRules.keepsEverything(false, false, true), "graves off: HCM does nothing on a death");
+        assertFalse(GraveRules.keepsEverything(true, true, true), "a game session's death is the Games'");
     }
 
     @Test
     void aDeathInAGameSessionMakesNoGrave() {
-        assertEquals(Decision.GAME_SESSION, GraveRules.decide(true, false, false, false, true));
-        assertEquals(Decision.CANCELLED, GraveRules.decide(true, false, true, false, true),
+        assertEquals(Decision.GAME_SESSION, GraveRules.decide(true, false, false, false, true, false, true));
+        assertEquals(Decision.GAME_SESSION, GraveRules.decide(true, false, false, true, true, false, true),
+                "a keep-inventory one too");
+        assertEquals(Decision.CANCELLED, GraveRules.decide(true, false, true, false, true, false, true),
                 "the usual case: the Games revived them at LOWEST, so the death was cancelled");
     }
 
     @Test
     void switchedOffOrADisabledWorldMakesNoGrave() {
-        assertEquals(Decision.OFF, GraveRules.decide(false, false, false, false, false));
-        assertEquals(Decision.WORLD_OFF, GraveRules.decide(true, true, false, false, false));
+        assertEquals(Decision.OFF, GraveRules.decide(false, false, false, false, false, false, true));
+        assertEquals(Decision.OFF, GraveRules.decide(false, false, false, false, false, true, true));
+        assertEquals(Decision.WORLD_OFF, GraveRules.decide(true, true, false, false, false, false, true));
     }
 
     @Test

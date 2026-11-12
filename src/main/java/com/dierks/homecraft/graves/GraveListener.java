@@ -34,7 +34,9 @@ import java.util.List;
  * <p><b>The death, at MONITOR</b> ({@link #onDeath}). Where it sits among HCM's own death listeners:
  * <ul>
  *   <li>LOWEST: {@code KitGuardListener.onDeath} cancels a death inside a game session and revives the player;
- *       {@code TradeListener} ends any trade. A cancelled death makes no grave ({@code ignoreCancelled}).</li>
+ *       {@code TradeListener} ends any trade. A cancelled death makes no grave ({@code ignoreCancelled}). Also
+ *       {@link #onDeathKeep}: a player with {@code hcm.graves.keep} keeps everything, so everything after sees a
+ *       keep-inventory death with nothing dropped (never for a game session's death).</li>
  *   <li>LOW: {@code PrizeSafetyListener.onDeath} moves prizes to the items to keep.</li>
  *   <li>NORMAL: {@code CourierListener.onDeath} keeps courier packages when {@code courier.package.keep_on_death}.</li>
  *   <li>HIGHEST: {@code PrizeSafetyListener.onDeathGuard} takes out of the drops any prize that is kept as well.</li>
@@ -64,6 +66,39 @@ public final class GraveListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         graves.onDeath(event);
+    }
+
+    /**
+     * {@code hcm.graves.keep} (a child who should simply keep everything): at LOWEST the death becomes a keep-inventory
+     * death with nothing dropped, before any other HCM death listener reads it, so prizes and courier packages just stay
+     * in the bag and no grave is made. A death in a game session is left to the Games.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onDeathKeep(PlayerDeathEvent event) {
+        graves.keepIfAllowed(event);
+    }
+
+    /** The compass to the grave the death made, once the player is back. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(com.destroystokyo.paper.event.player.PlayerPostRespawnEvent event) {
+        graves.respawned(event.getPlayer());
+    }
+
+    /** A grave compass whose grave is closed crumbles in any container a player opens. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onOpen(org.bukkit.event.inventory.InventoryOpenEvent event) {
+        graves.crumble(event.getInventory());
+    }
+
+    /** A grave compass is only a pointer: nothing is crafted from it (a map, a recovery compass). */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onCraft(org.bukkit.event.inventory.PrepareItemCraftEvent event) {
+        for (org.bukkit.inventory.ItemStack in : event.getInventory().getMatrix()) {
+            if (GraveCompass.is(in)) {
+                event.getInventory().setResult(null);
+                return;
+            }
+        }
     }
 
     // ---- using it -------------------------------------------------------------------------------------

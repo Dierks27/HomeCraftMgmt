@@ -134,7 +134,8 @@ also stops the rumble of minecarts rolling and the buzz of bees flying. Needs **
 
 ### Graves — your things wait where you fell
 Die, and everything you'd have dropped, plus your experience, waits in a grave at the spot: your head
-with your name over it. Right-click it and it all goes back where it was, armor on and hotbar in order.
+with your name over it, and a compass in your bag points the way. Right-click it and it all goes back
+where it was, armor on and hotbar in order. A player with `hcm.graves.keep` simply keeps everything.
 Only you (and admins) can open it, and nothing can break, blow up, flood or duplicate it. HCM's own, in
 place of GravesX. See [Graves](#graves-0390).
 
@@ -6374,9 +6375,21 @@ ground, and your experience, waits for you in a grave where you fell.
   anything inside a Courier delivery building. It is placed **even in a claim or region where you can't
   build**: losing your things at a claim edge is worse than a grave in someone's yard, and an admin can
   move it.
-- **No grave** when the death keeps your inventory (the `keep_inventory` gamerule, as in **fairyhub**),
-  inside a game session (the Games revive you there), in a world listed in `graves.disabled_worlds`, or
-  with `graves.enabled: false`. Those deaths go as they did before graves.
+- **A compass** to the grave is in your bag after you respawn ("Compass to Lilah's grave"). It points
+  at the grave (in another world it spins; its text says which world) and crumbles once you have your
+  things back. Lost it? `/hcm graves compass`. It's only a pointer: a death deletes it, nothing can be
+  crafted from it, and a stale one crumbles in any bag or chest it's seen in. `graves.compass: false`
+  turns it off.
+- **Keep-inventory deaths still make a grave.** When the death would keep your inventory (the
+  `keep_inventory` gamerule, as in **fairyhub**, or Essentials' `keepinv`), the grave is made from your
+  inventory instead, with your levels, so everyone walks back for their things.
+  `graves.keep_inventory_makes_grave: false` lets those deaths keep everything again; listing a world in
+  `graves.disabled_worlds` does the same for that world only.
+- **Keep everything: `hcm.graves.keep`.** A player with this permission (a young player who should
+  simply keep their things) keeps everything when they die, items and levels, anywhere, and never gets
+  a grave: `lp user <name> permission set hcm.graves.keep true`. It isn't given to ops by default.
+- **No grave** inside a game session (the Games revive you there), in a world listed in
+  `graves.disabled_worlds`, or with `graves.enabled: false`. Those deaths go as they did before graves.
 - **Never in a grave:** Arcade prizes (kept when you die, as since 0.37.1), game kit items (a game
   takes them back) and courier packages (they drop, or come back with `courier.package.keep_on_death`).
   Their own rules decide, as before graves.
@@ -6409,6 +6422,7 @@ ground, and your experience, waits for you in a grave where you fell.
 | Command | Permission | What it does |
 |---|---|---|
 | `/hcm graves` | `hcm.graves.use` | Your graves: id, world, place, age, stacks |
+| `/hcm graves compass [id]` | `hcm.graves.use` | A new compass to your newest grave (or that one), in place of one you lost |
 | `/hcm graves list [player]` | `hcm.graves.admin` | Every open grave, or one player's |
 | `/hcm graves tp <id>` | `hcm.graves.admin` | Go to a grave |
 | `/hcm graves open <id>` | `hcm.graves.admin` | The grave screen from anywhere: see it, take what's needed |
@@ -6420,8 +6434,9 @@ own bag. Every grave made, emptied, restored, expired or removed is a line in th
 
 ### Permissions
 `hcm.graves.use` (default **true**): get a grave, loot your own, `/hcm graves`. Without it a death
-drops everything on the ground, as without graves. `hcm.graves.admin` (default **op**, a child of
-`hcm.admin`): every admin subcommand, and opening anyone's grave.
+drops everything on the ground, as without graves. `hcm.graves.keep` (default **false**, not given to
+ops): keep everything when you die and never get a grave. `hcm.graves.admin` (default **op**, a child
+of `hcm.admin`): every admin subcommand, and opening anyone's grave.
 
 ### Owner knobs (`graves`)
 | Key | Default | What it does |
@@ -6431,11 +6446,14 @@ drops everything on the ground, as without graves. `hcm.graves.admin` (default *
 | `unlock_after_minutes` | `0` | After this long anyone may open a grave; 0 = never (owner and admins only) |
 | `expire_after_hours` | `0` | After this long a grave's things drop on the ground where it stands; 0 = never |
 | `sneak_opens_menu` | `true` | Sneak + right-click opens the grave screen |
+| `keep_inventory_makes_grave` | `true` | A keep-inventory death (the gamerule, Essentials) still makes a grave, from the inventory; `false`: those deaths keep everything |
+| `compass` | `true` | A compass to the grave after the respawn |
 | `disabled_worlds` | `[]` | Worlds where a death makes no grave |
 
-Keep-inventory comes from the death itself (the gamerule, or a plugin that sets it), never from
-Essentials' permissions: once GravesX is gone, take `essentials.keepinv` and `essentials.keepxp` off
-any group that should get graves (see below).
+Who keeps everything is HCM's `hcm.graves.keep`, never Essentials' permissions: with
+`keep_inventory_makes_grave` on, an Essentials keep-inventory death makes a grave anyway, but take
+`essentials.keepinv` and `essentials.keepxp` off the groups all the same (below), so the two plugins
+never disagree.
 
 ### Switching over from GravesX
 1. **Before installing:** have everyone loot any open GravesX graves (HCM doesn't import them).
@@ -6445,8 +6463,12 @@ any group that should get graves (see below).
    `lp group default permission unset essentials.keepinv`,
    `lp group default permission unset essentials.keepxp`,
    `lp group default permission unset graves.keepinventory.bypass`.
-5. Test: die with a stack of something cheap in the main world, read the chat line, walk back,
-   right-click and count the stack. Then die in fairyhub (keep-inventory): no grave, things kept.
+5. Give whoever should simply keep everything the keep permission:
+   `lp user <name> permission set hcm.graves.keep true`.
+6. Test: die with a stack of something cheap in the main world, read the chat line, follow the compass,
+   right-click and count the stack (the compass crumbles). Die in fairyhub: a grave there too, unless
+   fairyhub is in `graves.disabled_worlds`. Then, as the player with `hcm.graves.keep`: no grave, everything
+   kept.
 
 ---
 
@@ -6477,6 +6499,7 @@ any group that should get graves (see below).
 | `hcm.trade.use` | all | The trade window (0.38): `/trade`, `/hcm trade`, the crouch gesture and the PC's Trade site. Without it a player can't trade and can't be asked |
 | `hcm.muffler.use` | all | Place a Sound Muffler and change what your own mufflers hush (anyone may look; admins may change any) |
 | `hcm.graves.use` | all | Graves (0.39.0): get a grave when you die, loot your own, `/hcm graves`. Without it a death drops everything on the ground |
+| `hcm.graves.keep` | nobody | Keep everything when you die, items and levels, and never get a grave (grant it per player; not given to ops) |
 | `hcm.graves.admin` | op | Run the graves: open anyone's grave, `/hcm graves list\|tp\|open\|restore\|remove` (a child of `hcm.admin`) |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 

@@ -18,12 +18,16 @@ import java.util.function.Consumer;
  * @param expireAfterHours   after this long a grave's things drop on the ground where it stands (0 = never)
  * @param disabledWorlds     worlds where a death makes no grave, lower-cased
  * @param sneakOpensMenu     sneak + right-click opens the grave screen (take stacks one by one)
+ * @param keepInventoryMakesGrave a keep-inventory death (the gamerule, Essentials) still makes a grave, from the
+ *                               inventory, for everyone without {@code hcm.graves.keep}
+ * @param compass                a grave compass on respawn, pointing at the grave
  */
 public record GraveSettings(boolean enabled, int xpPercent, int unlockAfterMinutes, int expireAfterHours,
-                            Set<String> disabledWorlds, boolean sneakOpensMenu) {
+                            Set<String> disabledWorlds, boolean sneakOpensMenu, boolean keepInventoryMakesGrave,
+                            boolean compass) {
 
     /** The shipped values. */
-    public static final GraveSettings DEFAULTS = new GraveSettings(true, 100, 0, 0, Set.of(), true);
+    public static final GraveSettings DEFAULTS = new GraveSettings(true, 100, 0, 0, Set.of(), true, true, true);
 
     public GraveSettings {
         disabledWorlds = Set.copyOf(disabledWorlds);
@@ -63,6 +67,8 @@ public record GraveSettings(boolean enabled, int xpPercent, int unlockAfterMinut
             }
         }
         boolean menu = s.getBoolean("sneak_opens_menu", true);
-        return new GraveSettings(enabled, xp, unlock, expire, worlds, menu);
+        boolean override = s.getBoolean("keep_inventory_makes_grave", true);
+        boolean compass = s.getBoolean("compass", true);
+        return new GraveSettings(enabled, xp, unlock, expire, worlds, menu, override, compass);
     }
 }

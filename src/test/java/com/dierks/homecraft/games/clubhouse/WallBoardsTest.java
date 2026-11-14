@@ -94,7 +94,7 @@ class WallBoardsTest {
             for (int y = (int) Math.floor(w.y()); y < Math.ceil(w.y() + w.height()); y++) {
                 for (int a = (int) Math.floor(from); a < Math.ceil(to); a++) {
                     String block = alongX(w) ? b.get(a + "," + y + "," + wallZ) : b.get(wallX + "," + y + "," + a);
-                    assertTrue(block != null && !block.equals(ClubhousePlanner.WINDOW),
+                    assertTrue(block != null && !block.startsWith(ClubhousePlanner.WINDOW),
                             which + " has solid wall behind it at " + a + "," + y + ": " + block);
                 }
             }
@@ -112,8 +112,9 @@ class WallBoardsTest {
 
     @Test
     void theBoardsChangeNoBlockOfTheRoom() {
-        assertEquals(3, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
-                + " jukebox corner's and 0.38.6's 3 the feast tables', not theirs (ClubhousePlannerTest pins the room)");
+        assertEquals(4, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
+                + " jukebox corner's, 0.38.6's 3 the feast tables' and 0.40.0's 4 the golf club's, not theirs"
+                + " (ClubhousePlannerTest pins the room)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same blocks");
         assertEquals(SITE.board().x(), BOX.minX() + 16.0, 0.001, "the results board's old spot is kept (the check)");
     }

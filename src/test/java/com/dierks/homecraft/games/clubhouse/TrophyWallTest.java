@@ -66,6 +66,14 @@ class TrophyWallTest {
     }
 
     @Test
+    void aLabelHangsFlatOnTheWallNotOutInTheRoom() {
+        // 0.39.1, the owner's screenshot of 14 Nov: the labels stood a block out from the wall
+        double fromWall = 0.5 + TrophyWall.LINE_OUT; // the frame block's middle is half a block out from the wall
+        assertTrue(fromWall > 0, "in front of the wall, never inside it");
+        assertTrue(fromWall < 0.1, "close enough to read as on the wall: " + fromWall);
+    }
+
+    @Test
     void aFrameIsMadeAgainWhenItsSlotMovedOrTurned() {
         int[] at = {10, 64, -5};
         assertFalse(TrophyWall.moved(at, -90f, new int[]{10, 64, -5}, -90f), "the same slot, the same way: as it is");

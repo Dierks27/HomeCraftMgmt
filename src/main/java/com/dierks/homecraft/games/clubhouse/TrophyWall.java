@@ -64,9 +64,15 @@ final class TrophyWall {
      */
     static final float SCALE = 0.6f;
     static final int LINE_WIDTH = 120;
-    /** Where a label hangs: its bottom edge this far over its frame's block, a little into the room. */
+    /** Where a label hangs: its bottom edge this far over its frame's block. */
     static final double LINE_UP = 1.15;
-    static final double LINE_OUT = 0.5;
+    /**
+     * And how far out from the wall's face (0.39.1; was half a block into the room from the frame block's middle, a
+     * full block off the wall): flat on the wall, just in front of it, like a sign. The wall is behind the frame's
+     * block, so its face is half a block back from that block's middle.
+     */
+    static final double LINE_OFF_WALL = 0.07;
+    static final double LINE_OUT = LINE_OFF_WALL - 0.5;
     /**
      * How much higher every other label hangs, so labels at one height are two frames apart: more than three lines
      * of a Bedrock name tag (0.75 of a block), so a raised label clears the one under it.

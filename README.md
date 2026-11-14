@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.39.0-graves`
+- **Version:** `0.39.1-jukebox`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,10 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.39.0 from 0.39.1:** the jar alone (0.39.1 changes no schema and no config revision). The
+Clubhouse jukebox goes back to stopping after about 2 seconds with "There's no jukebox in the room now",
+and the trophy labels stand a block out from the wall again. Nothing is lost.
 
 **Back to 0.38.8 from 0.39.0:** **first have every open grave emptied** (`/hcm graves list`; each
 owner right-clicks theirs, or `/hcm graves restore <id>`): 0.38.8 doesn't know graves, so a grave left

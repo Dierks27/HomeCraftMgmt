@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.39.0-graves`
+- **Version:** `0.40.0-golf-club`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,16 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.39.1 from 0.40.0:** the jar alone (0.40.0 changes no schema and no config revision). The
+generated Clubhouse is converged back to the glass room at the next start (the plan's ALGO goes 4 -> 3:
+the room stays closed while it builds and verifies, as on the way up). The cushions go with 0.40.0: they
+are never saved, and 0.39.1 doesn't know them. The trophy case moves back to the west wall. An
+owner-built room is not touched either way. Nothing is lost.
+
+**Back to 0.39.0 from 0.39.1:** the jar alone (0.39.1 changes no schema and no config revision). The
+Clubhouse jukebox goes back to stopping after about 2 seconds with "There's no jukebox in the room now",
+and the trophy labels stand a block out from the wall again. Nothing is lost.
 
 **Back to 0.38.8 from 0.39.0:** **first have every open grave emptied** (`/hcm graves list`; each
 owner right-clicks theirs, or `/hcm graves restore <id>`): 0.38.8 doesn't know graves, so a grave left
@@ -1980,7 +1990,8 @@ Clubhouse show the progress.
   Harvest Basket treats are welcome** at their normal points. Candy, prizes, kit items and other named items
   get a soft low note and stay in the hand. Creative counts.
 - **The pot can't be broken** while the Feast is open (an admin sneaking can), blown up, pushed or burnt.
-- **In the Clubhouse:** two orange-glass tables (5 x 2 each) with an aisle to the podium. Twenty plates
+- **In the Clubhouse:** the Great Hall's two banquet tables either side of the runner (0.40.0), and the
+  show-only Feast Pot centred on a 3 x 3 table south of them (the real pot is the one at home). Twenty plates
   fill with food as the total grows, and a line reads `Family Feast 137 / 150` with a bar.
 - **When the table is full** (150 points): every helper is paid **20 tokens once** (ledger source
   `EVENT_FEAST`, paid even when offline), each helper who is home gets **one Turkey Mini 2026** and their
@@ -4167,10 +4178,38 @@ session, so your things are kept safe and come back when you leave. It ships swi
 (`games.clubhouse.enabled: true`), builds itself, and **while it is off, not built or not checked,
 every race and round works exactly as before**.
 
-- **The room.** A glass-floored hall, 32 x 16 x 32, with windows, a lit roof, lanterns, benches, two
-  tables, a three-step podium (1st in the middle and highest) and a results board. Sixteen spread-out
-  arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
-  is no way out on foot, and nothing a mob can spawn on.
+- **The room (0.40.0: a golf club; the owner: "more clubhouse-like, like a golf club... a big room you
+  could decorate for each holiday").** 32 x 16 x 32: dark-oak panelling to the chair rail, cream plaster
+  above, tall paned windows, a coffered dark-oak ceiling under the glass roof, and two rows of tall
+  columns with lantern sconces that split it into rooms while leaving every board in sight. Each wall's
+  board hangs on a framed dark panel, like a club's leaderboard.
+  - **The Great Hall** (the middle, north): the podium on a green under the results board (2 x 2
+    plinths of gold, iron and copper, 1st on the room's middle line), a red runner up the aisle, two
+    banquet tables in white cloth with chairs (gaps between them, never a bench) and candles down the
+    middle, a 3 x 3 table south of each on the same line, the **Feast Pot** (a cauldron) centred on
+    the west one and flowers on the east one, two chandeliers and the club's green banners. The room to
+    dress for a holiday.
+  - **The 19th Hole** (west): a bar with a back bar and four stools, a reading nook with the jukebox in
+    the middle of a wall of books and two armchairs, and two armchairs by a brick fireplace (an iron
+    screen in front of the fire, so nobody steps on it).
+  - **The Trophy Gallery** (east): the trophy case on a dark-oak cabinet under the east wall's board,
+    two armchairs facing it, a putting green with a red flag in its cup (north) and a card table (south).
+  - **The Foyer** (the middle, south): sixteen spread-out arrival spots on black and white marble under
+    Now playing, so nobody lands on top of anybody.
+  - The hall and the foyer mirror about the room's middle line, everything odd-sized is centred on a
+    line of its own, and the walls are high with the roof closed: no way out on foot. **No dark corner:**
+    the floor isn't glass any more, so the room is lit instead (a mob spawns only at block light 0):
+    hidden lights under the rugs and the runner, sconces, chandeliers, pendants, lamps, candles and the
+    fire give every spot a mob could stand on light 6 or more, day and night (a test floods the plan's
+    light). The room is rebuilt once at the first start of 0.40.0 (the plan's ALGO goes 3 -> 4; it is
+    closed while it builds and verifies, a minute or two).
+  - **Cushions (Paper 26.3).** Every chair, stool and armchair gets a cushion: green in the hall, red at
+    the bar and the card table, brown on the armchairs. Anyone can sit on one (tap it), in the room's
+    game session too, and get up again; nobody can break one or take it as an item. They are never
+    saved, are put back once a second while the room is open (one whose chunk unloaded comes back) and
+    come down when the room closes. **On 26.2 there are no cushions:** the chairs stay bare and the
+    status says so. An owner-built room gets none (its chairs are yours). `/hcm games clubhouse status`
+    shows "cushions: 34 of 34".
 - **Visit any time:** `/hcm play clubhouse`. The kit: **Party** (slot 0, while in a party),
   **Challenge** (slot 1, golden boots, while not in a party: "Challenge - race anyone online", 0.38.4:
   a course picker, then the everyone-online picker of **Challenge someone**; you stay in the room and
@@ -4261,7 +4300,8 @@ every race and round works exactly as before**.
   reads "<name> set a new record on <course>: <time>". Outside the Clubhouse (the switches off,
   another world, a rider, a test run) a harmless burst goes up where the player stands instead; a
   round "changed while played" is never a record.
-- **The trophy case (0.38.4).** A row of item frames on the west wall under My stats, one per
+- **The trophy case (0.38.4; on the east wall's cabinet under the east board since 0.40.0, the labels
+  flat on the wall since 0.39.1).** A row of item frames, one per
   all-time record on the Fame board's list (the courses first, then golf): a gold ingot for a
   course's record, a golf ball for a golf course's, each with a label over it in three short lines:
   the course, the time or score, and who holds it (0.38.7; before, one long line that ran into the
@@ -4275,8 +4315,8 @@ every race and round works exactly as before**.
   is no trophy case (nothing fails). **A room set up before 0.38.7:** the same spot now reaches 15
   blocks, and nothing checks the wall, so walk it: if the row would run past a corner, into a side
   wall or across a doorway, stand further left and run `trophies` again.
-- **The jukebox corner (0.38.4).** A small pink glass stage in the south-west corner with a real
-  jukebox on it (glass on top, so nothing can stand on it). Tap the jukebox, Java or Bedrock, or tap
+- **The jukebox (0.38.4; in the 19th Hole's reading nook since 0.40.0, in the middle of the wall of
+  books).** A real jukebox. Tap the jukebox, Java or Bedrock, or tap
   **Songs** on the Games screen's Together tab while you are inside, and a Songs screen lists every
   record the server knows (22 in this build), its title in the name. Tap one: "Sam picked Pigstep"
   and it plays for the room; tap another while one plays and it goes next ("Next: Cat"); **Quiet**
@@ -4305,8 +4345,9 @@ every race and round works exactly as before**.
   written before the podium, so a crash never repeats it). It can run up to about 30 s after the
   second of them walks in (it waits for a boards' read that carries the new week). Points never
   become tokens or money.
-- **The feast tables (0.38.6).** Two orange-glass tables, 5 x 2 each, at the room's front with an
-  aisle straight to the podium. They are the Family Feast's progress: 20 plates fill with food as the
+- **The feast tables (0.38.6; the Great Hall's banquet tables since 0.40.0).** Two white-cloth tables,
+  3 x 5 each, either side of the runner up to the podium, ten plates on each table's outer rows. They
+  are the Family Feast's progress: 20 plates fill with food as the
   family puts food in the Feast Pot at home, and a line reads "Family Feast 137 / 150" with a bar. A
   helper who hasn't seen the full table gets the room's ceremony when they walk in (a title, the
   "Thankful for" line and 20 s of bursts). The tables stay all year as furniture; the food is only

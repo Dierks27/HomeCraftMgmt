@@ -143,6 +143,14 @@ public final class WorldEntities {
         return removed;
     }
 
+    /**
+     * Whether {@code entity} is a Clubhouse cushion (0.40.0, {@link Keys#CLUB_SEAT}): furniture anyone may sit on,
+     * in a game session or not.
+     */
+    public static boolean seat(Entity entity) {
+        return entity != null && Keys.CLUB_SEAT != null && entity.getPersistentDataContainer().has(Keys.CLUB_SEAT);
+    }
+
     /** Whether the effects service owns it: never ours to remove. */
     private static boolean effect(Entity e) {
         return Keys.EFFECT_ENTITY != null && e.getPersistentDataContainer().has(Keys.EFFECT_ENTITY);

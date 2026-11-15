@@ -160,7 +160,17 @@ final class JukeboxCorner implements SongMenu.Corner {
         jb.setRecord(new ItemStack(s.disc()));
         jb.update(true, false);
         disc.putIn(b.getWorld().getName(), b.getX(), b.getY(), b.getZ());
-        return jb.startPlaying();
+        return started(jb);
+    }
+
+    /**
+     * Whether the song is on once the record is in (0.39.1). On Paper 26.x {@code update()} hands the record to the
+     * block entity, which starts the song by itself; {@code startPlaying()} then returns {@code false} ("already
+     * playing", CraftJukebox), which 0.38.4-0.39.0 read as "no jukebox": the queue was cleared and the disc came out
+     * a second later. Playing either way is a start; neither is a block that couldn't play it.
+     */
+    static boolean started(Jukebox jb) {
+        return jb.startPlaying() || jb.isPlaying();
     }
 
     /** Once a second: the next song when the one playing is over; the disc out when nothing is left. */

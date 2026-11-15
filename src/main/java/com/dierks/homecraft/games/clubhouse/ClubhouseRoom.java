@@ -749,11 +749,20 @@ public final class ClubhouseRoom {
     }
 
     /**
-     * The way the trophy case faces (Minecraft yaw: 0 south, 90 west, 180 north, -90 east): east in the generated
-     * room (its frames hang on the west wall), the way the admin faced in an owner-built one.
+     * The way the trophy case faces (Minecraft yaw: 0 south, 90 west, 180 north, -90 east): west in the generated
+     * room (its frames hang on the east wall under the All-time records board, 0.40.0), the way the admin faced in an
+     * owner-built one.
      */
     public float trophyYaw() {
-        return hand ? (handTrophies == null ? 0f : WallBoards.snap(handTrophies.yaw())) : -90f;
+        return hand ? (handTrophies == null ? 0f : WallBoards.snap(handTrophies.yaw())) : 90f;
+    }
+
+    /**
+     * Where the cushions go (0.40.0, 26.3): the generated room's chairs, stools and armchairs; none in an owner-built
+     * room (its chairs are the owner's), or while there is no room.
+     */
+    public List<ClubhousePlanner.Seat> seats() {
+        return hand || site == null ? List.of() : ClubhousePlanner.seats(site.box());
     }
 
     /**

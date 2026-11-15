@@ -153,7 +153,8 @@ class ClubhouseRoomTest {
     @Test
     void anEmptyUnclaimedBoxIsScannedClaimedBuiltAndVerified() {
         UUID stray = UUID.randomUUID();
-        host.people.add(new Person(stray, "Stray", "games", BOX.minX() + 5, BOX.minY() + 2, BOX.minZ() + 5, null, null));
+        host.people.add(new Person(stray, "Stray", "games", BOX.minX() + 16, BOX.minY() + 2, BOX.minZ() + 22, null,
+                null)); // in the foyer, over the marble (0.40.0: x 5, z 5 is a bar stool now)
         ClubhouseRoom r = room();
         assertEquals(ClubhouseRoom.Phase.SCANNING, r.phase(), "an unclaimed box is only counted first");
         assertEquals(List.of(stray), host.moved, "anyone in the box who isn't a visitor is moved out of its way");
@@ -173,7 +174,7 @@ class ClubhouseRoomTest {
 
     @Test
     void anyonesBlocksInAnUnclaimedBoxCloseItTouchingNothingUntilRebuildConfirm() {
-        host.world.put(BOX.minX() + 3, BOX.minY() + 1, BOX.minZ() + 3, "minecraft:oak_planks");
+        host.world.put(BOX.minX() + 6, BOX.minY() + 1, BOX.minZ() + 12, "minecraft:oak_planks"); // air in the plan
         ClubhouseRoom r = room();
         until(r, ClubhouseRoom.Phase.CLOSED, 3_000);
         assertTrue(r.closedWhy().contains("1 block") && r.closedWhy().contains("rebuild confirm"), r.closedWhy());
@@ -183,7 +184,7 @@ class ClubhouseRoomTest {
         assertEquals(ClubhouseRoom.Phase.CLOSED, r.phase(), "and does nothing");
         assertTrue(r.rebuild(true).get(0).contains("being built"), r.statusLines().toString());
         until(r, ClubhouseRoom.Phase.READY, 3_000);
-        assertEquals("minecraft:air", host.world.at(BOX.minX() + 3, BOX.minY() + 1, BOX.minZ() + 3),
+        assertEquals("minecraft:air", host.world.at(BOX.minX() + 6, BOX.minY() + 1, BOX.minZ() + 12),
                 "confirmed: the block is cleared by the build");
     }
 
@@ -361,9 +362,10 @@ class ClubhouseRoomTest {
     void theTrophyCaseAndTheJukeboxOfAnOwnerBuiltRoomAreSavedAndReadBack() throws Exception {
         ClubhouseRoom generated = room();
         until(generated, ClubhouseRoom.Phase.READY, 3_000);
-        assertEquals(ClubBoard.MAX_ROWS, generated.trophyFrames().size(), "the generated room's west wall");
-        assertEquals(-90f, generated.trophyYaw(), 0.001f, "facing east, into the room");
-        assertArrayEquals(ClubhousePlanner.jukebox(BOX), generated.jukeboxBlock(), "the generated room's corner");
+        assertEquals(ClubBoard.MAX_ROWS, generated.trophyFrames().size(), "the generated room's east wall");
+        assertEquals(90f, generated.trophyYaw(), 0.001f, "facing west, into the room (0.40.0: under All-time records)");
+        assertArrayEquals(ClubhousePlanner.jukebox(BOX), generated.jukeboxBlock(), "the generated room's reading nook");
+        assertEquals(ClubhousePlanner.seats(BOX), generated.seats(), "a cushion's place on every chair (26.3)");
 
         ClubhouseRoom r = room();
         r.here(new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f));

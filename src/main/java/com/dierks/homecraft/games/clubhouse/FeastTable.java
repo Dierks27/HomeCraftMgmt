@@ -42,7 +42,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 final class FeastTable {
 
-    /** The bursts' height over the plates: from 3 to 8 blocks (the roof is 13 over them). */
+    /** The bursts' height over the plates: from 3 to 8 blocks (the coffered ceiling is 12 over them). */
     static final int BURST_LOW = 3;
     static final int BURST_HIGH = 8;
 

@@ -160,6 +160,8 @@ public final class Clubhouse implements Game, ClubDoor {
     private FamilyWeek familyWeek;
     /** 0.38.6: the Family Feast's tables; null with no server. When the room's ceremony last played, and its end. */
     private FeastTable feastTable;
+    /** 0.40.0 (26.3): a cushion on every chair of the generated room. */
+    private ClubCushions cushions;
     private long feastCeremonyAt = Long.MIN_VALUE / 2;
     private long feastShowUntil;
     private final Cheers cheers = new Cheers();
@@ -345,6 +347,10 @@ public final class Clubhouse implements Game, ClubDoor {
         List<String> out = new ArrayList<>(r.statusLines());
         out.add(visits.size() + " in the Clubhouse (" + (watch == null ? 0 : watch.count()) + " watching live), "
                 + arriving.size() + " on the way");
+        if (!r.seats().isEmpty()) {
+            out.add(ClubCushions.type() == null ? "cushions: none on this server (26.3 adds them)"
+                    : "cushions: " + (cushions == null ? 0 : cushions.count()) + " of " + r.seats().size());
+        }
         return out;
     }
 
@@ -360,12 +366,14 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         GamesService g = games();
         WorldEntities.sweep(this);
+        ClubCushions.sweep(); // 0.40.0: cushions a crash or a reload left
         host = new LiveRoomHost(this);
         display = new BoardDisplay(this);
         boards = new ClubBoards(this);
         jukebox = new JukeboxCorner(this);
         familyWeek = new FamilyWeek(this);
         feastTable = new FeastTable(this);
+        cushions = new ClubCushions(log());
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -373,6 +381,17 @@ public final class Clubhouse implements Game, ClubDoor {
         g.on(this, EntityDamageByEntityEvent.class, EventPriority.LOWEST, false, e -> {
             if (BoardDisplay.ours(e.getDamager(), this)) {
                 e.setCancelled(true); // the podium's firework never hurts anyone
+            }
+        });
+        // 0.40.0: a cushion is furniture: nobody breaks it, and it never becomes an item
+        g.on(this, org.bukkit.event.entity.EntityDamageEvent.class, EventPriority.LOWEST, false, e -> {
+            if (ClubCushions.ours(e.getEntity())) {
+                e.setCancelled(true);
+            }
+        });
+        g.on(this, org.bukkit.event.entity.EntityDropItemEvent.class, EventPriority.LOWEST, false, e -> {
+            if (ClubCushions.ours(e.getEntity())) {
+                e.setCancelled(true);
             }
         });
         g.on(this, org.bukkit.event.player.PlayerMoveEvent.class, EventPriority.HIGH, true, e -> watch.moved(e));
@@ -407,6 +426,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (feastTable != null) {
             feastTable.remove();
+        }
+        if (cushions != null) {
+            cushions.remove();
         }
         if (room != null) {
             room.stop();
@@ -749,6 +771,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (feastTable != null) {
                 feastTable.remove();
             }
+            if (cushions != null) {
+                cushions.remove();
+            }
             wasOpen = false;
             return;
         }
@@ -801,6 +826,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (familyWeek != null) {
             familyWeek.second(now);
+        }
+        if (cushions != null) {
+            cushions.second(r);
         }
         feast(now);
     }
@@ -904,6 +932,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (feastTable != null) {
             feastTable.remove();
+        }
+        if (cushions != null) {
+            cushions.remove();
         }
         room = newRoom();
         room.start();

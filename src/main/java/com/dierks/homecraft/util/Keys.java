@@ -209,6 +209,13 @@ public final class Keys {
     public static NamespacedKey TURKEY;
     /** On the Family Feast's floating "Feast Pot" name over the pot (0.38.6). Never persistent; swept at start. */
     public static NamespacedKey FEAST;
+    /**
+     * On a Clubhouse cushion (0.40.0, 26.3): the seat's number (INTEGER). Anyone may sit on it, even in a game
+     * session; nobody can break it or get it as an item. Never persistent; swept when the Clubhouse starts.
+     * Deliberately NOT {@link #GAME_ENTITY}: the games' guard keeps a rider on a game entity and lets nobody else
+     * touch one.
+     */
+    public static NamespacedKey CLUB_SEAT;
     /** On the Copper Golem Brush (0.38.4): the tool that picks a Copper Golem's chests (BYTE 1). */
     public static NamespacedKey GOLEM_BRUSH;
     /** On a Copper Golem: the chests it may put things in, packed x/y/z (LONG_ARRAY), and their world (String). */
@@ -284,6 +291,7 @@ public final class Keys {
         HARVEST_DROP = new NamespacedKey(plugin, "harvest_drop");
         TURKEY = new NamespacedKey(plugin, "turkey");
         FEAST = new NamespacedKey(plugin, "feast");
+        CLUB_SEAT = new NamespacedKey(plugin, "club_seat");
         GOLEM_BRUSH = new NamespacedKey(plugin, "golem_brush");
         GOLEM_CHESTS = new NamespacedKey(plugin, "golem_chests");
         GOLEM_WORLD = new NamespacedKey(plugin, "golem_world");

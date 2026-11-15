@@ -559,9 +559,12 @@ public final class KitGuardListener implements Listener {
         }
     }
 
-    /** A session player touches only their own boat; nobody else touches a game entity. */
+    /**
+     * A session player touches only their own boat; nobody else touches a game entity. A Clubhouse cushion
+     * (0.40.0) is furniture: anyone may sit on it.
+     */
     private void guardEntity(Player p, Entity target, Runnable cancel) {
-        if (!on()) {
+        if (!on() || WorldEntities.seat(target)) {
             return;
         }
         safely("a game entity check", () -> {

@@ -29,7 +29,7 @@ class GravesMigrationTest {
         HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
         YamlConfiguration after = LayoutFixtures.reread(c);
         YamlConfiguration bundled = LayoutFixtures.bundled();
-        assertEquals(27, after.getInt("config_revision"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, after.getInt("config_revision"));
         for (String key : List.of("graves.enabled", "graves.xp_percent", "graves.unlock_after_minutes",
                 "graves.expire_after_hours", "graves.sneak_opens_menu", "graves.disabled_worlds")) {
             assertEquals(bundled.get(key), after.get(key), key + " is the shipped value");

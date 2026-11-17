@@ -36,12 +36,26 @@ public final class FameBoard {
     private FameBoard() {
     }
 
-    /** A course's fastest run (names resolved). */
-    public record CourseTime(String course, String name, long ms) {
+    /**
+     * A course's fastest run (names resolved), and (0.41.0) who ran it, or {@code null} where it isn't known: the
+     * Trophy Room puts that player's head beside the trophy.
+     */
+    public record CourseTime(String course, String name, long ms, UUID id) {
+
+        public CourseTime(String course, String name, long ms) {
+            this(course, name, ms, null);
+        }
     }
 
-    /** A round of golf: the course, who (or {@code null} for the viewer's own), the strokes and against par. */
-    public record GolfRound(String course, String name, int strokes, int vsPar) {
+    /**
+     * A round of golf: the course, who (or {@code null} for the viewer's own), the strokes and against par; and
+     * (0.41.0) who played it, or {@code null}.
+     */
+    public record GolfRound(String course, String name, int strokes, int vsPar, UUID id) {
+
+        public GolfRound(String course, String name, int strokes, int vsPar) {
+            this(course, name, strokes, vsPar, null);
+        }
     }
 
     /** A Weekly Cup's leader this week. */
@@ -95,7 +109,7 @@ public final class FameBoard {
             }
             GamesDao.ScoreRow r = raw.records().get(c.id());
             if (r != null) {
-                records.add(new CourseTime(c.name(), names.apply(r.player()), r.score()));
+                records.add(new CourseTime(c.name(), names.apply(r.player()), r.score(), r.player()));
             }
             CupEntry lead = raw.cups().get(c.id());
             if (lead != null) {
@@ -117,7 +131,7 @@ public final class FameBoard {
             GamesDao.ScoreRow r = raw.golfRecords().get(g.id());
             if (r != null) {
                 golfRecords.add(new GolfRound(g.name(), names.apply(r.player()), (int) r.score(),
-                        (int) r.score() - g.par()));
+                        (int) r.score() - g.par(), r.player()));
             }
         }
         List<FamilyRow> family = new ArrayList<>();

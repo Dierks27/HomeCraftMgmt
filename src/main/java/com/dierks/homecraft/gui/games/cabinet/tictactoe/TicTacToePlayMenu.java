@@ -55,11 +55,23 @@ public final class TicTacToePlayMenu extends GameMenu {
     private int seen = -1;
     private int arcadeIn = -1;
     private boolean told;
+    /** 0.41.0: tapped in the Arcade Room. */
+    private final boolean kid;
 
     /** @param back what Back does (the first screen) */
     public TicTacToePlayMenu(HomeCraftManagement plugin, TicTacToe game, Player viewer, Runnable back,
                              TicTacToeMatch match) {
+        this(plugin, game, viewer, back, match, false);
+    }
+
+    /**
+     * 0.41.0, @param kid the kid screen (against the Arcade): when the game ends, the bottom row becomes one big Play
+     * again under the finished board (a fresh game at the same level)
+     */
+    public TicTacToePlayMenu(HomeCraftManagement plugin, TicTacToe game, Player viewer, Runnable back,
+                             TicTacToeMatch match, boolean kid) {
         super(plugin, game, viewer, back);
+        this.kid = kid && match.vsArcade();
         this.ttt = game;
         this.match = match;
         this.me = viewer.getUniqueId();
@@ -111,6 +123,9 @@ public final class TicTacToePlayMenu extends GameMenu {
         set(50, over ? Menus.icon(Material.OAK_SIGN, "&eHigh scores &7- wins")
                         : Menus.icon(Material.OAK_SIGN, "&7High scores &8- after this game"),
                 over ? e -> ttt.scores(viewer, back) : null);
+        if (kid && over) {
+            bigAgain(slots(45, 53), this::newGame);
+        }
         seen = match.version();
     }
 
@@ -172,7 +187,7 @@ public final class TicTacToePlayMenu extends GameMenu {
         if (!ttt.mayPlay(viewer)) {
             return;
         }
-        new TicTacToePlayMenu(plugin, ttt, viewer, back, ttt.vsArcade(viewer, match.level())).open(viewer);
+        new TicTacToePlayMenu(plugin, ttt, viewer, back, ttt.vsArcade(viewer, match.level()), kid).open(viewer);
     }
 
     private ItemStack yourTile() {

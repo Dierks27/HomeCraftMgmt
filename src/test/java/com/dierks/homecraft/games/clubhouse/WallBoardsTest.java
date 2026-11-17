@@ -23,8 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WallBoardsTest {
 
-    private static final Box BOX = ClubhouseSettings.defaults().box();
-    private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
+    /** The main room's box (the boards hang there); the plan is the whole room, side rooms and all (0.41.0). */
+    private static final Box BOX = ClubhouseSettings.defaults().mainBox();
+    private static final ClubhouseSite SITE = ClubhousePlanner.plan(ClubhouseSettings.defaults().box());
     private static final List<String> ALL = List.of(WallBoards.RESULTS, WallBoards.FAME, WallBoards.PLAYING,
             WallBoards.STATS);
 
@@ -112,10 +113,12 @@ class WallBoardsTest {
 
     @Test
     void theBoardsChangeNoBlockOfTheRoom() {
-        assertEquals(4, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
-                + " jukebox corner's, 0.38.6's 3 the feast tables' and 0.40.0's 4 the golf club's, not theirs"
+        assertEquals(5, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
+                + " jukebox corner's, 0.38.6's 3 the feast tables', 0.40.0's 4 the golf club's and 0.41.0's 5 the side"
+                + " rooms', not theirs"
                 + " (ClubhousePlannerTest pins the room)");
-        assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same blocks");
+        assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(ClubhouseSettings.defaults().box()).plan().hash(),
+                "the same blocks");
         assertEquals(SITE.board().x(), BOX.minX() + 16.0, 0.001, "the results board's old spot is kept (the check)");
     }
 

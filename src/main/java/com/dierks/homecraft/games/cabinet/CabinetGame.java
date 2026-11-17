@@ -224,6 +224,9 @@ public abstract class CabinetGame implements Game {
             }
         }
         paid += featuredBonus(player);
+        if (result != null && result.personalBest()) {
+            games().cheer(player, this, false, true); // 0.41.0: the Arcade Room's sound and sparkles
+        }
         boolean gold = milestonesReached(s.milestonesFor(board), milestoneValue, lowerIsBetter).contains(3);
         games().tellProgress(g -> g.cabinetFinished(player, id(), false, gold)); // quests and achievements (E4)
         return new Finish(result, reached, paid, false);
@@ -250,6 +253,14 @@ public abstract class CabinetGame implements Game {
         paid += featuredBonus(player);
         games().tellProgress(g -> g.cabinetFinished(player, id(), false, false)); // quests and achievements (E4)
         return new Finish(result, List.of(), paid, false);
+    }
+
+    /**
+     * 0.41.0: a game was won (a board cleared, a match won against the Arcade): the Arcade Room cheers it with a sound
+     * and sparkles at the cabinet. Moves nothing: rewards are the finish's own.
+     */
+    protected void cheerWin(Player player) {
+        games().cheer(player, this, true, false);
     }
 
     /**

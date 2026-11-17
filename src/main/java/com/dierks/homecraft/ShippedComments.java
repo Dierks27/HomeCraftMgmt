@@ -39,6 +39,8 @@ import java.util.Set;
  * {@code keep.area}'s (it said every Sky Rings course fits a plot). 0.37.2 through 0.38.4 shipped one text on each.
  * Revision 27 (graves, {@link GravesMigration}) makes {@code courier.package.keep_on_death}'s stale: it said "the grave
  * is the recovery path", and HCM's own graves never take a courier package. 0.35.0 through 0.38.8 shipped one text.
+ * Revision 28 (the Clubhouse's side rooms, {@link ClubhouseRoomsMigration}) makes {@code games.clubhouse.origin}'s stale:
+ * it said the box is 32 x 16 x 32. 0.35.0 through 0.40.0 shipped one text.
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
  * an earlier version of this plugin shipped on that key (0.35.0's, 0.36.0's, 0.37.2's, 0.38.0's or 0.38.1's), told
@@ -89,6 +91,9 @@ final class ShippedComments {
     /** {@code GravesMigration.REVISION}: graves, which never take a courier package. */
     private static final int REV_GRAVES = GravesMigration.REVISION;
 
+    /** {@code ClubhouseRoomsMigration.REVISION}: the Clubhouse's side rooms, a box 16 rows deeper. */
+    private static final int REV_ROOMS = ClubhouseRoomsMigration.REVISION;
+
     /**
      * Every comment revisions 20, 21, 22, 23, 24 and 25 make stale, in file order (frozen: 0.35.0's, 0.36.0's,
      * 0.37.2's, 0.38.0's and 0.38.1's texts).
@@ -135,7 +140,9 @@ final class ShippedComments {
             // the windows and the race now grow with the track by themselves
             new Stale("games.race_night.max_race_minutes", REV_AREAS, Set.of("5f2d54fc3b5d2ba7")),
             // "the grave is the recovery path" (0.35.0 to 0.38.8, one text): a grave never takes a package (0.39.0)
-            new Stale("courier.package.keep_on_death", REV_GRAVES, Set.of("3fd8de1757077f40")));
+            new Stale("courier.package.keep_on_death", REV_GRAVES, Set.of("3fd8de1757077f40")),
+            // "It is 32 x 16 x 32" (0.35.0 to 0.40.0, one text): the side rooms make it 32 x 16 x 48 (0.41.0)
+            new Stale("games.clubhouse.origin", REV_ROOMS, Set.of("9094cbcd775398bd", "0409c9b5cef936f3")));
 
     private ShippedComments() {
     }

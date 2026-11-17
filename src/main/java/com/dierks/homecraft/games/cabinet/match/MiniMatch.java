@@ -119,6 +119,13 @@ public final class MiniMatch extends CabinetGame {
         new MiniMatchMenu(ctx.plugin(), this, player, back).open(player);
     }
 
+    /** 0.41.0, a tap in the Clubhouse's Arcade Room: a Classic board at once, the kid screen. */
+    @Override
+    public boolean playClassic(Player player, Runnable back) {
+        new com.dierks.homecraft.gui.games.cabinet.match.MiniMatchPlayMenu(ctx.plugin(), this, player, back, null, classicSeed(), true).open(player);
+        return true;
+    }
+
     @Override
     public void feed(FeedWriter out) {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, LOWER_IS_BETTER);
@@ -231,6 +238,7 @@ public final class MiniMatch extends CabinetGame {
                     + dayStanding(f.result())));
         } else {
             player.sendMessage(Text.of("&aAll pairs found in " + score + "!" + standing(f.result())));
+            cheerWin(player); // 0.41.0: a board cleared is a win
         }
         if (daily == null ? f.result().personalBest() : !f.practice() && goal) {
             Sounds.won(player);

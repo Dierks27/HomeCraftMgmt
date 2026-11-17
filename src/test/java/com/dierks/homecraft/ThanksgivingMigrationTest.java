@@ -106,7 +106,7 @@ class ThanksgivingMigrationTest {
         YamlConfiguration c = v0385();
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
         assertEquals(List.of(WINDOWS_INFO, SEASONS_INFO, CATALOG_INFO, MINI_INFO,
-                "Config migration: config_revision 25 → 27."), log, "one INFO a list, and the revision (27, graves,"
+                "Config migration: config_revision 25 → 28."), log, "one INFO a list, and the revision (27, graves,"
                         + " refreshes one comment quietly)");
         assertEquals(List.of(), warns(log));
         YamlConfiguration b = bundled();
@@ -122,7 +122,7 @@ class ThanksgivingMigrationTest {
         List<String> catalog = ids(c, ThanksgivingMigration.CATALOG);
         int wheat = catalog.indexOf("wheat");
         assertEquals(NEW_FOODS, catalog.subList(wheat + 1, wheat + 7), "the six right after wheat, in order");
-        assertEquals(27, c.getInt("config_revision"));
+        assertEquals(28, c.getInt("config_revision"));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 

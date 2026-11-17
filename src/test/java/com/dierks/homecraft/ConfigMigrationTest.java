@@ -295,9 +295,9 @@ class ConfigMigrationTest {
     void revision26OnAFileThatHasTheRowsOnlyStampsTheRevision() throws Exception {
         YamlConfiguration onDisk = bundled();
         onDisk.set("config_revision", 25);
-        assertEquals(List.of("Config migration: config_revision 25 → 27."),
+        assertEquals(List.of("Config migration: config_revision 25 → 28."),
                 HomeCraftManagement.migrateConfig(onDisk, "world"), "nothing to add, nothing to say");
-        assertEquals(27, onDisk.getInt("config_revision"));
+        assertEquals(28, onDisk.getInt("config_revision"));
         assertEquals(bundled().getMapList("market.catalog"), onDisk.getMapList("market.catalog"));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
     }

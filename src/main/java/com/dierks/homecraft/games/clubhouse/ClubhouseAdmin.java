@@ -33,6 +33,10 @@ import java.util.Locale;
  *   <li>{@code feast} (0.38.6): the owner-built room's feast table, where the admin stands on it facing across
  *       it (ten plates to their right, ten more ahead). Optional: without it the Family Feast shows only at the
  *       pot.</li>
+ *   <li>{@code cabinet <game> [clear]}, {@code trophyroom [clear]} and {@code door arcade|trophy [clear]} (0.41.0):
+ *       the owner-built room's Arcade Room cabinets (one per game, on the block the admin stands on, facing their
+ *       way; {@code cabinet all clear} takes every one down), its trophy shelf (the first trophy where the admin stands
+ *       on their shelf, back to the wall, the row to their right) and the signs over its two doorways. Optional.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -48,7 +52,7 @@ final class ClubhouseAdmin implements GameAdmin {
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
-            "feast", "generated", "rebuild", "off");
+            "feast", "cabinet", "trophyroom", "door", "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -69,6 +73,19 @@ final class ClubhouseAdmin implements GameAdmin {
         switch (sub) {
             case "status" -> out.addAll(status(room, game.visits().size(), closedWhy()));
             case "tp" -> tp(sender, room);
+            case "cabinet", "trophyroom", "door" -> {
+                if (!(sender instanceof Player p)) {
+                    out.add("&cOnly a player can do that - stand where it goes first.");
+                } else if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    out.add(sideRoom(room, sub, args, p, id -> {
+                        var g = game.games().game(id);
+                        return g == null ? null : g.kind();
+                    }));
+                    game.sideRoomsChanged();
+                }
+            }
             case "here", "podium", "board", "trophies", "jukebox", "feast" -> {
                 if (!(sender instanceof Player p)) {
                     out.add("&cOnly a player can do that - stand in the room first.");
@@ -163,6 +180,46 @@ final class ClubhouseAdmin implements GameAdmin {
         };
     }
 
+    /**
+     * 0.41.0: {@code cabinet <game> [clear]}, {@code cabinet all clear}, {@code trophyroom [clear]} and
+     * {@code door arcade|trophy [clear]}, where the admin stands. A cabinet must be an arcade cabinet game, never a
+     * game of chance ({@link KidSet#refusal}).
+     */
+    static String sideRoom(ClubhouseRoom room, String sub, String[] args, Player p,
+                           java.util.function.Function<String, com.dierks.homecraft.games.GameKind> kindOf) {
+        Location l = p.getLocation();
+        String world = l.getWorld() == null ? "" : l.getWorld().getName();
+        return sideRoom(room, sub, args, new ClubhouseRoom.Place(world, l.getX(), l.getY(), l.getZ(), l.getYaw()),
+                kindOf);
+    }
+
+    /** {@link #sideRoom(ClubhouseRoom, String, String[], Player, java.util.function.Function)} at a place (tests). */
+    static String sideRoom(ClubhouseRoom room, String sub, String[] args, ClubhouseRoom.Place at,
+                           java.util.function.Function<String, com.dierks.homecraft.games.GameKind> kindOf) {
+        String a1 = args != null && args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "";
+        boolean clear = args != null && args.length > 1 && args[args.length - 1].equalsIgnoreCase("clear");
+        return switch (sub) {
+            case "cabinet" -> {
+                if (a1.isEmpty() || a1.equals("clear")) {
+                    yield "&cWhich game? &e/hcm games clubhouse cabinet <game> &7(or &ecabinet all clear&7)";
+                }
+                if (clear) {
+                    yield room.clearCabinet(a1);
+                }
+                String why = KidSet.refusal(a1, kindOf);
+                yield why != null ? "&c" + Character.toUpperCase(why.charAt(0)) + why.substring(1) + "."
+                        : room.cabinet(a1, at);
+            }
+            case "trophyroom" -> room.trophyRoom(clear ? null : at);
+            default -> {
+                if (!ClubhouseRoom.DOORS.contains(a1)) {
+                    yield "&cWhich door? &e/hcm games clubhouse door arcade|trophy [clear]";
+                }
+                yield room.door(a1, clear ? null : at);
+            }
+        };
+    }
+
     private static String notRunning(String why) {
         return "&cThe Clubhouse isn't running: " + why + ".";
     }
@@ -231,6 +288,26 @@ final class ClubhouseAdmin implements GameAdmin {
                     out.add(w);
                 }
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("door")) {
+            for (String w : ClubhouseRoom.DOORS) {
+                if (w.startsWith(last)) {
+                    out.add(w);
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("cabinet")) {
+            for (com.dierks.homecraft.games.Game g : game.games().games()) {
+                if (g.kind() == com.dierks.homecraft.games.GameKind.CABINET && g.id().startsWith(last)) {
+                    out.add(g.id());
+                }
+            }
+            if ("all".startsWith(last)) {
+                out.add("all");
+            }
+        } else if ((args.length == 2 && args[0].equalsIgnoreCase("trophyroom"))
+                || (args.length == 3 && (args[0].equalsIgnoreCase("door") || args[0].equalsIgnoreCase("cabinet")))) {
+            if ("clear".startsWith(last)) {
+                out.add("clear");
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("podium")) {
             for (String n : List.of("1", "2", "3")) {
                 if (n.startsWith(last)) {
@@ -246,6 +323,8 @@ final class ClubhouseAdmin implements GameAdmin {
             "&e/hcm games clubhouse status|tp &7- the Clubhouse: how it is, go and look",
             "&e/hcm games clubhouse here|podium <1|2|3>|board [fame|playing|stats]|trophies|jukebox|feast &7- use a"
                     + " room you built (stand where it goes, facing into the room)",
+            "&e/hcm games clubhouse cabinet <game>|trophyroom|door arcade|trophy [clear] &7- your room's Arcade Room"
+                    + " cabinets, trophy shelf and doorway signs (stand where it goes, facing out)",
             "&e/hcm games clubhouse generated|rebuild confirm|off &7- the built room, build it again, switch it off");
 
     @Override

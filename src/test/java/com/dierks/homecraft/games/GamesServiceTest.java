@@ -300,4 +300,71 @@ class GamesServiceTest {
         return host.logs.stream().filter(r -> r.getLevel() == java.util.logging.Level.INFO
                 && ("Games: Alex was told: " + message).equals(r.getMessage())).count();
     }
+
+    // ---- 0.41.0: a cabinet tapped in the Clubhouse's Arcade Room ------------------------------------
+
+    /**
+     * A kid's cabinet tap is {@code /hcm play}'s own entry point with its own gate (a game switched off, a world
+     * without games, a missing permission: refused the same way, nothing opened), then Classic at once (never the
+     * game's first screen, so never the daily-or-practice question); a game with no Classic start opens its first
+     * screen instead.
+     */
+    @Test
+    void aKidsCabinetTapGoesThroughThePlayGateThenStraightToClassic() {
+        games.start();
+        assertTrue(games.openKid(alex.player, "test_snake"), "opened");
+        assertEquals(1, snake.classic, "Classic at once");
+        assertEquals(0, snake.opened, "not the first screen with its daily question");
+
+        snake.open = false;
+        assertFalse(games.openKid(alex.player, "test_snake"), "a closed game");
+        assertEquals(Refusal.CLOSED, games.canOpen(alex.player, snake), "the gate's own refusal");
+        assertFalse(games.open(alex.player, "test_snake", null), "as /hcm play refuses it");
+        snake.open = true;
+
+        alex.world = GamesKit.world("world_nether");
+        alex.said.clear();
+        assertFalse(games.openKid(alex.player, "test_snake"), "a world without games");
+        assertTrue(alex.heard().contains("Games can't be played in this world."), alex.heard());
+        alex.world = GamesKit.world("world");
+
+        alex.denied.add(PlayGate.PERMISSION_PLAY);
+        assertFalse(games.openKid(alex.player, "test_snake"), "no hcm.games.play");
+        alex.denied.clear();
+        assertEquals(1, snake.classic, "none of the refused taps started anything");
+
+        snake.hasClassic = false;
+        assertTrue(games.openKid(alex.player, "worm"), "by alias too");
+        assertEquals(1, snake.opened, "a cabinet with no Classic start opens its own first screen");
+    }
+
+    /** A game of chance or a course never opens from a kid's cabinet, whatever the room's list says. */
+    @Test
+    void aKidsCabinetNeverOpensAGameOfChanceOrACourse() {
+        games.start();
+        alex.said.clear();
+        assertFalse(games.openKid(alex.player, "test_slots"), "a game of chance");
+        assertEquals(0, slots.opened + slots.classic, "nothing opened");
+        assertTrue(alex.heard().contains("isn't an arcade cabinet"), alex.heard());
+        assertFalse(games.openKid(alex.player, "river_run"), "a course");
+        assertFalse(games.openKid(alex.player, "test_trials"), "a course game");
+        assertEquals(0, trials.played + trials.opened + trials.classic, "nothing started");
+        assertFalse(games.openKid(alex.player, "nope"), "no such game");
+    }
+
+    /** A cheer reaches its listener only for a win or a best of a skill game; a game of chance is never cheered. */
+    @Test
+    void cheersAreForSkillGamesOnly() {
+        List<GamesService.Cheer> heard = new java.util.ArrayList<>();
+        java.util.function.Consumer<GamesService.Cheer> l = heard::add;
+        games.onCheer(l);
+        games.cheer(alex.player, snake, true, false);
+        games.cheer(alex.player, snake, false, false);
+        games.cheer(alex.player, slots, true, true);
+        assertEquals(1, heard.size(), "one win, nothing for no win and nothing for chance: " + heard);
+        assertEquals("test_snake", heard.get(0).gameId());
+        games.noCheers(l);
+        games.cheer(alex.player, snake, false, true);
+        assertEquals(1, heard.size(), "stopped listening");
+    }
 }

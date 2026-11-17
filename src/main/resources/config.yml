@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 27
+config_revision: 28
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -2562,9 +2562,10 @@ games:
     # true = the room builds itself; nothing happens while games.enabled is false. false = every race
     # and round works exactly as before.
     enabled: true
-    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
-    # from every Fresh Courses area, the kept courses and the Falling Floors arena, and 16 from
-    # hand-built courses. The shipped spot is 576 blocks from everything else, out of sight.
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 48 (the main room, and the
+    # Arcade Room and Trophy Room in its last 16 rows) and must stay 32 blocks from every Fresh
+    # Courses area, the kept courses and the Falling Floors arena, and 16 from hand-built courses.
+    # The shipped spot is 576 blocks from everything else, out of sight.
     origin: [6080, 160, 8544]
     # Minutes someone may stay with no race or party going before they are sent home (a warning
     # comes a minute before).
@@ -2588,3 +2589,17 @@ games:
     # The walls show this week's best, who's playing now and your own stats (only you see yours).
     # false = just the results board.
     boards: true
+    # Two rooms off the Foyer for someone who can't read yet, through open archways with a picture
+    # over each and a coloured path to it.
+    arcade_room:
+      # A cabinet for each game below: tap it (either click) and the game starts in Classic at
+      # once - free, unlimited, never today's scored try. false = the room isn't built.
+      enabled: true
+      # The cabinets, in order (at most 6). Any arcade cabinet game may be listed; a game of
+      # chance never opens here, even if listed. Also: snake, connect_four, creeper_sweeper,
+      # ore_merge.
+      games: [whack_a_zombie, simon_says, mini_match, tic_tac_toe]
+    trophy_room:
+      # The all-time records as trophies, each with its holder's head beside it, and last week's
+      # top three on a podium. Your own trophies sparkle when you walk in. false = not built.
+      enabled: true

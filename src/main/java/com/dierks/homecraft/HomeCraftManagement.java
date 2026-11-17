@@ -107,7 +107,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * Each of 20, 21, 22, 23, 24, 25 and 27 also refreshes the comments it makes stale, where they are still the
      * plugin's own words ({@link ShippedComments}); 26 makes none stale.
      */
-    static final int CONFIG_REVISION = 27;
+    static final int CONFIG_REVISION = 28;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -234,6 +234,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.candy.CandyService harvest;
     private com.dierks.homecraft.arcade.turkey.TurkeyService turkey;
     private com.dierks.homecraft.arcade.feast.FeastService feast;
+    /** 0.41.0: HCM's models in CraftBridge's pack (the Clubhouse's side rooms); never null after enable. */
+    private com.dierks.homecraft.pack.PackModels packModels;
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
@@ -663,6 +665,22 @@ public final class HomeCraftManagement extends JavaPlugin {
             }
         }
 
+        // 0.41.0: the Clubhouse side rooms' models in CraftBridge's pack (it builds the pack once every plugin has
+        // enabled, so a source added here is in the first build); the drop-ins are looked at again once a minute
+        this.packModels = new com.dierks.homecraft.pack.PackModels(this);
+        try {
+            packModels.enable();
+        } catch (Throwable t) {
+            getLogger().warning("Pack: couldn't add HCM's models: " + t.getMessage());
+        }
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            try {
+                packModels.check();
+            } catch (Throwable t) {
+                getLogger().warning("Pack: " + t.getMessage());
+            }
+        }, 1200L, 1200L);
+
         getLogger().info("HomeCraft Management enabled.");
     }
 
@@ -866,6 +884,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         recipeManager.registerRecipes();
         if (golems != null) {
             golems.reload(); // the switch and the brush's recipe
+        }
+        if (packModels != null) {
+            packModels.check(); // 0.41.0: the owner's drop-in models, looked at again
         }
         market.reload(); // also tells the live market the catalog changed
         if (marketSim != null) {
@@ -1435,6 +1456,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             // Graves: the graves: section is the backfill's; the courier package's keep_on_death comment no longer says
             // the grave is its recovery path, where the owner hasn't edited it. See GravesMigration.
             GravesMigration.apply(c);
+        }
+        if (from < 28) {
+            // The Clubhouse's side rooms: the box is 32 x 16 x 48 now, and games.clubhouse.origin's comment said 32 x 16
+            // x 32, where the owner hasn't edited it. The new keys are the backfill's. See ClubhouseRoomsMigration.
+            ClubhouseRoomsMigration.apply(c);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -2725,6 +2751,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Catch the Turkey (0.38.6), or null before enable / after disable. */
     public com.dierks.homecraft.arcade.turkey.TurkeyService turkey() {
         return turkey;
+    }
+
+    /** 0.41.0: HCM's models in CraftBridge's pack, or null before enable. */
+    public com.dierks.homecraft.pack.PackModels packModels() {
+        return packModels;
     }
 
     /** The Family Feast (0.38.6), or null before enable / after disable. */

@@ -42,6 +42,12 @@ class ClubhouseSettingsTest {
                 "0.38.2's six settings read 0.38.3's as shipped");
         assertEquals(32, d.box().sizeX(), "32 wide");
         assertEquals(16, d.box().sizeY(), "16 high");
+        assertEquals(48, d.box().sizeZ(), "0.41.0: 48 deep, the side rooms in its last 16 rows");
+        assertEquals(32, d.mainBox().sizeZ(), "the main room is 0.40.0's 32");
+        assertEquals(d.box().minZ() + 32, d.annexBox().minZ(), "the side rooms south of it");
+        assertEquals(d.box().maxZ(), d.annexBox().maxZ());
+        assertTrue(d.arcadeRoom() && d.trophyRoom(), "0.41.0: both side rooms ship on");
+        assertEquals(ClubhouseSettings.KID_GAMES, d.arcadeGames(), "the kid set");
         List<String> warns = new ArrayList<>();
         assertEquals(d, read(Map.of(), warns), "an empty block reads as shipped");
         assertEquals(List.of(), warns, "without a WARN");
@@ -116,5 +122,28 @@ class ClubhouseSettingsTest {
         assertFalse(s.enabled(), "the only reason to touch a switch is to turn something off");
         assertTrue(warns.contains("INVALID"), "and it closes the Clubhouse, as every games switch does: " + warns);
         assertFalse(read(Map.of("enabled", false), new ArrayList<>()).enabled(), "off is off");
+    }
+
+    /**
+     * 0.41.0: {@code arcade_room.enabled}, {@code arcade_room.games} (lower-cased, each once, at most six with one
+     * WARN for the rest) and {@code trophy_room.enabled} are read from config; a game of chance in the list is the
+     * room's to refuse ({@link KidSetTest}).
+     */
+    @Test
+    void theSideRoomsAreReadFromConfig() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("arcade_room", Map.of("enabled", false, "games", List.of("Snake", "snake", "simon_says", "ore_slots",
+                "mini_match", "whack_a_zombie", "tic_tac_toe", "connect_four")));
+        m.put("trophy_room", Map.of("enabled", false));
+        List<String> warns = new ArrayList<>();
+        ClubhouseSettings s = read(m, warns);
+        assertFalse(s.arcadeRoom());
+        assertFalse(s.trophyRoom());
+        assertEquals(List.of("snake", "simon_says", "ore_slots", "mini_match", "whack_a_zombie", "tic_tac_toe"),
+                s.arcadeGames(), "in order, once each, the first six");
+        assertEquals(1, warns.size(), "one WARN for the seventh: " + warns);
+        assertTrue(warns.get(0).contains("games.clubhouse.arcade_room.games"), warns.get(0));
+        assertEquals(new ClubhousePlanner.Rooms(false, false), s.rooms());
+        assertTrue(ClubhouseSettings.defaults().withRooms(true, false).rooms().arcade());
     }
 }

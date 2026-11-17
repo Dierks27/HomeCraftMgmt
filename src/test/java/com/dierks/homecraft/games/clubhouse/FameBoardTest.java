@@ -52,7 +52,10 @@ class FameBoardTest {
                 "the week's best round: fewest strokes against par (-2 beats -1)");
         assertEquals(List.of(new FameBoard.CupLead("River Run", "Lee", 71_500)), f.cups(), "the Cup's leader");
         assertEquals(2, f.records().size(), "the records");
-        assertEquals(new FameBoard.GolfRound("Tiny Golf", "Lee", 22, -4), f.golfRecords().get(0), "golf's record");
+        assertEquals(new FameBoard.GolfRound("Tiny Golf", "Lee", 22, -4, LEE), f.golfRecords().get(0), "golf's record,"
+                + " and (0.41.0) who holds it, for the Trophy Room's head");
+        assertEquals(List.of(LEE, SAM), f.records().stream().map(FameBoard.CourseTime::id).toList(),
+                "each course record's holder");
 
         List<String> pages = FameBoard.pages(f);
         assertEquals(3, pages.size(), "this week's best, this week, the records (no family week): " + pages);

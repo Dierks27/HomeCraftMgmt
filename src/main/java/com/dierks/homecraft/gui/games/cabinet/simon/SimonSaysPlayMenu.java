@@ -67,6 +67,8 @@ public final class SimonSaysPlayMenu extends GameMenu {
     private int flashPad = -1;
     private int flashLeft;
     private CabinetGame.Finish finish;
+    /** 0.41.0: tapped in the Arcade Room. */
+    private final boolean kid;
 
     /**
      * @param back  the first screen
@@ -74,7 +76,14 @@ public final class SimonSaysPlayMenu extends GameMenu {
      */
     public SimonSaysPlayMenu(HomeCraftManagement plugin, SimonSays game, Player viewer, Runnable back,
                              CabinetGame.DailyStart daily, long seed) {
+        this(plugin, game, viewer, back, daily, seed, false);
+    }
+
+    /** 0.41.0, @param kid the kid screen (Classic only): when the game ends, the pads become one big Play again */
+    public SimonSaysPlayMenu(HomeCraftManagement plugin, SimonSays game, Player viewer, Runnable back,
+                             CabinetGame.DailyStart daily, long seed, boolean kid) {
         super(plugin, game, viewer, back);
+        this.kid = kid && daily == null;
         this.simon = game;
         this.daily = daily;
         this.engine = new SimonEngine(seed);
@@ -119,6 +128,9 @@ public final class SimonSaysPlayMenu extends GameMenu {
                     e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> simon.scores(viewer, daily == null ? Scores.CLASSIC : simon.todayBoard(), back));
+            if (kid) {
+                bigAgain(slots(9, 53), this::again);
+            }
         }
     }
 
@@ -213,7 +225,7 @@ public final class SimonSaysPlayMenu extends GameMenu {
             return;
         }
         if (daily == null) {
-            new SimonSaysPlayMenu(plugin, simon, viewer, back, null, simon.classicSeed()).open(viewer);
+            new SimonSaysPlayMenu(plugin, simon, viewer, back, null, simon.classicSeed(), kid).open(viewer);
         } else {
             CabinetGame.DailyStart next = simon.startDaily(viewer);
             if (next == null) {

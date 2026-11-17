@@ -407,6 +407,24 @@ public final class GamesService {
      * @return whether something opened (the player has been told why not)
      */
     public boolean open(Player player, String id, Runnable back) {
+        return open(player, id, back, false);
+    }
+
+    /**
+     * 0.41.0, a tap on a cabinet in the Clubhouse's Arcade Room: {@code /hcm play <id>}'s own entry point and gate,
+     * then Classic at once ({@link Game#playClassic}; a game with none opens its first screen). Only a cabinet: a game
+     * of chance, a course or anything else is refused, whatever the room's list says. Never today's scored try.
+     *
+     * @return whether something opened (the player has been told why not)
+     */
+    public boolean openKid(Player player, String id) {
+        return open(player, id, player::closeInventory, true);
+    }
+
+    /** Refused at a kid's cabinet: not an arcade cabinet (a game of chance, a course). */
+    public static final Refusal NOT_A_CABINET = Refusal.of("That one isn't an arcade cabinet.");
+
+    private boolean open(Player player, String id, Runnable back, boolean kid) {
         Target t = resolve(id);
         if (t == null) {
             tell(player, Refusal.of("There's no game called \"" + (id == null ? "" : id.trim())
@@ -414,6 +432,10 @@ public final class GamesService {
             return false;
         }
         Game game = t.game();
+        if (kid && (t.playable() != null || game.kind() != GameKind.CABINET)) {
+            tell(player, NOT_A_CABINET);
+            return false;
+        }
         // Going back to a round already paid for is not a new play: no gate (spec §5.2), or a
         // pause or a world change would leave it to be finished by the exit rule.
         boolean resume = t.playable() == null && enabled(game) && rounds.openRound(player.getUniqueId(), game.id()) != null;
@@ -421,6 +443,14 @@ public final class GamesService {
         if (refusal != null) {
             tell(player, refusal);
             return false;
+        }
+        if (kid) {
+            guard(game, () -> {
+                if (!game.playClassic(player, back)) {
+                    game.open(player, back);
+                }
+            });
+            return !failed(game);
         }
         if (t.playable() == null) {
             guard(game, () -> game.open(player, back));
@@ -724,6 +754,44 @@ public final class GamesService {
             call.accept(progress);
         } catch (RuntimeException | LinkageError e) {
             host.logger().log(java.util.logging.Level.WARNING, "Games: a quest/achievement listener failed", e);
+        }
+    }
+
+    // ---- 0.41.0: cheers at a cabinet ---------------------------------------------------------
+
+    /** A cabinet game was won, or set a new personal best (Classic): what the Arcade Room cheers. */
+    public record Cheer(Player player, String gameId, boolean win, boolean best) {
+    }
+
+    private final java.util.List<java.util.function.Consumer<Cheer>> cheers =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Listen for {@link Cheer}s (the Clubhouse's Arcade Room); {@link #noCheers} stops it. */
+    public void onCheer(java.util.function.Consumer<Cheer> listener) {
+        if (listener != null) {
+            cheers.add(listener);
+        }
+    }
+
+    public void noCheers(java.util.function.Consumer<Cheer> listener) {
+        cheers.remove(listener);
+    }
+
+    /**
+     * Tell the listeners a cabinet game was won or set a new best, guarded: a listener that throws can't break a
+     * game. Nothing a game of chance does is ever cheered.
+     */
+    public void cheer(Player player, Game game, boolean win, boolean best) {
+        if (player == null || game == null || game.kind().chance() || (!win && !best)) {
+            return;
+        }
+        Cheer c = new Cheer(player, game.id(), win, best);
+        for (java.util.function.Consumer<Cheer> l : cheers) {
+            try {
+                l.accept(c);
+            } catch (RuntimeException | LinkageError e) {
+                host.logger().log(java.util.logging.Level.WARNING, "Games: a cheer listener failed", e);
+            }
         }
     }
 

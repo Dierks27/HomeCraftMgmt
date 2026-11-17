@@ -140,7 +140,7 @@ class LegacyFallbackTest {
         c.set("games.clubhouse.origin", Arrays.asList(5376, 160, "4448"));
         p = LayoutFixtures.parse(c, new ArrayList<>());
         assertTrue(p.readable(Clubhouse.SPEC.id()), "numbers written as text are read");
-        assertEquals(LegacyBoxes.clubhouse(), p.settings(Clubhouse.SPEC).box(), "at the room's 0.35 box");
+        assertEquals(LegacyBoxes.clubhouse(), p.settings(Clubhouse.SPEC).mainBox(), "at the room's 0.35 box (its main room: the claim's)");
 
         c = kept();
         c.set("games.falling_floors.origin", "east");

@@ -17,8 +17,9 @@ import java.util.List;
  * @param podium  the three pedestals' standing spots: 1st (middle, highest), 2nd, 3rd
  * @param board   where the results board (a text display) floats, in front of its dark panel
  * @param inside  the room's air: the walls, floor and roof are outside it
+ * @param more    0.41.0: the side rooms' air and their archways' (empty without side rooms)
  */
-public record ClubhouseSite(Plan plan, List<Spot> spawns, List<Spot> podium, Spot board, Box inside) {
+public record ClubhouseSite(Plan plan, List<Spot> spawns, List<Spot> podium, Spot board, Box inside, List<Box> more) {
 
     /**
      * A place to put a player (or the board): the feet and which way they face.
@@ -34,6 +35,12 @@ public record ClubhouseSite(Plan plan, List<Spot> spawns, List<Spot> podium, Spo
         }
         spawns = List.copyOf(spawns == null ? List.of() : spawns);
         podium = List.copyOf(podium == null ? List.of() : podium);
+        more = List.copyOf(more == null ? List.of() : more);
+    }
+
+    /** The main room alone (the tests' shape before 0.41.0). */
+    public ClubhouseSite(Plan plan, List<Spot> spawns, List<Spot> podium, Spot board, Box inside) {
+        this(plan, spawns, podium, board, inside, List.of());
     }
 
     /** The Clubhouse's box (the plan's half). */
@@ -48,6 +55,14 @@ public record ClubhouseSite(Plan plan, List<Spot> spawns, List<Spot> podium, Spo
 
     /** Whether feet at (x, y, z) are in the room (not in a wall, the floor or the roof). */
     public boolean in(double x, double y, double z) {
-        return inside.contains(x, y, z);
+        if (inside.contains(x, y, z)) {
+            return true;
+        }
+        for (Box b : more) {
+            if (b.contains(x, y, z)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

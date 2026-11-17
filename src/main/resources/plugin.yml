@@ -42,6 +42,9 @@ softdepend:
   # Sound Mufflers reach sounds on their way to each player through ProtocolLib. Without it
   # mufflers still place and save their settings, but can only silence minecarts and bees.
   - ProtocolLib
+  # The Clubhouse's side rooms (0.41.0) put their models in CraftBridge's resource pack (its pack
+  # sources API, reached by name). Without it the rooms show vanilla stand-ins.
+  - CraftBridge
   # Not Multiverse-Core or Multiverse-Inventories: this plugin enables BEFORE Multiverse-Core
   # (loadbefore, above), and Multiverse-Inventories depends on Multiverse-Core, so naming either
   # here would be a loop, and Paper would pick the order instead.

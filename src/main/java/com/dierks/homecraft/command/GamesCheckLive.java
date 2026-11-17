@@ -567,15 +567,21 @@ final class GamesCheckLive implements GamesCheck.Facts {
         String world = st.world().isBlank() ? (cfg.common().worlds().isEmpty() ? "" : cfg.common().worlds().get(0))
                 : st.world();
         World w = world.isBlank() ? null : Bukkit.getWorld(world);
-        Box box = cs.box();
+        Box box = cs.mainBox(); // 0.41.0: the main room's box is the claim's; the side rooms' is checked on its own
         List<String> problems = List.of();
+        List<String> annexProblems = List.of();
         if (w != null) {
             BukkitWorldPort port = new BukkitWorldPort(plugin, w);
             boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
             List<Regions.Extra> arena = DailyCourses.arenaExtras(cfg.settings(FallingFloors.SPEC));
-            problems = com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(box, st, arena,
-                    Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(),
-                            w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
+            Regions.WorldFacts facts = new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(), w.getMaxHeight(),
+                    port.border(), port.spawn(), st.safeSpot());
+            List<Regions.Area> handBuilt = Regions.handBuilt(rows());
+            problems = com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(box, st, arena, handBuilt, facts);
+            if (cs.rooms().any()) {
+                annexProblems = com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(cs.annexBox(), st, arena,
+                        handBuilt, facts);
+            }
         }
         ArenaCheck.Claim claim;
         try {
@@ -593,10 +599,18 @@ final class GamesCheckLive implements GamesCheck.Facts {
         boolean hand = running != null && running.handBuilt();
         String handWorld = hand ? running.handWorld() : null;
         boolean handListed = handWorld != null && cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(handWorld));
+        List<String> refused = new java.util.ArrayList<>();
+        if (cs.arcadeRoom() && g != null) {
+            com.dierks.homecraft.games.clubhouse.KidSet.resolve(cs.arcadeGames(), id -> {
+                Game k = g.game(id);
+                return k == null ? null : k.kind();
+            }, com.dierks.homecraft.games.clubhouse.ClubhousePlanner.CABINETS, refused::add);
+        }
         return new ClubhouseCheck.Facts(cfg.enabled() && cs.enabled(), hand, world, w != null, box.describe(),
                 hand ? List.of() : problems, claim, running == null ? null : running.closedWhy(),
                 running != null && running.ready(), running == null ? List.of() : running.handSpots(),
-                running != null && running.handComplete(), handWorld, !hand || handListed);
+                running != null && running.handComplete(), handWorld, !hand || handListed, cs.rooms().any(),
+                hand ? List.of() : annexProblems, running == null ? null : running.sideRooms(), refused);
     }
 
     // ---- end the Clubhouse ----

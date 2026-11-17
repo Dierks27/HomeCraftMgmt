@@ -110,6 +110,17 @@ public final class TicTacToe extends CabinetGame {
         new TicTacToeMenu(ctx.plugin(), this, player, back).open(player);
     }
 
+    /**
+     * 0.41.0, a tap in the Clubhouse's Arcade Room: a game against the easy Arcade at once (no level or friend to
+     * pick), the kid screen. Today's token is easy's as always: nothing new is paid.
+     */
+    @Override
+    public boolean playClassic(Player player, Runnable back) {
+        new TicTacToePlayMenu(ctx.plugin(), this, player, back, vsArcade(player, TicTacToeAI.Level.EASY), true)
+                .open(player);
+        return true;
+    }
+
     @Override
     public void feed(FeedWriter out) {
         GamesDao.ScoreRow record = games().scores().record(id(), BOARD, false);
@@ -179,7 +190,10 @@ public final class TicTacToe extends CabinetGame {
         TicTacToeMatch.Outcome outcome = match.outcome(id);
         boolean hard = match.level() == TicTacToeAI.Level.HARD;
         switch (outcome) {
-            case WON -> player.sendMessage(Text.of("&aThree in a row! You beat the Arcade."));
+            case WON -> {
+                player.sendMessage(Text.of("&aThree in a row! You beat the Arcade."));
+                cheerWin(player); // 0.41.0
+            }
             case LOST -> player.sendMessage(Text.of("&7The Arcade got three in a row this time."));
             case DRAW -> player.sendMessage(Text.of(hard
                     ? "&aA draw against the hard Arcade: the best anyone can do!"

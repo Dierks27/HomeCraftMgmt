@@ -216,6 +216,11 @@ public final class Keys {
      * touch one.
      */
     public static NamespacedKey CLUB_SEAT;
+    /**
+     * On a cabinet in the Clubhouse's Arcade Room (0.41.0): the game it plays (String), on its Interaction entity. The
+     * entity is also a game entity (swept at start, never saved).
+     */
+    public static NamespacedKey KID_CABINET;
     /** On the Copper Golem Brush (0.38.4): the tool that picks a Copper Golem's chests (BYTE 1). */
     public static NamespacedKey GOLEM_BRUSH;
     /** On a Copper Golem: the chests it may put things in, packed x/y/z (LONG_ARRAY), and their world (String). */
@@ -292,6 +297,7 @@ public final class Keys {
         TURKEY = new NamespacedKey(plugin, "turkey");
         FEAST = new NamespacedKey(plugin, "feast");
         CLUB_SEAT = new NamespacedKey(plugin, "club_seat");
+        KID_CABINET = new NamespacedKey(plugin, "kid_cabinet");
         GOLEM_BRUSH = new NamespacedKey(plugin, "golem_brush");
         GOLEM_CHESTS = new NamespacedKey(plugin, "golem_chests");
         GOLEM_WORLD = new NamespacedKey(plugin, "golem_world");

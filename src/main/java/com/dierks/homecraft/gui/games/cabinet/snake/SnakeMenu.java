@@ -134,6 +134,11 @@ public final class SnakeMenu extends GameMenu {
                 lore.toArray(new String[0]));
     }
 
+    /** 0.41.0, tapped in the Arcade Room: straight to a Classic field (the gate ran at the tap). */
+    public void classicNow() {
+        start(() -> snake.classic(viewer));
+    }
+
     /** Deal a field (after the gate) and switch this screen to it; the snake waits for Start. */
     private void start(Supplier<Snake.Run> how) {
         if (!snake.mayPlay(viewer)) {

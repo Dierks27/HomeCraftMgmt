@@ -418,6 +418,9 @@ final class GamesKit {
         int quits;
         int coursesChanged;
         boolean throwOnCoursesChanged;
+        /** 0.41.0: Classic starts asked for by a kid's cabinet tap, and whether the game has one. */
+        int classic;
+        boolean hasClassic = true;
 
         TestGame(String id, GameKind kind, String name, TokenService.Source source) {
             this.id = id;
@@ -482,6 +485,15 @@ final class GamesKit {
         @Override
         public boolean play(Player player, String playableId, Runnable back) {
             played++;
+            return true;
+        }
+
+        @Override
+        public boolean playClassic(Player player, Runnable back) {
+            if (!hasClassic) {
+                return false;
+            }
+            classic++;
             return true;
         }
 

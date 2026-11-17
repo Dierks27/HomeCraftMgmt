@@ -101,6 +101,13 @@ public final class WhackAZombie extends CabinetGame {
         new WhackAZombieMenu(ctx.plugin(), this, player, back).open(player);
     }
 
+    /** 0.41.0, a tap in the Clubhouse's Arcade Room: a Classic round at once, the kid screen. */
+    @Override
+    public boolean playClassic(Player player, Runnable back) {
+        new com.dierks.homecraft.gui.games.cabinet.whack.WhackAZombiePlayMenu(ctx.plugin(), this, player, back, null, classicSeed(), true).open(player);
+        return true;
+    }
+
     @Override
     public void feed(FeedWriter out) {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, LOWER_IS_BETTER);

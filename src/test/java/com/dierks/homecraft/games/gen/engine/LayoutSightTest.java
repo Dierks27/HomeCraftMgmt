@@ -112,7 +112,7 @@ class LayoutSightTest {
                 out.put(e.getKey().id() + ":" + h, e.getKey().half(o[0], o[1], o[2], h, Sight.GAP));
             }
         }
-        out.put("clubhouse", NEW_CLUBHOUSE);
+        out.put("clubhouse", Box.sized(6080, 160, 8544, 32, 16, 48)); // 0.41.0: with its side rooms, 16 rows south
         out.put("falling_floors", NEW_ARENA);
         for (int n = 1; n <= NEW_KEEP.maxPlots(); n++) {
             out.put("plot " + n, NEW_KEEP.plot(n));

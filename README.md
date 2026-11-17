@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.40.0-golf-club`
+- **Version:** `0.41.0-side-rooms`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,14 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.40.0 from 0.41.0:** the jar alone (0.41.0 changes no schema; 0.40.0 reads config revision 28 with
+one WARN and runs nothing, and ignores `arcade_room` and `trophy_room`). The generated Clubhouse is converged
+back to the golf club at the next start (ALGO 5 -> 4): its box is 32 deep again, so the side rooms' blocks
+are left standing south of it, unguarded and out of reach (their archways become wall); clear them by hand
+if you like, or leave them for the upgrade (their claim stays in `gen.clubhouse.annex.claim`, and the
+upgrade builds over them). The cabinets, cups and signs are never saved, so they simply aren't there. An
+owner-built room's cabinet, shelf and door spots stay in the database, unread. Nothing is lost.
 
 **Back to 0.39.1 from 0.40.0:** the jar alone (0.40.0 changes no schema and no config revision). The
 generated Clubhouse is converged back to the glass room at the next start (the plan's ALGO goes 4 -> 3:
@@ -4428,8 +4436,9 @@ every race and round works exactly as before**.
   achievement or Cup; a race from it is the same race as always. A run or round started from the
   Clubhouse is the same run as always: times, boards, the Weekly Cup, Today's pick's bonus and
   rewards count exactly as from home.
-- **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 6080-6111, y
-  160-175, z 8544-8575, 576 blocks from everything else), checked like the Falling Floors arena: 32
+- **Safety.** The generated room is one box, 32 x 16 x 48 at `origin` (0.41.0: the main room's 32 x 16 x 32
+  and, in its last 16 rows, the side rooms; shipped x 6080-6111, y 160-175, z 8544-8591, 576 blocks from
+  everything else), checked like the Falling Floors arena: 32
   blocks from every Fresh Courses
   area, the kept courses and the arena, 16 from hand-built courses, spawn and `games.fresh.safe_spot`,
   inside the world's heights and border. The first time, the box must be empty: anything in it closes
@@ -4454,6 +4463,103 @@ every race and round works exactly as before**.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
 
+#### The Arcade Room and the Trophy Room (0.41.0)
+
+Two rooms off the Foyer for someone who can't read yet (the owner: Lilah is four, plays with a
+controller, and should be able to use them on her own). **Everything she needs is a picture, a sound or
+sparkles; text is only ever an extra for the grown-ups.** The golf-club room is unchanged but for the two
+archways.
+
+- **Getting there.** Two open archways in the Foyer's south wall (3 wide, 3 high, no door), a big picture
+  over each, and a coloured path in the floor from the Foyer's first row to each archway and on into the
+  room: **blue** to the Arcade Room (a joystick over its door, south-west), **gold** to the Trophy Room (a
+  trophy over its door, south-east). The two sconces that hung over the archways moved to either side of
+  them.
+- **The Arcade Room.** A row of cabinets, one per game of `arcade_room.games` (shipped: Whack-a-Zombie,
+  Simon Says, Mini Match, Tic-Tac-Toe), each on a magenta mat, facing the door. **Tap a cabinet, either
+  click** (left or right, a controller's too: each cabinet is an Interaction entity, so both register):
+  a chime and sparkles, then the game opens straight away in **Classic** - no first screen, no mode to
+  pick, never today's scored try, so it can't be used up by accident. It goes through `/hcm play`'s own
+  entry point and gate (the same refusals: a game switched off, Take a break, a world without games, a
+  missing permission). Rewards and caps are exactly Classic's: this room adds no way to earn. Adults keep
+  the daily board through the Games screen. A **game of chance never opens here**, even if someone lists
+  one (the room leaves it out with one WARN, and `/hcm games check` says so); any arcade cabinet game may
+  be listed (Snake, Connect Four, Creeper Sweeper and Ore Merge are left out by default: quick turns, a
+  second player, reading and strategy).
+  - **When the round ends** the screen's whole play area (Whack-a-Zombie, Simon Says) or its whole bottom
+    row (Mini Match, Tic-Tac-Toe, so the finished board stays in sight) is **one big green Play again
+    picture**. Closing the screen (the controller's B, or Esc) leaves; Back on the kid screen just closes
+    it. Tic-Tac-Toe from a cabinet is always against the easy Arcade.
+  - **A win or a new best** (a board cleared, three in a row, a new personal best) plays a fanfare and a
+    burst of fireworks and totem sparkles at that cabinet, as well as the chat line the game already
+    sends.
+- **The Trophy Room.** The all-time records (the same list as the trophy case and the All-time records
+  board, from the same read) stand as **gold cups** on quartz pedestals along the side walls, and last
+  week's family top three on a podium at the back as **gold, silver and bronze**. **Beside each cup
+  stands its holder's head** - the way a four-year-old knows whose it is - and over it a small label for
+  the grown-ups (what, the score, who). **When you walk in, your own cups shimmer** for a few seconds
+  (for your eyes only, with a soft chime), so Lilah can find hers. A cup that changes hands (a new record,
+  a new week) bursts with a fanfare. No new scoring: every cup is a row the boards already show. (The
+  Trophy Room reads with the boards, so it needs `boards: true`, as shipped.) The east wing's trophy case
+  stays as it was.
+- **Models.** Every cabinet, cup and door picture is a model (`item_model hcm:<name>`) in CraftBridge's
+  resource pack, with a simple placeholder shipped in HCM's own pack source (`hcm`) until the owner's
+  Blockbench models arrive. **A player without the pack** (no CraftBridge, or they declined it) sees
+  vanilla stand-ins instead, never the purple-black cube: a jukebox-and-note-block cabinet with the game's
+  Games-screen icon floating over it, an ingot for a cup, a lever (a joystick) and a totem (a trophy) over
+  the doors. Who sees which is set per player, once a second. See
+  [Models for the side rooms](#models-for-the-side-rooms-041).
+- **Their box.** The side rooms are the last 16 rows of the Clubhouse box, claimed on their own: a server
+  that already has its room keeps its claim, and only the new rows are scanned (empty: claimed and built
+  with the room). Anything in them, or another games area too close, **leaves the side rooms out** and
+  the main room opens as before (archways stay wall); `/hcm games clubhouse status` and `/hcm games
+  check` say why, and `rebuild confirm` claims them anyway. Switch a room off and it isn't built (its half
+  is cleared, its archway stays wall). The room is rebuilt once at the first start of 0.41.0 (the plan's
+  ALGO goes 4 -> 5): closed for a minute or two while it builds and verifies, every spot lit (a test
+  floods the light), no way out but back through the Foyer.
+- **Your own room.** With `/hcm games clubhouse here` nothing is generated; place things by standing where
+  they go, facing out: `cabinet <game>` (one per game, on the block you stand on; `cabinet <game> clear`,
+  `cabinet all clear`), `trophyroom` (on your shelf, your back to the wall: the podium's three pairs then
+  eight records run to your right, a cup then its head, 22 blocks; `trophyroom clear`), and `door arcade`
+  / `door trophy` (the picture hangs 3.5 blocks over your feet; `door ... clear`). A cabinet must be an
+  arcade cabinet game: a game of chance is refused. Your cups shimmer within 22 blocks of the shelf's
+  start. Status lists them.
+
+##### Models for the side rooms (0.41)
+
+| Model id | What | Size and facing |
+|---|---|---|
+| `hcm:cabinet_whack` | Whack-a-Zombie's cabinet | 1 wide, 2 tall, 1 deep (16 x 32 x 16 units, y -8 to 24), screen on the north side |
+| `hcm:cabinet_simon` | Simon Says' cabinet | as above |
+| `hcm:cabinet_match` | Mini Match's cabinet | as above |
+| `hcm:cabinet_tictactoe` | Tic-Tac-Toe's cabinet | as above |
+| `hcm:cabinet_snake` | Snake's cabinet (only if Snake is listed) | as above |
+| `hcm:cabinet` | any other cabinet game someone lists | as above |
+| `hcm:trophy_gold`, `hcm:trophy_silver`, `hcm:trophy_bronze` | the cups | 1 x 1 x 1 (16 units, y 0 to 16), front on the north side |
+| `hcm:door_arcade`, `hcm:door_trophy` | the pictures over the archways (a joystick, a trophy) | 1 x 1 x 1, drawn 1.5 times as big, front on the north side |
+
+Each is an item display with transform `NONE`: the model is drawn exactly as built, 16 units to a block,
+its point (8, 8, 8) on the display, and its **north side** (Blockbench's "North", -Z) facing into the room.
+A cabinet's display stands one block over the floor (so y -8 to 24 is floor to two blocks up), a cup's half
+a block over its pedestal.
+
+**Dropping in your own models.** Make a folder (or a zip) in `plugins/CraftBridge/pack/sources/` named for
+your source, e.g. `hcm-models/` (any name but `hcm` or `craftbridge`), laid out like a resource pack:
+
+```
+plugins/CraftBridge/pack/sources/hcm-models/
+  assets/hcm/items/cabinet_whack.json        {"model":{"type":"minecraft:model","model":"hcm:item/cabinet_whack"}}
+  assets/hcm/models/item/cabinet_whack.json  (Blockbench: File > Export > Java Block/Item Model)
+  assets/hcm/textures/item/cabinet_whack.png (its textures; the model names them "hcm:item/cabinet_whack")
+```
+
+For every name your folder has an `assets/hcm/items/<name>.json` for, HCM takes its own placeholder out
+of its source (within a minute, or at once with `/hcm reload`) and asks CraftBridge to rebuild the pack,
+so yours is the only file at that path: nothing depends on `resource-pack.priority`. Names you haven't
+made yet keep HCM's placeholder. `/craftbridge pack rebuild` also works; if you rebuild before HCM has
+looked, the placeholder wins once (HCM's source is listed above unlisted drop-ins) until the next minute.
+Belt and braces: add your folder's name above `hcm` in CraftBridge's `resource-pack.priority`.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `clubhouse.enabled` | `true` | The Clubhouse's switch (and Watch, Watch live, cheers and Take a rider). Nothing happens while `games.enabled` is false |
@@ -4466,6 +4572,9 @@ every race and round works exactly as before**.
 | `clubhouse.solo_after` | `true` | A solo run's finish or a round alone's end comes back here with your own results and Play again. `false`: home, as before |
 | `clubhouse.first_seconds` | `5` | Seconds in the Clubhouse before you're taken on to your course or round (1-30) |
 | `clubhouse.boards` | `true` | This week's best, Now playing and My stats (the board and the item); `false` = just the results board |
+| `clubhouse.arcade_room.enabled` | `true` | 0.41.0: the Arcade Room off the Foyer: a cabinet per game, tap to play Classic. `false`: not built |
+| `clubhouse.arcade_room.games` | `[whack_a_zombie, simon_says, mini_match, tic_tac_toe]` | Its cabinets, in order, at most 6; arcade cabinet games only (a game of chance is always left out) |
+| `clubhouse.trophy_room.enabled` | `true` | 0.41.0: the Trophy Room off the Foyer: the records and last week's top three as cups with their holders' heads. `false`: not built |
 | `trials.rider_runs_count` | `true` | `false`: a run with a rider is just for fun, and Race Night takes no riders |
 
 A bad value logs a WARN and uses its shipped value. `/hcm games check` has Clubhouse rows: on or off,

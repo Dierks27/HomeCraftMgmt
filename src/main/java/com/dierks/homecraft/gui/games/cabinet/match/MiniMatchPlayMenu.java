@@ -51,6 +51,8 @@ public final class MiniMatchPlayMenu extends GameMenu {
     private final List<ItemStack> found = new ArrayList<>();
     private BukkitTask hide;
     private CabinetGame.Finish finish;
+    /** 0.41.0: tapped in the Arcade Room. */
+    private final boolean kid;
 
     /**
      * @param back  the first screen
@@ -58,7 +60,17 @@ public final class MiniMatchPlayMenu extends GameMenu {
      */
     public MiniMatchPlayMenu(HomeCraftManagement plugin, MiniMatch game, Player viewer, Runnable back,
                              CabinetGame.DailyStart daily, long seed) {
+        this(plugin, game, viewer, back, daily, seed, false);
+    }
+
+    /**
+     * 0.41.0, @param kid the kid screen (Classic only): when every pair is found, the bottom row becomes one big Play
+     * again under the finished board
+     */
+    public MiniMatchPlayMenu(HomeCraftManagement plugin, MiniMatch game, Player viewer, Runnable back,
+                             CabinetGame.DailyStart daily, long seed, boolean kid) {
         super(plugin, game, viewer, back);
+        this.kid = kid && daily == null;
         this.match = game;
         this.daily = daily;
         this.engine = new MatchEngine(seed);
@@ -96,7 +108,9 @@ public final class MiniMatchPlayMenu extends GameMenu {
             set(50, Menus.icon(Material.LIME_CONCRETE, daily != null
                     ? "&e" + CabinetGame.dailyAgain("board", match.triedToday(viewer)) : "&ePlay again"), e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
-                    e -> match.scores(viewer, daily == null ? Scores.CLASSIC : match.todayBoard(), back));
+                    e -> match.scores(viewer, daily == null ? Scores.CLASSIC : match.todayBoard(), back));            if (kid) {
+                bigAgain(slots(45, 53), this::again);
+            }
         }
     }
 
@@ -159,7 +173,7 @@ public final class MiniMatchPlayMenu extends GameMenu {
             return;
         }
         if (daily == null) {
-            new MiniMatchPlayMenu(plugin, match, viewer, back, null, match.classicSeed()).open(viewer);
+            new MiniMatchPlayMenu(plugin, match, viewer, back, null, match.classicSeed(), kid).open(viewer);
         } else {
             CabinetGame.DailyStart next = match.startDaily(viewer);
             if (next == null) {

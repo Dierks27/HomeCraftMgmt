@@ -52,11 +52,56 @@ public final class ClubhousePlanner {
 
     /**
      * The planner's version: part of the plan, so a change of the room is a change of plan. 2 (0.38.4): the
-     * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club.
+     * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club. 5 (0.41.0): the side rooms, the
+     * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall.
      */
-    public static final int ALGO = 4;
+    public static final int ALGO = 5;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
+
+    /** The main room's depth (z): the side rooms are south of it, in the box's last {@value #ANNEX_Z} rows. */
+    public static final int MAIN_Z = 32;
+    public static final int ANNEX_Z = 16;
+    /** The side rooms' walls stand up to here; their glass roof is on top (they are lower than the main room). */
+    public static final int SIDE_TOP = 7;
+    public static final int SIDE_ROOF = 8;
+    /**
+     * The archways (0.41.0) in the Foyer's south wall (z = minZ + 31): three wide, three high, open (no door). The
+     * Arcade Room's at x 11-13, the Trophy Room's at x 18-20 (mirrors); the colour path to each runs up its middle.
+     */
+    static final int ARCH_ARCADE_X0 = 11;
+    static final int ARCH_TROPHY_X0 = 18;
+    static final int ARCH_W = 3;
+    static final int ARCH_H = 3;
+    /** The first row of the Foyer (the path starts there). */
+    static final int FOYER_Z0 = 19;
+    /** The side rooms' west walls (x offsets): the Arcade Room's at 0, the Trophy Room's at 16; each 16 wide. */
+    static final int ARCADE_X0 = 0;
+    static final int TROPHY_X0 = 16;
+    /** The side rooms' first and last rows of air (z offsets). */
+    static final int SIDE_Z0 = MAIN_Z;
+    static final int SIDE_Z1 = MAIN_Z + ANNEX_Z - 2;
+    /**
+     * The Arcade Room's cabinet places (x, z offsets, yaw), at most {@value #CABINETS}: four along the south wall facing
+     * north to the archway, nearest the archway first, then two on the west wall facing east. Nothing of a cabinet is
+     * in the plan but its coloured mat in the floor: the cabinet is a model (an entity) you can walk up to.
+     */
+    static final int[][] CABINET_AT = {{13, 46, 180}, {10, 46, 180}, {5, 46, 180}, {2, 46, 180}, {1, 41, -90},
+            {1, 37, -90}};
+    public static final int CABINETS = 6;
+    /**
+     * The Trophy Room's pedestals: the podium for last week's top three at the back (2 x 1 plinths, 1st in the middle
+     * and highest, gold, iron and copper as the hall's; the trophy on the west block, the holder's head on the east),
+     * then {@value #RECORD_PEDESTALS} record pedestals (quartz, one high), four on each side wall, each a trophy block
+     * and, south of it, its head block.
+     */
+    static final int[] ROOM_PODIUM_X = {23, 26, 20};
+    static final int[] ROOM_PODIUM_HEIGHT = {3, 2, 1};
+    static final int ROOM_PODIUM_Z = 46;
+    static final int[] RECORD_Z = {33, 36, 39, 42};
+    static final int RECORD_WEST_X = 17;
+    static final int RECORD_EAST_X = 30;
+    public static final int RECORD_PEDESTALS = 8;
 
     /** The walls stand from the floor up to here (above the floor's own layer); the roof is on top. */
     public static final int WALL_TOP = 14;
@@ -158,6 +203,14 @@ public final class ClubhousePlanner {
     public static final String CANDLES = "minecraft:white_candle[candles=3,lit=true,waterlogged=false]";
     public static final String SCREEN = "minecraft:iron_bars[east=false,north=true,south=true,waterlogged=false,west=false]";
     public static final String FIRE = "minecraft:campfire[facing=east,lit=true,signal_fire=false,waterlogged=false]";
+    /** 0.41.0: the colour paths (the Arcade Room's blue, the Trophy Room's gold), the Arcade Room's floor and mats. */
+    public static final String PATH_ARCADE = "minecraft:light_blue_concrete";
+    public static final String PATH_TROPHY = "minecraft:yellow_concrete";
+    public static final String ARCADE_FLOOR = "minecraft:black_concrete";
+    public static final String MAT = "minecraft:magenta_concrete";
+    public static final String TROPHY_RUG = "minecraft:red_carpet";
+    public static final String TROPHY_RUNNER = "minecraft:yellow_carpet";
+    public static final String PEDESTAL = "minecraft:quartz_pillar[axis=y]";
 
     /** A log (or stripped log) along an axis. */
     static String log(String axis) {
@@ -251,21 +304,62 @@ public final class ClubhousePlanner {
     public record Seat(double x, double y, double z, float yaw, String color) {
     }
 
+    /**
+     * Which side rooms the plan has (0.41.0). A room that is off is not built at all: its half of the annex is air
+     * and its archway stays wall, so the main room is exactly as it was on that side.
+     */
+    public record Rooms(boolean arcade, boolean trophy) {
+        public static final Rooms NONE = new Rooms(false, false);
+        public static final Rooms BOTH = new Rooms(true, true);
+
+        public boolean any() {
+            return arcade || trophy;
+        }
+    }
+
+    /** A place in the room: the block's middle at the floor's top ({@code y}), and the way it faces (yaw). */
+    public record Place3(double x, double y, double z, float yaw) {
+    }
+
+    /**
+     * A trophy pedestal (0.41.0): where the trophy stands (its feet: the pedestal's top), where its holder's head
+     * stands (the block beside it), and the way both face.
+     */
+    public record Pedestal(Place3 trophy, Place3 head) {
+    }
+
     private ClubhousePlanner() {
     }
 
     /**
-     * The Clubhouse in {@code box}.
+     * The Clubhouse in {@code box}: 32 x 16 x 48 with both side rooms, or (0.41.0) 32 x 16 x 32, the main room alone.
      *
-     * @param box the Clubhouse box, 32 x 16 x 32
-     * @throws IllegalArgumentException when the box isn't the Clubhouse's size
+     * @throws IllegalArgumentException when the box isn't one of the Clubhouse's sizes
      */
     public static ClubhouseSite plan(Box box) {
+        return plan(box, box != null && box.sizeZ() == ClubhouseSettings.SIZE_Z ? Rooms.BOTH : Rooms.NONE);
+    }
+
+    /**
+     * The Clubhouse in {@code box} with the side rooms {@code rooms} (0.41.0). The main room is the box's first
+     * {@value #MAIN_Z} rows; with a room, the box is {@value #ANNEX_Z} deeper (the annex). A 48-deep box with no room
+     * leaves the annex air (a room switched off is cleared).
+     *
+     * @param box the Clubhouse box: 32 x 16 x 48, or 32 x 16 x 32 with no side room
+     * @throws IllegalArgumentException when the box isn't the Clubhouse's size, or a 32-deep box is given a room
+     */
+    public static ClubhouseSite plan(Box box, Rooms rooms) {
+        Rooms r = rooms == null ? Rooms.NONE : rooms;
+        boolean annex = box != null && box.sizeZ() == ClubhouseSettings.SIZE_Z;
         if (box == null || box.sizeX() != ClubhouseSettings.SIZE_X || box.sizeY() != ClubhouseSettings.SIZE_Y
-                || box.sizeZ() != ClubhouseSettings.SIZE_Z) {
+                || (box.sizeZ() != ClubhouseSettings.SIZE_Z && box.sizeZ() != MAIN_Z)) {
             throw new IllegalArgumentException("the Clubhouse box is " + ClubhouseSettings.SIZE_X + " x "
-                    + ClubhouseSettings.SIZE_Y + " x " + ClubhouseSettings.SIZE_Z + ", not "
+                    + ClubhouseSettings.SIZE_Y + " x " + ClubhouseSettings.SIZE_Z + " (or " + MAIN_Z + " deep without"
+                    + " its side rooms), not "
                     + (box == null ? "missing" : box.sizeX() + " x " + box.sizeY() + " x " + box.sizeZ()));
+        }
+        if (!annex && r.any()) {
+            throw new IllegalArgumentException("the side rooms need the box's last " + ANNEX_Z + " rows");
         }
         Builder b = new Builder(box);
         shell(b);
@@ -275,7 +369,13 @@ public final class ClubhousePlanner {
         List<ClubhouseSite.Spot> podium = hall(b);
         bar(b);
         gallery(b);
-        foyer(b);
+        foyer(b, r);
+        if (r.arcade()) {
+            arcadeRoom(b);
+        }
+        if (r.trophy()) {
+            trophyRoom(b);
+        }
         b.join();
 
         List<ClubhouseSite.Spot> spawns = new ArrayList<>();
@@ -287,20 +387,48 @@ public final class ClubhousePlanner {
         ClubhouseSite.Spot board = new ClubhouseSite.Spot(box.minX() + (PANEL_X0 + PANEL_X1 + 1) / 2.0,
                 box.minY() + (PANEL_Y0 + PANEL_Y1 + 1) / 2.0 - 0.5, box.minZ() + 1.1, 0f);
         Box inside = new Box(box.minX() + 1, box.minY() + 1, box.minZ() + 1, box.maxX() - 1, box.minY() + WALL_TOP,
-                box.maxZ() - 1);
+                box.minZ() + MAIN_Z - 2);
+        List<Box> more = new ArrayList<>();
+        if (r.arcade()) {
+            more.add(arch(box, ARCH_ARCADE_X0));
+            more.add(arcadeInside(box));
+        }
+        if (r.trophy()) {
+            more.add(arch(box, ARCH_TROPHY_X0));
+            more.add(trophyInside(box));
+        }
         List<String> summary = List.of("the Clubhouse: " + box.describe(), spawns.size() + " arrival spots in the "
                 + "foyer, the Great Hall with a podium of 3 and two banquet tables (feast tables, the Feast Pot), "
-                + "the 19th Hole with its bar and a jukebox, the Trophy Gallery with a putting green",
+                + "the 19th Hole with its bar and a jukebox, the Trophy Gallery with a putting green"
+                + (r.arcade() ? ", the Arcade Room" : "") + (r.trophy() ? ", the Trophy Room" : ""),
                 "plan " + ALGO);
         Plan plan = Plan.of(SLOT, ALGO, 0L, box, b.palette, b.ops, List.of(), List.of(), null, summary, 0);
-        return new ClubhouseSite(plan, spawns, podium, board, inside);
+        return new ClubhouseSite(plan, spawns, podium, board, inside, more);
+    }
+
+    /** An archway's air (the three blocks through the wall, three high): part of the room for "in the Clubhouse". */
+    static Box arch(Box box, int x0) {
+        return new Box(box.minX() + x0, box.minY() + 1, box.minZ() + MAIN_Z - 1, box.minX() + x0 + ARCH_W - 1,
+                box.minY() + ARCH_H, box.minZ() + MAIN_Z - 1);
+    }
+
+    /** The Arcade Room's air in {@code box} (a 48-deep box). */
+    public static Box arcadeInside(Box box) {
+        return new Box(box.minX() + ARCADE_X0 + 1, box.minY() + 1, box.minZ() + SIDE_Z0, box.minX() + ARCADE_X0 + 14,
+                box.minY() + SIDE_TOP, box.minZ() + SIDE_Z1);
+    }
+
+    /** The Trophy Room's air in {@code box} (a 48-deep box). */
+    public static Box trophyInside(Box box) {
+        return new Box(box.minX() + TROPHY_X0 + 1, box.minY() + 1, box.minZ() + SIDE_Z0, box.minX() + TROPHY_X0 + 14,
+                box.minY() + SIDE_TOP, box.minZ() + SIDE_Z1);
     }
 
     // ---- the shell -------------------------------------------------------------------------------
 
     /** The walls: panelling to the chair rail, plaster, windows, the board panels, the crown; the glass roof. */
     private static void shell(Builder b) {
-        int last = ClubhouseSettings.SIZE_X - 1;
+        int last = ClubhouseSettings.SIZE_X - 1; // the main room is square: 32 x 32
         for (int i = 0; i <= last; i++) {
             for (int k = 0; k <= last; k++) {
                 boolean edgeX = i == 0 || i == last;
@@ -643,8 +771,12 @@ public final class ClubhousePlanner {
 
     // ---- the Foyer ---------------------------------------------------------------------------------
 
-    /** Planters in its corners, a chandelier over each half, sconces on the south wall. */
-    private static void foyer(Builder b) {
+    /**
+     * Planters in its corners, a chandelier over each half, sconces on the south wall. With a side room (0.41.0) its
+     * archway is cut in the south wall, the sconce over it moves to either side of it (its sign hangs there), and a
+     * colour path runs from the Foyer's first row to the archway down its middle.
+     */
+    private static void foyer(Builder b, Rooms rooms) {
         for (int i : new int[]{9, 22}) {
             for (int k : new int[]{19, 30}) {
                 b.set(i, 1, k, PLANTER);
@@ -653,12 +785,127 @@ public final class ClubhousePlanner {
         }
         chandelier(b, 12, 25);
         chandelier(b, 19, 25);
-        for (int i : new int[]{12, 19}) {
-            sconce(b, i, 5, 30);
+        boolean[] on = {rooms.arcade(), rooms.trophy()};
+        int[] x0 = {ARCH_ARCADE_X0, ARCH_TROPHY_X0};
+        String[] path = {PATH_ARCADE, PATH_TROPHY};
+        for (int n = 0; n < 2; n++) {
+            int mid = x0[n] + ARCH_W / 2;
+            if (!on[n]) {
+                sconce(b, mid, 5, 30);
+                continue;
+            }
+            sconce(b, x0[n] - 1, 5, 30);
+            sconce(b, x0[n] + ARCH_W, 5, 30);
+            for (int i = x0[n]; i < x0[n] + ARCH_W; i++) {
+                for (int j = 1; j <= ARCH_H; j++) {
+                    b.set(i, j, MAIN_Z - 1, AIR);
+                }
+                b.set(i, 0, MAIN_Z - 1, path[n]); // the archway's floor is the path too
+            }
+            for (int k = FOYER_Z0; k < MAIN_Z - 1; k++) {
+                b.set(mid, 0, k, path[n]);
+            }
         }
         // the hall's south corners and the north wall, either side of the podium
         sconce(b, 9, 5, 1);
         sconce(b, 22, 5, 1);
+    }
+
+    // ---- the side rooms (0.41.0) -------------------------------------------------------------------
+
+    /**
+     * A side room's shell, west wall at {@code x0}: panelling to the chair rail and plaster above (the main room's
+     * walls, lower), its floor, and a glass roof at {@value #SIDE_ROOF}. Its north wall is the main room's south
+     * wall, so the only way in or out is the archway.
+     */
+    private static void sideShell(Builder b, int x0, String floor) {
+        int z1 = MAIN_Z + ANNEX_Z - 1; // the south wall
+        for (int i = x0; i <= x0 + 15; i++) {
+            for (int k = MAIN_Z; k <= z1; k++) {
+                boolean edgeX = i == x0 || i == x0 + 15;
+                boolean edgeZ = k == z1;
+                b.set(i, SIDE_ROOF, k, ROOF_GLASS);
+                if (!edgeX && !edgeZ) {
+                    b.set(i, 0, k, floor);
+                    continue;
+                }
+                String axis = edgeZ && !edgeX ? "x" : "z";
+                for (int j = 0; j <= SIDE_TOP; j++) {
+                    String block;
+                    if (edgeX && edgeZ) {
+                        block = j == 0 || j == SIDE_TOP ? PLANKS : log("y");
+                    } else if (j <= 3 || j == SIDE_TOP) {
+                        block = PLANKS;
+                    } else if (j == 4) {
+                        block = log(axis);
+                    } else {
+                        block = PLASTER;
+                    }
+                    b.set(i, j, k, block);
+                }
+            }
+        }
+    }
+
+    /**
+     * The Arcade Room (the south-west): a black floor with sea lanterns set in it every few blocks (lit, and fun),
+     * the blue path from the archway down the middle to the cabinets, a magenta mat where each cabinet stands, and
+     * lanterns hanging from the glass roof.
+     */
+    private static void arcadeRoom(Builder b) {
+        int x0 = ARCADE_X0;
+        sideShell(b, x0, ARCADE_FLOOR);
+        for (int i = x0 + 2; i <= x0 + 13; i += 4) {
+            for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k += 4) {
+                b.set(i, 0, k, LIGHT);
+            }
+        }
+        int mid = ARCH_ARCADE_X0 + ARCH_W / 2;
+        for (int k = SIDE_Z0; k <= SIDE_Z1 - 2; k++) {
+            b.set(mid, 0, k, PATH_ARCADE);
+        }
+        for (int[] c : CABINET_AT) {
+            b.set(c[0], 0, c[1], MAT);
+        }
+        for (int i : new int[]{x0 + 4, x0 + 11}) {
+            for (int k : new int[]{SIDE_Z0 + 3, SIDE_Z0 + 9}) {
+                b.set(i, SIDE_TOP, k, HANGING);
+            }
+        }
+    }
+
+    /**
+     * The Trophy Room (the south-east): a red rug over hidden lights, the gold runner from the archway, the podium
+     * for last week's top three at the back, a record pedestal for each all-time record on each side wall, and
+     * lanterns hanging from the glass roof. The trophies and the heads are entities, not in the plan.
+     */
+    private static void trophyRoom(Builder b) {
+        int x0 = TROPHY_X0;
+        sideShell(b, x0, PLANKS);
+        rug(b, x0 + 1, x0 + 14, SIDE_Z0, SIDE_Z1, TROPHY_RUG, 3);
+        int mid = ARCH_TROPHY_X0 + ARCH_W / 2;
+        for (int k = SIDE_Z0; k <= SIDE_Z1 - 2; k++) {
+            b.set(mid, 1, k, TROPHY_RUNNER);
+        }
+        String[] top = {GOLD, IRON, COPPER};
+        for (int n = 0; n < 3; n++) {
+            for (int dx = 0; dx < 2; dx++) {
+                for (int j = 1; j <= ROOM_PODIUM_HEIGHT[n]; j++) {
+                    b.set(ROOM_PODIUM_X[n] + dx, j, ROOM_PODIUM_Z, j < ROOM_PODIUM_HEIGHT[n] ? PLANKS : top[n]);
+                }
+            }
+        }
+        for (int z : RECORD_Z) {
+            for (int x : new int[]{RECORD_WEST_X, RECORD_EAST_X}) {
+                b.set(x, 1, z, PEDESTAL);
+                b.set(x, 1, z + 1, PEDESTAL);
+            }
+        }
+        for (int i : new int[]{x0 + 4, x0 + 11}) {
+            for (int k : new int[]{SIDE_Z0 + 3, SIDE_Z0 + 9}) {
+                b.set(i, SIDE_TOP, k, HANGING);
+            }
+        }
     }
 
     private static boolean contains(int[] values, int v) {
@@ -724,6 +971,55 @@ public final class ClubhousePlanner {
     /** The feast line's size and wrap: two short lines, readable across the room. */
     static final float FEAST_LINE_SCALE = 1.5f;
     static final int FEAST_LINE_WIDTH = 200;
+
+    /**
+     * The Arcade Room's cabinet places in {@code box} (0.41.0), {@value #CABINETS} of them in the order the kid set
+     * fills them: each the middle of its mat at the floor's top, facing into the room.
+     */
+    public static List<Place3> cabinets(Box box) {
+        List<Place3> out = new ArrayList<>();
+        for (int[] c : CABINET_AT) {
+            out.add(new Place3(box.minX() + c[0] + 0.5, box.minY() + 1, box.minZ() + c[1] + 0.5, c[2]));
+        }
+        return out;
+    }
+
+    /**
+     * The Trophy Room's pedestals in {@code box} (0.41.0): the podium's three (1st, 2nd, 3rd, facing north to the
+     * archway) and then the {@value #RECORD_PEDESTALS} record pedestals (the west wall's north to south facing east,
+     * then the east wall's facing west).
+     */
+    public static List<Pedestal> pedestals(Box box) {
+        List<Pedestal> out = new ArrayList<>();
+        for (int n = 0; n < 3; n++) {
+            double y = box.minY() + ROOM_PODIUM_HEIGHT[n] + 1;
+            double z = box.minZ() + ROOM_PODIUM_Z + 0.5;
+            out.add(new Pedestal(new Place3(box.minX() + ROOM_PODIUM_X[n] + 0.5, y, z, 180f),
+                    new Place3(box.minX() + ROOM_PODIUM_X[n] + 1.5, y, z, 180f)));
+        }
+        for (int[] side : new int[][]{{RECORD_WEST_X, -90}, {RECORD_EAST_X, 90}}) {
+            for (int z : RECORD_Z) {
+                double x = box.minX() + side[0] + 0.5;
+                out.add(new Pedestal(new Place3(x, box.minY() + 2, box.minZ() + z + 0.5, side[1]),
+                        new Place3(x, box.minY() + 2, box.minZ() + z + 1.5, side[1])));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Where the sign over an archway hangs in {@code box} (0.41.0): the model's middle, a little out from the Foyer's
+     * south wall over the archway, facing north into the Foyer.
+     */
+    public static Place3 door(Box box, boolean arcade) {
+        int x0 = arcade ? ARCH_ARCADE_X0 : ARCH_TROPHY_X0;
+        return new Place3(box.minX() + x0 + ARCH_W / 2.0, box.minY() + DOOR_Y, box.minZ() + MAIN_Z - 1 - DOOR_OUT,
+                180f);
+    }
+
+    /** The door sign's middle: this high over the floor's layer, and this far out from the wall's face. */
+    static final double DOOR_Y = 5.25;
+    static final double DOOR_OUT = 0.75;
 
     /** Where the cushions go in {@code box} (26.3): one on every chair, stool and armchair. */
     public static List<Seat> seats(Box box) {
@@ -854,5 +1150,6 @@ public final class ClubhousePlanner {
     /** The whole solid blocks of the plan (a fence joins them). */
     static final Set<String> SOLID = Set.of(PLANKS, HALL_FLOOR, MARBLE_WHITE, MARBLE_BLACK, PLASTER, LIGHT, // PANEL is MARBLE_BLACK
             GOLD, IRON, COPPER, CLOTH, CABINET, BRICKS, BOOKS, "minecraft:jukebox", "minecraft:barrel", PLANTER,
-            "minecraft:stripped_dark_oak_log", "minecraft:glass");
+            "minecraft:stripped_dark_oak_log", "minecraft:glass", PATH_ARCADE, PATH_TROPHY, ARCADE_FLOOR, MAT,
+            "minecraft:quartz_pillar");
 }

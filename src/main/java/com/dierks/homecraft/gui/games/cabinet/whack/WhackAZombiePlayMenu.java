@@ -55,6 +55,8 @@ public final class WhackAZombiePlayMenu extends GameMenu {
     private int ready = READY;
     private int drawnSeconds = -1;
     private CabinetGame.Finish finish;
+    /** 0.41.0: tapped in the Arcade Room: Classic, and Play again one big picture when the round ends. */
+    private final boolean kid;
 
     /**
      * @param back  the first screen
@@ -62,7 +64,14 @@ public final class WhackAZombiePlayMenu extends GameMenu {
      */
     public WhackAZombiePlayMenu(HomeCraftManagement plugin, WhackAZombie game, Player viewer, Runnable back,
                                 CabinetGame.DailyStart daily, long seed) {
+        this(plugin, game, viewer, back, daily, seed, false);
+    }
+
+    /** @param kid the kid screen (Classic only): when the round ends, the holes become one big Play again */
+    public WhackAZombiePlayMenu(HomeCraftManagement plugin, WhackAZombie game, Player viewer, Runnable back,
+                                CabinetGame.DailyStart daily, long seed, boolean kid) {
         super(plugin, game, viewer, back);
+        this.kid = kid && daily == null;
         this.whack = game;
         this.daily = daily;
         this.bedrock = Bedrock.is(viewer);
@@ -104,6 +113,9 @@ public final class WhackAZombiePlayMenu extends GameMenu {
                     ? "&e" + CabinetGame.dailyAgain("round", whack.triedToday(viewer)) : "&ePlay again"), e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> whack.scores(viewer, daily == null ? Scores.CLASSIC : whack.todayBoard(), back));
+            if (kid) {
+                bigAgain(slots(9, 53), this::again); // everything under the score: one big Play again
+            }
         }
     }
 
@@ -219,7 +231,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             return;
         }
         if (daily == null) {
-            new WhackAZombiePlayMenu(plugin, whack, viewer, back, null, whack.classicSeed()).open(viewer);
+            new WhackAZombiePlayMenu(plugin, whack, viewer, back, null, whack.classicSeed(), kid).open(viewer);
         } else {
             CabinetGame.DailyStart next = whack.startDaily(viewer);
             if (next == null) {

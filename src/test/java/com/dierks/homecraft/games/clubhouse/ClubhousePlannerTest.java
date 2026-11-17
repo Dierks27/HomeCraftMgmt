@@ -34,8 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ClubhousePlannerTest {
 
-    /** The 0.35 box: the golden hash names blocks where they stand, so it never follows the shipped origin. */
-    private static final Box BOX = LegacyBoxes.clubhouse();
+    /**
+     * The 0.35 box's corner, 0.41.0's depth (the side rooms): the golden hash names blocks where they stand, so it
+     * never follows the shipped origin.
+     */
+    private static final Box MAIN = LegacyBoxes.clubhouse();
+    private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, 48);
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
     /** The least block light over anything a mob could stand on: spawning needs 0; a margin, and it reads lit. */
     private static final int LIT = 4;
@@ -68,7 +72,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("fd748114a533", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("b9dcc75eef50", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -76,7 +80,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(4, ClubhousePlanner.ALGO, "the golf club: every server builds it once");
+        assertEquals(5, ClubhousePlanner.ALGO, "the side rooms: every server builds it once");
     }
 
     @Test
@@ -224,10 +228,11 @@ class ClubhousePlannerTest {
         }
         assertTrue(places > 800, "the whole floor and every table top is checked: " + places);
         assertTrue(least >= LIT, "least light " + least);
-        // the roof's top, outside, is glass: nothing stands on it
+        // the roofs' tops, outside, are glass: nothing stands on them
         for (int x = BOX.minX(); x <= BOX.maxX(); x++) {
             for (int z = BOX.minZ(); z <= BOX.maxZ(); z++) {
-                assertTrue(ClubhousePlanner.noFooting(b.get(key(x, BOX.minY() + ClubhousePlanner.ROOF, z))), "glass");
+                int roof = z - BOX.minZ() < ClubhousePlanner.MAIN_Z ? ClubhousePlanner.ROOF : ClubhousePlanner.SIDE_ROOF;
+                assertTrue(ClubhousePlanner.noFooting(b.get(key(x, BOX.minY() + roof, z))), "glass");
             }
         }
         assertEquals(15, ClubhousePlanner.lightOf(ClubhousePlanner.HANGING));
@@ -237,23 +242,48 @@ class ClubhousePlannerTest {
         assertTrue(ClubhousePlanner.noFooting(ClubhousePlanner.HANGING) && !ClubhousePlanner.noFooting(ClubhousePlanner.CLOTH));
     }
 
+    /**
+     * No way out: the main room's walls to its glass roof (the Foyer's south wall open only at the two archways, which
+     * lead into the side rooms), and each side room closed on its other three sides up to its own glass roof.
+     */
     @Test
     void theRoomHasNoWayOut() {
         Map<Long, String> b = blocks(SITE.plan());
         for (int x = BOX.minX(); x <= BOX.maxX(); x++) {
             for (int z = BOX.minZ(); z <= BOX.maxZ(); z++) {
-                assertEquals(ClubhousePlanner.ROOF_GLASS, b.get(key(x, BOX.minY() + ClubhousePlanner.ROOF, z)),
+                boolean main = z - BOX.minZ() < ClubhousePlanner.MAIN_Z;
+                int roof = main ? ClubhousePlanner.ROOF : ClubhousePlanner.SIDE_ROOF;
+                assertEquals(ClubhousePlanner.ROOF_GLASS, b.get(key(x, BOX.minY() + roof, z)),
                         "the roof is closed over " + x + "," + z);
                 assertNotNull(b.get(key(x, BOX.minY(), z)), "the floor is whole at " + x + "," + z);
             }
         }
+        int south = BOX.minZ() + ClubhousePlanner.MAIN_Z - 1;
         for (int y = BOX.minY(); y <= BOX.minY() + ClubhousePlanner.WALL_TOP; y++) {
             for (int i = 0; i < ClubhouseSettings.SIZE_X; i++) {
                 assertNotNull(b.get(key(BOX.minX() + i, y, BOX.minZ())), "north wall");
-                assertNotNull(b.get(key(BOX.minX() + i, y, BOX.maxZ())), "south wall");
+                boolean arch = y - BOX.minY() >= 1 && y - BOX.minY() <= ClubhousePlanner.ARCH_H
+                        && (i >= ClubhousePlanner.ARCH_ARCADE_X0 && i < ClubhousePlanner.ARCH_ARCADE_X0 + 3
+                        || i >= ClubhousePlanner.ARCH_TROPHY_X0 && i < ClubhousePlanner.ARCH_TROPHY_X0 + 3);
+                assertEquals(arch, b.get(key(BOX.minX() + i, y, south)) == null, "the Foyer's south wall, open only"
+                        + " at the archways: " + i + "," + (y - BOX.minY()));
                 assertNotNull(b.get(key(BOX.minX(), y, BOX.minZ() + i)), "west wall");
                 assertNotNull(b.get(key(BOX.maxX(), y, BOX.minZ() + i)), "east wall");
             }
+        }
+        // the side rooms: the west, middle (two walls) and east walls, and the south wall, up to their roof
+        for (int y = BOX.minY(); y <= BOX.minY() + ClubhousePlanner.SIDE_TOP; y++) {
+            for (int k = ClubhousePlanner.MAIN_Z; k < 48; k++) {
+                for (int i : new int[]{0, 15, 16, 31}) {
+                    assertNotNull(b.get(key(BOX.minX() + i, y, BOX.minZ() + k)), "side wall " + i + "," + k);
+                }
+            }
+            for (int i = 0; i < 32; i++) {
+                assertNotNull(b.get(key(BOX.minX() + i, y, BOX.maxZ())), "the side rooms' south wall");
+            }
+        }
+        for (Box room : new Box[]{ClubhousePlanner.arcadeInside(BOX), ClubhousePlanner.trophyInside(BOX)}) {
+            assertTrue(SITE.in(room.minX() + 0.5, room.minY(), room.minZ() + 0.5), "a side room is in the Clubhouse");
         }
     }
 
@@ -312,7 +342,8 @@ class ClubhousePlannerTest {
     void theHallAndTheFoyerMirrorAboutTheMiddleLine() {
         Map<Long, String> b = blocks(SITE.plan());
         Set<String> pairs = Set.of(ClubhousePlanner.IRON + "|" + ClubhousePlanner.COPPER,
-                ClubhousePlanner.POT + "|" + ClubhousePlanner.FLOWERS);
+                ClubhousePlanner.POT + "|" + ClubhousePlanner.FLOWERS,
+                ClubhousePlanner.PATH_ARCADE + "|" + ClubhousePlanner.PATH_TROPHY); // each room's own colour
         int checked = 0;
         for (int i = 8; i <= 15; i++) {
             for (int j = 0; j <= ClubhousePlanner.ROOF; j++) {
@@ -411,7 +442,7 @@ class ClubhousePlannerTest {
         List<int[]> frames = ClubhousePlanner.trophyFrames(BOX);
         assertEquals(ClubBoard.MAX_ROWS, frames.size(), "one frame per record row, at most");
         Set<String> seen = new HashSet<>();
-        WallBoards.Wall fame = WallBoards.generated(WallBoards.FAME, BOX);
+        WallBoards.Wall fame = WallBoards.generated(WallBoards.FAME, MAIN); // the boards hang in the main room
         for (int[] f : frames) {
             assertNull(b.get(key(f[0], f[1], f[2])), "a frame hangs in air: " + f[0] + "," + f[1] + "," + f[2]);
             assertNotNull(b.get(key(f[0] + 1, f[1], f[2])), "on the east wall");
@@ -480,5 +511,187 @@ class ClubhousePlannerTest {
                         && s.contains("south=true"), "a window pane joins along its wall: " + s);
             }
         }
+    }
+
+    // ---- 0.41.0: the side rooms ----------------------------------------------------------------------
+
+    /**
+     * Without its side rooms (a 32-deep box, or both switched off) the main room is plan 4's golf club block for block;
+     * with them, the only changes to it are the two archways, their floors, the two colour paths and the two sconces
+     * that move to either side of each archway's sign.
+     */
+    @Test
+    void theMainRoomChangesOnlyAtTheArchways() {
+        ClubhouseSite alone = ClubhousePlanner.plan(MAIN);
+        assertTrue(alone.more().isEmpty(), "no side rooms in a 32-deep box");
+        assertThrows(IllegalArgumentException.class, () -> ClubhousePlanner.plan(MAIN, ClubhousePlanner.Rooms.BOTH),
+                "a side room needs the annex");
+        Map<Long, String> a = blocks(alone.plan());
+        Map<Long, String> b = blocks(SITE.plan());
+        Map<Long, String> off = blocks(ClubhousePlanner.plan(BOX, ClubhousePlanner.Rooms.NONE).plan());
+        assertEquals(a, off, "a 48-deep box with both rooms off is the main room alone (the annex is air)");
+        Set<String> changed = new HashSet<>();
+        for (int i = 0; i < 32; i++) {
+            for (int j = 0; j <= ClubhousePlanner.ROOF; j++) {
+                for (int k = 0; k < ClubhousePlanner.MAIN_Z; k++) {
+                    long at = key(BOX.minX() + i, BOX.minY() + j, BOX.minZ() + k);
+                    if (!java.util.Objects.equals(a.get(at), b.get(at))) {
+                        changed.add(i + "," + j + "," + k);
+                    }
+                }
+            }
+        }
+        Set<String> expected = new HashSet<>();
+        for (int x0 : new int[]{ClubhousePlanner.ARCH_ARCADE_X0, ClubhousePlanner.ARCH_TROPHY_X0}) {
+            for (int i = x0; i < x0 + 3; i++) {
+                for (int j = 0; j <= ClubhousePlanner.ARCH_H; j++) {
+                    expected.add(i + "," + j + ",31"); // the archway and its floor
+                }
+            }
+            for (int k = ClubhousePlanner.FOYER_Z0; k <= 30; k++) {
+                expected.add((x0 + 1) + ",0," + k); // the path
+            }
+            for (int j : new int[]{4, 5}) {
+                expected.add((x0 + 1) + "," + j + ",30"); // the old sconce over the archway
+                expected.add((x0 - 1) + "," + j + ",30"); // and its two new places either side
+                expected.add((x0 + 3) + "," + j + ",30");
+            }
+        }
+        assertEquals(new java.util.TreeSet<>(expected), new java.util.TreeSet<>(changed),
+                "only the archways, the paths and the sconces");
+    }
+
+    /** One room off: its half of the annex is air and its archway stays wall; the other room stands as it was. */
+    @Test
+    void aRoomSwitchedOffIsNotBuilt() {
+        ClubhouseSite arcadeOnly = ClubhousePlanner.plan(BOX, new ClubhousePlanner.Rooms(true, false));
+        Map<Long, String> b = blocks(arcadeOnly.plan());
+        Map<Long, String> both = blocks(SITE.plan());
+        for (BlockOp op : arcadeOnly.plan().ops()) {
+            assertTrue(op.x() - BOX.minX() < ClubhousePlanner.TROPHY_X0 || op.z() - BOX.minZ() < ClubhousePlanner.MAIN_Z,
+                    "nothing of the Trophy Room: " + op);
+        }
+        assertNotNull(rel(b, ClubhousePlanner.ARCH_TROPHY_X0 + 1, 1, 31), "its archway stays wall");
+        assertNull(rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 1, 31), "the other archway is open");
+        for (int i = 0; i < 16; i++) {
+            for (int k = 32; k < 48; k++) {
+                for (int j = 0; j <= ClubhousePlanner.SIDE_ROOF; j++) {
+                    assertEquals(rel(both, i, j, k), rel(b, i, j, k), "the Arcade Room as it was");
+                }
+            }
+        }
+        assertFalse(arcadeOnly.in(BOX.minX() + 20.5, BOX.minY() + 1, BOX.minZ() + 40.5), "no Trophy Room to be in");
+    }
+
+    /**
+     * The archways are walk-in (three wide, three high, nothing to open), each with its colour path from the Foyer's
+     * first row up its middle and on into its room, and a door sign over it in front of the wall; standing in an
+     * archway is being in the Clubhouse.
+     */
+    @Test
+    void walkInArchwaysWithAPathAndASign() {
+        Map<Long, String> b = blocks(SITE.plan());
+        Object[][] rooms = {{ClubhousePlanner.ARCH_ARCADE_X0, ClubhousePlanner.PATH_ARCADE, true},
+                {ClubhousePlanner.ARCH_TROPHY_X0, ClubhousePlanner.PATH_TROPHY, false}};
+        for (Object[] r : rooms) {
+            int x0 = (int) r[0];
+            int mid = x0 + 1;
+            for (int i = x0; i < x0 + 3; i++) {
+                for (int j = 1; j <= 3; j++) {
+                    assertNull(rel(b, i, j, 31), "open archway at " + i + "," + j);
+                    assertTrue(SITE.in(BOX.minX() + i + 0.5, BOX.minY() + j, BOX.minZ() + 31.5), "in the Clubhouse");
+                }
+                assertNotNull(rel(b, i, 4, 31), "a lintel over it");
+            }
+            for (int k = ClubhousePlanner.FOYER_Z0; k <= 31; k++) {
+                assertEquals(r[1], rel(b, mid, 0, k), "the path at " + mid + "," + k);
+                String over = rel(b, mid, 1, k);
+                assertTrue(over == null, "nothing on the path: " + over);
+            }
+            ClubhousePlanner.Place3 sign = ClubhousePlanner.door(BOX, (boolean) r[2]);
+            assertEquals(BOX.minX() + mid + 0.5, sign.x(), 1e-9, "over the archway's middle");
+            assertEquals(180f, sign.yaw(), "facing the Foyer");
+            assertTrue(sign.z() < BOX.minZ() + 31 && sign.z() > BOX.minZ() + 30, "just out from the wall");
+            assertTrue(sign.y() - 0.75 >= BOX.minY() + 4 && sign.y() + 0.75 <= BOX.minY() + ClubhousePlanner.PANEL_Y0 - 1,
+                    "between the archway's top and the board's panel");
+            for (int dx : new int[]{-1, 0, 1}) {
+                for (int j = 4; j <= 6; j++) {
+                    assertNull(rel(b, mid + dx, j, 30), "the sign hangs clear of the sconces: " + (mid + dx) + "," + j);
+                }
+            }
+        }
+        // the sconces either side of each sign still light the archway
+        assertEquals(ClubhousePlanner.HANGING, rel(b, ClubhousePlanner.ARCH_ARCADE_X0 - 1, 4, 30));
+        assertEquals(ClubhousePlanner.HANGING, rel(b, ClubhousePlanner.ARCH_TROPHY_X0 + 3, 4, 30));
+    }
+
+    /**
+     * The Arcade Room's six cabinet places stand on their mats, in the room, with room to walk up (two blocks of air
+     * over each and one in front), the first four on the south wall facing the archway; the path reaches them.
+     */
+    @Test
+    void theArcadeRoomsCabinetPlaces() {
+        Map<Long, String> b = blocks(SITE.plan());
+        List<ClubhousePlanner.Place3> cabs = ClubhousePlanner.cabinets(BOX);
+        assertEquals(ClubhousePlanner.CABINETS, cabs.size());
+        Box room = ClubhousePlanner.arcadeInside(BOX);
+        Set<String> seen = new HashSet<>();
+        for (ClubhousePlanner.Place3 c : cabs) {
+            assertTrue(room.contains(c.x(), c.y(), c.z()), "in the Arcade Room: " + c);
+            assertEquals(ClubhousePlanner.MAT, at(b, c.x(), c.y() - 1, c.z()), "on its mat");
+            assertNull(at(b, c.x(), c.y(), c.z()), "air for the cabinet");
+            assertNull(at(b, c.x(), c.y() + 1, c.z()), "two high");
+            double fx = c.yaw() == -90f ? 1 : c.yaw() == 90f ? -1 : 0;
+            double fz = c.yaw() == 180f ? -1 : c.yaw() == 0f ? 1 : 0;
+            assertTrue(room.contains(c.x() + fx, c.y(), c.z() + fz), "it faces into the room: " + c);
+            assertNull(at(b, c.x() + fx, c.y(), c.z() + fz), "room to walk up");
+            assertTrue(seen.add(Math.floor(c.x()) + "," + Math.floor(c.z())), "one a place");
+            for (ClubhousePlanner.Place3 o : cabs) {
+                if (o != c) {
+                    assertTrue(Math.hypot(o.x() - c.x(), o.z() - c.z()) >= 3, "three apart: easy to tap the right one");
+                }
+            }
+        }
+        for (int n = 0; n < 4; n++) {
+            assertEquals(180f, cabs.get(n).yaw(), "the south wall's face the archway");
+        }
+        assertEquals(ClubhousePlanner.PATH_ARCADE, rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 0, 44), "the path runs to"
+                + " the cabinets");
+    }
+
+    /**
+     * The Trophy Room: the podium's three pedestals at the back (1st in the room's middle and highest, gold, iron,
+     * copper), eight record pedestals on the side walls; each trophy and its head stand on top, side by side, facing
+     * into the room.
+     */
+    @Test
+    void theTrophyRoomsPedestals() {
+        Map<Long, String> b = blocks(SITE.plan());
+        List<ClubhousePlanner.Pedestal> ps = ClubhousePlanner.pedestals(BOX);
+        assertEquals(3 + ClubhousePlanner.RECORD_PEDESTALS, ps.size());
+        Box room = ClubhousePlanner.trophyInside(BOX);
+        String[] tops = {ClubhousePlanner.GOLD, ClubhousePlanner.IRON, ClubhousePlanner.COPPER};
+        Set<String> seen = new HashSet<>();
+        for (int n = 0; n < ps.size(); n++) {
+            ClubhousePlanner.Pedestal p = ps.get(n);
+            for (ClubhousePlanner.Place3 c : new ClubhousePlanner.Place3[]{p.trophy(), p.head()}) {
+                assertTrue(room.contains(c.x(), c.y(), c.z()), "in the Trophy Room: " + c);
+                assertNotNull(at(b, c.x(), c.y() - 1, c.z()), "on its pedestal");
+                assertNull(at(b, c.x(), c.y(), c.z()), "air over it");
+                assertTrue(seen.add(Math.floor(c.x()) + "," + Math.floor(c.z())), "one a block");
+            }
+            assertEquals(1.0, Math.abs(p.head().x() - p.trophy().x()) + Math.abs(p.head().z() - p.trophy().z()), 1e-9,
+                    "the head is next to its trophy");
+            assertEquals(p.trophy().yaw(), p.head().yaw(), "both face the same way");
+            if (n < 3) {
+                assertEquals(tops[n], at(b, p.trophy().x(), p.trophy().y() - 1, p.trophy().z()), "podium " + (n + 1));
+            } else {
+                assertEquals(ClubhousePlanner.PEDESTAL, at(b, p.trophy().x(), p.trophy().y() - 1, p.trophy().z()));
+            }
+        }
+        assertTrue(ps.get(0).trophy().y() > ps.get(1).trophy().y() && ps.get(1).trophy().y() > ps.get(2).trophy().y(),
+                "1st highest");
+        double middle = (room.minX() + room.maxX() + 1) / 2.0;
+        assertEquals(middle, (ps.get(0).trophy().x() + ps.get(0).head().x()) / 2, 1e-9, "1st in the room's middle");
     }
 }

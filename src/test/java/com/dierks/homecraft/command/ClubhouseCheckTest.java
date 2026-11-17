@@ -71,4 +71,37 @@ class ClubhouseCheckTest {
         assertEquals(2, both.size(), "and the spots still to set, too: " + both);
         assertEquals(Status.WARN, both.get(1).status(), both.get(1).what());
     }
+
+    /** 0.41.0: the generated room with its side rooms on, one with blocks in their way, and a game of chance listed. */
+    private static Facts rooms(List<String> annex, String line, List<String> refused) {
+        return new Facts(true, false, "games", true, BOX, List.of(), ArenaCheck.Claim.CLAIMED, null, true, List.of(),
+                false, "", true, true, annex, line, refused);
+    }
+
+    @Test
+    void theSideRoomsHaveTheirOwnLines() {
+        List<Line> ok = rows(rooms(List.of(), "the Arcade Room and the Trophy Room, x 5376..5407", List.of()));
+        assertEquals(2, ok.size(), ok.toString());
+        assertTrue(ok.get(1).what().contains("side rooms: the Arcade Room"), ok.toString());
+        assertEquals(Status.OK, ok.get(1).status());
+
+        List<Line> near = rows(rooms(List.of("clubhouse is only 4 blocks from fresh_parkour's half A"), null, List.of()));
+        assertEquals(Status.OK, near.get(0).status(), "the main room still fits: " + near);
+        assertEquals(Status.WARN, near.get(1).status(), "the side rooms are left out, a WARN, never a FAIL");
+        assertTrue(near.get(1).what().contains("left out"), near.toString());
+
+        List<Line> blocked = rows(rooms(List.of(), "left out - the side rooms' box has 3 blocks that aren't the"
+                + " Clubhouse's - /hcm games clubhouse rebuild confirm clears them", List.of()));
+        assertEquals(Status.WARN, blocked.get(1).status());
+        assertTrue(blocked.get(1).fix().contains("rebuild confirm"), blocked.toString());
+
+        List<Line> chance = rows(rooms(List.of(), "built", List.of("games.clubhouse.arcade_room.games: ore_slots is a"
+                + " game of chance, and those never go in the Arcade Room - left out")));
+        assertEquals(Status.WARN, chance.get(2).status(), "a listed game of chance is a WARN: " + chance);
+        assertTrue(chance.get(2).what().contains("game of chance"));
+
+        Facts off = new Facts(true, false, "games", true, BOX, List.of(), ArenaCheck.Claim.CLAIMED, null, true,
+                List.of(), false, "", true, false, List.of(), "both switched off", List.of());
+        assertTrue(rows(off).get(1).what().contains("switched off"), rows(off).toString());
+    }
 }

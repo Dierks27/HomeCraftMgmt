@@ -47,8 +47,20 @@ public final class ClubhouseRoom {
      * server (fx2-C #8).
      */
     public static final String META_PREFIX = "gen.clubhouse.";
-    /** Where the claim is kept in {@code hcm_meta}. */
+    /** Where the claim is kept in {@code hcm_meta}: the main room's box (32 x 16 x 32, as before 0.41.0). */
     public static final String CLAIM_KEY = META_PREFIX + "claim";
+    /**
+     * 0.41.0: the side rooms' box (the 16 rows south of the main room) is claimed on its own, the same way: scanned
+     * first, claimed only when empty. A server that already has its main room keeps that claim untouched.
+     */
+    public static final String ANNEX_CLAIM_KEY = META_PREFIX + "annex.claim";
+    /**
+     * 0.41.0: the owner-built room's Arcade Room cabinets (one key: "game=world;x;y;z;yaw|game=..."), its trophy shelf
+     * and its two door signs ({@code DOOR_KEY + "arcade"|"trophy"}).
+     */
+    public static final String CABINETS_KEY = META_PREFIX + "hand.cabinets";
+    public static final String TROPHY_ROOM_KEY = META_PREFIX + "hand.trophyroom";
+    public static final String DOOR_KEY = META_PREFIX + "hand.door.";
     /** "hand" while an owner-built room is the Clubhouse. */
     public static final String MODE_KEY = META_PREFIX + "mode";
     /** "1" while an admin has switched the Clubhouse off. */
@@ -128,10 +140,24 @@ public final class ClubhouseRoom {
     }
 
     private final RoomHost host;
+    /** The main room's box (0.41.0: the claim's), the side rooms' box, and the side rooms wanted. */
     private final Box box;
+    private final Box annex;
+    private final Box full;
+    private final ClubhousePlanner.Rooms rooms;
     private final String world;
     private final BuildBudget budget;
-    private final ClubhouseSite site;
+    /** The main room alone, and with the annex (the rooms wanted, or none to clear it); {@code null} if not made. */
+    private final ClubhouseSite mainSite;
+    private final ClubhouseSite fullSite;
+    /** The room being built or standing: one of the two. */
+    private ClubhouseSite site;
+    /** 0.41.0: whether the annex is part of the build (claimed), and why not when it is wanted but left out. */
+    private boolean annexIn;
+    private String annexOut;
+    /** What the running job is: a claim scan of the main box, of the annex, or the build. */
+    private enum JobKind { SCAN_MAIN, SCAN_ANNEX, BUILD }
+    private JobKind jobKind;
 
     private Phase phase = Phase.WAITING;
     private String waitingFor;
@@ -149,11 +175,17 @@ public final class ClubhouseRoom {
     private Place handJukebox;
     /** 0.38.6: the owner-built room's feast table, where set. */
     private Place handFeast;
+    /** 0.41.0: the owner-built room's cabinets (game id to place), trophy shelf and door signs, where set. */
+    private final Map<String, Place> handCabinets = new java.util.LinkedHashMap<>();
+    private Place handTrophyRoom;
+    private final Map<String, Place> handDoors = new HashMap<>();
     private BuildJob job;
     private boolean jobScan;
     private long jobStarted;
     private long ticks;
     private boolean confirmClaim;
+    /** 0.41.0: {@code rebuild confirm} claims the side rooms' box too, even with blocks in it. */
+    private boolean confirmAnnex;
     private boolean verified;
     // for status
     private int builds;
@@ -165,18 +197,26 @@ public final class ClubhouseRoom {
     /** The room with the settings as they are now: the box and world are fixed until it stops. */
     public ClubhouseRoom(RoomHost host, ClubhouseSettings settings) {
         this.host = host;
-        this.box = settings.box();
+        this.box = settings.mainBox();
+        this.annex = settings.annexBox();
+        this.full = settings.box();
+        this.rooms = settings.rooms();
         String w = host.worldName();
         this.world = w == null ? "" : w.trim();
         this.budget = new BuildBudget(host::nanoTime);
-        ClubhouseSite s;
+        ClubhouseSite m;
+        ClubhouseSite f;
         try {
-            s = ClubhousePlanner.plan(box);
+            m = ClubhousePlanner.plan(box, ClubhousePlanner.Rooms.NONE);
+            f = ClubhousePlanner.plan(full, rooms);
         } catch (RuntimeException e) {
-            s = null;
+            m = null;
+            f = null;
             planProblem = e.getMessage();
         }
-        this.site = s;
+        this.mainSite = m;
+        this.fullSite = f;
+        this.site = m;
     }
 
     /** Who may stay in the box during a build (their writes wait); anyone else is moved out first. */
@@ -206,6 +246,16 @@ public final class ClubhouseRoom {
             handTrophies = Place.of(host.meta(TROPHIES_KEY));
             handJukebox = Place.of(host.meta(JUKEBOX_KEY));
             handFeast = Place.of(host.meta(FEAST_KEY));
+            handCabinets.clear();
+            handCabinets.putAll(cabinetsOf(host.meta(CABINETS_KEY)));
+            handTrophyRoom = Place.of(host.meta(TROPHY_ROOM_KEY));
+            handDoors.clear();
+            for (String which : DOORS) {
+                Place at = Place.of(host.meta(DOOR_KEY + which));
+                if (at != null) {
+                    handDoors.put(which, at);
+                }
+            }
         } catch (Exception e) {
             host.logger().log(Level.WARNING, "Clubhouse: could not read its settings from the database", e);
             waitingFor = "its settings can't be read from the database";
@@ -238,7 +288,7 @@ public final class ClubhouseRoom {
             }
             return;
         }
-        if (site == null) {
+        if (mainSite == null) {
             close("its room could not be made: " + planProblem);
             return;
         }
@@ -284,8 +334,12 @@ public final class ClubhouseRoom {
             BuildJob done = job;
             job = null;
             done.release();
-            if (jobScan) {
+            if (jobKind == JobKind.SCAN_MAIN) {
                 scanned(done);
+                return;
+            }
+            if (jobKind == JobKind.SCAN_ANNEX) {
+                annexScanned(done);
                 return;
             }
             builds++;
@@ -293,7 +347,7 @@ public final class ClubhouseRoom {
             verified = true;
             phase = Phase.READY;
             lastError = null;
-            host.logger().info("Clubhouse: built and checked (" + box.describe() + ", " + done.writes()
+            host.logger().info("Clubhouse: built and checked (" + site.box().describe() + ", " + done.writes()
                     + " blocks written in " + (ticks - jobStarted) + " ticks)");
         } else if (job.failed()) {
             BuildJob failed = job;
@@ -314,7 +368,7 @@ public final class ClubhouseRoom {
     }
 
     private void tryBuild() {
-        if (hand || off || site == null) {
+        if (hand || off || mainSite == null) {
             return;
         }
         if (world.isEmpty()) {
@@ -357,14 +411,102 @@ public final class ClubhouseRoom {
                     + " they are");
         }
         moveStrays();
-        startJob(port, !claimed);
+        if (!claimed) {
+            startJob(port, JobKind.SCAN_MAIN);
+        } else {
+            afterMain(port);
+        }
     }
 
-    private void startJob(WorldPort port, boolean scan) {
-        job = new BuildJob(port, box, scan ? null : site.plan(), scan ? BuildJob.Mode.SCAN : BuildJob.Mode.CONVERGE);
-        jobScan = scan;
+    /**
+     * The main box is claimed: the side rooms' box next (0.41.0). Wanted (a room is on) or claimed before (a room
+     * switched off is cleared), it must be clear of every other games area; claimed, or scanned empty now, it is
+     * built with the main room. Anything in its way leaves the side rooms out (the main room opens as before, and the
+     * status says why); {@code rebuild confirm} claims it anyway.
+     */
+    private void afterMain(WorldPort port) {
+        annexIn = false;
+        annexOut = null;
+        String claim;
+        try {
+            claim = host.meta(ANNEX_CLAIM_KEY);
+        } catch (Exception e) {
+            annexOut = "its claim can't be read from the database";
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        boolean claimed = claimText(world, annex).equals(claim);
+        if (!rooms.any() && !claimed) {
+            startJob(port, JobKind.BUILD); // no side room wanted, and none ever built here
+            return;
+        }
+        List<String> problems = host.regionProblems(annex, world);
+        if (problems != null && !problems.isEmpty()) {
+            annexOut = "the side rooms' box can't be used: " + problems.get(0);
+            host.logger().warning("Clubhouse: the side rooms are left out - " + annexOut);
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        if (!claimed && confirmAnnex) {
+            try {
+                host.meta(ANNEX_CLAIM_KEY, claimText(world, annex));
+                claimed = true;
+            } catch (Exception e) {
+                annexOut = "its claim can't be written to the database";
+            }
+        }
+        confirmAnnex = false;
+        if (claimed) {
+            annexIn = true;
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        if (annexOut != null) {
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        startJob(port, JobKind.SCAN_ANNEX);
+    }
+
+    /** The annex's count is in: empty, it is claimed and built with the room; anything in it leaves it out. */
+    private void annexScanned(BuildJob scan) {
+        WorldPort port = host.world(world);
+        if (port == null) {
+            phase = Phase.WAITING;
+            return;
+        }
+        if (scan.found() > 0) {
+            String first = scan.firstFound().isEmpty() ? "" : " (first at " + String.join(" ", scan.firstFound()) + ")";
+            annexOut = "the side rooms' box has " + scan.found() + " block" + (scan.found() == 1 ? "" : "s")
+                    + " that aren't the Clubhouse's" + first + " - /hcm games clubhouse rebuild confirm clears them";
+            host.logger().warning("Clubhouse: the side rooms are left out - " + annexOut);
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        try {
+            host.meta(ANNEX_CLAIM_KEY, claimText(world, annex));
+        } catch (Exception e) {
+            host.logger().log(Level.WARNING, "Clubhouse: could not record the side rooms' claim", e);
+            annexOut = "its claim can't be written to the database";
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        host.logger().info("Clubhouse: claimed the side rooms' empty box (" + annex.describe() + ")");
+        annexIn = true;
+        startJob(port, JobKind.BUILD);
+    }
+
+    private void startJob(WorldPort port, JobKind kind) {
+        jobKind = kind;
+        jobScan = kind != JobKind.BUILD;
+        if (kind == JobKind.BUILD) {
+            site = annexIn ? fullSite : mainSite;
+        }
+        Box where = kind == JobKind.SCAN_ANNEX ? annex : kind == JobKind.SCAN_MAIN ? box : site.box();
+        job = new BuildJob(port, where, jobScan ? null : site.plan(), jobScan ? BuildJob.Mode.SCAN
+                : BuildJob.Mode.CONVERGE);
         jobStarted = ticks;
-        phase = scan ? Phase.SCANNING : Phase.BUILDING;
+        phase = jobScan ? Phase.SCANNING : Phase.BUILDING;
     }
 
     /** The claim's count is in: an empty box is claimed and built; anything in it closes the Clubhouse. */
@@ -390,7 +532,7 @@ public final class ClubhouseRoom {
             phase = Phase.WAITING;
             return;
         }
-        startJob(port, false);
+        afterMain(port);
     }
 
     private void cancelJob() {
@@ -416,10 +558,10 @@ public final class ClubhouseRoom {
         return out;
     }
 
-    /** Before a build: anyone in the box who isn't a visitor is moved out of its way. */
+    /** Before a build: anyone in the box (the side rooms' too) who isn't a visitor is moved out of its way. */
     private void moveStrays() {
         for (Person p : host.people()) {
-            if (p.in(world, box) && !visitor.test(p.id())) {
+            if ((p.in(world, box) || p.in(world, annex)) && !visitor.test(p.id())) {
                 host.toSafety(p.id(), world);
             }
         }
@@ -462,6 +604,7 @@ public final class ClubhouseRoom {
         off = false;
         hand = false;
         confirmClaim = true;
+        confirmAnnex = rooms.any();
         settle();
         out.add("&aThe Clubhouse is being built and checked. &7/hcm games clubhouse status shows how it goes.");
         return out;
@@ -585,6 +728,212 @@ public final class ClubhouseRoom {
                 + notOnYet();
     }
 
+    // ---- 0.41.0: the owner-built room's side-room spots ----------------------------------------------
+
+    /** The two door signs: over the Arcade Room's doorway and over the Trophy Room's. */
+    public static final List<String> DOORS = List.of("arcade", "trophy");
+    /** How far over the admin's feet an owner-built door sign's middle hangs. */
+    static final double HAND_DOOR_UP = 3.5;
+    /** The owner-built trophy shelf: this many pairs (the podium's three, then the records), two blocks each. */
+    static final int SHELF_PAIRS = 3 + ClubhousePlanner.RECORD_PEDESTALS;
+
+    /** "game=place|game=place" as stored, read back in order; anything unreadable is skipped. */
+    static Map<String, Place> cabinetsOf(String text) {
+        Map<String, Place> out = new java.util.LinkedHashMap<>();
+        if (text == null || text.isBlank()) {
+            return out;
+        }
+        for (String part : text.split("\\|")) {
+            int eq = part.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            Place at = Place.of(part.substring(eq + 1));
+            if (at != null) {
+                out.put(part.substring(0, eq).trim().toLowerCase(Locale.ROOT), at);
+            }
+        }
+        return out;
+    }
+
+    /** The owner-built cabinets as stored. */
+    static String cabinetsText(Map<String, Place> cabinets) {
+        StringBuilder out = new StringBuilder();
+        for (Map.Entry<String, Place> e : cabinets.entrySet()) {
+            out.append(out.length() == 0 ? "" : "|").append(e.getKey()).append('=').append(e.getValue().text());
+        }
+        return out.toString();
+    }
+
+    /**
+     * {@code /hcm games clubhouse cabinet <game>} (0.41.0): the owner-built room's cabinet for {@code gameId} stands on
+     * the block the admin stands on, facing the way they face (squared). The caller has checked it is a cabinet game.
+     */
+    public String cabinet(String gameId, Place at) {
+        Map<String, Place> next = new java.util.LinkedHashMap<>(handCabinets);
+        next.put(gameId, at);
+        if (!setMeta(CABINETS_KEY, cabinetsText(next))) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handCabinets.clear();
+        handCabinets.putAll(next);
+        return "&aThe " + gameId + " cabinet stands where you stand, facing the way you face." + notOnYet();
+    }
+
+    /** {@code /hcm games clubhouse cabinet <game> clear} (or {@code all}): the cabinet comes down. */
+    public String clearCabinet(String gameId) {
+        Map<String, Place> next = new java.util.LinkedHashMap<>(handCabinets);
+        boolean all = "all".equals(gameId);
+        if (all) {
+            next.clear();
+        } else if (next.remove(gameId) == null) {
+            return "&7There is no " + gameId + " cabinet to clear.";
+        }
+        if (!setMeta(CABINETS_KEY, next.isEmpty() ? null : cabinetsText(next))) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handCabinets.clear();
+        handCabinets.putAll(next);
+        return all ? "&aEvery cabinet is cleared." : "&aThe " + gameId + " cabinet is cleared.";
+    }
+
+    /**
+     * {@code /hcm games clubhouse trophyroom} (0.41.0): the owner-built room's trophy shelf starts on the block the
+     * admin stands on (on their shelf, their back to the wall): {@value #SHELF_PAIRS} pairs run to their right, a
+     * trophy then its holder's head, the podium's three first. {@code clear} takes it down.
+     */
+    public String trophyRoom(Place at) {
+        if (!setMeta(TROPHY_ROOM_KEY, at == null ? null : at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handTrophyRoom = at;
+        return at == null ? "&aThe trophy shelf is cleared."
+                : "&aThe trophy shelf starts where you stand and runs " + 2 * SHELF_PAIRS + " blocks to your right: a"
+                + " trophy, then its holder's head." + notOnYet();
+    }
+
+    /**
+     * {@code /hcm games clubhouse door arcade|trophy} (0.41.0): the owner-built room's sign over that doorway hangs
+     * {@value #HAND_DOOR_UP} blocks over the admin's feet, facing the way they face. {@code null}: cleared.
+     */
+    public String door(String which, Place at) {
+        if (!DOORS.contains(which)) {
+            return "&cThe door signs are arcade and trophy.";
+        }
+        if (!setMeta(DOOR_KEY + which, at == null ? null : at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        if (at == null) {
+            handDoors.remove(which);
+            return "&aThe " + which + " door sign is cleared.";
+        }
+        handDoors.put(which, at);
+        return "&aThe " + which + " door sign hangs over where you stand, facing the way you face." + notOnYet();
+    }
+
+    /**
+     * The Arcade Room's cabinet places (0.41.0) for the kid set {@code games} (already checked): the generated room's
+     * places in order, while the room is built; the owner-built room's own cabinet for each game that has one (only in
+     * its world). Empty while there is none.
+     */
+    public Map<String, ClubhousePlanner.Place3> cabinetPlaces(List<String> games) {
+        Map<String, ClubhousePlanner.Place3> out = new java.util.LinkedHashMap<>();
+        if (games == null || games.isEmpty()) {
+            return out;
+        }
+        if (!hand) {
+            if (!arcadeBuilt()) {
+                return out;
+            }
+            List<ClubhousePlanner.Place3> at = ClubhousePlanner.cabinets(site.box());
+            for (int n = 0; n < games.size() && n < at.size(); n++) {
+                out.put(games.get(n), at.get(n));
+            }
+            return out;
+        }
+        for (String g : games) {
+            Place at = handCabinets.get(g);
+            if (at != null && at.world().equalsIgnoreCase(world())) {
+                out.put(g, new ClubhousePlanner.Place3(Math.floor(at.x()) + 0.5, Math.floor(at.y()),
+                        Math.floor(at.z()) + 0.5, WallBoards.snap(at.yaw())));
+            }
+        }
+        return out;
+    }
+
+    /** The games with an owner-built cabinet, in the order they were set (for the kid set in that room). */
+    public List<String> handCabinetGames() {
+        return List.copyOf(handCabinets.keySet());
+    }
+
+    /**
+     * The Trophy Room's pedestals (0.41.0): the generated room's ({@link ClubhousePlanner#pedestals}) while it is
+     * built, or the owner-built shelf's pairs along the admin's right (only in its world); empty for none.
+     */
+    public List<ClubhousePlanner.Pedestal> pedestals() {
+        if (!hand) {
+            return trophyBuilt() ? ClubhousePlanner.pedestals(site.box()) : List.of();
+        }
+        Place at = handTrophyRoom;
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return List.of();
+        }
+        int[] r = right(at.yaw());
+        float yaw = WallBoards.snap(at.yaw());
+        double x0 = Math.floor(at.x()) + 0.5;
+        double z0 = Math.floor(at.z()) + 0.5;
+        double y = Math.floor(at.y());
+        List<ClubhousePlanner.Pedestal> out = new ArrayList<>();
+        for (int n = 0; n < SHELF_PAIRS; n++) {
+            int t = 2 * n;
+            out.add(new ClubhousePlanner.Pedestal(new ClubhousePlanner.Place3(x0 + t * r[0], y, z0 + t * r[1], yaw),
+                    new ClubhousePlanner.Place3(x0 + (t + 1) * r[0], y, z0 + (t + 1) * r[1], yaw)));
+        }
+        return out;
+    }
+
+    /** Where door sign {@code which} hangs (its middle and facing), or {@code null} for none (0.41.0). */
+    public ClubhousePlanner.Place3 doorSign(String which) {
+        if (!hand) {
+            boolean arcade = "arcade".equals(which);
+            return (arcade ? arcadeBuilt() : trophyBuilt()) ? ClubhousePlanner.door(site.box(), arcade) : null;
+        }
+        Place at = handDoors.get(which);
+        if (at == null || !at.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        return new ClubhousePlanner.Place3(Math.floor(at.x()) + 0.5, Math.floor(at.y()) + HAND_DOOR_UP,
+                Math.floor(at.z()) + 0.5, WallBoards.snap(at.yaw()));
+    }
+
+    /**
+     * Whether feet at (x, y, z) are in the Trophy Room (0.41.0, for the shimmer): the generated room's, or within
+     * {@value #SHELF_REACH} blocks of the owner-built shelf's start.
+     */
+    public boolean inTrophyRoom(String worldName, double x, double y, double z) {
+        if (worldName == null || !worldName.equalsIgnoreCase(world())) {
+            return false;
+        }
+        if (!hand) {
+            return trophyBuilt() && ClubhousePlanner.trophyInside(site.box()).contains(x, y, z);
+        }
+        Place at = handTrophyRoom;
+        return at != null && Math.abs(x - at.x()) <= SHELF_REACH && Math.abs(z - at.z()) <= SHELF_REACH
+                && Math.abs(y - at.y()) <= 4;
+    }
+
+    /** How near the owner-built shelf's start counts as being at it. */
+    static final double SHELF_REACH = 2 * SHELF_PAIRS;
+
+    /** Whether the generated room's Arcade Room is built in (open, the side rooms' box in, and switched on). */
+    private boolean arcadeBuilt() {
+        return site != null && annexIn && rooms.arcade() && open();
+    }
+
+    private boolean trophyBuilt() {
+        return site != null && annexIn && rooms.trophy() && open();
+    }
+
     /** What a wall board is called in the admin's lines. */
     static String wallName(String which) {
         return switch (which) {
@@ -627,7 +976,8 @@ public final class ClubhouseRoom {
      * starts a new room when they change ({@code /hcm reload}).
      */
     public boolean builtWith(ClubhouseSettings s, String worldName) {
-        return s != null && box.equals(s.box()) && world.equals(worldName == null ? "" : worldName.trim());
+        return s != null && box.equals(s.mainBox()) && rooms.equals(s.rooms())
+                && world.equals(worldName == null ? "" : worldName.trim());
     }
 
     /** Whether visitors may come in now. */
@@ -664,9 +1014,23 @@ public final class ClubhouseRoom {
         return site;
     }
 
-    /** The generated room's box. */
+    /** The generated room's box as built (0.41.0: with the side rooms' box when they are in), or the main box. */
     public Box box() {
+        return site == null ? box : site.box();
+    }
+
+    /** The main room's box (the claim's). */
+    public Box mainBox() {
         return box;
+    }
+
+    /** 0.41.0: whether the side rooms' box is part of the generated room, and why not when it was wanted. */
+    public boolean annexIn() {
+        return annexIn;
+    }
+
+    public String annexOut() {
+        return annexOut;
     }
 
     /** The room's world: the owner-built room's, or the Games world. */
@@ -907,6 +1271,7 @@ public final class ClubhouseRoom {
             out.add("plan " + site.plan().hash() + ", " + site.plan().ops().size() + " blocks; builds " + builds
                     + (builds > 0 ? ", last wrote " + lastWrites : "") + (lastError == null ? "" : "; last failure: "
                     + lastError));
+            out.add("side rooms: " + sideRoomsLine()); // 0.41.0
         }
         if (hand) {
             out.addAll(handSpots());
@@ -917,8 +1282,30 @@ public final class ClubhouseRoom {
             out.add("trophies " + (handTrophies == null ? "not set (optional)" : handTrophies.text())); // 0.38.4
             out.add("jukebox " + (handJukebox == null ? "not set (optional)" : handJukebox.text()));
             out.add("feast " + (handFeast == null ? "not set (optional)" : handFeast.text())); // 0.38.6
+            out.add("arcade cabinets " + (handCabinets.isEmpty() ? "none set (optional)" : String.join(", ",
+                    handCabinets.keySet()))); // 0.41.0
+            out.add("trophy room " + (handTrophyRoom == null ? "not set (optional)" : handTrophyRoom.text()));
+            for (String which : DOORS) {
+                Place at = handDoors.get(which);
+                out.add(which + " door sign " + (at == null ? "not set (optional)" : at.text()));
+            }
         }
         return out;
+    }
+
+    /** The generated room's side rooms in a line: which are built, or why they are left out (0.41.0). */
+    String sideRoomsLine() {
+        if (!rooms.any()) {
+            return annexIn ? "both switched off (their box is cleared)" : "both switched off";
+        }
+        if (annexOut != null) {
+            return "left out - " + annexOut;
+        }
+        if (!annexIn) {
+            return "not built yet";
+        }
+        return (rooms.arcade() ? "the Arcade Room" : "") + (rooms.arcade() && rooms.trophy() ? " and " : "")
+                + (rooms.trophy() ? "the Trophy Room" : "") + ", " + annex.describe();
     }
 
     /** The build running now, or {@code null} (for the tests). */

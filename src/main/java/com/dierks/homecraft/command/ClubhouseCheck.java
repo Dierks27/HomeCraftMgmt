@@ -31,16 +31,31 @@ final class ClubhouseCheck {
      * @param handComplete every owner-built spot is set
      * @param handWorld   the owner-built room's world ({@code ""} for none)
      * @param handListed  that world is one of {@code games.worlds}
+     * @param roomsOn     0.41.0: the Arcade Room or the Trophy Room is switched on
+     * @param annexProblems 0.41.0: why the side rooms' box can't be used, empty when it can
+     * @param sideRooms   0.41.0: the running room's side rooms in a line, or {@code null}
+     * @param kidRefused  0.41.0: the Arcade Room's listed games that are left out (a game of chance, not a game)
      */
     record Facts(boolean enabled, boolean handBuilt, String world, boolean worldLoaded, String box,
                  List<String> problems, ArenaCheck.Claim claim, String closed, boolean ready, List<String> handSpots,
-                 boolean handComplete, String handWorld, boolean handListed) {
+                 boolean handComplete, String handWorld, boolean handListed, boolean roomsOn,
+                 List<String> annexProblems, String sideRooms, List<String> kidRefused) {
 
         Facts {
             world = world == null ? "" : world;
             handWorld = handWorld == null ? "" : handWorld;
             problems = List.copyOf(problems == null ? List.of() : problems);
             handSpots = List.copyOf(handSpots == null ? List.of() : handSpots);
+            annexProblems = List.copyOf(annexProblems == null ? List.of() : annexProblems);
+            kidRefused = List.copyOf(kidRefused == null ? List.of() : kidRefused);
+        }
+
+        /** 0.40.0's facts: no side rooms. */
+        Facts(boolean enabled, boolean handBuilt, String world, boolean worldLoaded, String box, List<String> problems,
+              ArenaCheck.Claim claim, String closed, boolean ready, List<String> handSpots, boolean handComplete,
+              String handWorld, boolean handListed) {
+            this(enabled, handBuilt, world, worldLoaded, box, problems, claim, closed, ready, handSpots, handComplete,
+                    handWorld, handListed, false, List.of(), null, List.of());
         }
     }
 
@@ -71,6 +86,7 @@ final class ClubhouseCheck {
             } else {
                 out.add(Line.ok("The Clubhouse is your own room: arrival, podium and board all set"));
             }
+            kids(f, out);
             return;
         }
         if (f.world().isBlank()) {
@@ -103,5 +119,43 @@ final class ClubhouseCheck {
         out.add(Line.ok("The Clubhouse: box fits (" + f.box() + "), "
                 + (f.claim() == ArenaCheck.Claim.CLAIMED ? "claimed" : "empty (claimed at its first build)")
                 + (f.ready() ? ", built and checked" : ", being built")));
+        sideRooms(f, out);
+    }
+
+    /**
+     * 0.41.0, the generated room's side rooms: switched off; their box in another area's way (the main room opens
+     * without them); left out for blocks in their box; or built.
+     */
+    static void sideRooms(Facts f, List<Line> out) {
+        if (!f.roomsOn() && f.sideRooms() == null) {
+            kids(f, out);
+            return; // no running room to report on (or 0.40.0's facts): nothing to say
+        }
+        if (!f.roomsOn()) {
+            out.add(Line.ok("The Clubhouse's Arcade Room and Trophy Room are switched off"
+                    + " (games.clubhouse.arcade_room / trophy_room)"));
+            return;
+        }
+        for (String p : f.annexProblems()) {
+            out.add(Line.warn("The Clubhouse's side rooms (the 16 rows south of it): " + p + " - they are left out",
+                    ORIGIN + ", or switch them off with games.clubhouse.arcade_room.enabled and trophy_room.enabled"));
+        }
+        if (f.annexProblems().isEmpty()) {
+            String s = f.sideRooms();
+            if (s != null && s.startsWith("left out")) {
+                out.add(Line.warn("The Clubhouse's side rooms are " + s, s.contains("rebuild confirm")
+                        ? "/hcm games clubhouse rebuild confirm" : "see /hcm games clubhouse status"));
+            } else {
+                out.add(Line.ok("The Clubhouse's side rooms: " + (s == null ? "built with the room" : s)));
+            }
+        }
+        kids(f, out);
+    }
+
+    /** The Arcade Room's list: each game left out (a game of chance, or no such cabinet) is a WARN. */
+    private static void kids(Facts f, List<Line> out) {
+        for (String why : f.kidRefused()) {
+            out.add(Line.warn(why, "list only arcade cabinet games in games.clubhouse.arcade_room.games"));
+        }
     }
 }

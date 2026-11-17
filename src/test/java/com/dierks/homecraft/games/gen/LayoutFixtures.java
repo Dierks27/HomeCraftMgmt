@@ -128,7 +128,7 @@ public final class LayoutFixtures {
         out.put("keep", plots);
         ClubhouseSettings cs = p.settings(Clubhouse.SPEC);
         FallingFloorsSettings ff = p.settings(FallingFloors.SPEC);
-        out.put("clubhouse", List.of(cs.box()));
+        out.put("clubhouse", List.of(cs.mainBox())); // the claim's box (0.41.0: the side rooms are claimed apart)
         out.put("falling_floors", List.of(ff.box()));
         return out;
     }

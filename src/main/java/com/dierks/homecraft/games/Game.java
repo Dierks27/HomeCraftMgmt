@@ -160,6 +160,17 @@ public interface Game {
         return false;
     }
 
+    /**
+     * 0.41.0, a cabinet in the Clubhouse's Arcade Room was tapped (after the gate allowed it): start a Classic game at
+     * once, with no first screen, no mode to pick and never today's scored try, the screen made for a player who can't
+     * read yet (one big Play again picture). {@code back} is where Back goes (the kid tap closes the screen).
+     *
+     * @return false when this game has no such start (its own first screen opens instead)
+     */
+    default boolean playClassic(Player player, Runnable back) {
+        return false;
+    }
+
     /** The player's world session in this game ended (after their things were restored). */
     default void onSessionEnd(Player player, EndReason reason) {
     }

@@ -154,6 +154,26 @@ public abstract class GameMenu extends Menu implements GameScreen {
     }
 
     /** The token balance tile: "&amp;eYou have &amp;6N tokens". */
+    /**
+     * 0.41.0, the kid screen (a cabinet tapped in the Clubhouse's Arcade Room): Play again as one big green picture
+     * over every slot in {@code slots}, the same button in each, so a thumb on a controller can't miss it.
+     */
+    protected void bigAgain(int[] slots, Runnable again) {
+        ItemStack big = Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&l▶ Play again"), true);
+        for (int slot : slots) {
+            set(slot, big, e -> again.run());
+        }
+    }
+
+    /** Slots {@code from} to {@code to}, both in: a kid screen's big button. */
+    protected static int[] slots(int from, int to) {
+        int[] out = new int[to - from + 1];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = from + i;
+        }
+        return out;
+    }
+
     protected ItemStack balanceTile() {
         int tokens = plugin.tokens() == null ? 0 : plugin.tokens().balance(viewer.getUniqueId());
         return Menus.icon(Material.SUNFLOWER, "&eYou have &6" + tokens + " token" + (tokens == 1 ? "" : "s"));

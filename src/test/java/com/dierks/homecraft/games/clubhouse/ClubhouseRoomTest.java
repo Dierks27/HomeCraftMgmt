@@ -34,12 +34,17 @@ class ClubhouseRoomTest {
 
     private static final ClubhouseSettings SETTINGS = ClubhouseSettings.defaults();
     private static final Box BOX = SETTINGS.box();
+    /** 0.41.0: the main room's box (the claim's) and the side rooms'. */
+    private static final Box MAIN = SETTINGS.mainBox();
+    private static final Box ANNEX = SETTINGS.annexBox();
 
     /** The server as the room sees it: a fake world, a meta map, and who was moved out of the way. */
     static class Host implements RoomHost {
         final FakeWorldPort world = new FakeWorldPort("games");
         final Map<String, String> meta = new HashMap<>();
         final List<String> problems = new ArrayList<>();
+        /** 0.41.0: what is in the side rooms' box's way alone (the main box has {@link #problems}). */
+        final List<String> annexProblems = new ArrayList<>();
         final List<Person> people = new ArrayList<>();
         final List<UUID> moved = new ArrayList<>();
         boolean loaded = true;
@@ -93,7 +98,7 @@ class ClubhouseRoomTest {
 
         @Override
         public List<String> regionProblems(Box box, String world) {
-            return problems;
+            return ANNEX.equals(box) && !annexProblems.isEmpty() ? annexProblems : problems;
         }
 
         @Override
@@ -163,6 +168,10 @@ class ClubhouseRoomTest {
         until(r, ClubhouseRoom.Phase.READY, 3_000);
         assertTrue(r.open() && r.verified(), "built and checked: open");
         assertEquals(r.claimText(), host.meta.get(ClubhouseRoom.CLAIM_KEY), "the empty box was claimed");
+        assertEquals(ClubhouseRoom.claimText("games", MAIN), r.claimText(), "the main room's claim is 0.40.0's");
+        assertEquals(ClubhouseRoom.claimText("games", ANNEX), host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY),
+                "and the side rooms' box is claimed on its own");
+        assertTrue(r.annexIn() && r.site().box().equals(BOX), "built with its side rooms");
         assertEquals(r.site().plan().ops().size(), host.world.count(BOX), "every block of the plan is there");
         assertNotNull(r.spawn(0), "arrival spots are handed out");
         assertTrue(r.guarded(), "the generated room's box is guarded");
@@ -190,7 +199,8 @@ class ClubhouseRoomTest {
 
     @Test
     void aVerifyThatFailsClosesTheClubhouse() {
-        host.meta.put(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.claimText("games", BOX));
+        host.meta.put(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.claimText("games", MAIN));
+        host.meta.put(ClubhouseRoom.ANNEX_CLAIM_KEY, ClubhouseRoom.claimText("games", ANNEX));
         host.world.sticky.add(FakeWorldPort.pos(BOX.minX(), BOX.minY(), BOX.minZ())); // it never changes
         ClubhouseRoom r = room();
         assertEquals(ClubhouseRoom.Phase.BUILDING, r.phase(), "claimed: straight to the build");
@@ -285,8 +295,11 @@ class ClubhouseRoomTest {
     @Test
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
-        assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "generated",
-                "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
+        assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "cabinet",
+                "trophyroom", "door", "generated", "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
+        assertEquals(List.of("arcade", "trophy"), admin.tab(null, new String[]{"door", ""}), "the two doors");
+        assertEquals(List.of("clear"), admin.tab(null, new String[]{"door", "arcade", "c"}), "and clear");
+        assertEquals(List.of("clear"), admin.tab(null, new String[]{"trophyroom", ""}));
         assertEquals(List.of("confirm"), admin.tab(null, new String[]{"rebuild", "c"}), "rebuild confirm");
         assertEquals(List.of("1", "2", "3"), admin.tab(null, new String[]{"podium", ""}), "the three places");
         assertEquals(List.of("fame", "playing", "stats"), admin.tab(null, new String[]{"board", ""}),
@@ -311,7 +324,7 @@ class ClubhouseRoomTest {
         ClubhouseRoom generated = room();
         until(generated, ClubhouseRoom.Phase.READY, 3_000);
         for (String which : List.of(WallBoards.RESULTS, WallBoards.FAME, WallBoards.PLAYING, WallBoards.STATS)) {
-            assertEquals(WallBoards.generated(which, BOX), generated.wall(which), "the generated room's " + which);
+            assertEquals(WallBoards.generated(which, MAIN), generated.wall(which), "the generated room's " + which);
         }
         assertNull(generated.wall("podium"), "only the boards");
 
@@ -504,5 +517,170 @@ class ClubhouseRoomTest {
             assertFalse(rebuilt.off() || rebuilt.hand(), "rebuild confirm's switches are kept after a restart");
             assertNull(store.get(ClubhouseRoom.OFF_KEY), "the off switch is gone from the store");
         }
+    }
+
+    // ---- 0.41.0: the side rooms ----------------------------------------------------------------------
+
+    /**
+     * A server that already has its 0.40.0 room keeps its claim: the main room is not scanned again, only the side
+     * rooms' new box is (empty: claimed), and the room is built once with both.
+     */
+    @Test
+    void aBuiltServerKeepsItsClaimAndOnlyTheSideRoomsBoxIsScanned() {
+        host.meta.put(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.claimText("games", MAIN));
+        ClubhouseSite old = ClubhousePlanner.plan(MAIN);
+        for (com.dierks.homecraft.games.gen.api.BlockOp op : old.plan().ops()) {
+            host.world.put(op.x(), op.y(), op.z(), old.plan().blockOf(op)); // 0.40.0's room stands
+        }
+        ClubhouseRoom r = room();
+        assertEquals(ClubhouseRoom.Phase.SCANNING, r.phase(), "the new box is counted first");
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertEquals(ClubhouseRoom.claimText("games", MAIN), host.meta.get(ClubhouseRoom.CLAIM_KEY), "unchanged");
+        assertEquals(ClubhouseRoom.claimText("games", ANNEX), host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY));
+        assertTrue(r.annexIn(), "with its side rooms");
+        assertEquals(r.site().plan().ops().size(), host.world.count(BOX), "every block of the new plan is there");
+        assertTrue(r.contains("games", BOX.minX() + 5.5, BOX.minY() + 1, BOX.minZ() + 40.5), "the Arcade Room is in");
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("side rooms: the Arcade Room and the Trophy"
+                + " Room")), r.statusLines().toString());
+    }
+
+    /**
+     * Anything in the side rooms' box leaves the side rooms out, touching nothing: the main room opens as before (its
+     * archways stay wall), and the status says why; {@code rebuild confirm} claims the box and builds them.
+     */
+    @Test
+    void blocksInTheSideRoomsBoxLeaveThemOutUntilRebuildConfirm() {
+        host.world.put(ANNEX.minX() + 5, ANNEX.minY() + 3, ANNEX.minZ() + 5, "minecraft:oak_planks");
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertFalse(r.annexIn(), "left out");
+        assertTrue(r.annexOut().contains("1 block") && r.annexOut().contains("rebuild confirm"), r.annexOut());
+        assertEquals("minecraft:oak_planks", host.world.at(ANNEX.minX() + 5, ANNEX.minY() + 3, ANNEX.minZ() + 5),
+                "nothing of anyone's was touched");
+        assertNull(host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY), "nor claimed");
+        assertEquals(MAIN, r.site().box(), "the main room alone");
+        assertTrue(r.cabinetPlaces(ClubhouseSettings.KID_GAMES).isEmpty(), "no cabinets");
+        assertTrue(r.pedestals().isEmpty() && r.doorSign("arcade") == null, "no trophies, no signs");
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.startsWith("side rooms: left out")), r.statusLines().toString());
+        r.rebuild(true);
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertTrue(r.annexIn(), "confirmed: claimed and built");
+        assertEquals("minecraft:air", host.world.at(ANNEX.minX() + 5, ANNEX.minY() + 3, ANNEX.minZ() + 5));
+        assertEquals(4, r.cabinetPlaces(ClubhouseSettings.KID_GAMES).size(), "a cabinet for each kid game");
+        assertEquals(11, r.pedestals().size(), "the podium's three and eight records");
+        assertNotNull(r.doorSign("arcade"));
+        assertNotNull(r.doorSign("trophy"));
+    }
+
+    /** The side rooms' box too close to another games area: they are left out, the main room opens. */
+    @Test
+    void aSideRoomsBoxTooCloseToAnythingLeavesThemOut() {
+        host.annexProblems.add("clubhouse is only 4 blocks from fresh_parkour's half A (they must be 32 apart)");
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertFalse(r.annexIn());
+        assertTrue(r.annexOut().contains("fresh_parkour"), r.annexOut());
+        assertEquals(0, host.world.count(ANNEX), "nothing written there");
+    }
+
+    /** Both rooms switched off: no side-rooms box is claimed, and the room is 0.40.0's main room. */
+    @Test
+    void bothRoomsOffClaimNothingNew() {
+        ClubhouseRoom r = new ClubhouseRoom(host, SETTINGS.withRooms(false, false));
+        r.start();
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertNull(host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY), "nothing claimed");
+        assertEquals(MAIN, r.site().box());
+        assertFalse(r.builtWith(SETTINGS, "games"), "switching a room on starts the room again");
+        assertTrue(r.builtWith(SETTINGS.withRooms(false, false), "games"));
+    }
+
+    /**
+     * The owner-built room's side-room spots: a cabinet per game where the admin stands (cleared one by one or all),
+     * the trophy shelf running to their right, the two door signs over them; each read back after a restart.
+     */
+    @Test
+    void anOwnerBuiltRoomsCabinetsShelfAndDoorSigns() {
+        ClubhouseRoom r = room();
+        r.here(new ClubhouseRoom.Place("games", 100.5, 70, 100.5, 0f));
+        assertTrue(r.cabinet("whack_a_zombie", new ClubhouseRoom.Place("games", 103.7, 70, 98.2, 178f)).startsWith("&a"));
+        r.cabinet("simon_says", new ClubhouseRoom.Place("games", 106.2, 70, 98.2, 180f));
+        Map<String, ClubhousePlanner.Place3> cabs = r.cabinetPlaces(List.of("simon_says", "whack_a_zombie", "snake"));
+        assertEquals(List.of("simon_says", "whack_a_zombie"), List.copyOf(cabs.keySet()), "only games with a cabinet");
+        assertEquals(new ClubhousePlanner.Place3(103.5, 70, 98.5, 180f), cabs.get("whack_a_zombie"),
+                "on the block the admin stood on, squared");
+        r.trophyRoom(new ClubhouseRoom.Place("games", 110.5, 71, 90.5, 0f)); // facing south: their right is west
+        List<ClubhousePlanner.Pedestal> shelf = r.pedestals();
+        assertEquals(11, shelf.size());
+        assertEquals(110.5, shelf.get(0).trophy().x(), 1e-9);
+        assertEquals(109.5, shelf.get(0).head().x(), 1e-9, "the head to the right of its trophy");
+        assertEquals(108.5, shelf.get(1).trophy().x(), 1e-9, "the next pair beyond");
+        assertTrue(r.inTrophyRoom("games", 104, 71, 91), "near the shelf");
+        r.door("arcade", new ClubhouseRoom.Place("games", 100.5, 70, 95.5, 180f));
+        assertEquals(new ClubhousePlanner.Place3(100.5, 70 + ClubhouseRoom.HAND_DOOR_UP, 95.5, 180f), r.doorSign("arcade"));
+        assertNull(r.doorSign("trophy"));
+        assertTrue(r.door("fish", null).startsWith("&c"), "only the two");
+
+        ClubhouseRoom later = room(); // after a restart
+        assertEquals(2, later.cabinetPlaces(List.of("simon_says", "whack_a_zombie")).size(), "read back");
+        assertEquals(11, later.pedestals().size());
+        assertNotNull(later.doorSign("arcade"));
+        assertTrue(later.statusLines().stream().anyMatch(l -> l.equals("arcade cabinets whack_a_zombie, simon_says")),
+                later.statusLines().toString());
+
+        assertTrue(later.clearCabinet("whack_a_zombie").startsWith("&a"));
+        assertEquals(List.of("simon_says"), later.handCabinetGames());
+        assertTrue(later.clearCabinet("snake").startsWith("&7"), "nothing to clear");
+        later.clearCabinet("all");
+        assertTrue(later.handCabinetGames().isEmpty());
+        assertNull(host.meta.get(ClubhouseRoom.CABINETS_KEY), "forgotten");
+        later.trophyRoom(null);
+        later.door("arcade", null);
+        assertTrue(later.pedestals().isEmpty() && later.doorSign("arcade") == null, "cleared");
+    }
+
+    /** Cabinets stored with a bad part are read back without it. */
+    @Test
+    void storedCabinetsReadBackAndSkipJunk() {
+        Map<String, ClubhouseRoom.Place> m = ClubhouseRoom.cabinetsOf("snake=games;1.00;2.00;3.00;90.00|junk|x=nope");
+        assertEquals(List.of("snake"), List.copyOf(m.keySet()));
+        assertEquals("snake=games;1.00;2.00;3.00;90.00", ClubhouseRoom.cabinetsText(m));
+        assertTrue(ClubhouseRoom.cabinetsOf(null).isEmpty());
+    }
+
+    /**
+     * 0.41.0: the admin's {@code cabinet} takes only an arcade cabinet game (a game of chance never), {@code clear}
+     * takes one down, and {@code trophyroom} and {@code door} set and clear theirs.
+     */
+    @Test
+    void theAdminsSideRoomCommands() {
+        ClubhouseRoom r = room();
+        r.here(new ClubhouseRoom.Place("games", 100.5, 70, 100.5, 0f));
+        java.util.function.Function<String, com.dierks.homecraft.games.GameKind> kinds = id -> switch (id) {
+            case "snake", "simon_says" -> com.dierks.homecraft.games.GameKind.CABINET;
+            case "ore_slots" -> com.dierks.homecraft.games.GameKind.CHANCE;
+            case "trials" -> com.dierks.homecraft.games.GameKind.TRIAL;
+            default -> null;
+        };
+        ClubhouseRoom.Place at = new ClubhouseRoom.Place("games", 103.5, 70, 98.5, 180f);
+        assertTrue(ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet", "Snake"}, at, kinds).startsWith("&a"));
+        String chance = ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet", "ore_slots"}, at, kinds);
+        assertTrue(chance.startsWith("&c") && chance.contains("game of chance"), chance);
+        assertTrue(ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet", "trials"}, at, kinds).startsWith("&c"));
+        assertTrue(ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet", "nope"}, at, kinds).startsWith("&c"));
+        assertTrue(ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet"}, at, kinds).startsWith("&c"));
+        assertEquals(List.of("snake"), r.handCabinetGames(), "only the cabinet game is set");
+        assertTrue(ClubhouseAdmin.sideRoom(r, "cabinet", new String[]{"cabinet", "snake", "clear"}, at, kinds)
+                .startsWith("&a"));
+        assertTrue(r.handCabinetGames().isEmpty(), "cleared");
+        ClubhouseAdmin.sideRoom(r, "trophyroom", new String[]{"trophyroom"}, at, kinds);
+        assertEquals(11, r.pedestals().size());
+        ClubhouseAdmin.sideRoom(r, "trophyroom", new String[]{"trophyroom", "clear"}, at, kinds);
+        assertTrue(r.pedestals().isEmpty());
+        assertTrue(ClubhouseAdmin.sideRoom(r, "door", new String[]{"door"}, at, kinds).startsWith("&c"));
+        ClubhouseAdmin.sideRoom(r, "door", new String[]{"door", "trophy"}, at, kinds);
+        assertNotNull(r.doorSign("trophy"));
+        ClubhouseAdmin.sideRoom(r, "door", new String[]{"door", "trophy", "clear"}, at, kinds);
+        assertNull(r.doorSign("trophy"));
     }
 }

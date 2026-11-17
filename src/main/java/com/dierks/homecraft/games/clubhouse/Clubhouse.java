@@ -162,6 +162,15 @@ public final class Clubhouse implements Game, ClubDoor {
     private FeastTable feastTable;
     /** 0.40.0 (26.3): a cushion on every chair of the generated room. */
     private ClubCushions cushions;
+    /** 0.41.0: the Arcade Room's cabinets, the Trophy Room's cups and the door signs; null with no server. */
+    private SideRooms sideRooms;
+    /** 0.41.0: what tells the side rooms a cabinet game was won (registered with the games while running). */
+    private final java.util.function.Consumer<GamesService.Cheer> cheerListener = c -> {
+        SideRooms sr = sideRooms;
+        if (sr != null) {
+            games().guard(this, () -> sr.cheered(c, now()));
+        }
+    };
     private long feastCeremonyAt = Long.MIN_VALUE / 2;
     private long feastShowUntil;
     private final Cheers cheers = new Cheers();
@@ -351,6 +360,9 @@ public final class Clubhouse implements Game, ClubDoor {
             out.add(ClubCushions.type() == null ? "cushions: none on this server (26.3 adds them)"
                     : "cushions: " + (cushions == null ? 0 : cushions.count()) + " of " + r.seats().size());
         }
+        if (sideRooms != null) {
+            out.add("side rooms up: " + sideRooms.statusLine()); // 0.41.0
+        }
         return out;
     }
 
@@ -374,6 +386,8 @@ public final class Clubhouse implements Game, ClubDoor {
         familyWeek = new FamilyWeek(this);
         feastTable = new FeastTable(this);
         cushions = new ClubCushions(log());
+        sideRooms = new SideRooms(this);
+        g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
@@ -403,6 +417,28 @@ public final class Clubhouse implements Game, ClubDoor {
                 e -> watch.arrived(e.getPlayer()));
         g.on(this, org.bukkit.event.player.PlayerInteractEvent.class, EventPriority.LOWEST, false,
                 e -> jukebox.tapped(e)); // 0.38.4: a tap on the jukebox opens Songs, and never pops the disc
+        // 0.41.0: a cabinet in the Arcade Room answers either click (a controller's too). The games' guard cancels
+        // any touch of a game entity first, so these read cancelled events as well, and cancel them themselves.
+        g.on(this, org.bukkit.event.player.PlayerInteractEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (SideRooms.cabinetGame(e.getRightClicked()) != null) {
+                e.setCancelled(true);
+                if (e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
+                    sideRooms.tapped(e.getPlayer(), e.getRightClicked(), now());
+                }
+            }
+        });
+        g.on(this, io.papermc.paper.event.player.PrePlayerAttackEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (SideRooms.cabinetGame(e.getAttacked()) != null) {
+                e.setCancelled(true);
+                sideRooms.tapped(e.getPlayer(), e.getAttacked(), now());
+            }
+        });
+        g.on(this, EntityDamageByEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (SideRooms.cabinetGame(e.getEntity()) != null && e.getDamager() instanceof Player p) {
+                e.setCancelled(true);
+                sideRooms.tapped(p, e.getEntity(), now()); // the same tap as the attack event's: once
+            }
+        });
         g.every(this, 1, 1, this::tick);
         g.every(this, 20, 20, this::second);
         room.start();
@@ -421,6 +457,12 @@ public final class Clubhouse implements Game, ClubDoor {
     }
 
     private void stopRoom() {
+        if (sideRooms != null) {
+            sideRooms.remove();
+        }
+        if (ctx.plugin() != null) {
+            games().noCheers(cheerListener);
+        }
         if (jukebox != null) {
             jukebox.stop(); // the music off and our disc cleared while the world is up, before the room goes
         }
@@ -458,6 +500,9 @@ public final class Clubhouse implements Game, ClubDoor {
     @Override
     public void onQuit(Player player) {
         gone(player.getUniqueId(), player);
+        if (sideRooms != null) {
+            sideRooms.forget(player.getUniqueId());
+        }
         cheers.forget(player.getUniqueId());
         cheersOn.remove(player.getUniqueId());
     }
@@ -774,6 +819,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (cushions != null) {
                 cushions.remove();
             }
+            if (sideRooms != null) {
+                sideRooms.remove();
+            }
             wasOpen = false;
             return;
         }
@@ -829,6 +877,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (cushions != null) {
             cushions.second(r);
+        }
+        if (sideRooms != null) {
+            sideRooms.second(r, now); // 0.41.0
         }
         feast(now);
     }
@@ -935,6 +986,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (cushions != null) {
             cushions.remove();
+        }
+        if (sideRooms != null) {
+            sideRooms.remove();
         }
         room = newRoom();
         room.start();
@@ -2039,6 +2093,22 @@ public final class Clubhouse implements Game, ClubDoor {
     public boolean ready() {
         ClubhouseRoom r = room;
         return r != null && r.open();
+    }
+
+    /** 0.41.0, for the check: the generated room's side rooms in a line, or {@code null} for none to report. */
+    public String sideRooms() {
+        ClubhouseRoom r = room;
+        return r == null || r.hand() ? null : r.sideRoomsLine();
+    }
+
+    /** 0.41.0: an admin set or cleared a side-room spot: everything there is drawn again at the next second. */
+    void sideRoomsChanged() {
+        // the next second's redraw compares each slot's place and contents; nothing to do now
+    }
+
+    /** The Fame board's snapshot (the trophy case's and the Trophy Room's feed), or {@code null} before a read. */
+    FameBoard.Fame fame() {
+        return boards == null ? null : boards.fame();
     }
 
     /** Why its room closed itself, or {@code null}. */

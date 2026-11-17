@@ -80,7 +80,7 @@ class ShippedLayoutTest {
             assertArrayEquals(e.getValue(), e.getKey().origin(), e.getKey().id() + ": §1.5's origin");
         }
         assertEquals(13, LayoutSightTest.NEW.size(), "nine courses and four Classics");
-        assertEquals(LayoutSightTest.NEW_CLUBHOUSE, ClubhouseSettings.defaults().box(), "the Clubhouse's box");
+        assertEquals(LayoutSightTest.NEW_CLUBHOUSE, ClubhouseSettings.defaults().mainBox(), "the Clubhouse's main box");
         assertEquals(LayoutSightTest.NEW_ARENA, FallingFloorsSettings.defaults().box(), "the arena's box");
         assertEquals(LayoutSightTest.NEW_KEEP, DailySettings.Archive.shipped().keep(), "24 plots from x 1760, z 7296");
         assertEquals(List.of(144, 176, 336), List.of(KeepArea.PLOT_X, KeepArea.PLOT_Y, KeepArea.PLOT_Z),
@@ -95,7 +95,8 @@ class ShippedLayoutTest {
             assertEquals(List.of(code.get(d.id() + ":A"), code.get(d.id() + ":B")), read.get(d.id()),
                     d.id() + ": the bundled config.yml reads as the code's default");
         }
-        assertEquals(List.of(code.get("clubhouse")), read.get("clubhouse"), "the Clubhouse from config.yml");
+        assertEquals(List.of(LayoutSightTest.NEW_CLUBHOUSE), read.get("clubhouse"),
+                "the Clubhouse from config.yml (its main room: the claim's box; the sight test takes the side rooms too)");
         assertEquals(List.of(code.get("falling_floors")), read.get("falling_floors"), "the arena from config.yml");
         assertEquals(24, read.get("keep").size(), "24 plots shipped");
         for (int n = 1; n <= 24; n++) {

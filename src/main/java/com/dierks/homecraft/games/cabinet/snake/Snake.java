@@ -104,6 +104,15 @@ public final class Snake extends CabinetGame {
         new SnakeMenu(ctx.plugin(), this, player, back).open(player);
     }
 
+    /** 0.41.0, a tap in the Clubhouse's Arcade Room: straight to a Classic field (no Classic-or-today choice). */
+    @Override
+    public boolean playClassic(Player player, Runnable back) {
+        SnakeMenu m = new SnakeMenu(ctx.plugin(), this, player, back);
+        m.open(player);
+        m.classicNow();
+        return true;
+    }
+
     @Override
     public void feed(FeedWriter out) {
         GamesDao.ScoreRow record = games().scores().record(id(), Scores.CLASSIC, false);

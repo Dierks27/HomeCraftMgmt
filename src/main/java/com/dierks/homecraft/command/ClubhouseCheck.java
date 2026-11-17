@@ -127,6 +127,10 @@ final class ClubhouseCheck {
      * without them); left out for blocks in their box; or built.
      */
     static void sideRooms(Facts f, List<Line> out) {
+        if (!f.roomsOn() && f.sideRooms() == null) {
+            kids(f, out);
+            return; // no running room to report on (or 0.40.0's facts): nothing to say
+        }
         if (!f.roomsOn()) {
             out.add(Line.ok("The Clubhouse's Arcade Room and Trophy Room are switched off"
                     + " (games.clubhouse.arcade_room / trophy_room)"));

@@ -364,7 +364,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         if (welcomeDue.isEmpty()) {
             return;
         }
-        if (!c.welcome()) {
+        if (TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUp(), c.catchUpMinutes()) < 0) {
             welcomeDue.clear();
             return;
         }
@@ -379,6 +379,10 @@ public final class TurkeyService implements Listener, TurkeyHost {
             Long had = welcomedDay.get(id);
             if (p == null || !p.isOnline() || (had != null && had == day)) {
                 it.remove();
+                continue;
+            }
+            if (!TurkeyRules.ownTurkeyOwed(c.welcome(), caughtToday(id))) {
+                it.remove(); // 0.44.0: caught one today already: no catch-up turkey needed
                 continue;
             }
             Long until = noSpotUntil.get(id);
@@ -994,18 +998,22 @@ public final class TurkeyService implements Listener, TurkeyHost {
 
     // ---- join and quit ---------------------------------------------------------------------
 
-    /** The first join of a local day, while it is open: a welcome turkey of their own 90 seconds later. */
+    /**
+     * The first join of a local day, while it is open: a welcome turkey of their own 90 seconds later, or (0.44.0) a
+     * catch-up turkey after {@code catch_up_minutes} if they haven't caught one today by then.
+     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         TurkeyConfig.Turkey c = settings();
         LocalDate today = plugin.clock().today();
-        if (task == null || !c.welcome() || !open(c, today)) {
+        long delay = TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUp(), c.catchUpMinutes());
+        if (task == null || delay < 0 || !open(c, today)) {
             return;
         }
         Long had = welcomedDay.get(id);
         if (had == null || had != today.toEpochDay()) {
-            welcomeDue.put(id, plugin.clock().nowMillis() + TurkeyRules.WELCOME_DELAY_MS);
+            welcomeDue.put(id, plugin.clock().nowMillis() + delay); // the welcome turkey, or 0.44.0's catch-up one
         }
     }
 

@@ -233,8 +233,8 @@ class ConfigMigrationTest {
         for (String section : THANKSGIVING_SECTIONS) {
             thanksgiving += shipped.getConfigurationSection(section).getKeys(false).size();
         }
-        assertEquals(12 + 12 + 15 + 8, leaves.size() + thanksgiving, "candy, harvest, turkey (0.44.0: random_times and"
-                + " the quiet hours) and feast");
+        assertEquals(12 + 12 + 17 + 8, leaves.size() + thanksgiving, "candy, harvest, turkey (0.44.0: random_times, the"
+                + " quiet hours and the catch-up turkey) and feast");
         assertEquals(leaves.size() + thanksgiving, added.size(), "and nothing else: " + added);
         assertFalse(shipped.getComments("arcade.events").isEmpty(), "the section ships with its block");
         assertEquals(shipped.getComments("arcade.events"), onDisk.getComments("arcade.events"));

@@ -1998,6 +1998,10 @@ turkey** 4 to 6 blocks in front of them, in sight, on dry ground with no lava or
 - **No welcome turkey** since 0.44.0 (the owner: "a special event so not every single time someone logs
   in"); `welcome: true` brings back one of your own 90 seconds after your first join of the day, counted
   only for its owner and never twice in a day. Each catch is saved before the prize, so nothing pays twice.
+- **A catch-up turkey** (0.44.0, the owner: "I worry because I am limiting Lilah to only an hour a day ...
+  that she would miss out"): anyone who has played **10 minutes** today without catching a turkey gets **one
+  of their own**, once a day, wherever they are (home or the Hub). Same prize as a run; it counts for the
+  Mini's chance like any catch. `catch_up: false` turns it off; `catch_up_minutes` sets the wait (1-60).
 - **In the Hub too** (0.44.0): see [The Hub](#the-hub-0440). A run's start tells everyone "Gobble gobble!
   Turkeys are out" with a **[Go to the Hub]** link.
 - **Nothing can hurt or misuse it:** no damage, leads, breeding, eggs, riding, name tags, mobs going after
@@ -2128,6 +2132,7 @@ head Value and its event exists in the plugin.
 | `arcade.events.turkey.random_times` | `true` | 0.44.0: the runs at random times (new each day, the same for everyone) |
 | `arcade.events.turkey.quiet_from_hour`, `quiet_to_hour` | `2`, `8` | 0.44.0: no run from 2 to 8 in the morning (the same hour: none) |
 | `arcade.events.turkey.welcome` | `false` | `true`: a turkey of your own 90 s after your first join of the day |
+| `arcade.events.turkey.catch_up`, `catch_up_minutes` | `true`, `10` | 0.44.0: a turkey of your own after 10 minutes' play, once a day, if you haven't caught one today |
 | `arcade.events.turkey.scale` | `2.0` | How big the turkey is (1.0-3.0) |
 | `arcade.events.turkey.tokens`, `daily_token_cap` | `3`, `6` | Tokens per catch (once a run), and the most a day |
 | `arcade.events.turkey.feather` | `true` | A Turkey Feather 2026 with each catch |

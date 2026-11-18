@@ -64,6 +64,8 @@ class TurkeyConfigTest {
         assertTrue(d.randomTimes(), "0.44.0: random times");
         assertEquals(2, d.quietFromHour(), "never from 2 ...");
         assertEquals(8, d.quietToHour(), "... to 8 in the morning");
+        assertTrue(d.catchUp(), "0.44.0: a catch-up turkey for anyone who hasn't caught one");
+        assertEquals(10, d.catchUpMinutes());
         assertEquals(2.0, d.scale());
         assertEquals(3, d.tokens());
         assertEquals(6, d.dailyTokenCap(), "two catches a day pay");

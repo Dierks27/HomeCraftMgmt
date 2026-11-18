@@ -1893,6 +1893,10 @@ arcade:
       run_minutes: 3
       # true = a turkey of your own 90 seconds after your first join of the day.
       welcome: false
+      # true = anyone who has played catch_up_minutes today without catching a turkey gets one of their
+      # own, once a day (so a short play time never misses out). Off while welcome is on.
+      catch_up: true
+      catch_up_minutes: 10
       # How big the turkey is (1.0-3.0; 1.0 = a plain chicken).
       scale: 2.0
       # Tokens for each catch (once a run), and the most a player gets from turkeys in a local day.

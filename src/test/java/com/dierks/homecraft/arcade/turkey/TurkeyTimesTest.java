@@ -85,4 +85,16 @@ class TurkeyTimesTest {
         assertFalse(TurkeyRules.quiet(480, 2, 8));
         assertTrue(TurkeyRules.quiet(23 * 60, 22, 6), "quiet hours over midnight");
     }
+
+    /** The catch-up turkey (0.44.0): once a day, after ten minutes' play, only for someone who caught none today. */
+    @Test
+    void theCatchUpTurkey() {
+        assertEquals(600_000L, TurkeyRules.ownTurkeyDelayMs(false, true, 10), "ten minutes after the join");
+        assertEquals(TurkeyRules.WELCOME_DELAY_MS, TurkeyRules.ownTurkeyDelayMs(true, true, 10),
+                "the welcome turkey, when it is on, comes first");
+        assertEquals(-1, TurkeyRules.ownTurkeyDelayMs(false, false, 10), "neither: none");
+        assertTrue(TurkeyRules.ownTurkeyOwed(false, 0), "caught none today: one of your own");
+        assertFalse(TurkeyRules.ownTurkeyOwed(false, 1), "caught one: no need");
+        assertTrue(TurkeyRules.ownTurkeyOwed(true, 3), "a welcome turkey is everyone's");
+    }
 }

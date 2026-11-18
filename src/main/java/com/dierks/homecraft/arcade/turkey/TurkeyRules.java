@@ -124,6 +124,26 @@ public final class TurkeyRules {
 
     // ---- when -----------------------------------------------------------------------------
 
+    /**
+     * How long after a join a turkey of one's own is due (0.44.0), or -1 for none: the welcome turkey's 90 seconds
+     * with {@code welcome}, else the catch-up turkey's {@code catchUpMinutes} with {@code catchUp}.
+     */
+    public static long ownTurkeyDelayMs(boolean welcome, boolean catchUp, int catchUpMinutes) {
+        if (welcome) {
+            return WELCOME_DELAY_MS;
+        }
+        return catchUp ? Math.max(1, catchUpMinutes) * 60_000L : -1;
+    }
+
+    /**
+     * Whether a turkey of one's own is still owed when it is due: always for the welcome turkey; the catch-up turkey
+     * only while they have caught none today (the owner: "for everyone that didn't get the chance to catch the
+     * turkey it would fire off for them as a one time thing").
+     */
+    public static boolean ownTurkeyOwed(boolean welcome, int caughtToday) {
+        return welcome || caughtToday <= 0;
+    }
+
     /** Mixed into the random times' seed, so they are no simple function of the date. */
     static final long RANDOM_SALT = 0x7A2B_C0FF_EE15_2026L;
 

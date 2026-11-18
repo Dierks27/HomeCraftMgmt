@@ -54,9 +54,10 @@ public final class ClubhousePlanner {
      * The planner's version: part of the plan, so a change of the room is a change of plan. 2 (0.38.4): the
      * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club. 5 (0.41.0): the side rooms, the
      * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
-     * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred.
+     * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
+     * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over.
      */
-    public static final int ALGO = 6;
+    public static final int ALGO = 7;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -83,12 +84,19 @@ public final class ClubhousePlanner {
     static final int SIDE_Z0 = MAIN_Z;
     static final int SIDE_Z1 = MAIN_Z + ANNEX_Z - 2;
     /**
-     * The Arcade Room's cabinet places (x, z offsets, yaw), at most {@value #CABINETS}: four along the south wall facing
-     * north to the archway, nearest the archway first, then two on the west wall facing east. Nothing of a cabinet is
+     * The Arcade Room's cabinet places (x, z offsets, yaw), {@value #CABINETS} (0.42.0): two facing rows of three down
+     * the side walls, the east row facing west and the west row facing east, taken in turn from the archway's end. Nothing of a cabinet is
      * in the plan but its coloured mat in the floor: the cabinet is a model (an entity) you can walk up to.
      */
-    static final int[][] CABINET_AT = {{13, 46, 180}, {10, 46, 180}, {5, 46, 180}, {2, 46, 180}, {1, 41, -90},
-            {1, 37, -90}};
+    static final int[][] CABINET_AT = {{14, 36, 90}, {1, 36, -90}, {14, 39, 90}, {1, 39, -90}, {14, 42, 90},
+            {1, 42, -90}};
+    /** 0.42.0: the Arcade Room's prize counter (x 5-10) and claw machines (x 2 and 13) on its back row. */
+    static final int PRIZE_X0 = 5;
+    static final int PRIZE_X1 = 10;
+    static final int[] CLAW_X = {2, 13};
+    /** 0.42.0: the Trophy Room's beams (across, at these rows) and banners (on the side walls). */
+    static final int[] TROPHY_BEAM_Z = {38, 44};
+    static final int[] TROPHY_BANNER_Z = {35, 41};
     public static final int CABINETS = 6;
     /**
      * The Trophy Room's pedestals: the podium for last week's top three at the back (2 x 1 plinths, 1st in the middle
@@ -108,9 +116,10 @@ public final class ClubhousePlanner {
     public static final int WALL_TOP = 14;
     public static final int ROOF = 15;
     /** The pedestals: heights (1st, 2nd, 3rd), their west column (each is 2 x 2), and their north row. */
-    public static final int[] PODIUM_HEIGHT = {3, 2, 1};
     public static final int[] PODIUM_X = {15, 12, 18};
     public static final int PODIUM_Z = 2;
+    /** 0.42.0: the hedge under the results board, x 13 to 18 (mirrors). */
+    static final int HEDGE_X0 = 13;
     /** The arrival spots: a 4 x 4 grid on the foyer's marble, mirror-symmetric, three or more apart. */
     static final int[] SPAWN_X = {10, 14, 17, 21};
     static final int[] SPAWN_Z = {20, 23, 26, 29};
@@ -126,12 +135,17 @@ public final class ClubhousePlanner {
     static final int JUKEBOX_X = 1;
     static final int JUKEBOX_Y = 1;
     static final int JUKEBOX_Z = 16;
+    /** 0.42.0: the brewing stand at the bar counter's south end. */
+    static final int BREWING_Z = 10;
     /**
      * The trophy case (0.38.4; the east wall since 0.40.0, under the All-time records board): item frames on the
      * east wall's inner face (x = minX + {@value #TROPHY_X}), over the cabinet, from z = minZ + {@value #TROPHY_Z0}
      * every {@value #TROPHY_STEP}, at most {@link ClubBoard#MAX_ROWS}. They face west.
      */
     static final int TROPHY_X = 30;
+    /** The putting green's cup (0.42.0: its pole, flag, ball and putter around it). */
+    static final int GREEN_CUP_X = 27;
+    static final int GREEN_CUP_Z = 4;
     static final int TROPHY_Y = 2;
     static final int TROPHY_Z0 = 9;
     static final int TROPHY_STEP = 2;
@@ -197,8 +211,6 @@ public final class ClubhousePlanner {
     public static final String RUG = "minecraft:brown_carpet";
     public static final String FELT = "minecraft:green_carpet";
     public static final String CUP = "minecraft:cauldron";
-    public static final String PIN = "minecraft:birch_fence";
-    public static final String FLAG = "minecraft:red_banner[rotation=4]";
     public static final String PLANTER = "minecraft:moss_block";
     public static final String SHRUB = "minecraft:flowering_azalea";
     public static final String CANDLES = "minecraft:white_candle[candles=3,lit=true,waterlogged=false]";
@@ -216,6 +228,16 @@ public final class ClubhousePlanner {
     public static final String MAT = "minecraft:polished_blackstone";
     public static final String TROPHY_RUG = "minecraft:red_carpet";
     public static final String PEDESTAL = "minecraft:quartz_pillar[axis=y]";
+    /** 0.42.0: the putting green's pole (a thin end rod, lit), the jukebox alcove's light, the arcade's roof and neon. */
+    public static final String POLE = "minecraft:end_rod[facing=up]";
+    public static final String ALCOVE = "minecraft:ochre_froglight[axis=y]";
+    public static final String BREWING = "minecraft:brewing_stand[has_bottle_0=true,has_bottle_1=true,has_bottle_2=false]";
+    public static final String TINTED = "minecraft:tinted_glass";
+    static final String[] NEON = {"minecraft:ochre_froglight[axis=y]", "minecraft:verdant_froglight[axis=y]",
+            "minecraft:pearlescent_froglight[axis=y]"};
+    static final String[] CONFETTI = {"minecraft:cyan_concrete", "minecraft:lime_concrete", "minecraft:orange_concrete",
+            "minecraft:light_blue_concrete"};
+    public static final String CLAW = "minecraft:red_concrete";
 
     /** A log (or stripped log) along an axis. */
     static String log(String axis) {
@@ -261,7 +283,10 @@ public final class ClubhousePlanner {
         }
         String id = id(blockData);
         return switch (id) {
-            case "minecraft:sea_lantern", "minecraft:lantern", "minecraft:glowstone" -> 15;
+            case "minecraft:sea_lantern", "minecraft:lantern", "minecraft:glowstone", "minecraft:ochre_froglight",
+                 "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", "minecraft:shroomlight" -> 15;
+            case "minecraft:end_rod" -> 14;
+            case "minecraft:brewing_stand" -> 1;
             case "minecraft:campfire" -> blockData.contains("lit=true") ? 15 : 0;
             default -> {
                 if (id.endsWith("candle") && blockData.contains("lit=true")) {
@@ -283,7 +308,8 @@ public final class ClubhousePlanner {
         return id.equals(AIR) || id.equals("minecraft:glass") || id.endsWith("_pane") || id.endsWith("chain")
                 || id.equals("minecraft:lantern") || id.endsWith("_fence") || id.endsWith("_carpet")
                 || id.endsWith("_banner") || id.endsWith("candle") || id.startsWith("minecraft:potted_")
-                || id.equals(SHRUB) || id.equals("minecraft:iron_bars");
+                || id.equals(SHRUB) || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod")
+                || id.endsWith("_stained_glass");
     }
 
     /**
@@ -295,7 +321,8 @@ public final class ClubhousePlanner {
         return id.equals("minecraft:glass") || id.endsWith("_pane") || id.equals("minecraft:lantern")
                 || id.endsWith("chain") || id.endsWith("candle") || id.endsWith("_carpet") || id.endsWith("_banner")
                 || id.startsWith("minecraft:potted_") || id.equals(SHRUB) || id.endsWith("_fence")
-                || id.equals("minecraft:iron_bars");
+                || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod") || id.equals(TINTED)
+                || id.endsWith("_stained_glass");
     }
 
     static String id(String blockData) {
@@ -391,6 +418,9 @@ public final class ClubhousePlanner {
             for (int i : SPAWN_X) {
                 spawns.add(b.spot(i, 1, k, 180f));
             }
+        }
+        if (r.trophy()) {
+            podium = roomPodium(box); // 0.42.0: "Photo time!" on the Trophy Room's podium
         }
         ClubhouseSite.Spot board = new ClubhouseSite.Spot(box.minX() + (PANEL_X0 + PANEL_X1 + 1) / 2.0,
                 box.minY() + (PANEL_Y0 + PANEL_Y1 + 1) / 2.0 - 0.5, box.minZ() + 1.1, 0f);
@@ -576,10 +606,15 @@ public final class ClubhousePlanner {
 
     // ---- the Great Hall ----------------------------------------------------------------------------
 
-    /** The podium on its green, the runner, the banquet tables, the 3 x 3 tables, the chandeliers and banners. */
+    /**
+     * The green under the results board, the runner, the banquet tables, the 3 x 3 tables, the chandeliers and banners.
+     * 0.42.0: the podium left the Great Hall (the owner: it "feels very out of place"); a hedge of flowering azalea
+     * runs under the results board instead, and "Photo time!" is on the Trophy Room's podium. The spots returned are
+     * the green's three, only for a room with no Trophy Room.
+     */
     private static List<ClubhouseSite.Spot> hall(Builder b) {
-        // the green under the podium, with the runner up the aisle to it
-        rug(b, 11, 20, 1, 4, STAGE_RUG, 0); // lit by the runner and the sconces: the plinths would cover lights
+        // the green under the results board, with the runner up the aisle to it
+        rug(b, 11, 20, 1, 4, STAGE_RUG, 0); // lit by the runner and the sconces
         for (int k = 5; k <= 18; k++) {
             b.set(15, 1, k, RUNNER);
             b.set(16, 1, k, RUNNER);
@@ -588,20 +623,15 @@ public final class ClubhousePlanner {
                 b.set(16, 0, k, LIGHT);
             }
         }
-        // the podium: 2 x 2 plinths, 1st in the middle (its spot on the middle line) and highest
-        String[] top = {GOLD, IRON, COPPER};
+        // a hedge of flowering azalea on moss under the results board, centred on the middle line
+        for (int i = HEDGE_X0; i <= 31 - HEDGE_X0; i++) {
+            b.set(i, 1, 1, PLANTER);
+            b.set(i, 2, 1, SHRUB);
+        }
+        // with no Trophy Room, "Photo time!" is on the green: three places, 1st on the middle line
         List<ClubhouseSite.Spot> podium = new ArrayList<>();
         for (int n = 0; n < 3; n++) {
-            int x0 = PODIUM_X[n];
-            int h = PODIUM_HEIGHT[n];
-            for (int dx = 0; dx < 2; dx++) {
-                for (int dz = 0; dz < 2; dz++) {
-                    for (int j = 1; j <= h; j++) {
-                        b.set(x0 + dx, j, PODIUM_Z + dz, j < h ? PLANKS : top[n]);
-                    }
-                }
-            }
-            podium.add(new ClubhouseSite.Spot(b.box.minX() + x0 + 1.0, b.box.minY() + h + 1,
+            podium.add(new ClubhouseSite.Spot(b.box.minX() + PODIUM_X[n] + 1.0, b.box.minY() + 1,
                     b.box.minZ() + PODIUM_Z + 1.0, 0f));
         }
         // the banquet tables: white cloth, candles down the middle, three chairs a side with gaps
@@ -629,7 +659,9 @@ public final class ClubhousePlanner {
             }
             int cx = x0 + 1;
             int cz = ROUND_Z0 + 1;
-            b.set(cx, 2, cz, x0 == FEAST_WEST_X0 ? POT : FLOWERS);
+            if (x0 == FEAST_EAST_X0) {
+                b.set(cx, 2, cz, FLOWERS); // 0.42.0: the Feast Pot on the west one is a pot on the cloth (a display)
+            }
             b.seat(cx - 2, 1, cz, chair("west"), "GREEN");
             b.seat(cx + 2, 1, cz, chair("east"), "GREEN");
             b.seat(cx, 1, cz - 2, chair("north"), "GREEN");
@@ -687,6 +719,7 @@ public final class ClubhousePlanner {
         for (int k = 3; k <= 9; k += 3) {
             pendant(b, 4, k, 5);
         }
+        b.set(4, 2, BREWING_Z, BREWING); // 0.42.0: a brewing stand at the counter's end (bottles and glasses: displays)
         rug(b, 2, 3, 2, 10, RUG, 3);
         // the reading nook: a wall of books, the jukebox in its middle, two armchairs and a lamp
         for (int k = 13; k <= 19; k++) {
@@ -695,6 +728,10 @@ public final class ClubhousePlanner {
             }
         }
         b.set(JUKEBOX_X, JUKEBOX_Y, JUKEBOX_Z, JUKEBOX);
+        // 0.42.0: a lit alcove over the jukebox and a record shelf either side, so it shows across the wing
+        b.set(JUKEBOX_X, JUKEBOX_Y + 1, JUKEBOX_Z, ALCOVE);
+        b.set(JUKEBOX_X, JUKEBOX_Y, JUKEBOX_Z - 1, shelf("east"));
+        b.set(JUKEBOX_X, JUKEBOX_Y, JUKEBOX_Z + 1, shelf("east"));
         rug(b, 2, 6, 13, 19, RUG, 3);
         armchair(b, 4, 14, "east", "BROWN");
         armchair(b, 4, 18, "east", "BROWN");
@@ -768,10 +805,10 @@ public final class ClubhousePlanner {
                 }
             }
         }
-        b.set(27, 0, 4, CUP);
-        b.set(27, 1, 4, PIN);
-        b.set(27, 2, 4, PIN);
-        b.set(27, 3, 4, FLAG);
+        // 0.42.0: the cup open, a thin pole standing in it (the flag, the ball and a putter are displays)
+        b.set(GREEN_CUP_X, 0, GREEN_CUP_Z, CUP);
+        b.set(GREEN_CUP_X, 1, GREEN_CUP_Z, POLE);
+        b.set(GREEN_CUP_X, 2, GREEN_CUP_Z, POLE);
         // the trophy cabinet under the frames (the frames are entities, not in the plan)
         for (int k = TROPHY_Z0 - 1; k <= TROPHY_Z0 + (TROPHY_MAX - 1) * TROPHY_STEP + 1; k++) {
             b.set(TROPHY_X, 1, k, CABINET);
@@ -845,12 +882,20 @@ public final class ClubhousePlanner {
      * wall, so the only way in or out is the archway.
      */
     private static void sideShell(Builder b, int x0, String floor) {
+        sideShell(b, x0, floor, ROOF_GLASS, false);
+    }
+
+    /**
+     * A side room's shell with its roof ({@code roof}), and (0.42.0) a neon strip of coloured froglights along its
+     * own walls at y 6 when {@code neon}.
+     */
+    private static void sideShell(Builder b, int x0, String floor, String roof, boolean neon) {
         int z1 = MAIN_Z + ANNEX_Z - 1; // the south wall
         for (int i = x0; i <= x0 + 15; i++) {
             for (int k = MAIN_Z; k <= z1; k++) {
                 boolean edgeX = i == x0 || i == x0 + 15;
                 boolean edgeZ = k == z1;
-                b.set(i, SIDE_ROOF, k, ROOF_GLASS);
+                b.set(i, SIDE_ROOF, k, roof);
                 if (!edgeX && !edgeZ) {
                     b.set(i, 0, k, floor);
                     continue;
@@ -864,6 +909,8 @@ public final class ClubhousePlanner {
                         block = PLANKS;
                     } else if (j == 4) {
                         block = log(axis);
+                    } else if (neon && j == 6) {
+                        block = NEON[Math.floorMod(i + k, NEON.length)];
                     } else {
                         block = PLASTER;
                     }
@@ -874,13 +921,22 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Arcade Room (the south-west): a black floor with sea lanterns set in it every few blocks (lit, and fun),
-     * a dark polished-blackstone mat where each cabinet stands (0.41.1: no stripe across the floor), and
-     * lanterns hanging from the glass roof.
+     * The Arcade Room (the south-west; 0.42.0, the owner: "this thing needs to look much more like an arcade"): dim
+     * under a tinted-glass roof, a neon strip of coloured froglights round its walls, an arcade carpet (black with
+     * coloured confetti and lit squares), six cabinets in two facing rows down the walls on dark mats, a prize counter
+     * of glass cases along the back wall and a claw machine in each back corner (their prizes are displays), lanterns
+     * hanging low. A soft arcade chime plays now and then while anyone is in.
      */
     private static void arcadeRoom(Builder b) {
         int x0 = ARCADE_X0;
-        sideShell(b, x0, ARCADE_FLOOR);
+        sideShell(b, x0, ARCADE_FLOOR, TINTED, true);
+        for (int i = x0 + 1; i <= x0 + 14; i++) {
+            for (int k = SIDE_Z0; k <= SIDE_Z1; k++) {
+                if (Math.floorMod(i * 5 + k * 3, 7) == 0) {
+                    b.set(i, 0, k, CONFETTI[Math.floorMod(i + 2 * k, CONFETTI.length)]);
+                }
+            }
+        }
         for (int i = x0 + 2; i <= x0 + 13; i += 4) {
             for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k += 4) {
                 b.set(i, 0, k, LIGHT);
@@ -888,6 +944,18 @@ public final class ClubhousePlanner {
         }
         for (int[] c : CABINET_AT) {
             b.set(c[0], 0, c[1], MAT);
+        }
+        // the prize counter along the back wall: a counter with glass cases on it
+        for (int i = PRIZE_X0; i <= PRIZE_X1; i++) {
+            b.set(i, 1, SIDE_Z1, CABINET);
+            b.set(i, 2, SIDE_Z1, ROOF_GLASS);
+        }
+        // a claw machine in each back corner: a red base and top, a glass box between
+        for (int i : CLAW_X) {
+            b.set(i, 1, SIDE_Z1, CLAW);
+            b.set(i, 2, SIDE_Z1, ROOF_GLASS);
+            b.set(i, 3, SIDE_Z1, ROOF_GLASS);
+            b.set(i, 4, SIDE_Z1, CLAW);
         }
         for (int i : new int[]{x0 + 4, x0 + 11}) {
             for (int k : new int[]{SIDE_Z0 + 3, SIDE_Z0 + 9}) {
@@ -897,9 +965,10 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Trophy Room (the south-east): a red rug over hidden lights (0.41.1: no stripe across it), the podium
-     * for last week's top three at the back, a record pedestal for each all-time record on each side wall, and
-     * lanterns hanging from the glass roof. The trophies and the heads are entities, not in the plan.
+     * The Trophy Room (the south-east): a red rug over hidden lights (0.41.1: no stripe across it), the podium at the
+     * back (last week's top three, and from 0.42.0 every "Photo time!"), a record pedestal for each all-time record on
+     * each side wall, lanterns hanging from the glass roof, and (0.42.0) the club's look: dark-oak beams across the
+     * ceiling and green banners on the side walls. The trophies and the heads are entities, not in the plan.
      */
     private static void trophyRoom(Builder b) {
         int x0 = TROPHY_X0;
@@ -924,6 +993,28 @@ public final class ClubhousePlanner {
                 b.set(i, SIDE_TOP, k, HANGING);
             }
         }
+        for (int k : TROPHY_BEAM_Z) {
+            for (int i = x0 + 1; i <= x0 + 14; i++) {
+                b.set(i, SIDE_TOP, k, log("x"));
+            }
+        }
+        for (int k : TROPHY_BANNER_Z) {
+            b.set(x0 + 1, 5, k, banner("east"));
+            b.set(x0 + 14, 5, k, banner("west"));
+        }
+    }
+
+    /**
+     * Where "Photo time!" stands on the Trophy Room's podium (0.42.0): 1st, 2nd, 3rd, each in the middle of its
+     * 2 x 1 plinth (its cup and head are taken down for the photo), facing the archway.
+     */
+    static List<ClubhouseSite.Spot> roomPodium(Box box) {
+        List<ClubhouseSite.Spot> out = new ArrayList<>();
+        for (int n = 0; n < 3; n++) {
+            out.add(new ClubhouseSite.Spot(box.minX() + ROOM_PODIUM_X[n] + 1.0, box.minY() + ROOM_PODIUM_HEIGHT[n] + 1,
+                    box.minZ() + ROOM_PODIUM_Z + 0.5, 180f));
+        }
+        return out;
     }
 
     private static boolean contains(int[] values, int v) {
@@ -1038,6 +1129,113 @@ public final class ClubhousePlanner {
     /** The door sign's middle: this high over the floor's layer, and this far out from the wall's face. */
     static final double DOOR_Y = 5.25;
     static final double DOOR_OUT = 0.75;
+
+    /**
+     * A piece of decoration that isn't a block (0.42.0): an item or a block drawn by a display, nothing to take or
+     * break (ClubDecor draws them).
+     *
+     * @param key   a stable name ("bar.bottle.3")
+     * @param what  the item's or block's material name ({@code GLASS_BOTTLE}, {@code RED_WOOL})
+     * @param block a block display (its corner at x, y, z) rather than an item display (its middle at x, y, z)
+     * @param look  for an item: {@code face} (turns to whoever looks), {@code flat} (lying on the table), {@code
+     *              wall} (flat against the wall, facing {@code yaw}), {@code lean} (leaning, facing {@code yaw})
+     */
+    public record Prop(String key, String what, boolean block, double x, double y, double z, float yaw, float sx,
+                       float sy, float sz, String look) {
+
+        static Prop item(String key, String what, double x, double y, double z, float yaw, float size, String look) {
+            return new Prop(key, what, false, x, y, z, yaw, size, size, size, look);
+        }
+    }
+
+    /**
+     * The room's decoration (0.42.0) in {@code box} with {@code rooms}: the Feast Pot on the west 3 x 3 table's cloth
+     * with bread and a pie beside it; bottles on the back bar and glasses on the counter; a big record over the
+     * jukebox's alcove and a record on each shelf beside it; the putting green's flag, ball and putter; and, with the
+     * Arcade Room, prizes in its counter's glass cases and its claw machines.
+     */
+    public static List<Prop> decor(Box box, Rooms rooms) {
+        List<Prop> out = new ArrayList<>();
+        double x0 = box.minX();
+        double y0 = box.minY();
+        double z0 = box.minZ();
+        // the Feast Pot: a small pot of food on the cloth (its bottom on the cloth's top), bread and a pie by it
+        out.add(Prop.item("feast.pot", "CAULDRON", x0 + POT_X + 0.5, y0 + 2 + POT_SIZE / 2, z0 + POT_Z + 0.5, 0f,
+                POT_SIZE, "fixed"));
+        out.add(Prop.item("feast.bread", "BREAD", x0 + POT_X - 0.1, y0 + 2.02, z0 + POT_Z + 1.2, 0f, 0.4f, "flat"));
+        out.add(Prop.item("feast.pie", "PUMPKIN_PIE", x0 + POT_X + 1.1, y0 + 2.02, z0 + POT_Z - 0.2, 0f, 0.4f, "flat"));
+        // the back bar's bottles (in front of its shelves) and glasses on the counter
+        String[] bottles = {"HONEY_BOTTLE", "GLASS_BOTTLE", "EXPERIENCE_BOTTLE", "POTION"};
+        int n = 0;
+        for (int k = 2; k <= 10; k++) {
+            for (int j = 2; j <= 3; j++) {
+                if ((k + j) % 2 == 0) {
+                    out.add(Prop.item("bar.bottle." + n, bottles[n % bottles.length], x0 + 2.12, y0 + j + 0.3,
+                            z0 + k + 0.5, -90f, 0.4f, "face"));
+                    n++;
+                }
+            }
+        }
+        for (int k : new int[]{3, 6, 9}) {
+            out.add(Prop.item("bar.glass." + k, "GLASS_BOTTLE", x0 + 4.5, y0 + 2.2, z0 + k + 0.5, -90f, 0.4f, "face"));
+        }
+        // the jukebox: a big record over its alcove, a record on each shelf beside it
+        out.add(Prop.item("jukebox.sign", "MUSIC_DISC_CAT", x0 + JUKEBOX_X + 1.04, y0 + JUKEBOX_Y + 2.5,
+                z0 + JUKEBOX_Z + 0.5, -90f, 1.3f, "wall"));
+        out.add(Prop.item("jukebox.shelf.0", "MUSIC_DISC_13", x0 + JUKEBOX_X + 1.04, y0 + JUKEBOX_Y + 0.5,
+                z0 + JUKEBOX_Z - 0.5, -90f, 0.6f, "wall"));
+        out.add(Prop.item("jukebox.shelf.1", "MUSIC_DISC_BLOCKS", x0 + JUKEBOX_X + 1.04, y0 + JUKEBOX_Y + 0.5,
+                z0 + JUKEBOX_Z + 1.5, -90f, 0.6f, "wall"));
+        // the putting green: a small red flag on the pole, a ball near the cup, a putter by the edge
+        out.add(new Prop("green.flag", "RED_WOOL", true, x0 + GREEN_CUP_X + 0.5, y0 + 2.55, z0 + GREEN_CUP_Z + 0.48, 0f,
+                0.55f, 0.32f, 0.04f, "block"));
+        out.add(Prop.item("green.ball", "SNOWBALL", x0 + GREEN_CUP_X - 0.7, y0 + 1.18, z0 + GREEN_CUP_Z + 0.9, 0f,
+                0.3f, "face"));
+        out.add(Prop.item("green.putter", "IRON_HOE", x0 + 29.6, y0 + 1.55, z0 + 1.8, 90f, 0.9f, "lean"));
+        if (rooms != null && rooms.arcade()) {
+            String[] prizes = {"CAKE", "GOLDEN_APPLE", "DIAMOND", "TOTEM_OF_UNDYING", "MUSIC_DISC_PIGSTEP",
+                    "FIREWORK_ROCKET"};
+            for (int i = PRIZE_X0; i <= PRIZE_X1; i++) {
+                out.add(Prop.item("arcade.prize." + i, prizes[(i - PRIZE_X0) % prizes.length], x0 + i + 0.5,
+                        y0 + 2.5, z0 + SIDE_Z1 + 0.5, 0f, 0.55f, "face"));
+            }
+            String[] plush = {"SLIME_BALL", "COOKIE", "EMERALD", "PUFFERFISH"};
+            for (int c = 0; c < CLAW_X.length; c++) {
+                for (int m = 0; m < 3; m++) {
+                    out.add(Prop.item("arcade.claw." + c + "." + m, plush[(c + m) % plush.length],
+                            x0 + CLAW_X[c] + 0.3 + m * 0.2, y0 + 2.2 + (m % 2) * 0.15, z0 + SIDE_Z1 + 0.35 + m * 0.15,
+                            0f, 0.35f, "face"));
+                }
+                out.add(Prop.item("arcade.claw." + c + ".hook", "CHAIN", x0 + CLAW_X[c] + 0.5, y0 + 3.5,
+                        z0 + SIDE_Z1 + 0.5, 0f, 0.6f, "face"));
+            }
+        }
+        return out;
+    }
+
+    /** The Feast Pot's size on the cloth (blocks). */
+    static final float POT_SIZE = 0.6f;
+
+    /**
+     * The planner's regions in {@code box} with {@code rooms} (0.42.0), by name: what a save says it covers, so a room
+     * added in a later release (a region the save doesn't name) is built from HCM's plan into the owner's saved room
+     * ({@link ClubSave#merged}). The main room, then each side room's 16 x 16 half of the annex.
+     */
+    public static Map<String, Box> regions(Box box, Rooms rooms) {
+        Map<String, Box> out = new java.util.LinkedHashMap<>();
+        out.put("main", new Box(box.minX(), box.minY(), box.minZ(), box.minX() + 31, box.maxY(), box.minZ() + MAIN_Z - 1));
+        if (box.sizeZ() == ClubhouseSettings.SIZE_Z) {
+            if (rooms.arcade()) {
+                out.put("arcade", new Box(box.minX() + ARCADE_X0, box.minY(), box.minZ() + MAIN_Z,
+                        box.minX() + ARCADE_X0 + 15, box.minY() + SIDE_ROOF, box.maxZ()));
+            }
+            if (rooms.trophy()) {
+                out.put("trophy", new Box(box.minX() + TROPHY_X0, box.minY(), box.minZ() + MAIN_Z,
+                        box.minX() + TROPHY_X0 + 15, box.minY() + SIDE_ROOF, box.maxZ()));
+            }
+        }
+        return out;
+    }
 
     /** Where the cushions go in {@code box} (26.3): one on every chair, stool and armchair. */
     public static List<Seat> seats(Box box) {
@@ -1160,5 +1358,8 @@ public final class ClubhousePlanner {
     static final Set<String> SOLID = Set.of(PLANKS, HALL_FLOOR, MARBLE_WHITE, MARBLE_BLACK, PLASTER, LIGHT, // PANEL is MARBLE_BLACK
             GOLD, IRON, COPPER, CLOTH, CABINET, BRICKS, BOOKS, "minecraft:jukebox", "minecraft:barrel", PLANTER,
             "minecraft:stripped_dark_oak_log", "minecraft:glass", ARCADE_FLOOR, MAT,
-            "minecraft:quartz_pillar", "minecraft:green_wool", "minecraft:brown_wool", "minecraft:red_wool");
+            "minecraft:quartz_pillar", "minecraft:green_wool", "minecraft:brown_wool", "minecraft:red_wool",
+            "minecraft:ochre_froglight", "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", CLAW,
+            "minecraft:cyan_concrete", "minecraft:lime_concrete", "minecraft:orange_concrete",
+            "minecraft:light_blue_concrete");
 }

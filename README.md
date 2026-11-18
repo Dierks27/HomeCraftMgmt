@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.41.1-clubhouse-fixes`
+- **Version:** `0.42.0-edit-mode`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,11 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.41.1 from 0.42.0:** the jar alone (no schema, no config revision). **Before rolling back, save
+nothing you need only in edit mode**: 0.41.1 doesn't know saves or edit mode, so the room converges back to
+HCM's 0.41.1 room at the next start (ALGO 7 -> 6) and your saves stay in `clubhouse-saves/`, unread, for the
+upgrade. The podium comes back to the Great Hall. Nothing is lost.
 
 **Back to 0.41.0 from 0.41.1:** the jar alone (no schema, no config revision). The room converges back to
 0.41.0's (ALGO 6 -> 5: the stripes and magenta mats come back, the runners go) and the side rooms' models
@@ -1989,11 +1994,19 @@ front of them, in sight, on dry ground with no lava or fire beside it. It gobble
 
 ### The Family Feast
 
-The family fills a feast table together. Food goes in at the **Feast Pot**, one block an admin picks in the
-home world (food can't go in inside the Clubhouse, where only the kit is carried). The tables in the
-Clubhouse show the progress.
+The family fills a feast table together. Food goes in at a **Feast Pot**: the one on the Clubhouse's feast
+table (0.42.0), or the block an admin picks in the home world (`/hcm feast pot`). Both count the same. The
+tables in the Clubhouse show the progress.
 
-- **At the pot:** a floating "Feast Pot" name and slow sparkles. **A tap holding food puts in one item**,
+- **At the Clubhouse pot (0.42.0):** inside the Clubhouse you carry only the kit, and your own things wait
+  at home, so **a tap on the pot opens a picture of the food you have at home**, one picture per food, most
+  points first. **Tap a food to put one in**: it comes out of your things at home (you get home one lighter
+  when you leave), with the same munch, rising chime and family bar, under the same daily points. No food
+  at home shows an empty bowl. A full day keeps the food at home ("Full for today"). Before and after the
+  Feast's dates the pot only bubbles. In an owner-built room (or one with its feast spot moved) the pot
+  stands one place on from the end of the plates' first row.
+
+- **At the home pot:** a floating "Feast Pot" name and slow sparkles. **A tap holding food puts in one item**,
   with a munch and a chime that rises as the table fills, and a 5-second family bar. **A sneak-tap** (Java
   only) puts in the stack, up to 40 points a player a local day. On Bedrock every tap puts in one item, even
   crouched: on a tablet crouch stays on by itself, and she shouldn't lose a stack of pies to it. An
@@ -2003,7 +2016,7 @@ Clubhouse show the progress.
   get a soft low note and stay in the hand. Creative counts.
 - **The pot can't be broken** while the Feast is open (an admin sneaking can), blown up, pushed or burnt.
 - **In the Clubhouse:** the Great Hall's two banquet tables either side of the runner (0.40.0), and the
-  show-only Feast Pot centred on a 3 x 3 table south of them (the real pot is the one at home). Twenty plates
+  Feast Pot on the 3 x 3 table south of them (0.42.0: a real one, see above). Twenty plates
   fill with food as the total grows, and a line reads `Family Feast 137 / 150` with a bar.
 - **When the table is full** (150 points): every helper is paid **20 tokens once** (ledger source
   `EVENT_FEAST`, paid even when offline), each helper who is home gets **one Turkey Mini 2026** and their
@@ -4466,6 +4479,65 @@ every race and round works exactly as before**.
   goes back.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
+
+#### Edit the Clubhouse yourself (0.42.0)
+
+The owner: "being able to edit the clubhouse will be really nice ... then when I am done, Save the Clubhouse
+and it simply saves the blocks as is." HCM's room stays protected and self-repairing, just with your blocks.
+
+1. `/hcm games clubhouse edit` turns **edit mode** on. Admins (`hcm.games.admin`) can place and break blocks
+   anywhere in the Clubhouse, side rooms included; nothing is built, checked or put back while you work;
+   everyone else is still refused; visitors still come in. It stays on across a restart.
+2. Decorate.
+3. `/hcm games clubhouse save` reads every block and tells you what it found: the block count, **any spot
+   the room uses that your blocks covered or took away** (an arrival spot, a podium place, the jukebox, a
+   trophy frame, a feast plate, a cabinet, a pedestal, a cushion's chair), each with its coordinates, and
+   **any place a mob could stand in the dark** (the same light check the generated room is tested with).
+   Nothing is kept yet.
+4. `/hcm games clubhouse save confirm` keeps it: your blocks become the room (a save in
+   `plugins/HomeCraftManagement/clubhouse-saves/`), edit mode goes off and the guard comes back. From then on
+   the room is built, checked and put back after a crash **from your save**. The warnings don't stop a save:
+   it's your call.
+
+- **Move a spot** in an edited or saved room by standing where it goes: `/hcm games clubhouse spot
+  arrival`, `spot podium <1|2|3>`, `spot board [fame|playing|stats]`, `spot trophies`, `spot jukebox`, `spot
+  feast`, `spot cabinet <game>`, `spot trophyroom`, `spot door <arcade|trophy>`; add `clear` to put one back
+  where HCM's room has it.
+- `/hcm games clubhouse discard`: edit mode off, and every block you changed goes back to your last save (or
+  HCM's room).
+- `/hcm games clubhouse saves`: the last five saves, newest first, the one in use marked. `restore <n>`
+  makes one the room again (a bad save can be undone).
+- `/hcm games clubhouse generated` asks first when a save is in use (`generated confirm` puts HCM's room
+  back; your saves are kept for `restore`).
+- **Updates.** Once you've saved, a release that changes HCM's room doesn't change yours: the console and
+  every admin who joins read "The Clubhouse plan changed in this update - your saved room is kept.
+  /hcm games clubhouse generated to see the new one." A **new room** HCM adds later (a region your save
+  doesn't know) is built into your saved room automatically; everything you made stays.
+- Blocks only: the cabinets, cups, heads, signs and decoration (the Feast Pot, bottles, records, the flag)
+  are drawn by HCM as before, where HCM's room has them.
+
+#### The Club, polished (0.42.0)
+
+- **The podium moved to the Trophy Room** (the owner: it "feels very out of place" in the Great Hall). A
+  hedge of flowering azalea stands under the results board instead. Every "Photo time!" is on the Trophy
+  Room's podium: Race Night, the family week's ceremony, and now **every party race and every Golf
+  together round of two or more** (the top three who finished). The podium's cups and heads step down for
+  the photo and come back after it. With no Trophy Room, the photo is on the hall's green.
+- **The jukebox** sits in a lit alcove with a record shelf either side and a big record over it, and
+  music notes rise in front of it while a song plays.
+- **The Feast Pot** is a small pot on the west table's cloth with bread and a pie beside it, steaming while
+  anyone is in. **It's a real Feast Pot**: tap it while the Feast is open and put in food from your things
+  at home (see [The Family Feast](#the-family-feast)). The home pot (`/hcm feast pot`) works as before.
+- **The bar** has bottles on its back shelves, glasses on the counter and a brewing stand at its end.
+- **The putting green**: a thin lit pole standing in the open cup with a small red flag, a golf ball by the
+  hole and a putter at the edge.
+- **The Trophy Room**: dark-oak beams across its ceiling, the club's green banners, and a little glass
+  case on every empty record pedestal ("the next trophy goes here").
+- **The Arcade Room** (the owner: "this thing needs to look much more like an arcade"): dim under a tinted
+  roof, a neon strip of coloured froglights round its walls, a confetti arcade carpet, six cabinets in two
+  facing rows (the kid set taken round again to fill them), a prize counter of glass cases with prizes on
+  show and a claw machine in each back corner (decoration only), and a soft arcade chime now and then.
+- `/hcm games clubhouse models` lists every model id, its size, and whether it's yours or the placeholder.
 
 #### The Arcade Room and the Trophy Room (0.41.0)
 

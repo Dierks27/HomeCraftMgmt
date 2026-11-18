@@ -61,6 +61,16 @@ public final class ClubhouseRoom {
     public static final String CABINETS_KEY = META_PREFIX + "hand.cabinets";
     public static final String TROPHY_ROOM_KEY = META_PREFIX + "hand.trophyroom";
     public static final String DOOR_KEY = META_PREFIX + "hand.door.";
+    /**
+     * 0.42.0, edit mode: "1" while the owner is decorating the generated room ({@code edit}), and the save in use
+     * ({@code save confirm}, {@code restore}), its id in {@link RoomHost#saves()}.
+     */
+    public static final String EDIT_KEY = META_PREFIX + "edit";
+    public static final String SAVED_KEY = META_PREFIX + "saved";
+    /** How many saves are kept (the newest). */
+    public static final int SAVES_KEPT = 5;
+    /** At most this many dark spots are listed when a save is checked. */
+    static final int DARK_LISTED = 8;
     /** "hand" while an owner-built room is the Clubhouse. */
     public static final String MODE_KEY = META_PREFIX + "mode";
     /** "1" while an admin has switched the Clubhouse off. */
@@ -150,8 +160,16 @@ public final class ClubhouseRoom {
     /** The main room alone, and with the annex (the rooms wanted, or none to clear it); {@code null} if not made. */
     private final ClubhouseSite mainSite;
     private final ClubhouseSite fullSite;
-    /** The room being built or standing: one of the two. */
+    /** The room being built or standing: one of the two, or (0.42.0) the owner's saved room. */
     private ClubhouseSite site;
+    /** 0.42.0: edit mode, the save in use (its id and site), and whether HCM's plan changed since it was taken. */
+    private boolean editing;
+    private String savedId;
+    private ClubhouseSite savedSite;
+    private String savedProblem;
+    private boolean planChanged;
+    /** A save being taken (its chunks loading). */
+    private boolean saving;
     /** 0.41.0: whether the annex is part of the build (claimed), and why not when it is wanted but left out. */
     private boolean annexIn;
     private String annexOut;
@@ -246,6 +264,8 @@ public final class ClubhouseRoom {
             handTrophies = Place.of(host.meta(TROPHIES_KEY));
             handJukebox = Place.of(host.meta(JUKEBOX_KEY));
             handFeast = Place.of(host.meta(FEAST_KEY));
+            editing = "1".equals(host.meta(EDIT_KEY));
+            savedId = host.meta(SAVED_KEY);
             handCabinets.clear();
             handCabinets.putAll(cabinetsOf(host.meta(CABINETS_KEY)));
             handTrophyRoom = Place.of(host.meta(TROPHY_ROOM_KEY));
@@ -292,8 +312,51 @@ public final class ClubhouseRoom {
             close("its room could not be made: " + planProblem);
             return;
         }
+        if (editing) {
+            // 0.42.0: the owner is decorating: open as it stands, nothing built, checked or put back
+            try {
+                annexIn = claimText(world, annex).equals(host.meta(ANNEX_CLAIM_KEY));
+            } catch (Exception e) {
+                annexIn = false;
+            }
+            site = chosenSite();
+            phase = Phase.READY;
+            return;
+        }
         phase = Phase.WAITING;
         tryBuild();
+    }
+
+    /**
+     * The room to build (0.42.0): the owner's save when one is in use and fits the box as it is now (the main room,
+     * with the side rooms when they are in), else HCM's generated room. A save that can't be read or doesn't fit is
+     * left aside with a WARN (the generated room is built; {@code restore} picks it again).
+     */
+    private ClubhouseSite chosenSite() {
+        ClubhouseSite gen = annexIn ? fullSite : mainSite;
+        savedSite = null;
+        savedProblem = null;
+        planChanged = false;
+        if (savedId == null || gen == null) {
+            return gen;
+        }
+        try {
+            ClubSave.Saved s = ClubSave.read(host.readSave(savedId), gen.box());
+            // a room HCM added since the save (a region it doesn't cover) comes from HCM's plan, the rest is the save's
+            com.dierks.homecraft.games.gen.api.Plan plan = ClubSave.merged(s, gen.plan(),
+                    ClubhousePlanner.regions(gen.box(), annexIn ? rooms : ClubhousePlanner.Rooms.NONE));
+            savedSite = new ClubhouseSite(plan, gen.spawns(), gen.podium(), gen.board(), gen.inside(), gen.more());
+            planChanged = s.generatedHash() != null && !s.generatedHash().equals(gen.plan().hash());
+            if (planChanged) {
+                host.logger().info("Clubhouse: the Clubhouse plan changed in this update - your saved room is kept."
+                        + " /hcm games clubhouse generated to see the new one.");
+            }
+            return savedSite;
+        } catch (Exception e) {
+            savedProblem = "your save " + savedId + " can't be used: " + e.getMessage();
+            host.logger().warning("Clubhouse: " + savedProblem + " - building HCM's room instead");
+            return gen;
+        }
     }
 
     private void close(String why) {
@@ -500,7 +563,7 @@ public final class ClubhouseRoom {
         jobKind = kind;
         jobScan = kind != JobKind.BUILD;
         if (kind == JobKind.BUILD) {
-            site = annexIn ? fullSite : mainSite;
+            site = chosenSite();
         }
         Box where = kind == JobKind.SCAN_ANNEX ? annex : kind == JobKind.SCAN_MAIN ? box : site.box();
         job = new BuildJob(port, where, jobScan ? null : site.plan(), jobScan ? BuildJob.Mode.SCAN
@@ -836,29 +899,89 @@ public final class ClubhouseRoom {
      * places in order, while the room is built; the owner-built room's own cabinet for each game that has one (only in
      * its world). Empty while there is none.
      */
-    public Map<String, ClubhousePlanner.Place3> cabinetPlaces(List<String> games) {
-        Map<String, ClubhousePlanner.Place3> out = new java.util.LinkedHashMap<>();
+    public List<Cabinet> cabinetPlaces(List<String> games) {
+        List<Cabinet> out = new ArrayList<>();
         if (games == null || games.isEmpty()) {
             return out;
         }
-        if (!hand) {
+        if (!hand && !(overrides() && !handCabinets.isEmpty())) {
             if (!arcadeBuilt()) {
                 return out;
             }
+            // 0.42.0: every place has a cabinet, the kid set taken round again to fill the room ("repeats are fine")
             List<ClubhousePlanner.Place3> at = ClubhousePlanner.cabinets(site.box());
-            for (int n = 0; n < games.size() && n < at.size(); n++) {
-                out.put(games.get(n), at.get(n));
+            for (int n = 0; n < at.size(); n++) {
+                out.add(new Cabinet(games.get(n % games.size()), at.get(n)));
             }
             return out;
         }
         for (String g : games) {
             Place at = handCabinets.get(g);
             if (at != null && at.world().equalsIgnoreCase(world())) {
-                out.put(g, new ClubhousePlanner.Place3(Math.floor(at.x()) + 0.5, Math.floor(at.y()),
-                        Math.floor(at.z()) + 0.5, WallBoards.snap(at.yaw())));
+                out.add(new Cabinet(g, new ClubhousePlanner.Place3(Math.floor(at.x()) + 0.5, Math.floor(at.y()),
+                        Math.floor(at.z()) + 0.5, WallBoards.snap(at.yaw()))));
             }
         }
         return out;
+    }
+
+    /** A cabinet in the Arcade Room: the game it plays and where it stands (0.42.0: a game may have two). */
+    public record Cabinet(String game, ClubhousePlanner.Place3 at) {
+    }
+
+    /**
+     * 0.42.0: the generated room's decoration that isn't blocks ({@link ClubhousePlanner#decor}), while it is open;
+     * none in an owner-built room (its decoration is the owner's).
+     */
+    public List<ClubhousePlanner.Prop> decor() {
+        if (site == null || !open()) {
+            return List.of();
+        }
+        List<ClubhousePlanner.Prop> out = new ArrayList<>();
+        if (!hand) {
+            out.addAll(ClubhousePlanner.decor(site.box(), annexIn ? rooms : ClubhousePlanner.Rooms.NONE));
+        }
+        if (hand || mine(handFeast)) {
+            // the owner's own feast table: the Feast Pot (the real one, 0.42.0) just past the end of the plates' first
+            // row; the generated table's pot, bread and pie don't stand on the old cloth
+            out.removeIf(p -> p.key().startsWith("feast."));
+            ClubhousePlanner.Prop pot = handPot();
+            if (pot != null) {
+                out.add(pot);
+            }
+        }
+        return out;
+    }
+
+    /** The Feast Pot by an owner-built feast table: one cell on from the first row's last plate, or {@code null}. */
+    ClubhousePlanner.Prop handPot() {
+        List<int[]> cells = feastCells();
+        Place at = handFeast;
+        if (cells == null || cells.isEmpty() || at == null) {
+            return null;
+        }
+        int[] right = right(at.yaw());
+        int[] last = cells.get(com.dierks.homecraft.arcade.feast.FeastRules.CELLS / 2 - 1);
+        return ClubhousePlanner.Prop.item("feast.pot", "CAULDRON", last[0] + right[0] + 0.5,
+                last[1] + ClubhousePlanner.POT_SIZE / 2, last[2] + right[1] + 0.5, 0f, ClubhousePlanner.POT_SIZE,
+                "fixed");
+    }
+
+    /** Whether feet at (x, y, z) are in the Arcade Room (0.42.0, its sound): the generated room's, or near a cabinet. */
+    public boolean inArcadeRoom(String worldName, double x, double y, double z) {
+        if (worldName == null || !worldName.equalsIgnoreCase(world())) {
+            return false;
+        }
+        if (!hand) {
+            return arcadeBuilt() && ClubhousePlanner.arcadeInside(site.box()).contains(x, y, z);
+        }
+        for (Place at : handCabinets.values()) {
+            if (at.world().equalsIgnoreCase(world()) && Math.abs(at.x() - x) <= 8 && Math.abs(at.z() - z) <= 8
+                    && Math.abs(at.y() - y) <= 4) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The games with an owner-built cabinet, in the order they were set (for the kid set in that room). */
@@ -871,7 +994,7 @@ public final class ClubhouseRoom {
      * built, or the owner-built shelf's pairs along the admin's right (only in its world); empty for none.
      */
     public List<ClubhousePlanner.Pedestal> pedestals() {
-        if (!hand) {
+        if (!mine(handTrophyRoom)) {
             return trophyBuilt() ? ClubhousePlanner.pedestals(site.box()) : List.of();
         }
         Place at = handTrophyRoom;
@@ -894,7 +1017,7 @@ public final class ClubhouseRoom {
 
     /** Where door sign {@code which} hangs (its middle and facing), or {@code null} for none (0.41.0). */
     public ClubhousePlanner.Place3 doorSign(String which) {
-        if (!hand) {
+        if (!mine(handDoors.get(which))) {
             boolean arcade = "arcade".equals(which);
             return (arcade ? arcadeBuilt() : trophyBuilt()) ? ClubhousePlanner.door(site.box(), arcade) : null;
         }
@@ -914,7 +1037,7 @@ public final class ClubhouseRoom {
         if (worldName == null || !worldName.equalsIgnoreCase(world())) {
             return false;
         }
-        if (!hand) {
+        if (!mine(handTrophyRoom)) {
             return trophyBuilt() && ClubhousePlanner.trophyInside(site.box()).contains(x, y, z);
         }
         Place at = handTrophyRoom;
@@ -934,6 +1057,347 @@ public final class ClubhouseRoom {
         return site != null && annexIn && rooms.trophy() && open();
     }
 
+    // ---- 0.42.0: edit mode and saves -----------------------------------------------------------------
+
+    /**
+     * {@code /hcm games clubhouse edit}: edit mode on. Admins ({@code hcm.games.admin}) may place and break blocks in
+     * the whole box, side rooms too; nothing is built, checked or put back meanwhile, and visitors still come in. It
+     * stays on across a restart until {@code save confirm} or {@code discard}.
+     */
+    public String edit() {
+        if (hand) {
+            return "&cYour owner-built room is yours already: change it as you like. &7(Edit mode is for HCM's room.)";
+        }
+        if (off) {
+            return "&cThe Clubhouse is switched off. &e/hcm games clubhouse generated &7first.";
+        }
+        if (editing) {
+            return "&7Edit mode is on already. &e/hcm games clubhouse save &7when you're done, or &ediscard&7.";
+        }
+        if (!open()) {
+            return "&cThe Clubhouse isn't built and checked yet. &7See /hcm games clubhouse status.";
+        }
+        if (!setMeta(EDIT_KEY, "1")) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        cancelJob();
+        editing = true;
+        verified = false;
+        phase = Phase.READY;
+        return "&aEdit mode is on. &7Admins can place and break blocks anywhere in the Clubhouse, side rooms too;"
+                + " nothing is put back while you work, and visitors still come in. &e/hcm games clubhouse save &7checks"
+                + " it, &esave confirm &7keeps it, &ediscard &7puts the room back.";
+    }
+
+    /** Whether edit mode is on. */
+    public boolean editing() {
+        return editing;
+    }
+
+    /** The save in use, or {@code null} for HCM's generated room. */
+    public String savedId() {
+        return savedId;
+    }
+
+    /** Whether HCM's plan changed in an update since the save in use was taken (the admins are told). */
+    public boolean planChanged() {
+        return planChanged && savedSite != null;
+    }
+
+    /**
+     * {@code /hcm games clubhouse save [confirm]}: every block of the box as it stands now (its chunks are loaded first,
+     * so the answer comes a moment later through {@code reply}). Without {@code confirm} it only says what it found:
+     * how many blocks, any spot the room uses that a block covers or that lost its block (with where; {@code spot}
+     * moves one), and any place a mob could stand in the dark. With it, the blocks become the room: kept as a save (the
+     * newest {@value #SAVES_KEPT}), edit mode off, the guard back on, and from then on built, checked and put back after
+     * a crash from the save.
+     */
+    public void save(boolean confirm, java.util.function.Consumer<List<String>> reply) {
+        if (hand) {
+            reply.accept(List.of("&cYour owner-built room isn't saved: it's yours as it stands."));
+            return;
+        }
+        if (site == null || !open()) {
+            reply.accept(List.of("&cThe Clubhouse isn't open. &7See /hcm games clubhouse status."));
+            return;
+        }
+        if (saving) {
+            reply.accept(List.of("&7A save is being taken already - a moment."));
+            return;
+        }
+        WorldPort port = host.world(world);
+        if (port == null) {
+            reply.accept(List.of("&cThe Clubhouse's world isn't loaded."));
+            return;
+        }
+        Box b = site.box();
+        List<int[]> chunks = new ArrayList<>();
+        for (int cx = b.minX() >> 4; cx <= b.maxX() >> 4; cx++) {
+            for (int cz = b.minZ() >> 4; cz <= b.maxZ() >> 4; cz++) {
+                chunks.add(new int[]{cx, cz});
+            }
+        }
+        saving = true;
+        int[] left = {chunks.size()};
+        boolean[] failed = {false};
+        for (int[] c : chunks) {
+            port.load(c[0], c[1], ok -> {
+                failed[0] |= !ok;
+                if (--left[0] == 0) {
+                    try {
+                        reply.accept(failed[0] ? List.of("&cThe Clubhouse's chunks couldn't be loaded - try again.")
+                                : saveNow(port, b, confirm));
+                    } finally {
+                        for (int[] r : chunks) {
+                            port.release(r[0], r[1]);
+                        }
+                        saving = false;
+                    }
+                }
+            });
+        }
+    }
+
+    /** The save itself, once the box's chunks are loaded. */
+    private List<String> saveNow(WorldPort port, Box b, boolean confirm) {
+        Map<Long, WorldPort.ChunkView> views = new HashMap<>();
+        com.dierks.homecraft.games.gen.api.Plan plan = ClubSave.snapshot(b, at -> {
+            long k = ((long) (at[0] >> 4) << 32) ^ (at[2] >> 4);
+            WorldPort.ChunkView v = views.computeIfAbsent(k, kk -> port.snapshot(at[0] >> 4, at[2] >> 4));
+            return v == null ? null : v.block(at[0], at[1], at[2]);
+        });
+        ClubhouseSite check = new ClubhouseSite(plan, site.spawns(), site.podium(), site.board(), site.inside(),
+                site.more());
+        List<String> spots = ClubSave.spotProblems(plan, spots());
+        List<int[]> dark = ClubSave.dark(plan, check, DARK_LISTED);
+        List<String> out = new ArrayList<>();
+        out.add("&6The Clubhouse as it stands: &f" + plan.ops().size() + " blocks &7(" + b.describe() + ")");
+        for (String why : spots) {
+            out.add("&e! &7" + why + " &8- move it with /hcm games clubhouse spot ...");
+        }
+        if (!dark.isEmpty()) {
+            StringBuilder d = new StringBuilder();
+            for (int[] p : dark) {
+                d.append(d.length() == 0 ? "" : ", ").append(p[0]).append(' ').append(p[1]).append(' ').append(p[2]);
+            }
+            out.add("&e! &7Mobs could spawn in the dark at " + d + (dark.size() >= DARK_LISTED ? " and more" : "")
+                    + " &8- a light nearby fixes it (your call)");
+        }
+        if (spots.isEmpty() && dark.isEmpty()) {
+            out.add("&a\u2714 &7Every spot is clear and every place is lit.");
+        }
+        if (!confirm) {
+            out.add("&e/hcm games clubhouse save confirm &7to keep it as the Clubhouse.");
+            return out;
+        }
+        String id = "save-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new java.util.Date(host.now()));
+        String genHash = (annexIn ? fullSite : mainSite).plan().hash();
+        try {
+            host.writeSave(id, ClubSave.text(plan, genHash, ClubhousePlanner.regions(b,
+                    annexIn ? rooms : ClubhousePlanner.Rooms.NONE).keySet()));
+            List<String> all = new ArrayList<>(host.saves());
+            all.sort(null);
+            while (all.size() > SAVES_KEPT) {
+                String gone = all.remove(0);
+                if (!gone.equals(id)) {
+                    host.deleteSave(gone);
+                }
+            }
+        } catch (Exception e) {
+            host.logger().log(Level.WARNING, "Clubhouse: could not write the save", e);
+            out.add("&cThe save couldn't be written: " + e.getMessage());
+            return out;
+        }
+        if (!setMeta(SAVED_KEY, id) || !setMeta(EDIT_KEY, null)) {
+            out.add("&cThe save is written but couldn't be made the room's - see the console.");
+            return out;
+        }
+        savedId = id;
+        editing = false;
+        settle(); // built (nothing to write) and checked from the save, guarded again
+        out.add("&aSaved as &f" + id + "&a. &7The Clubhouse is your room now: built, checked and put back from it."
+                + " Edit mode is off.");
+        return out;
+    }
+
+    /**
+     * {@code /hcm games clubhouse discard}: edit mode off, and the room put back to the save in use (or HCM's
+     * generated room): every block changed since is built back.
+     */
+    public String discard() {
+        if (!editing) {
+            return "&7Edit mode isn't on.";
+        }
+        if (!setMeta(EDIT_KEY, null)) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        editing = false;
+        settle();
+        return "&aEdit mode is off. &7The room goes back to " + (savedId == null ? "HCM's room" : "your save " + savedId)
+                + ": changed blocks are put back.";
+    }
+
+    /** {@code /hcm games clubhouse saves}: the saves kept, newest first, the one in use marked. */
+    public List<String> savesList() {
+        List<String> ids = new ArrayList<>(host.saves());
+        ids.sort(java.util.Comparator.reverseOrder());
+        List<String> out = new ArrayList<>();
+        out.add("&6Clubhouse saves &7(newest first; &erestore <n>&7)");
+        if (ids.isEmpty()) {
+            out.add("&7None yet. &e/hcm games clubhouse edit&7, decorate, then &esave confirm&7.");
+        }
+        for (int n = 0; n < ids.size(); n++) {
+            out.add("&e" + (n + 1) + ". &f" + ids.get(n) + (ids.get(n).equals(savedId) ? " &a(in use)" : ""));
+        }
+        out.add("&7In use: " + (savedId == null ? "HCM's generated room" : savedId) + (editing ? " &e(edit mode on)" : ""));
+        return out;
+    }
+
+    /** {@code /hcm games clubhouse restore <n>}: the {@code n}th newest save becomes the room (built and checked). */
+    public String restore(int n) {
+        List<String> ids = new ArrayList<>(host.saves());
+        ids.sort(java.util.Comparator.reverseOrder());
+        if (n < 1 || n > ids.size()) {
+            return "&cThere's no save " + n + ". &7/hcm games clubhouse saves lists them.";
+        }
+        if (hand) {
+            return "&cThe owner-built room is on. &e/hcm games clubhouse generated &7first.";
+        }
+        String id = ids.get(n - 1);
+        if (!setMeta(SAVED_KEY, id) || !setMeta(EDIT_KEY, null) || !setMeta(OFF_KEY, null)) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        savedId = id;
+        editing = false;
+        off = false;
+        settle();
+        return "&aThe Clubhouse is your save &f" + id + " &aagain. &7It is built and checked before anyone comes in.";
+    }
+
+    /**
+     * {@code /hcm games clubhouse spot arrival [clear]}: in the edited or saved room, visitors arrive where the admin
+     * stands (instead of the Foyer's sixteen spots); {@code clear} gives the sixteen back. Every other spot moves with
+     * its own command ({@code podium}, {@code board}, {@code trophies}, {@code jukebox}, {@code feast}, {@code cabinet},
+     * {@code trophyroom}, {@code door}).
+     */
+    public String spotArrival(Place at) {
+        if (hand) {
+            return here(at);
+        }
+        if (!setMeta(SPAWN_KEY, at == null ? null : at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handSpawn = at;
+        return at == null ? "&aVisitors arrive at the Foyer's spots again."
+                : "&aVisitors arrive where you stand." + notOnYet();
+    }
+
+    /**
+     * {@code spot <podium <n>|board [which]|trophies|jukebox|feast> clear} (0.42.0): the spot goes back to the
+     * generated room's place.
+     */
+    public String clearSpot(String which, String arg) {
+        String key;
+        switch (which) {
+            case "podium" -> {
+                int n;
+                try {
+                    n = arg == null ? 0 : Integer.parseInt(arg);
+                } catch (NumberFormatException e) {
+                    n = 0;
+                }
+                if (n < 1 || n > 3) {
+                    return "&cThe podium has places 1, 2 and 3.";
+                }
+                key = PODIUM_KEY + n;
+                handPodium[n - 1] = null;
+            }
+            case "board" -> {
+                String w = arg == null ? WallBoards.RESULTS : arg.toLowerCase(Locale.ROOT);
+                key = WallBoards.RESULTS.equals(w) ? BOARD_KEY : WALL_KEY + w;
+                if (WallBoards.RESULTS.equals(w)) {
+                    handBoard = null;
+                } else {
+                    handWalls.remove(w);
+                }
+            }
+            case "trophies" -> {
+                key = TROPHIES_KEY;
+                handTrophies = null;
+            }
+            case "jukebox" -> {
+                key = JUKEBOX_KEY;
+                handJukebox = null;
+            }
+            case "feast" -> {
+                key = FEAST_KEY;
+                handFeast = null;
+            }
+            default -> {
+                return "&cThe spots are arrival, podium <n>, board [which], trophies, jukebox, feast, cabinet <game>,"
+                        + " trophyroom and door <arcade|trophy>.";
+            }
+        }
+        if (!setMeta(key, null)) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        return "&aThe " + which + (arg == null ? "" : " " + arg) + " spot is the generated room's again.";
+    }
+
+    /** Every spot the room uses, for a save's check: where each stands and what it needs of the blocks. */
+    List<ClubSave.Spot> spots() {
+        List<ClubSave.Spot> out = new ArrayList<>();
+        if (site == null) {
+            return out;
+        }
+        int n = 1;
+        for (ClubhouseSite.Spot s : mine(handSpawn) ? List.of(handSpawn.spot()) : site.spawns()) {
+            out.add(stand("arrival " + n++, s));
+        }
+        for (int p = 1; p <= 3; p++) {
+            ClubhouseSite.Spot s = podium(p);
+            if (s != null) {
+                out.add(stand("podium " + p, s));
+            }
+        }
+        int[] j = jukeboxBlock();
+        if (j != null) {
+            out.add(new ClubSave.Spot("the jukebox", j[0], j[1], j[2], ClubSave.Need.JUKEBOX));
+        }
+        int f = 1;
+        List<int[]> frames = trophyFrames();
+        for (int[] c : frames == null ? List.<int[]>of() : frames) {
+            out.add(new ClubSave.Spot("trophy case frame " + f++, c[0], c[1], c[2], ClubSave.Need.AIR));
+        }
+        int pl = 1;
+        List<int[]> cells = feastCells();
+        for (int[] c : cells == null ? List.<int[]>of() : cells) {
+            out.add(new ClubSave.Spot("feast plate " + pl++, c[0], c[1], c[2], ClubSave.Need.AIR));
+        }
+        int c = 1;
+        for (Cabinet cab : cabinetPlaces(List.of("a", "b", "c", "d", "e", "f"))) {
+            out.add(stand("cabinet " + c++, new ClubhouseSite.Spot(cab.at().x(), cab.at().y(), cab.at().z(), 0f)));
+        }
+        int t = 1;
+        for (ClubhousePlanner.Pedestal p : pedestals()) {
+            out.add(new ClubSave.Spot("trophy " + t, (int) Math.floor(p.trophy().x()), (int) Math.floor(p.trophy().y()),
+                    (int) Math.floor(p.trophy().z()), ClubSave.Need.AIR));
+            out.add(new ClubSave.Spot("trophy " + t++ + "'s head", (int) Math.floor(p.head().x()),
+                    (int) Math.floor(p.head().y()), (int) Math.floor(p.head().z()), ClubSave.Need.AIR));
+        }
+        int seat = 1;
+        for (ClubhousePlanner.Seat s : seats()) {
+            out.add(new ClubSave.Spot("cushion " + seat++, (int) Math.floor(s.x()), (int) Math.floor(s.y()),
+                    (int) Math.floor(s.z()), ClubSave.Need.SEAT));
+        }
+        return out;
+    }
+
+    private static ClubSave.Spot stand(String name, ClubhouseSite.Spot s) {
+        return new ClubSave.Spot(name, (int) Math.floor(s.x()), (int) Math.floor(s.y()), (int) Math.floor(s.z()),
+                ClubSave.Need.STAND);
+    }
+
     /** What a wall board is called in the admin's lines. */
     static String wallName(String which) {
         return switch (which) {
@@ -945,16 +1409,35 @@ public final class ClubhouseRoom {
     }
 
     private String notOnYet() {
-        return hand ? "" : " &7(It's used once the owner-built room is on: /hcm games clubhouse here.)";
+        return hand ? "" : overrides() ? " &7(Your edited room uses it now; &e... clear &7puts the generated spot back.)"
+                : " &7(It's used once the owner-built room is on: /hcm games clubhouse here, or once you edit the"
+                + " room: /hcm games clubhouse edit.)";
     }
 
     /** {@code /hcm games clubhouse generated}: back to the generated room (built and checked first). */
     public String generated() {
-        if (!setMeta(MODE_KEY, null) || !setMeta(OFF_KEY, null)) {
+        return generated(false);
+    }
+
+    /**
+     * {@code /hcm games clubhouse generated [confirm]} (0.42.0): back to HCM's generated room. With a save in use it
+     * asks for {@code confirm} first (it replaces the owner's blocks); the saves are kept, so {@code restore} brings
+     * one back.
+     */
+    public String generated(boolean confirm) {
+        if ((savedId != null || editing) && !confirm) {
+            return "&eThat puts HCM's own room back over your saved one. &7Your saves are kept (&e/hcm games clubhouse"
+                    + " saves&7, &erestore <n>&7). &e/hcm games clubhouse generated confirm &7to go ahead.";
+        }
+        if (!setMeta(MODE_KEY, null) || !setMeta(OFF_KEY, null) || !setMeta(SAVED_KEY, null)
+                || !setMeta(EDIT_KEY, null)) {
             return "&cThat can't be saved to the database right now.";
         }
         hand = false;
         off = false;
+        editing = false;
+        savedId = null;
+        savedSite = null;
         settle();
         return "&aBack to the generated Clubhouse. &7It is built and checked before anyone comes in.";
     }
@@ -1043,7 +1526,20 @@ public final class ClubhouseRoom {
         if (!open()) {
             return null;
         }
-        return hand ? handSpawn.spot() : site.spawn(n);
+        return mine(handSpawn) ? handSpawn.spot() : site.spawn(n);
+    }
+
+    /**
+     * 0.42.0: whether a spot recorded with the owner-built commands is used: always in an owner-built room, and in the
+     * generated room once the owner edits or saved it (moving a spot their blocks covered, {@code spot}).
+     */
+    private boolean mine(Place p) {
+        return hand || (overrides() && p != null && p.world().equalsIgnoreCase(world));
+    }
+
+    /** Whether the generated room takes the owner's spots: in edit mode, or with a save in use. */
+    boolean overrides() {
+        return !hand && (editing || savedSite != null);
     }
 
     /** Podium place {@code n} (1-3), or {@code null} when there is none. */
@@ -1051,7 +1547,7 @@ public final class ClubhouseRoom {
         if (n < 1 || n > 3) {
             return null;
         }
-        if (hand) {
+        if (mine(handPodium[n - 1])) {
             Place p = handPodium[n - 1];
             return p == null || !p.world().equalsIgnoreCase(world()) ? null : p.spot();
         }
@@ -1078,10 +1574,10 @@ public final class ClubhouseRoom {
         if (which == null) {
             return null;
         }
-        if (!hand) {
+        Place at = WallBoards.RESULTS.equals(which) ? handBoard : handWalls.get(which);
+        if (!mine(at)) {
             return site == null ? null : WallBoards.generated(which, box);
         }
-        Place at = WallBoards.RESULTS.equals(which) ? handBoard : handWalls.get(which);
         return at == null || !at.world().equalsIgnoreCase(world()) ? null : WallBoards.hand(which, at);
     }
 
@@ -1092,7 +1588,7 @@ public final class ClubhouseRoom {
      * the owner-built row's frames were side by side, and their labels ran into each other).
      */
     public List<int[]> trophyFrames() {
-        if (!hand) {
+        if (!mine(handTrophies)) {
             return site == null ? null : ClubhousePlanner.trophyFrames(box);
         }
         Place at = handTrophies;
@@ -1118,7 +1614,7 @@ public final class ClubhouseRoom {
      * owner-built one.
      */
     public float trophyYaw() {
-        return hand ? (handTrophies == null ? 0f : WallBoards.snap(handTrophies.yaw())) : 90f;
+        return mine(handTrophies) ? (handTrophies == null ? 0f : WallBoards.snap(handTrophies.yaw())) : 90f;
     }
 
     /**
@@ -1135,7 +1631,7 @@ public final class ClubhouseRoom {
      * world). Whether a jukebox is really there is the corner's to check.
      */
     public int[] jukeboxBlock() {
-        if (!hand) {
+        if (!mine(handJukebox)) {
             return site == null ? null : ClubhousePlanner.jukebox(box);
         }
         Place at = handJukebox;
@@ -1151,7 +1647,7 @@ public final class ClubhouseRoom {
      * rows of ten from the recorded spot along the admin's right (only in its world).
      */
     public List<int[]> feastCells() {
-        if (!hand) {
+        if (!mine(handFeast)) {
             return site == null ? null : ClubhousePlanner.feastCells(box);
         }
         Place at = handFeast;
@@ -1177,7 +1673,7 @@ public final class ClubhouseRoom {
      * facing back to where the admin stood.
      */
     public WallBoards.Wall feastLine() {
-        if (!hand) {
+        if (!mine(handFeast)) {
             return site == null ? null : ClubhousePlanner.feastLine(box);
         }
         Place at = handFeast;
@@ -1233,9 +1729,18 @@ public final class ClubhouseRoom {
     /** How far from an owner-built room's arrival spot still counts as in it. */
     public static final double HAND_REACH = 24;
 
-    /** Whether the box is guarded now: only the generated room, while it isn't off. */
+    /**
+     * Whether the box is guarded now: only the generated room, while it isn't off and (0.42.0) isn't being edited.
+     * In edit mode nothing is put back and nothing is refused by the area guard; {@link #refuses} still keeps
+     * everyone but an admin from changing a block.
+     */
     public boolean guarded() {
-        return !hand && !off;
+        return !hand && !off && !editing;
+    }
+
+    /** Whether a player's block edit in the box is refused (0.42.0): always while guarded; in edit mode, a non-admin's. */
+    public boolean refuses(boolean admin) {
+        return guarded() || (editing && !hand && !off && !admin);
     }
 
     /** Whether the owner-built room's spots are set: the arrival spot, the podium places and the board. */
@@ -1272,6 +1777,10 @@ public final class ClubhouseRoom {
                     + (builds > 0 ? ", last wrote " + lastWrites : "") + (lastError == null ? "" : "; last failure: "
                     + lastError));
             out.add("side rooms: " + sideRoomsLine()); // 0.41.0
+            out.add("room: " + (savedSite != null ? "your save " + savedId : "HCM's generated room")
+                    + (editing ? " - EDIT MODE ON (save confirm keeps it, discard puts it back)" : "")
+                    + (planChanged() ? " - HCM's plan changed in an update (generated to see it)" : "")
+                    + (savedProblem == null ? "" : " - " + savedProblem)); // 0.42.0
         }
         if (hand) {
             out.addAll(handSpots());

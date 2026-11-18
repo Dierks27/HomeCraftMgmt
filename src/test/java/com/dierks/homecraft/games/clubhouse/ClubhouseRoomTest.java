@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,6 +48,8 @@ class ClubhouseRoomTest {
         final List<String> annexProblems = new ArrayList<>();
         final List<Person> people = new ArrayList<>();
         final List<UUID> moved = new ArrayList<>();
+        /** 0.42.0: the owner's saves, by id. */
+        final java.util.TreeMap<String, String> saves = new java.util.TreeMap<>();
         boolean loaded = true;
         long now;
 
@@ -94,6 +97,26 @@ class ClubhouseRoomTest {
             } else {
                 meta.put(key, value);
             }
+        }
+
+        @Override
+        public List<String> saves() {
+            return List.copyOf(saves.keySet());
+        }
+
+        @Override
+        public String readSave(String id) {
+            return saves.get(id);
+        }
+
+        @Override
+        public void writeSave(String id, String text) {
+            saves.put(id, text);
+        }
+
+        @Override
+        public void deleteSave(String id) {
+            saves.remove(id);
         }
 
         @Override
@@ -296,7 +319,8 @@ class ClubhouseRoomTest {
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
         assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "cabinet",
-                "trophyroom", "door", "generated", "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
+                "trophyroom", "door", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
+                "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("arcade", "trophy"), admin.tab(null, new String[]{"door", ""}), "the two doors");
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"door", "arcade", "c"}), "and clear");
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"trophyroom", ""}));
@@ -567,7 +591,8 @@ class ClubhouseRoomTest {
         until(r, ClubhouseRoom.Phase.READY, 5_000);
         assertTrue(r.annexIn(), "confirmed: claimed and built");
         assertEquals("minecraft:air", host.world.at(ANNEX.minX() + 5, ANNEX.minY() + 3, ANNEX.minZ() + 5));
-        assertEquals(4, r.cabinetPlaces(ClubhouseSettings.KID_GAMES).size(), "a cabinet for each kid game");
+        assertEquals(ClubhousePlanner.CABINETS, r.cabinetPlaces(ClubhouseSettings.KID_GAMES).size(),
+                "0.42.0: every place has a cabinet, the kid set taken round again");
         assertEquals(11, r.pedestals().size(), "the podium's three and eight records");
         assertNotNull(r.doorSign("arcade"));
         assertNotNull(r.doorSign("trophy"));
@@ -606,9 +631,10 @@ class ClubhouseRoomTest {
         r.here(new ClubhouseRoom.Place("games", 100.5, 70, 100.5, 0f));
         assertTrue(r.cabinet("whack_a_zombie", new ClubhouseRoom.Place("games", 103.7, 70, 98.2, 178f)).startsWith("&a"));
         r.cabinet("simon_says", new ClubhouseRoom.Place("games", 106.2, 70, 98.2, 180f));
-        Map<String, ClubhousePlanner.Place3> cabs = r.cabinetPlaces(List.of("simon_says", "whack_a_zombie", "snake"));
-        assertEquals(List.of("simon_says", "whack_a_zombie"), List.copyOf(cabs.keySet()), "only games with a cabinet");
-        assertEquals(new ClubhousePlanner.Place3(103.5, 70, 98.5, 180f), cabs.get("whack_a_zombie"),
+        List<ClubhouseRoom.Cabinet> cabs = r.cabinetPlaces(List.of("simon_says", "whack_a_zombie", "snake"));
+        assertEquals(List.of("simon_says", "whack_a_zombie"), cabs.stream().map(ClubhouseRoom.Cabinet::game).toList(),
+                "only games with a cabinet");
+        assertEquals(new ClubhousePlanner.Place3(103.5, 70, 98.5, 180f), cabs.get(1).at(),
                 "on the block the admin stood on, squared");
         r.trophyRoom(new ClubhouseRoom.Place("games", 110.5, 71, 90.5, 0f)); // facing south: their right is west
         List<ClubhousePlanner.Pedestal> shelf = r.pedestals();
@@ -683,5 +709,158 @@ class ClubhouseRoomTest {
         assertNotNull(r.doorSign("trophy"));
         ClubhouseAdmin.sideRoom(r, "door", new String[]{"door", "trophy", "clear"}, at, kinds);
         assertNull(r.doorSign("trophy"));
+    }
+
+    // ---- 0.42.0: edit mode and saves ---------------------------------------------------------------------
+
+    /** A built room, ready (the generated one with its side rooms). */
+    private ClubhouseRoom built() {
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertTrue(r.open() && r.verified(), r.statusLines().toString());
+        return r;
+    }
+
+    private static List<String> reply(ClubhouseRoom r, boolean confirm) {
+        List<String> out = new ArrayList<>();
+        r.save(confirm, out::addAll);
+        return out;
+    }
+
+    /**
+     * Edit mode: the area guard is off and only an admin's edit goes through; nothing is built or checked meanwhile;
+     * it survives a restart; visitors still come in.
+     */
+    @Test
+    void editModeLetsAdminsChangeBlocksAndSurvivesARestart() {
+        ClubhouseRoom r = built();
+        assertTrue(r.guarded() && r.refuses(true), "guarded: even an admin is refused");
+        assertTrue(r.edit().startsWith("&a"), "edit mode on");
+        assertTrue(r.editing() && !r.guarded(), "the area guard is off");
+        assertFalse(r.refuses(true), "an admin's edit goes through");
+        assertTrue(r.refuses(false), "anyone else's is still refused");
+        assertTrue(r.open() && r.spawn(0) != null, "visitors still come in");
+        assertNull(r.job(), "nothing built or checked meanwhile");
+        long writes = host.world.writes;
+        ClubhouseRoom later = room(); // a restart
+        assertTrue(later.editing() && later.open(), "edit mode survives a restart");
+        assertNull(later.job(), "and nothing is put back at boot");
+        assertEquals(writes, host.world.writes);
+        assertTrue(later.statusLines().stream().anyMatch(l -> l.contains("EDIT MODE ON")), later.statusLines().toString());
+    }
+
+    /**
+     * Save: without confirm it only says what it found (a spot a block covers, by name and place); with it, the blocks
+     * as they stand are the room: kept as a save, edit mode off, guarded again, and a block changed later is put back
+     * to the owner's, not HCM's.
+     */
+    @Test
+    void aSaveKeepsTheOwnersBlocksAndPutsThemBack() {
+        ClubhouseRoom r = built();
+        r.edit();
+        int[] mine = {BOX.minX() + 5, BOX.minY() + 1, BOX.minZ() + 21}; // air in the plan, in the 19th Hole
+        host.world.put(mine[0], mine[1], mine[2], "minecraft:gold_block");
+        ClubhouseSite.Spot arrival = r.spawn(0);
+        host.world.put((int) Math.floor(arrival.x()), (int) arrival.y(), (int) Math.floor(arrival.z()),
+                "minecraft:oak_planks"); // the owner covered an arrival spot
+        List<String> preview = reply(r, false);
+        assertTrue(preview.stream().anyMatch(l -> l.contains("arrival 1 at")), "the covered spot, by name: " + preview);
+        assertTrue(preview.get(preview.size() - 1).contains("save confirm"), preview.toString());
+        assertTrue(host.saves.isEmpty() && r.editing(), "nothing kept yet");
+        host.now = 1_800_000_000_000L;
+        List<String> saved = reply(r, true);
+        assertEquals(1, host.saves.size(), saved.toString());
+        String id = host.saves.firstKey();
+        assertEquals(id, host.meta.get(ClubhouseRoom.SAVED_KEY));
+        assertFalse(r.editing(), "edit mode off");
+        assertNull(host.meta.get(ClubhouseRoom.EDIT_KEY));
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertTrue(r.verified() && r.guarded(), "built and checked from the save, guarded again");
+        assertEquals(id, r.savedId());
+        host.world.put(mine[0], mine[1], mine[2], "minecraft:dirt"); // something changed it
+        ClubhouseRoom after = room(); // a crash and a restart
+        until(after, ClubhouseRoom.Phase.READY, 5_000);
+        assertEquals("minecraft:gold_block", host.world.at(mine[0], mine[1], mine[2]), "put back as the owner saved it");
+        assertTrue(after.statusLines().stream().anyMatch(l -> l.startsWith("room: your save " + id)),
+                after.statusLines().toString());
+    }
+
+    /** Discard puts the room back; saves are listed newest first and only the newest five are kept; restore picks one. */
+    @Test
+    void discardSavesAndRestore() {
+        ClubhouseRoom r = built();
+        assertTrue(r.discard().startsWith("&7"), "not editing: nothing to discard");
+        r.edit();
+        int[] p = {BOX.minX() + 5, BOX.minY() + 1, BOX.minZ() + 21};
+        host.world.put(p[0], p[1], p[2], "minecraft:gold_block");
+        assertTrue(r.discard().startsWith("&a"));
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertEquals("minecraft:air", host.world.at(p[0], p[1], p[2]), "discarded: HCM's room is put back");
+        for (int n = 0; n < ClubhouseRoom.SAVES_KEPT + 2; n++) {
+            r.edit();
+            host.now = 1_800_000_000_000L + n * 60_000L;
+            host.world.put(p[0], p[1], p[2], n % 2 == 0 ? "minecraft:gold_block" : "minecraft:iron_block");
+            reply(r, true);
+            until(r, ClubhouseRoom.Phase.READY, 5_000);
+        }
+        assertEquals(ClubhouseRoom.SAVES_KEPT, host.saves.size(), "only the newest five are kept");
+        List<String> list = r.savesList();
+        assertTrue(list.get(1).startsWith("&e1. ") && list.get(1).contains("(in use)"), "newest first, in use: " + list);
+        assertTrue(r.restore(2).startsWith("&a"), "the one before");
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertEquals("minecraft:iron_block", host.world.at(p[0], p[1], p[2]), "save 2 (the one before the newest) had iron");
+        assertTrue(r.restore(9).startsWith("&c"), "no such save");
+        String warn = r.generated(false);
+        assertTrue(warn.contains("generated confirm"), "HCM's room again asks first: " + warn);
+        assertTrue(r.generated(true).startsWith("&a"));
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        assertEquals("minecraft:air", host.world.at(p[0], p[1], p[2]), "HCM's room again");
+        assertNull(r.savedId());
+        assertEquals(ClubhouseRoom.SAVES_KEPT, host.saves.size(), "the saves are kept for restore");
+    }
+
+    /** A save taken under another plan: kept, and the admins are told HCM's room changed. */
+    @Test
+    void anUpdatedPlanKeepsTheSaveAndSaysSo() {
+        ClubhouseRoom r = built();
+        r.edit();
+        reply(r, true);
+        until(r, ClubhouseRoom.Phase.READY, 5_000);
+        String id = host.saves.firstKey();
+        host.saves.put(id, host.saves.get(id).replaceFirst("generated [0-9a-f]+", "generated 000000000000"));
+        ClubhouseRoom later = room();
+        until(later, ClubhouseRoom.Phase.READY, 5_000);
+        assertTrue(later.planChanged(), "HCM's plan changed since the save");
+        assertTrue(later.statusLines().stream().anyMatch(l -> l.contains("plan changed")), later.statusLines().toString());
+        assertEquals(id, later.savedId(), "the save is kept");
+    }
+
+    /** In an edited room a spot moves with its command and comes back with clear; arrival with spot arrival. */
+    @Test
+    void spotsMoveInAnEditedRoom() {
+        ClubhouseRoom r = built();
+        ClubhouseSite.Spot generated = r.podium(1);
+        r.podium(1, new ClubhouseRoom.Place("games", BOX.minX() + 5.5, BOX.minY() + 1, BOX.minZ() + 20.5, 0f));
+        assertEquals(generated, r.podium(1), "not editing: the generated room's own spot");
+        r.edit();
+        assertEquals(BOX.minX() + 5.5, r.podium(1).x(), 1e-9, "editing: the moved spot");
+        assertTrue(r.clearSpot("podium", "1").startsWith("&a"));
+        assertEquals(generated, r.podium(1), "cleared: the generated spot again");
+        assertTrue(r.spotArrival(new ClubhouseRoom.Place("games", BOX.minX() + 5.5, BOX.minY() + 1, BOX.minZ() + 20.5,
+                0f)).startsWith("&a"));
+        assertEquals(BOX.minX() + 5.5, r.spawn(3).x(), 1e-9, "every arrival there");
+        r.spotArrival(null);
+        assertNotEquals(BOX.minX() + 5.5, r.spawn(3).x(), "the Foyer's spots again");
+        assertFalse(r.hand(), "never the owner-built room");
+    }
+
+    /** 0.42.0, {@code models}: every model id with its size, and a word when CraftBridge isn't taking them. */
+    @Test
+    void theModelList() {
+        List<String> lines = ClubhouseAdmin.models(null);
+        for (com.dierks.homecraft.pack.ClubModels.Model m : com.dierks.homecraft.pack.ClubModels.all()) {
+            assertTrue(lines.stream().anyMatch(l -> l.contains(m.id()) && l.contains("placeholder")), m.id());
+        }
+        assertTrue(lines.get(lines.size() - 1).contains("stand-ins"), "no CraftBridge: said");
     }
 }

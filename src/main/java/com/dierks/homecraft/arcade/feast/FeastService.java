@@ -67,9 +67,9 @@ import java.util.concurrent.ThreadLocalRandom;
  * The Family Feast (0.38.6), the live side of {@link FeastCore}: the Feast Pot in the home world, its taps and its
  * guard, the family bar, each helper's moment, the show over the pot, and what the Clubhouse's tables read.
  *
- * <p><b>The Feast Pot</b> is one block an admin picks ({@code /hcm feast pot}) in an Overworld economy world: food
- * can't be handed in inside the Clubhouse (a visitor carries only the kit), so the Clubhouse's tables only show the
- * progress. A floating "Feast Pot" name and slow sparkles mark it. A tap holding food hands in one item (a sneak-tap
+ * <p><b>The Feast Pot</b> is one block an admin picks ({@code /hcm feast pot}) in an Overworld economy world. A
+ * Clubhouse visitor carries only the kit, so the Clubhouse's own pot (0.42.0) feeds from their saved home inventory
+ * instead ({@link #feedFromHome}, {@link HomePantry}). A floating "Feast Pot" name and slow sparkles mark it. A tap holding food hands in one item (a sneak-tap
  * the stack, up to the day's points), with a munch, a chime that rises as the table fills and a 5-second family bar;
  * an empty hand shows the bar; anything the pot won't take gets a soft low note and stays in the hand. The tap is
  * taken at LOWEST with the block and the item denied, so it never eats the food or opens the block, and a tap on the
@@ -524,6 +524,128 @@ public final class FeastService implements Listener, FeastHost {
                 // the window closed between the checks: nothing
             }
         }
+    }
+
+    // ---- 0.42.0: the Clubhouse's Feast Pot, fed from the saved home inventory ------------------------
+
+    /** A tap in the Clubhouse pot's menu, at most this often (a double click is one). */
+    static final String CLUB_TAP_KEY = FeastRules.POT_KEY + ".club";
+
+    /** The visitor's saved state as the pot reads it: the row, its items, and each slot as the pot sees it. */
+    private record Home(com.dierks.homecraft.games.world.SavedState row, ItemStack[] items,
+                        List<HomePantry.Slot> slots) {
+    }
+
+    /** The visitor's live, ACTIVE saved state, or {@code null} (none, not readable). */
+    private Home home(Player p) {
+        com.dierks.homecraft.games.world.SavedState row;
+        try {
+            row = new GamesDao(plugin.database()).loadState(p.getUniqueId());
+        } catch (SQLException e) {
+            plugin.getLogger().warning("The Family Feast could not read " + p.getName() + "'s saved things: "
+                    + e.getMessage());
+            return null;
+        }
+        if (row == null || !com.dierks.homecraft.games.world.SavedState.ACTIVE.equals(row.phase())
+                || row.items() == null) {
+            return null;
+        }
+        ItemStack[] items;
+        try {
+            items = ItemStack.deserializeItemsFromBytes(row.items());
+        } catch (RuntimeException e) {
+            return null; // never touched when it can't be read
+        }
+        List<HomePantry.Slot> slots = new ArrayList<>();
+        for (ItemStack i : items) {
+            if (i == null || i.getType().isAir() || i.getAmount() <= 0) {
+                slots.add(null);
+                continue;
+            }
+            String type = i.getType().name();
+            boolean takes = FeastRules.refusal(type, HarvestItems.isHarvest(i), TokenPrizes.carries(i),
+                    CandyItems.isCandy(i), KitItems.isKit(i), named(i), true) == FeastRules.Refusal.NONE;
+            slots.add(new HomePantry.Slot(type, i.getAmount(), takes));
+        }
+        return new Home(row, items, slots);
+    }
+
+    /** The food waiting at home that the Clubhouse pot takes (empty with none, or no saved state). */
+    public List<HomePantry.Food> homeFood(Player p) {
+        Home h = p == null ? null : home(p);
+        return h == null ? List.of() : HomePantry.foods(h.slots());
+    }
+
+    /**
+     * One {@code type} from the visitor's saved home inventory into the Feast (the Clubhouse pot's menu): the same
+     * points, day's cap, munch, rising chime and family bar as the home pot, the steam at {@code at}. Main thread.
+     */
+    public HomePantry.Fed feedFromHome(Player p, String type, Location at) {
+        if (core == null || !open()) {
+            softNo(p);
+            return HomePantry.Fed.CLOSED;
+        }
+        if (!taps.counts(p.getUniqueId(), CLUB_TAP_KEY, now())) {
+            return HomePantry.Fed.CHANGED; // a double click: once
+        }
+        Home h = home(p);
+        if (h == null) {
+            softNo(p);
+            return HomePantry.Fed.CHANGED;
+        }
+        GamesDao dao = new GamesDao(plugin.database());
+        byte[] before = h.row().items();
+        byte[][] written = new byte[1][];
+        int each = FeastRules.points(type);
+        boolean creative = GameMode.CREATIVE.name().equals(h.row().gameMode());
+        HomePantry.Fed fed = HomePantry.feed(h.slots(), type, slot -> {
+            ItemStack[] next = h.items().clone();
+            ItemStack one = next[slot].clone();
+            one.setAmount(one.getAmount() - 1);
+            next[slot] = one.getAmount() <= 0 ? ItemStack.empty() : one;
+            byte[] blob = ItemStack.serializeItemsAsBytes(next);
+            try {
+                if (dao.swapItems(p.getUniqueId(), h.row().sessionId(), before, blob)) {
+                    written[0] = blob;
+                    return true;
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().warning("The Family Feast could not take food from " + p.getName()
+                        + "'s saved things: " + e.getMessage());
+            }
+            return false;
+        }, () -> core.give(p.getUniqueId(), each, 1, false, creative), () -> {
+            try {
+                return dao.swapItems(p.getUniqueId(), h.row().sessionId(), written[0], before);
+            } catch (SQLException e) {
+                return false;
+            }
+        });
+        switch (fed) {
+            case TAKEN -> {
+                FeastRules.FeastView v = core.view();
+                p.playSound(p.getLocation(), Sound.ENTITY_GENERIC_EAT, 0.8f, 1.0f);
+                p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.9f, FeastRules.pitch(v.total(), v.goal()));
+                if (at != null && at.getWorld() != null) {
+                    at.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, at.clone().add(0, 0.5, 0), 6, 0.3, 0.2, 0.3,
+                            0);
+                }
+                showBar(p);
+                core.afterGift(p.getUniqueId());
+            }
+            case FULL -> {
+                softNo(p);
+                p.sendActionBar(Text.of("&7Full for today - come back tomorrow!"));
+                showBar(p);
+            }
+            case LOST -> {
+                softNo(p);
+                plugin.getLogger().severe("The Family Feast took one " + type + " from " + p.getName() + "'s saved"
+                        + " things but could not count it or put it back (session " + h.row().sessionId() + ")");
+            }
+            default -> softNo(p);
+        }
+        return fed;
     }
 
     /** Whether the item has a name of its own (a renamed sword, a prize): the pot takes plain food only. */

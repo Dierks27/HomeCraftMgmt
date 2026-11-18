@@ -164,6 +164,8 @@ public final class Clubhouse implements Game, ClubDoor {
     private ClubCushions cushions;
     /** 0.41.0: the Arcade Room's cabinets, the Trophy Room's cups and the door signs; null with no server. */
     private SideRooms sideRooms;
+    /** 0.42.0: the decoration that isn't blocks (the Feast Pot, the bar, the jukebox's records, the green, prizes). */
+    private ClubDecor decor;
     /** 0.41.0: what tells the side rooms a cabinet game was won (registered with the games while running). */
     private final java.util.function.Consumer<GamesService.Cheer> cheerListener = c -> {
         SideRooms sr = sideRooms;
@@ -387,6 +389,7 @@ public final class Clubhouse implements Game, ClubDoor {
         feastTable = new FeastTable(this);
         cushions = new ClubCushions(log());
         sideRooms = new SideRooms(this);
+        decor = new ClubDecor(this);
         g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
@@ -420,6 +423,13 @@ public final class Clubhouse implements Game, ClubDoor {
         // 0.41.0: a cabinet in the Arcade Room answers either click (a controller's too). The games' guard cancels
         // any touch of a game entity first, so these read cancelled events as well, and cancel them themselves.
         g.on(this, org.bukkit.event.player.PlayerInteractEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (decor != null && decor.isPot(e.getRightClicked())) { // 0.42.0: the real Feast Pot
+                e.setCancelled(true);
+                if (e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
+                    feastPot(e.getPlayer());
+                }
+                return;
+            }
             if (SideRooms.cabinetGame(e.getRightClicked()) != null) {
                 e.setCancelled(true);
                 if (e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
@@ -428,12 +438,24 @@ public final class Clubhouse implements Game, ClubDoor {
             }
         });
         g.on(this, io.papermc.paper.event.player.PrePlayerAttackEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (decor != null && decor.isPot(e.getAttacked())) {
+                e.setCancelled(true);
+                feastPot(e.getPlayer());
+                return;
+            }
             if (SideRooms.cabinetGame(e.getAttacked()) != null) {
                 e.setCancelled(true);
                 sideRooms.tapped(e.getPlayer(), e.getAttacked(), now());
             }
         });
         g.on(this, EntityDamageByEntityEvent.class, EventPriority.HIGH, false, e -> {
+            if (decor != null && decor.isPot(e.getEntity())) {
+                e.setCancelled(true);
+                if (e.getDamager() instanceof Player p) {
+                    feastPot(p);
+                }
+                return;
+            }
             if (SideRooms.cabinetGame(e.getEntity()) != null && e.getDamager() instanceof Player p) {
                 e.setCancelled(true);
                 sideRooms.tapped(p, e.getEntity(), now()); // the same tap as the attack event's: once
@@ -442,6 +464,28 @@ public final class Clubhouse implements Game, ClubDoor {
         g.every(this, 1, 1, this::tick);
         g.every(this, 20, 20, this::second);
         room.start();
+    }
+
+    /** When each player last opened the Feast Pot (an attack and its damage event are one tap). */
+    private final java.util.Map<UUID, Long> potTaps = new java.util.HashMap<>();
+
+    /**
+     * A tap on the Clubhouse's Feast Pot (0.42.0): while the Feast is open, the picture menu of the food waiting at
+     * home ({@link com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu}); otherwise a bubble and nothing.
+     */
+    private void feastPot(Player p) {
+        long now = now();
+        Long last = potTaps.get(p.getUniqueId());
+        if (last != null && now - last < 400) {
+            return;
+        }
+        potTaps.put(p.getUniqueId(), now);
+        com.dierks.homecraft.arcade.feast.FeastService f = plugin() == null ? null : plugin().feast();
+        if (f == null || !f.open()) {
+            p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BUBBLE_COLUMN_BUBBLE_POP, 0.8f, 1.0f);
+            return;
+        }
+        new com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu(plugin(), this, p, f, decor.potPlace()).open(p);
     }
 
     private ClubhouseRoom newRoom() {
@@ -459,6 +503,9 @@ public final class Clubhouse implements Game, ClubDoor {
     private void stopRoom() {
         if (sideRooms != null) {
             sideRooms.remove();
+        }
+        if (decor != null) {
+            decor.remove();
         }
         if (ctx.plugin() != null) {
             games().noCheers(cheerListener);
@@ -513,7 +560,17 @@ public final class Clubhouse implements Game, ClubDoor {
         if (watch != null) {
             watch.joined(player);
         }
+        ClubhouseRoom r = room;
+        if (r != null && r.planChanged() && player.hasPermission("hcm.games.admin")
+                && toldPlanChanged.add(player.getUniqueId())) {
+            player.sendMessage(Text.of(PLAN_CHANGED)); // 0.42.0: once a run, to each admin
+        }
     }
+
+    /** 0.42.0: what an admin reads when HCM's room changed in an update and their saved room is kept. */
+    static final String PLAN_CHANGED = "&6The Clubhouse plan changed in this update - your saved room is kept."
+            + " &e/hcm games clubhouse generated &7to see the new one.";
+    private final Set<UUID> toldPlanChanged = new java.util.HashSet<>();
 
     /** Their Clubhouse session ended (any way at all): out of the Clubhouse, off the no-push team. */
     @Override
@@ -822,6 +879,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (sideRooms != null) {
                 sideRooms.remove();
             }
+            if (decor != null) {
+                decor.remove();
+            }
             wasOpen = false;
             return;
         }
@@ -880,6 +940,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (sideRooms != null) {
             sideRooms.second(r, now); // 0.41.0
+        }
+        if (decor != null) {
+            decor.second(r, visits.size() > 0); // 0.42.0
         }
         feast(now);
     }
@@ -989,6 +1052,9 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         if (sideRooms != null) {
             sideRooms.remove();
+        }
+        if (decor != null) {
+            decor.remove();
         }
         room = newRoom();
         room.start();
@@ -1396,6 +1462,7 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         photo = null;
+        photoUntil = now + PHOTO_TICKS * 50L;
         for (ClubVisits.Visit v : visits.all()) {
             Player p = online(v.id());
             if (p != null) {
@@ -1762,10 +1829,25 @@ public final class Clubhouse implements Game, ClubDoor {
     @Override
     public void podium(List<UUID> topThree) {
         List<UUID> top = topThree == null ? List.of() : topThree.subList(0, Math.min(3, topThree.size()));
+        Photo ph = photo;
+        if (ph != null && ph.top.equals(top)) {
+            return; // 0.42.0: the same three again (each golfer's arrival tells it): the one photo waits on
+        }
         if (!top.isEmpty() && room != null && room.podium(1) != null) {
             photo = new Photo(top, now() + PHOTO_WAIT_MS);
         }
     }
+
+    /**
+     * 0.42.0: whether "Photo time!" holds the podium now (waiting for its three, or the photo showing): the Trophy
+     * Room's podium cups and heads step down meanwhile.
+     */
+    boolean photoOnPodium() {
+        return photo != null || now() < photoUntil;
+    }
+
+    /** When the last photo's title is over. */
+    private long photoUntil;
 
     // ---- the box guard --------------------------------------------------------------------------
 
@@ -1798,8 +1880,11 @@ public final class Clubhouse implements Game, ClubDoor {
             + " look after it.";
 
     private void refuseEdit(Cancellable e, Player player, Block block) {
-        if (block == null || !guardedAt(block.getWorld().getName(), block.getX(), block.getY(), block.getZ())) {
-            return;
+        ClubhouseRoom r = room;
+        if (block == null || r == null || !r.refuses(player != null && player.hasPermission("hcm.games.admin"))
+                || !block.getWorld().getName().equalsIgnoreCase(r.world())
+                || !r.box().contains(block.getX(), block.getY(), block.getZ())) {
+            return; // 0.42.0: in edit mode an admin's edit goes through
         }
         e.setCancelled(true);
         if (player != null) {

@@ -113,9 +113,9 @@ class WallBoardsTest {
 
     @Test
     void theBoardsChangeNoBlockOfTheRoom() {
-        assertEquals(6, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
+        assertEquals(7, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
                 + " jukebox corner's, 0.38.6's 3 the feast tables', 0.40.0's 4 the golf club's, 0.41.0's 5 the side"
-                + " rooms' and 0.41.1's 6 the runners and floors, not theirs"
+                + " rooms', 0.41.1's 6 the runners and floors and 0.42.0's 7 the polish, not theirs"
                 + " (ClubhousePlannerTest pins the room)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(ClubhouseSettings.defaults().box()).plan().hash(),
                 "the same blocks");

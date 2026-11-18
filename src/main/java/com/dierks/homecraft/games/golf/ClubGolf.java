@@ -62,6 +62,10 @@ public final class ClubGolf {
         }
         forget.run();
         club.result(sheet(card), opener);
+        List<java.util.UUID> top = photoTop(card);
+        if (!top.isEmpty()) {
+            club.podium(top); // 0.42.0: a round of two or more ends with "Photo time!" on the podium
+        }
         return club.takeIn(p, ClubVisits.Kind.GOLF, ClubhouseText.BACK_GOLF);
     }
 
@@ -257,6 +261,23 @@ public final class ClubGolf {
     }
 
     /** The group ranking on the board: "1. Sam 24 strokes (-2)". */
+    /**
+     * 0.42.0: the podium's three after a round of Golf together with two or more players (fewest strokes first, only
+     * players who finished); empty for a round alone.
+     */
+    static List<java.util.UUID> photoTop(GolfGroup.Card card) {
+        List<java.util.UUID> out = new ArrayList<>();
+        if (card == null || card.rows().size() < 2) {
+            return out;
+        }
+        for (GolfGroup.Standing s : GolfGroup.ranking(card.rows(), card.pars().size())) {
+            if (s.place() > 0 && out.size() < 3) {
+                out.add(s.player());
+            }
+        }
+        return out;
+    }
+
     static ClubBoard.Sheet sheet(GolfGroup.Card card) {
         List<String> rows = new ArrayList<>();
         for (GolfGroup.Standing s : GolfGroup.ranking(card.rows(), card.pars().size())) {

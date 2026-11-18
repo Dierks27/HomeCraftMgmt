@@ -28,8 +28,9 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * The Family Feast's tables in the Clubhouse (0.38.6): {@value FeastRules#CELLS} plates (item frames facing up on the
  * glass) that fill with food as the family's total passes each twentieth of the goal, and one line over them,
- * "Family Feast 137 / 150" with a bar under it. A child sees the plates fill; nothing needs reading. Food is never
- * handed in here (a visitor carries only the kit): the Feast Pot is in the home world, and this only shows it.
+ * "Family Feast 137 / 150" with a bar under it. A child sees the plates fill; nothing needs reading. Food goes in
+ * at the Feast Pot beside them (0.42.0: from the visitor's saved home inventory, {@code FeastPotMenu}) or at the
+ * home world's pot; this only shows the total.
  *
  * <p>As the trophy case ({@link TrophyWall}): every frame is fixed, drops nothing, and is a game entity
  * ({@link WorldEntities#tag}): never saved with its chunk, swept at every start. It is redrawn once a second while

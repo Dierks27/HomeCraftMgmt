@@ -59,4 +59,25 @@ public interface RoomHost {
 
     /** Move someone who isn't in the Clubhouse out of the box (the safe spot, or the spawn). */
     void toSafety(UUID player, String world);
+
+    // ---- 0.42.0: the owner's saves of the room ----------------------------------------------------
+
+    /** The saves' ids, oldest first (none on a host that keeps none). */
+    default List<String> saves() {
+        return List.of();
+    }
+
+    /** A save's text, or {@code null} for none; throws when it can't be read. */
+    default String readSave(String id) throws Exception {
+        return null;
+    }
+
+    /** Keep a save; throws when it can't be written. */
+    default void writeSave(String id, String text) throws Exception {
+        throw new UnsupportedOperationException("this host keeps no saves");
+    }
+
+    /** Forget a save (the oldest beyond the ones kept). */
+    default void deleteSave(String id) throws Exception {
+    }
 }

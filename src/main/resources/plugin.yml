@@ -152,6 +152,7 @@ permissions:
       hcm.games.play: true
       hcm.games.chance: true
       hcm.games.admin: true
+      hcm.clubhouse.secretroom: true
       hcm.graves.admin: true
       hcm.market.order: true
       hcm.market.buy: true
@@ -238,6 +239,12 @@ permissions:
       Crates, Scratch Tickets and Card Packs bought with tokens; they then don't see those games
       at all. Skill games are not affected.
     default: true
+  hcm.clubhouse.secretroom:
+    description: >-
+      The Clubhouse's secret trophy room (0.43.0): a tap on the little gold star in the Trophy Room takes
+      you in, to your own trophies. Without it the star is only decoration (no message). Give it to the
+      kids you want to have it: /lp user <player> permission set hcm.clubhouse.secretroom true
+    default: false
   hcm.games.admin:
     description: >-
       Run the Games (/hcm games): status, time-trial and golf courses, the featured game, a

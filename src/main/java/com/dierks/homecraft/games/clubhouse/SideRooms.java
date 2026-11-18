@@ -185,6 +185,7 @@ final class SideRooms {
             pedestals = List.of();
         }
         cups = nowCups;
+        upstairs(room, w, s, keep);
         for (String key : new ArrayList<>(shown.keySet())) {
             if (!keep.contains(key)) {
                 take(shown.remove(key));
@@ -193,6 +194,439 @@ final class SideRooms {
         views(w);
         shimmer(room, w);
         arcadeSounds(room, w);
+        secretVisitors(room, w);
+        parlorGuests(room, w);
+        gates(w);
+    }
+
+    // ---- 0.43.0: ways in only their own players see ------------------------------------------------------
+
+    /** Entities seen only by players with a permission (the secret room's star, the Game Parlor's door). */
+    private final Map<UUID, String> gatedBy = new HashMap<>();
+    /** Each player's gated entities shown to them now. */
+    private final Map<UUID, Set<UUID>> gateShown = new HashMap<>();
+
+    /** A way in nobody sees but the players with {@code permission} ({@link #gates}). */
+    private void gated(Entity e, String permission) {
+        WorldEntities.tag(e, club, null);
+        e.setVisibleByDefault(false);
+        gatedBy.put(e.getUniqueId(), permission);
+    }
+
+    /** Show each gated way in to the players allowed it, and hide it from the rest (a permission can change). */
+    private void gates(World w) {
+        gatedBy.keySet().removeIf(id -> Bukkit.getEntity(id) == null);
+        for (Player p : w.getPlayers()) {
+            Set<UUID> mine = gateShown.computeIfAbsent(p.getUniqueId(), k -> new HashSet<>());
+            mine.retainAll(gatedBy.keySet());
+            for (Map.Entry<UUID, String> g : gatedBy.entrySet()) {
+                boolean may = p.hasPermission(g.getValue());
+                if (may && mine.add(g.getKey())) {
+                    show(p, g.getKey(), true);
+                } else if (!may && mine.remove(g.getKey())) {
+                    show(p, g.getKey(), false);
+                }
+            }
+        }
+    }
+
+    // ---- 0.43.0: upstairs ------------------------------------------------------------------------------
+
+    /** The secret room's star and door, the Game Parlor's doors and machines. */
+    private void upstairs(ClubhouseRoom room, World w, ClubhouseSettings s, Set<String> keep) {
+        if (s.secretRoom()) {
+            ClubhousePlanner.Place3 star = room.secretStar();
+            if (star != null) {
+                keep.add("star");
+                put(w, "star", "star@" + star, star, () -> star(w, star));
+            }
+            ClubhousePlanner.Place3 out = room.secretExit();
+            if (out != null) {
+                keep.add("sexit");
+                put(w, "sexit", "sexit@" + out, out, () -> door(w, out, "secret:out"));
+            }
+        }
+        if (s.parlor()) {
+            ClubhousePlanner.Place3 in = room.parlorDoor();
+            if (in != null) {
+                keep.add("pdoor");
+                put(w, "pdoor", "pdoor@" + in, in, () -> door(w, in, "parlor:in"));
+            }
+            ClubhousePlanner.Place3 out = room.parlorExit();
+            if (out != null) {
+                keep.add("pexit");
+                put(w, "pexit", "pexit@" + out, out, () -> door(w, out, "parlor:out"));
+            }
+            List<ClubhouseRoom.Cabinet> machines = room.parlorMachines();
+            for (int n = 0; n < machines.size(); n++) {
+                ClubhouseRoom.Cabinet m = machines.get(n);
+                if (club.games().game(m.game()) == null) {
+                    continue; // a game not built on this server
+                }
+                String key = "mach:" + n;
+                keep.add(key);
+                put(w, key, m.game() + "@" + m.at(), m.at(), () -> machine(w, m.game(), m.at()));
+            }
+        }
+    }
+
+    /** The secret room's way in: a little gold star on the wall, and its tap target. */
+    private Shown star(World w, ClubhousePlanner.Place3 at) {
+        List<UUID> all = new ArrayList<>();
+        all.add(w.spawn(loc(w, at, 0), ItemDisplay.class, e -> {
+            gated(e, SECRET_PERMISSION);
+            e.setItemStack(new ItemStack(Material.NETHER_STAR));
+            e.setBillboard(Display.Billboard.CENTER);
+            e.setTransformation(scale(0.45f));
+            e.setBrightness(new Display.Brightness(15, 15));
+        }).getUniqueId());
+        Entity target = tapTarget(w, loc(w, at, -0.35), 0.7f, 0.7f, "secret:in");
+        gated(target, SECRET_PERMISSION);
+        all.add(target.getUniqueId());
+        return new Shown("star", all, List.of(), List.of());
+    }
+
+    /** A door you tap (a dark-oak door against the wall, two high), to {@code tap}. */
+    private Shown door(World w, ClubhousePlanner.Place3 at, String tap) {
+        List<UUID> all = new ArrayList<>();
+        String facing = facing(at.yaw());
+        double bx = Math.floor(at.x());
+        double bz = Math.floor(at.z());
+        for (int half = 0; half < 2; half++) {
+            String data = "minecraft:dark_oak_door[facing=" + facing + ",half=" + (half == 0 ? "lower" : "upper")
+                    + ",hinge=left,open=false,powered=false]";
+            int h = half;
+            all.add(w.spawn(new Location(w, bx, at.y() + h, bz), BlockDisplay.class, e -> {
+                WorldEntities.tag(e, club, null);
+                e.setBlock(Bukkit.createBlockData(data));
+                if ("parlor:in".equals(tap)) {
+                    gated(e, com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE);
+                }
+            }).getUniqueId());
+        }
+        Entity target = tapTarget(w, new Location(w, bx + 0.5, at.y(), bz + 0.5), 1.0f, 2.0f, tap);
+        if ("parlor:in".equals(tap)) {
+            gated(target, com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE);
+        }
+        all.add(target.getUniqueId());
+        return new Shown(tap, all, List.of(), List.of());
+    }
+
+    /** A Game Parlor machine: its model or stand-in, its label, its tap target (the games of chance's own gate). */
+    private Shown machine(World w, String gameId, ClubhousePlanner.Place3 at) {
+        ClubModels.Model m = ClubModels.machineFor(gameId);
+        List<UUID> models = new ArrayList<>();
+        List<UUID> plain = new ArrayList<>();
+        List<UUID> all = new ArrayList<>();
+        boolean table = m != null && m.kind() == ClubModels.Kind.TROPHY;
+        all.add(tapTarget(w, loc(w, at, table ? -0.1 : 0), table ? 1.0f : 1.0f, table ? 0.8f : 2.0f,
+                "machine:" + gameId).getUniqueId());
+        if (m != null) {
+            models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
+            plain.add(w.spawn(loc(w, at, table ? 0.35 : ICON_UP - 0.6), ItemDisplay.class, e -> {
+                hidden(e);
+                e.setItemStack(new ItemStack(m.fallback()));
+                e.setBillboard(Display.Billboard.CENTER);
+                e.setTransformation(scale(table ? 0.6f : 1.0f));
+                e.setBrightness(new Display.Brightness(15, 15));
+            }).getUniqueId());
+            if (!table) {
+                double bx = Math.floor(at.x());
+                double bz = Math.floor(at.z());
+                plain.add(block(w, new Location(w, bx, at.y(), bz), Material.DARK_OAK_PLANKS).getUniqueId());
+                plain.add(block(w, new Location(w, bx, at.y() + 1, bz), Material.WAXED_CUT_COPPER).getUniqueId());
+            }
+        }
+        Game g = club.games().game(gameId);
+        all.add(label(w, loc(w, at, table ? 0.9 : LABEL_UP), "&a" + (g == null ? gameId : g.name()), 0.5f)
+                .getUniqueId());
+        all.addAll(models);
+        all.addAll(plain);
+        return new Shown(gameId, all, models, plain);
+    }
+
+    /** An Interaction you tap (either click), carrying what the tap does. */
+    private Interaction tapTarget(World w, Location at, float width, float height, String tap) {
+        return w.spawn(at, Interaction.class, e -> {
+            WorldEntities.tag(e, club, null);
+            e.setInteractionWidth(width);
+            e.setInteractionHeight(height);
+            e.setResponsive(true);
+            e.getPersistentDataContainer().set(Keys.CLUB_TAP, PersistentDataType.STRING, tap);
+        });
+    }
+
+    private static String facing(float yaw) {
+        float y = WallBoards.snap(yaw);
+        return y == 0f ? "south" : y == 90f ? "west" : y == 180f ? "north" : "east";
+    }
+
+    /** What an upstairs tap target does, or {@code null} for any other entity. */
+    static String tapOf(Entity e) {
+        if (!(e instanceof Interaction) || Keys.CLUB_TAP == null) {
+            return null;
+        }
+        return e.getPersistentDataContainer().get(Keys.CLUB_TAP, PersistentDataType.STRING);
+    }
+
+    /**
+     * An upstairs tap: the star takes a player with {@code hcm.clubhouse.secretroom} into the secret room (a whoosh
+     * and sparkles), anyone else gets nothing at all (it stays decoration, so it stays secret); the doors take a
+     * player through (the parlor's only with {@code hcm.games.chance}); a machine opens its game of chance through the
+     * games' own entry point and gate.
+     */
+    void tappedUp(Player p, Entity e, long now) {
+        String tap = tapOf(e);
+        if (tap == null || p == null) {
+            return;
+        }
+        Long last = tapAt.get(p.getUniqueId());
+        if (last != null && now - last < TAP_MS) {
+            return;
+        }
+        tapAt.put(p.getUniqueId(), now);
+        ClubhouseRoom room = club.room();
+        if (room == null) {
+            return;
+        }
+        switch (tap) {
+            case "secret:in" -> {
+                if (!SecretShelf.mayEnter(p.hasPermission(SECRET_PERMISSION))) {
+                    return; // nothing at all: no message, no sound
+                }
+                whoosh(p);
+                club.moveTo(p, room.secretArrival());
+                whoosh(p);
+            }
+            case "secret:out" -> {
+                whoosh(p);
+                club.moveTo(p, room.secretReturn());
+            }
+            case "parlor:in" -> {
+                if (!p.hasPermission(com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE)) {
+                    return; // the door stays a door
+                }
+                p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 1.0f);
+                club.moveTo(p, room.parlorArrival());
+            }
+            case "parlor:out" -> {
+                p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_CLOSE, 0.8f, 1.0f);
+                club.moveTo(p, room.parlorReturn());
+            }
+            default -> {
+                if (tap.startsWith("machine:")) {
+                    if (!p.hasPermission(com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE)) {
+                        return; // never an error wall: the machine just doesn't answer
+                    }
+                    if (room.inParlor(p.getWorld().getName(), p.getX(), p.getY(), p.getZ())) {
+                        club.games().parlorGuest(p.getUniqueId()); // in now, for this tap's gate
+                    }
+                    club.games().open(p, tap.substring("machine:".length()), null);
+                }
+            }
+        }
+    }
+
+    /** The secret room's permission (0.43.0, default false). */
+    static final String SECRET_PERMISSION = "hcm.clubhouse.secretroom";
+
+    private static void whoosh(Player p) {
+        p.playSound(p.getLocation(), Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 0.8f, 1.3f);
+        p.spawnParticle(Particle.END_ROD, p.getLocation().add(0, 1, 0), 20, 0.4, 0.7, 0.4, 0.04);
+    }
+
+    /** The Clubhouse's visitors standing in the Game Parlor, told to the games (their gate lets chance through there). */
+    private void parlorGuests(ClubhouseRoom room, World w) {
+        List<UUID> in = new ArrayList<>();
+        for (Player p : w.getPlayers()) {
+            if (room.inParlor(w.getName(), p.getX(), p.getY(), p.getZ())) {
+                in.add(p.getUniqueId());
+            }
+        }
+        club.games().parlorGuests(in);
+    }
+
+    // ---- the secret room's own trophies, one set per visitor -------------------------------------------
+
+    /** Each visitor's trophies in the secret room: their entities (seen by them alone). */
+    private final Map<UUID, List<UUID>> secretShown = new HashMap<>();
+    /** Visitors whose trophies are being read. */
+    private final Set<UUID> secretReading = new HashSet<>();
+
+    /** Who is in the secret room: their own trophies drawn as they come in, taken down as they go. */
+    private void secretVisitors(ClubhouseRoom room, World w) {
+        Set<UUID> in = new HashSet<>();
+        for (Player p : w.getPlayers()) {
+            if (room.inSecretRoom(w.getName(), p.getX(), p.getY(), p.getZ())) {
+                in.add(p.getUniqueId());
+                if (!secretShown.containsKey(p.getUniqueId()) && secretReading.add(p.getUniqueId())) {
+                    readSecret(p, room);
+                }
+            }
+        }
+        for (UUID id : new ArrayList<>(secretShown.keySet())) {
+            if (!in.contains(id)) {
+                for (UUID e : secretShown.remove(id)) {
+                    Entity x = Bukkit.getEntity(e);
+                    if (x != null) {
+                        x.remove();
+                    }
+                }
+            }
+        }
+    }
+
+    /** Read the visitor's bests off the main thread, then draw them on it. */
+    private void readSecret(Player p, ClubhouseRoom room) {
+        UUID id = p.getUniqueId();
+        org.bukkit.plugin.Plugin plugin = club.plugin();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<com.dierks.homecraft.storage.GamesDao.Mine> rows;
+            String seen;
+            try {
+                rows = club.games().dao().scoresOf(id);
+                seen = room.meta(SEEN_KEY + id);
+            } catch (Exception e) {
+                rows = List.of();
+                seen = null;
+            }
+            List<com.dierks.homecraft.storage.GamesDao.Mine> got = rows;
+            String seenText = seen;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                secretReading.remove(id);
+                Player q = Bukkit.getPlayer(id);
+                if (q != null && club.room() == room && room.inSecretRoom(q.getWorld().getName(), q.getX(), q.getY(),
+                        q.getZ())) {
+                    drawSecret(q, room, got, seenText);
+                }
+            });
+        });
+    }
+
+    /** Where a visitor's seen trophies are kept (their keys), under {@code gen.clubhouse.}. */
+    static final String SEEN_KEY = ClubhouseRoom.META_PREFIX + "secret.seen.";
+
+    private void drawSecret(Player p, ClubhouseRoom room, List<com.dierks.homecraft.storage.GamesDao.Mine> rows,
+                            String seenText) {
+        World w = p.getWorld();
+        GamesService games = club.games();
+        List<SecretShelf.Trophy> trophies = SecretShelf.trophies(rows, new SecretShelf.Games() {
+            @Override
+            public GameKind kind(String game) {
+                Game g = games.game(game);
+                return g == null ? null : g.kind();
+            }
+
+            @Override
+            public String name(String game) {
+                Game g = games.game(game);
+                return g == null ? game : g.name();
+            }
+
+            @Override
+            public int medal(String game, String board, long score) {
+                return games.game(game) instanceof com.dierks.homecraft.games.cabinet.CabinetGame c
+                        ? c.medalFor(board, score) : 0;
+            }
+        });
+        List<ClubhousePlanner.Place3> shelf = room.secretShelf();
+        boolean models;
+        try {
+            models = seesModels(packOn(), p.getResourcePackStatus());
+        } catch (RuntimeException | LinkageError e) {
+            models = false;
+        }
+        List<UUID> mine = new ArrayList<>();
+        Set<String> fresh = new HashSet<>();
+        for (SecretShelf.Trophy t : SecretShelf.fresh(trophies, SecretShelf.seen(seenText))) {
+            fresh.add(t.key());
+        }
+        for (int n = 0; n < trophies.size() && n < shelf.size(); n++) {
+            SecretShelf.Trophy t = trophies.get(n);
+            ClubhousePlanner.Place3 at = shelf.get(n);
+            ClubModels.Model m = ClubModels.trophy(t.metal());
+            float size = t.big() ? 1.25f : 0.85f;
+            boolean useModel = models;
+            mine.add(w.spawn(loc(w, at, useModel ? m.up() * size : 0.45), ItemDisplay.class, e -> {
+                hidden(e);
+                if (useModel) {
+                    e.setItemStack(modelItem(m));
+                    e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
+                    e.setRotation(at.yaw(), 0f);
+                } else {
+                    e.setItemStack(new ItemStack(m.fallback()));
+                    e.setBillboard(Display.Billboard.VERTICAL);
+                }
+                e.setTransformation(scale(size));
+            }).getUniqueId());
+            Game g = t.game() == null ? null : games.game(t.game());
+            if (g != null) { // the game's Games-screen icon on the plaque: which game it is, with no reading
+                ItemStack icon;
+                try {
+                    icon = new ItemStack(g.tile(p).getType());
+                } catch (RuntimeException ex) {
+                    icon = null;
+                }
+                ItemStack i = icon;
+                if (i != null) {
+                    mine.add(w.spawn(loc(w, at, 1.15 * size + 0.1), ItemDisplay.class, e -> {
+                        hidden(e);
+                        e.setItemStack(i);
+                        e.setBillboard(Display.Billboard.CENTER);
+                        e.setTransformation(scale(0.35f));
+                    }).getUniqueId());
+                }
+            }
+            mine.add(w.spawn(loc(w, at, -0.15), TextDisplay.class, e -> {
+                hidden(e);
+                e.setBillboard(Display.Billboard.CENTER);
+                e.setTransformation(scale(0.3f));
+                e.setDefaultBackground(false);
+                e.setBackgroundColor(Color.fromARGB(110, 0, 0, 0));
+                e.setAlignment(TextDisplay.TextAlignment.CENTER);
+                e.text(Text.of(t.label()));
+            }).getUniqueId());
+            if (fresh.contains(t.key())) { // new since last time: a burst, a fanfare, a shimmer, for them
+                Location l = loc(w, at, 0.6);
+                p.spawnParticle(Particle.TOTEM_OF_UNDYING, l, 25, 0.25, 0.4, 0.25, 0.25);
+                p.spawnParticle(Particle.END_ROD, l, 10, 0.3, 0.4, 0.3, 0.01);
+            }
+        }
+        if (!fresh.isEmpty() && !trophies.isEmpty()) {
+            p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.9f, 1.1f);
+        }
+        ClubhousePlanner.Place3 centre = room.secretCentre();
+        if (centre != null) { // the room is theirs: their head on the middle pedestal, their name over it
+            mine.add(w.spawn(loc(w, centre, headUp(1.4f)), ItemDisplay.class, e -> {
+                hidden(e);
+                e.setItemStack(head(p.getUniqueId()));
+                e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
+                e.setBillboard(Display.Billboard.VERTICAL);
+                e.setTransformation(scale(1.4f));
+            }).getUniqueId());
+            mine.add(w.spawn(loc(w, centre, 1.0), TextDisplay.class, e -> {
+                hidden(e);
+                e.setBillboard(Display.Billboard.CENTER);
+                e.setTransformation(scale(0.8f));
+                e.setDefaultBackground(false);
+                e.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+                e.setShadowed(true);
+                e.setAlignment(TextDisplay.TextAlignment.CENTER);
+                e.text(Text.of("&6\u2605 &e" + p.getName() + " &6\u2605"));
+            }).getUniqueId());
+        }
+        for (UUID e : mine) {
+            show(p, e, true); // theirs alone
+        }
+        secretShown.put(p.getUniqueId(), mine);
+        String seenNow = SecretShelf.seenText(trophies);
+        Bukkit.getScheduler().runTaskAsynchronously(club.plugin(), () -> {
+            try {
+                room.meta(SEEN_KEY + p.getUniqueId(), seenNow);
+            } catch (Exception ignored) {
+                // a new trophy just bursts again next time
+            }
+        });
     }
 
     /** 0.42.0: now and then a soft arcade chime for whoever is in the Arcade Room (every few seconds, a random note). */
@@ -440,6 +874,20 @@ final class SideRooms {
             take(s);
         }
         shown.clear();
+        for (List<UUID> ids : secretShown.values()) {
+            for (UUID e : ids) {
+                Entity x = Bukkit.getEntity(e);
+                if (x != null) {
+                    x.remove();
+                }
+            }
+        }
+        secretShown.clear();
+        gatedBy.clear();
+        gateShown.clear();
+        if (club.games() != null) {
+            club.games().parlorGuests(List.of());
+        }
         applied.clear();
         cups = List.of();
         pedestals = List.of();
@@ -508,6 +956,7 @@ final class SideRooms {
     /** A player left: their view is set again when they come back. */
     void forget(UUID id) {
         applied.remove(id);
+        gateShown.remove(id);
         tapAt.remove(id);
         tapped.remove(id);
         cheerAt.remove(id);
@@ -616,10 +1065,11 @@ final class SideRooms {
         int doors = 0;
         int cupsUp = 0;
         for (String k : shown.keySet()) {
-            String kind = k.substring(0, k.indexOf(':')).toLowerCase(Locale.ROOT);
+            int colon = k.indexOf(':');
+            String kind = (colon < 0 ? k : k.substring(0, colon)).toLowerCase(Locale.ROOT);
             switch (kind) {
-                case "cab" -> cab++;
-                case "door" -> doors++;
+                case "cab", "mach" -> cab++;
+                case "door", "star", "sexit", "pdoor", "pexit" -> doors++;
                 default -> cupsUp++;
             }
         }

@@ -435,6 +435,11 @@ public final class Clubhouse implements Game, ClubDoor {
                 if (e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
                     sideRooms.tapped(e.getPlayer(), e.getRightClicked(), now());
                 }
+            } else if (SideRooms.tapOf(e.getRightClicked()) != null) {
+                e.setCancelled(true);
+                if (e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
+                    sideRooms.tappedUp(e.getPlayer(), e.getRightClicked(), now());
+                }
             }
         });
         g.on(this, io.papermc.paper.event.player.PrePlayerAttackEntityEvent.class, EventPriority.HIGH, false, e -> {
@@ -446,6 +451,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (SideRooms.cabinetGame(e.getAttacked()) != null) {
                 e.setCancelled(true);
                 sideRooms.tapped(e.getPlayer(), e.getAttacked(), now());
+            } else if (SideRooms.tapOf(e.getAttacked()) != null) {
+                e.setCancelled(true);
+                sideRooms.tappedUp(e.getPlayer(), e.getAttacked(), now()); // 0.43.0: the star, the doors, machines
             }
         });
         g.on(this, EntityDamageByEntityEvent.class, EventPriority.HIGH, false, e -> {
@@ -459,6 +467,9 @@ public final class Clubhouse implements Game, ClubDoor {
             if (SideRooms.cabinetGame(e.getEntity()) != null && e.getDamager() instanceof Player p) {
                 e.setCancelled(true);
                 sideRooms.tapped(p, e.getEntity(), now()); // the same tap as the attack event's: once
+            } else if (SideRooms.tapOf(e.getEntity()) != null && e.getDamager() instanceof Player p) {
+                e.setCancelled(true);
+                sideRooms.tappedUp(p, e.getEntity(), now());
             }
         });
         g.every(this, 1, 1, this::tick);
@@ -2178,6 +2189,24 @@ public final class Clubhouse implements Game, ClubDoor {
     public boolean ready() {
         ClubhouseRoom r = room;
         return r != null && r.open();
+    }
+
+    /**
+     * 0.43.0: take a player to {@code to} in the room (the secret room, the Game Parlor and back): a session teleport
+     * for a visitor (their things stay safe), a plain one for anyone else (an admin looking round).
+     */
+    void moveTo(Player p, ClubhouseSite.Spot to) {
+        ClubhouseRoom r = room;
+        World w = r == null ? null : Bukkit.getWorld(r.world());
+        if (to == null || w == null) {
+            return;
+        }
+        Location at = new Location(w, to.x(), to.y(), to.z(), to.yaw(), 0f);
+        boolean ok = inOurSession(p) ? games().sessions().teleport(p, at) : p.teleport(at);
+        if (ok) {
+            p.setFallDistance(0f);
+            visits.recheck(p.getUniqueId(), now());
+        }
     }
 
     /** 0.41.0, for the check: the generated room's side rooms in a line, or {@code null} for none to report. */

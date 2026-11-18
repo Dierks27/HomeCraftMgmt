@@ -221,6 +221,11 @@ public final class Keys {
      * entity is also a game entity (swept at start, never saved).
      */
     public static NamespacedKey KID_CABINET;
+    /**
+     * 0.43.0: on the Clubhouse's other things to tap (the secret room's star and door, the Game Parlor's doors and
+     * machines): what the tap does ("secret:in", "machine:ore_slots", ...) (String).
+     */
+    public static NamespacedKey CLUB_TAP;
     /** On the Copper Golem Brush (0.38.4): the tool that picks a Copper Golem's chests (BYTE 1). */
     public static NamespacedKey GOLEM_BRUSH;
     /** On a Copper Golem: the chests it may put things in, packed x/y/z (LONG_ARRAY), and their world (String). */
@@ -298,6 +303,7 @@ public final class Keys {
         FEAST = new NamespacedKey(plugin, "feast");
         CLUB_SEAT = new NamespacedKey(plugin, "club_seat");
         KID_CABINET = new NamespacedKey(plugin, "kid_cabinet");
+        CLUB_TAP = new NamespacedKey(plugin, "club_tap");
         GOLEM_BRUSH = new NamespacedKey(plugin, "golem_brush");
         GOLEM_CHESTS = new NamespacedKey(plugin, "golem_chests");
         GOLEM_WORLD = new NamespacedKey(plugin, "golem_world");

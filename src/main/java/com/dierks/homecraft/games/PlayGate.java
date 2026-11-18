@@ -194,16 +194,28 @@ public final class PlayGate {
      * played on its screen right there).
      */
     private Refusal session(Player player, Game game) {
-        return session(games.sessions().session(player), game);
+        return session(games.sessions().session(player), game, games.inParlor(player.getUniqueId()));
     }
 
     /** {@link #session(Player, Game)} over the player's session, or {@code null} for none (pure, tested). */
     static Refusal session(Session s, Game game) {
+        return session(s, game, false);
+    }
+
+    /**
+     * {@link #session(Session, Game)}, and (0.43.0) a Clubhouse visitor in the Game Parlor may also open a game of
+     * chance there: only there, and every later step (the permission, Take a break, the limits, the cooldown) still
+     * runs.
+     */
+    static Refusal session(Session s, Game game, boolean inParlor) {
         if (s == null || s.gameId().equals(game.id())) {
             return null;
         }
         if (!CLUBHOUSE.equals(s.gameId())) {
             return Refusal.IN_SESSION;
+        }
+        if (inParlor && game.kind().chance()) {
+            return null;
         }
         return fromClubhouse(game) ? null : Refusal.NOT_IN_CLUBHOUSE;
     }

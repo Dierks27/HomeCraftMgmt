@@ -52,8 +52,8 @@ final class ClubhouseAdmin implements GameAdmin {
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
-            "feast", "cabinet", "trophyroom", "door", "edit", "save", "discard", "saves", "restore", "spot", "models",
-            "generated", "rebuild", "off");
+            "feast", "cabinet", "trophyroom", "door", "secret", "parlor", "edit", "save", "discard", "saves", "restore",
+            "spot", "models", "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -105,6 +105,24 @@ final class ClubhouseAdmin implements GameAdmin {
                 }
                 boolean confirm = args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm");
                 out.add(room == null ? notRunning(closedWhy()) : room.generated(confirm));
+            }
+            case "secret", "parlor" -> {
+                if (!(sender instanceof Player p)) {
+                    out.add("&cOnly a player can do that - stand where it goes first.");
+                } else if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    String a1 = args != null && args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : null;
+                    boolean clear = args != null && args.length > 1 && args[args.length - 1].equalsIgnoreCase("clear");
+                    if ("clear".equals(a1)) {
+                        a1 = null;
+                    }
+                    Location l = p.getLocation();
+                    ClubhouseRoom.Place at = clear ? null : new ClubhouseRoom.Place(l.getWorld() == null ? ""
+                            : l.getWorld().getName(), l.getX(), l.getY(), l.getZ(), l.getYaw());
+                    var g = a1 == null ? null : game.games().game(a1);
+                    out.add(room.upstairs(sub, a1, at, g != null && g.kind().chance()));
+                }
             }
             case "edit" -> out.add(room == null ? notRunning(closedWhy()) : room.edit());
             case "discard" -> out.add(room == null ? notRunning(closedWhy()) : room.discard());
@@ -417,6 +435,8 @@ final class ClubhouseAdmin implements GameAdmin {
                     + " room you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse cabinet <game>|trophyroom|door arcade|trophy [clear] &7- your room's Arcade Room"
                     + " cabinets, trophy shelf and doorway signs (stand where it goes, facing out)",
+            "&e/hcm games clubhouse secret [room] [clear]|parlor door|room|<game> [clear] &7- your room's secret"
+                    + " trophy room (its star, its room) and Game Parlor (its door, room, machines)",
             "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
                     + " save it as the Clubhouse",
             "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",

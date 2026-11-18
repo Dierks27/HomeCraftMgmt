@@ -252,6 +252,12 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**Back to 0.42.0 from 0.43.0:** the jar alone (no schema, no config revision; the two new
+`games.clubhouse` keys are left in config.yml, unread). The generated room converges back to 0.42.0's
+(ALGO 8 -> 7): the two rooms upstairs are cleared. A room you saved with 0.43.0 keeps its upstairs blocks
+(they are in the save) but has no star, doors, machines or trophies. `hcm.clubhouse.secretroom` does
+nothing. Nothing is lost.
+
 **Back to 0.41.1 from 0.42.0:** the jar alone (no schema, no config revision). **Before rolling back, save
 nothing you need only in edit mode**: 0.41.1 doesn't know saves or edit mode, so the room converges back to
 HCM's 0.41.1 room at the next start (ALGO 7 -> 6) and your saves stay in `clubhouse-saves/`, unread, for the
@@ -4479,6 +4485,62 @@ every race and round works exactly as before**.
   goes back.
 - **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
   kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
+
+#### Upstairs: the secret trophy room and the Game Parlor (0.43.0)
+
+Two rooms over the side rooms (the box is the same 32 x 16 x 48; they use its top half, y 9-15 from the
+corner). Each has its own walls, a glass roof and lights; you reach them by tapping, not by stairs.
+
+**The secret trophy room** (over the Trophy Room). The owner: "her own little trophy room (make it a secret
+room) that shows all her high scores."
+
+- **The way in** is a little gold star on the Trophy Room's back wall (east end). One tap, either click: a
+  whoosh, a sparkle, and you're in. **Only players with `hcm.clubhouse.secretroom` see the star at all**
+  (nobody has it until you give it: `/lp user <player> permission set hcm.clubhouse.secretroom true`).
+  Anyone else sees a wall and gets no message.
+- **Every visitor sees only their own trophies.** They're drawn for that player alone, so two visitors stand
+  in the same room and each sees their own shelves. Your head and name stand on the pedestal in the middle.
+- **Trophies come from what the games already keep**, with no new scoring: **firsts** (first arcade game,
+  first race, first round of golf), **games played** (5, 10, 25, 50, 100: every run of every skill game,
+  never a game of chance), and a **best** for every board you have one on: each cabinet's Classic (its cup
+  is the medal it reached: gold, silver or bronze), each course's time, each golf course's strokes.
+- **A new trophy bursts once**, with sparkles and a fanfare, the first time you come in after earning it
+  (remembered per player).
+- The door on its north wall takes you back to the Trophy Room.
+- `secret_room.enabled: false` (under `games.clubhouse`) doesn't build it.
+
+**The Game Parlor** (over the Arcade Room). The games of chance as machines you tap: two Ore Slots, the
+Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same gate as anywhere else**:
+`hcm.games.chance`, the day's `chance_daily_tokens`, Take a break and the cooldowns.
+
+- **The way in** is a dark-oak door on the 19th Hole's west wall, between the reading nook and the fireplace.
+  **Only players with `hcm.games.chance` see it.** Lilah's path (foyer, hall, Arcade Room, Trophy Room)
+  never passes it. Without the permission there is no door, and a machine does nothing.
+- Inside, a Clubhouse visitor may open a game of chance (anywhere else in the Clubhouse they still can't).
+  The rest of the gate is unchanged.
+- Green felt floor, two card tables with chairs, a brass rail, lanterns from the beams. The door on its
+  north wall takes you back to the 19th Hole.
+- `parlor.enabled: false` (under `games.clubhouse`) doesn't build it.
+
+**Owner-built spots** (stand there first):
+
+- `/hcm games clubhouse secret`: the gold star.
+- `secret room`: where visitors arrive (the door out goes behind you, the trophies along a row three ahead).
+- `parlor door`: the Parlor's door.
+- `parlor room`: where its visitors arrive.
+- `parlor <game>`: a machine (one of the games of chance).
+
+Add `clear` to any of them to give it back. These work in the generated room, an owner-built room, and an
+edited or saved room alike.
+
+**Your saved room.** If you saved a room with 0.42.0, the two new rooms are **added to it automatically**.
+Your save names the parts it covers (main room, Arcade Room, Trophy Room), and anything it doesn't cover
+comes from HCM's plan. Nothing you built changes. You'll also read the "The Clubhouse plan changed in this
+update" notice once, because the generated room's plan changed.
+
+**Models.** The Parlor's machines are on `/hcm games clubhouse models`: `machine_slots`, `machine_wheel`,
+`machine_coin` and `machine_cards` (Twenty-One and Higher or Lower share it). Until you drop your own in,
+each one is a block-textured stand-in.
 
 #### Edit the Clubhouse yourself (0.42.0)
 

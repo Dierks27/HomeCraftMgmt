@@ -39,16 +39,20 @@ import java.util.Map;
  *                       {@value ClubhousePlanner#CABINETS}); a game of chance is refused when the room is drawn
  * @param trophyRoom     0.41.0: the Trophy Room, off the Foyer: the all-time records and last week's top three as
  *                       trophies, each with its holder's head
+ * @param secretRoom     0.43.0: the secret trophy room over the Trophy Room (a tap on its gold star takes a player
+ *                       with {@code hcm.clubhouse.secretroom} in): each visitor's own trophies
+ * @param parlor         0.43.0: the Game Parlor over the Arcade Room, through a door in the 19th Hole: the games of
+ *                       chance as machines you tap
  */
 public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMinutes, boolean partyAfter,
                                 boolean raceNightAfter, boolean golfAfter, boolean soloFirst, boolean soloAfter,
                                 int firstSeconds, boolean boards, boolean arcadeRoom, List<String> arcadeGames,
-                                boolean trophyRoom) {
+                                boolean trophyRoom, boolean secretRoom, boolean parlor) {
 
     /** The leaves under {@code games.clubhouse}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "origin", "max_minutes", "party_after",
             "race_night_after", "golf_after", "solo_first", "solo_after", "first_seconds", "boards",
-            "arcade_room.enabled", "arcade_room.games", "trophy_room.enabled");
+            "arcade_room.enabled", "arcade_room.games", "trophy_room.enabled", "secret_room.enabled", "parlor.enabled");
 
     /**
      * The Arcade Room's shipped cabinets (0.41.0): the games a four-year-old plays on her own with a controller.
@@ -93,18 +97,20 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
                              boolean raceNightAfter, boolean golfAfter, boolean soloFirst, boolean soloAfter,
                              int firstSeconds, boolean boards) {
         this(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter, soloFirst, soloAfter, firstSeconds,
-                boards, true, KID_GAMES, true);
+                boards, true, KID_GAMES, true, true, true);
     }
 
     /** These settings with the side rooms {@code arcade} and {@code trophy} on or off (tests). */
     public ClubhouseSettings withRooms(boolean arcade, boolean trophy) {
+        // the upstairs room over each follows it here (the tests' shape): the secret room the Trophy Room's, the
+        // parlor the Arcade Room's
         return new ClubhouseSettings(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter, soloFirst,
-                soloAfter, firstSeconds, boards, arcade, arcadeGames, trophy);
+                soloAfter, firstSeconds, boards, arcade, arcadeGames, trophy, trophy && secretRoom, arcade && parlor);
     }
 
-    /** The side rooms the plan builds, from the two switches. */
+    /** The rooms the plan builds, from the switches (0.43.0: the two upstairs too). */
     public ClubhousePlanner.Rooms rooms() {
-        return new ClubhousePlanner.Rooms(arcadeRoom, trophyRoom);
+        return new ClubhousePlanner.Rooms(arcadeRoom, trophyRoom, secretRoom, parlor);
     }
 
     /**
@@ -113,7 +119,7 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
      */
     public static ClubhouseSettings defaults() {
         return new ClubhouseSettings(true, ORIGIN, 30, true, true, true, true, true, FIRST_SECONDS, true, true,
-                KID_GAMES, true);
+                KID_GAMES, true, true, true);
     }
 
     /**
@@ -149,8 +155,10 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
         boolean arcadeRoom = arcade.bool("enabled", d.arcadeRoom());
         List<String> arcadeGames = kidGames(arcade, arcade.stringList("games", d.arcadeGames()));
         boolean trophyRoom = k.child("trophy_room").bool("enabled", d.trophyRoom());
+        boolean secretRoom = k.child("secret_room").bool("enabled", d.secretRoom());
+        boolean parlor = k.child("parlor").bool("enabled", d.parlor());
         return new ClubhouseSettings(enabled, origin, maxMinutes, partyAfter, raceNightAfter, golfAfter, soloFirst,
-                soloAfter, firstSeconds, boards, arcadeRoom, arcadeGames, trophyRoom);
+                soloAfter, firstSeconds, boards, arcadeRoom, arcadeGames, trophyRoom, secretRoom, parlor);
     }
 
     /**

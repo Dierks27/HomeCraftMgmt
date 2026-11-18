@@ -304,4 +304,20 @@ class PlayGateTest {
             }
         };
     }
+
+    /**
+     * 0.43.0, the Clubhouse's Game Parlor: a visitor standing in it passes step 0 for a game of chance (and only for
+     * one: Race Night and Falling Floors still wait); outside it, a game of luck stays outside as before. Every later
+     * step (hcm.games.chance, Take a break, the limits, the cooldown) is the gate's as everywhere.
+     */
+    @Test
+    void theGameParlorLetsAVisitorThereOpenAGameOfChance() {
+        var club = in("clubhouse");
+        assertNull(PlayGate.session(club, slots, true), "in the parlor: a game of chance opens");
+        assertEquals(Refusal.NOT_IN_CLUBHOUSE, PlayGate.session(club, slots, false), "elsewhere in the Clubhouse: no");
+        assertEquals(Refusal.NOT_IN_CLUBHOUSE, PlayGate.session(club, new TestGame("race_night", GameKind.TRIAL,
+                "Race Night", com.dierks.homecraft.arcade.TokenService.Source.GAMES_RACE_NIGHT), true),
+                "only games of chance");
+        assertEquals(Refusal.IN_SESSION, PlayGate.session(in("trials"), slots, true), "never from another game");
+    }
 }

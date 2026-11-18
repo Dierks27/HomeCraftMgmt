@@ -552,15 +552,13 @@ public final class FeastService implements Listener, FeastHost {
             return;
         }
         long now = now();
-        var games = plugin.games();
         for (UUID id : new ArrayList<>(toPot.keySet())) {
             Player p = Bukkit.getPlayer(id);
             if (p == null || toPot.get(id) < now) {
                 toPot.remove(id);
                 continue;
             }
-            boolean home = games == null || (games.sessions().session(p) == null && games.sessions().home(p));
-            if (!home || Whereabouts.gamesWorld(plugin, p.getWorld())) {
+            if (!Whereabouts.homeFromGames(plugin, p) || Whereabouts.gamesWorld(plugin, p.getWorld())) {
                 continue; // still on the way
             }
             toPot.remove(id);

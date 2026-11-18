@@ -69,11 +69,16 @@ public final class TurkeyConfig {
      * @param catchUpMinutes    how long they play first (1-60)
      * @param catchUpLastDays   only on the event's last this many days (the owner: "the closer we get to the end of
      *                          the event ... within the last 3 days or so"); 0 = every day
+     * @param stampede          0.44.0: turkeys let loose around the Hub at each run's start for everyone there to
+     *                          catch, as many as they can (0: none)
+     * @param stampedeMinutes   how long the stampede lasts (1-30)
+     * @param stampedeRadius    how far from the Hub's arrival spot they are let loose (16-200)
      */
     public record Turkey(boolean enabled, LocalDate from, LocalDate to, int everyMinutes, int offsetMinutes,
                          int runMinutes, boolean welcome, double scale, int tokens, int dailyTokenCap,
                          boolean feather, int miniChancePercent, boolean randomTimes, int quietFromHour,
-                         int quietToHour, boolean catchUp, int catchUpMinutes, int catchUpLastDays) {
+                         int quietToHour, boolean catchUp, int catchUpMinutes, int catchUpLastDays, int stampede,
+                         int stampedeMinutes, int stampedeRadius) {
 
         /**
          * The shipped settings: six runs a day at random times, never from 2 to 8 in the morning (the owner: "we
@@ -82,7 +87,7 @@ public final class TurkeyConfig {
          * anyone who has played ten minutes that day without catching one.
          */
         public static final Turkey DEFAULTS = new Turkey(true, DEFAULT_FROM, DEFAULT_TO, 240, 50, 3, false, 2.0, 3, 6,
-                true, 5, true, 2, 8, true, 10, 3);
+                true, 5, true, 2, 8, true, 10, 3, 100, 10, 80);
         /** Until config.yml has been read: the shipped settings, switched off. */
         public static final Turkey OFF = DEFAULTS.withEnabled(false);
 
@@ -90,7 +95,7 @@ public final class TurkeyConfig {
         public Turkey withEnabled(boolean on) {
             return new Turkey(on, from, to, everyMinutes, offsetMinutes, runMinutes, welcome, scale, tokens,
                     dailyTokenCap, feather, miniChancePercent, randomTimes, quietFromHour, quietToHour, catchUp,
-                    catchUpMinutes, catchUpLastDays);
+                    catchUpMinutes, catchUpLastDays, stampede, stampedeMinutes, stampedeRadius);
         }
 
         /** The event's year, from {@code from}: the claim keys, the feather's name and the Mini's id. */
@@ -160,8 +165,12 @@ public final class TurkeyConfig {
         boolean catchUp = root.getBoolean(PATH + ".catch_up", d.catchUp());
         int catchUpMinutes = number(root, "catch_up_minutes", d.catchUpMinutes(), 1, 60, w);
         int catchUpLastDays = number(root, "catch_up_last_days", d.catchUpLastDays(), 0, 31, w);
+        int stampede = number(root, "hub_stampede", d.stampede(), 0, 200, w);
+        int stampedeMinutes = number(root, "hub_stampede_minutes", d.stampedeMinutes(), 1, 30, w);
+        int stampedeRadius = number(root, "hub_stampede_radius", d.stampedeRadius(), 16, 200, w);
         return new Turkey(enabled, from, to, every, offset, run, welcome, scale, tokens, cap, feather, mini, random,
-                quietFrom, quietTo, catchUp, catchUpMinutes, catchUpLastDays);
+                quietFrom, quietTo, catchUp, catchUpMinutes, catchUpLastDays, stampede, stampedeMinutes,
+                stampedeRadius);
     }
 
     /** A date key, quoted or bare; missing reads as {@code def}. Null, with one WARN, for anything else. */

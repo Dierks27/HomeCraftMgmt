@@ -2136,6 +2136,7 @@ head Value and its event exists in the plugin.
 | `arcade.events.turkey.random_times` | `true` | 0.44.0: the runs at random times (new each day, the same for everyone) |
 | `arcade.events.turkey.quiet_from_hour`, `quiet_to_hour` | `2`, `8` | 0.44.0: no run from 2 to 8 in the morning (the same hour: none) |
 | `arcade.events.turkey.welcome` | `false` | `true`: a turkey of your own 90 s after your first join of the day |
+| `arcade.events.turkey.hub_stampede`, `hub_stampede_minutes`, `hub_stampede_radius` | `100`, `10`, `80` | 0.44.0: turkeys let loose in the Hub at each run, everyone's to catch (0 = none) |
 | `arcade.events.turkey.catch_up`, `catch_up_minutes`, `catch_up_last_days` | `true`, `10`, `3` | 0.44.0: on the last 3 days, a turkey of your own after 10 minutes' play, once a day, if you haven't caught one that day |
 | `arcade.events.turkey.scale` | `2.0` | How big the turkey is (1.0-3.0) |
 | `arcade.events.turkey.tokens`, `daily_token_cap` | `3`, `6` | Tokens per catch (once a run), and the most a day |
@@ -4246,6 +4247,15 @@ games' own carry, which already brings home anything that reaches a player durin
 - **Catch the Turkey:** Hub visitors get their own turkey in every run, as at home. Its tokens pay as at
   home (the day's cap is the same); the feather and any Turkey Mini go in your Bag. If you go to the Hub (or
   home) mid-run with a minute or more left, a new turkey meets you there.
+- **The Turkey Stampede:** the owner: "place like 100 turkeys all over the hub ... and let us go nuts and
+  catch as many as we can ... a much more fun group event". At each run's start, **100 turkeys** are let loose
+  within 80 blocks of the Hub's arrival spot (on open ground, in loaded chunks), dashing about and gobbling,
+  for **10 minutes**. Everyone visiting the Hub can catch **as many as they can**: a tap and it poofs, and the
+  action bar counts yours. **Each catch rolls the Turkey Mini's chance** (still one a player, and for sure on
+  the last three days) and pays tokens under the day's cap. At the end everyone reads how many they caught.
+  Your own turkey and its feather come as well; the stampede is extra. `hub_stampede` (0 = none),
+  `hub_stampede_minutes` and `hub_stampede_radius` under `arcade.events.turkey`. **`/hcm turkey stampede`** (admin) lets one
+  loose now, to try it: before 22 Nov the catches count but give no tokens or Mini.
 - **The shout:** when a turkey run starts, everyone not in the Hub reads "Gobble gobble! Turkeys are out.
   Catch yours here, or with everyone at **[Go to the Hub]**". The link is a click (Java; on Bedrock use the
   Arcade's Hub button).

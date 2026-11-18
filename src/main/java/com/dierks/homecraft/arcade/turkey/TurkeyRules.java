@@ -124,6 +124,28 @@ public final class TurkeyRules {
 
     // ---- when -----------------------------------------------------------------------------
 
+    /** The stampede's turkeys' tag prefix ({@code stampede|<run>}): never anyone's own. */
+    public static final String STAMPEDE_TAG = "stampede";
+
+    /**
+     * Whether a tap on a stampede turkey is a catch (0.44.0): a Hub visitor's, at least {@link #TAP_GAP_MS} after
+     * their last one. Anyone else's tap only clucks.
+     */
+    public static boolean stampedeCatch(boolean hubVisitor, Long lastTapAt, long now) {
+        return hubVisitor && CandyRules.cooledDown(lastTapAt, now, TAP_GAP_MS);
+    }
+
+    /** What the action bar says after a stampede catch: the visitor's count this stampede. */
+    public static String stampedeCount(int caught) {
+        return "&6Turkeys caught: &f" + caught;
+    }
+
+    /** What a visitor reads when the stampede ends. */
+    public static String stampedeOver(int caught) {
+        return caught <= 0 ? "&7The turkey stampede is over!" : "&6The turkey stampede is over! &7You caught &f"
+                + caught + (caught == 1 ? " &7turkey." : " &7turkeys.");
+    }
+
     /** Whether {@code today} is one of the last {@code days} days up to {@code to} (0: every day). */
     public static boolean lastDays(LocalDate today, LocalDate to, int days) {
         if (days <= 0) {

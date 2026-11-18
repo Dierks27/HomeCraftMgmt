@@ -1900,6 +1900,13 @@ arcade:
       catch_up_minutes: 10
       # Only on the event's last this many days (0 = every day).
       catch_up_last_days: 3
+      # The Hub's Turkey Stampede (0.44.0): at each run's start this many turkeys are let loose around the
+      # Hub's arrival spot (within hub_stampede_radius blocks) for everyone visiting the Hub to catch, as
+      # many as they can, for hub_stampede_minutes. Each catch has the Mini's chance; tokens under the
+      # day's cap. 0 = none.
+      hub_stampede: 100
+      hub_stampede_minutes: 10
+      hub_stampede_radius: 80
       # How big the turkey is (1.0-3.0; 1.0 = a plain chicken).
       scale: 2.0
       # Tokens for each catch (once a run), and the most a player gets from turkeys in a local day.

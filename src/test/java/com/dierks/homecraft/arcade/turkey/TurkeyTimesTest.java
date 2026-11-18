@@ -112,4 +112,20 @@ class TurkeyTimesTest {
         assertFalse(TurkeyRules.lastDays(LocalDate.of(2026, 11, 26), LocalDate.of(2026, 11, 29), 3));
         assertTrue(TurkeyRules.lastDays(LocalDate.of(2026, 11, 22), LocalDate.of(2026, 11, 29), 0), "0: every day");
     }
+
+    /** The Hub's Turkey Stampede (0.44.0): only a Hub visitor catches, one tap at a time; the counts read plainly. */
+    @Test
+    void theStampede() {
+        assertTrue(TurkeyRules.stampedeCatch(true, null, 1_000L), "a visitor's first tap");
+        assertFalse(TurkeyRules.stampedeCatch(false, null, 1_000L), "anyone else's only clucks");
+        assertFalse(TurkeyRules.stampedeCatch(true, 1_000L, 1_000L + TurkeyRules.TAP_GAP_MS - 1), "a held tap");
+        assertTrue(TurkeyRules.stampedeCatch(true, 1_000L, 1_000L + TurkeyRules.TAP_GAP_MS));
+        assertEquals("&6Turkeys caught: &f7", TurkeyRules.stampedeCount(7));
+        assertEquals("&6The turkey stampede is over! &7You caught &f1 &7turkey.", TurkeyRules.stampedeOver(1));
+        assertEquals("&7The turkey stampede is over!", TurkeyRules.stampedeOver(0));
+        com.dierks.homecraft.config.TurkeyConfig.Turkey d = com.dierks.homecraft.config.TurkeyConfig.Turkey.DEFAULTS;
+        assertEquals(100, d.stampede(), "a hundred turkeys");
+        assertEquals(10, d.stampedeMinutes(), "for ten minutes");
+        assertEquals(80, d.stampedeRadius(), "within 80 blocks of the Hub's arrival spot");
+    }
 }

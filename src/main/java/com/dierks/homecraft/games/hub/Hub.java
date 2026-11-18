@@ -368,6 +368,26 @@ public final class Hub implements Game {
         return h != null && h.inside(p);
     }
 
+    /** Where the Hub's visitors arrive, while it can be visited (the turkey stampede's middle), else {@code null}. */
+    public static Location arrivalOf(GamesService games) {
+        Hub h = running(games);
+        return h == null || h.whyClosed() != null ? null : h.arrival();
+    }
+
+    /** Everyone visiting the Hub now. */
+    public static List<Player> visitors(GamesService games) {
+        Hub h = running(games);
+        List<Player> out = new ArrayList<>();
+        if (h != null) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (h.inside(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
     /** Whether the Hub can be visited now (the Arcade's button and the event shout). */
     public static boolean offered(GamesService games) {
         Hub h = running(games);

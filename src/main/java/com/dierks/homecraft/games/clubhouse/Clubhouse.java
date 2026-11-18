@@ -481,8 +481,9 @@ public final class Clubhouse implements Game, ClubDoor {
     private final java.util.Map<UUID, Long> potTaps = new java.util.HashMap<>();
 
     /**
-     * A tap on the Clubhouse's Feast Pot (0.42.0): while the Feast is open, the picture menu of the food waiting at
-     * home ({@link com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu}); otherwise a bubble and nothing.
+     * A tap on the Clubhouse's Feast Pot (0.42.0; 0.44.0: the way to the real one): while the Feast is open, its
+     * screen ({@link com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu}: the family's total and "Take me to the
+     * Feast Pot"); otherwise a bubble and nothing.
      */
     private void feastPot(Player p) {
         long now = now();
@@ -496,7 +497,7 @@ public final class Clubhouse implements Game, ClubDoor {
             p.playSound(p.getLocation(), org.bukkit.Sound.BLOCK_BUBBLE_COLUMN_BUBBLE_POP, 0.8f, 1.0f);
             return;
         }
-        new com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu(plugin(), this, p, f, decor.potPlace()).open(p);
+        new com.dierks.homecraft.gui.games.clubhouse.FeastPotMenu(plugin(), this, p, f).open(p);
     }
 
     private ClubhouseRoom newRoom() {

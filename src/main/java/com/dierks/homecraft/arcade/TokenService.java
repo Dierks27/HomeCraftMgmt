@@ -273,6 +273,22 @@ public final class TokenService {
         return true;
     }
 
+    /**
+     * 0.44.0: an event's pay to a Hub visitor (Catch the Turkey there): {@link #award} without the economy-world check,
+     * since the Hub's world is its own and tokens are no thing that could cross from it. Only the Hub's events call it.
+     */
+    public boolean awardEvent(Player player, int tokens, Source source, String detail) {
+        if (tokens <= 0 || player == null) {
+            return false;
+        }
+        int after = change(player.getUniqueId(), tokens, source, detail);
+        if (after == TokenDao.REFUSED) {
+            return false;
+        }
+        feedback(player, tokens, source, after);
+        return true;
+    }
+
     /** "+N tokens" feedback: a chat line and a bright pickup sound. */
     private void feedback(Player player, int tokens, Source source, int balance) {
         player.sendMessage(Text.of("&e✦ &a+" + tokens + " token" + (tokens == 1 ? "" : "s")

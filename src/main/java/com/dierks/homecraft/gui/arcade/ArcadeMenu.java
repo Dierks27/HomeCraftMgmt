@@ -64,6 +64,8 @@ import java.util.Set;
 public final class ArcadeMenu extends Menu {
 
     static final int WALLET = 4;
+    /** 0.44.0: the Hub's button, top left, while it can be visited. */
+    static final int HUB = 0;
     static final int WILD = 8;
     /**
      * The Play row, while the games are on: label, All games, Today's pick, Courses, Mini golf, Cabinets, Together,
@@ -120,6 +122,9 @@ public final class ArcadeMenu extends Menu {
         GamesMenu.LuckView luck = playRow ? GamesMenu.luck(plugin, player) : null;
         if (play) {
             play(games);
+        }
+        if (play) {
+            hub(games);
         }
         prizeTabs();
         if (GamesMenu.hubShowsChance(playRow, luck == null ? null : luck.state())) {
@@ -255,6 +260,22 @@ public final class ArcadeMenu extends Menu {
         set(PLAY[7], Menus.icon(Material.BIRCH_DOOR, "&6The Clubhouse &7- " + here + " here",
                 "&7Hang out, see the boards,", "&7then pick a game there.", "&eClick to go in"), e -> {
             if (!games.open(player, Clubhouse.SPEC.id(), this::reopen) && isOpenFor(player)) {
+                refresh();
+            }
+        });
+    }
+
+    /**
+     * The Hub's button (0.44.0), top left, while the Hub can be visited: one tap goes, through the gate, as
+     * {@code /hcm hub} does; a refusal says why.
+     */
+    private void hub(GamesService games) {
+        if (!com.dierks.homecraft.games.hub.Hub.offered(games)) {
+            return; // off or not set up: the slot stays border
+        }
+        set(HUB, Menus.glint(Menus.icon(Material.BEACON, "&b&lThe Hub", "&7The big spawn, where the events are.",
+                "&7What you win comes home", "&7in Your Bag.", "&eClick to go"), true), e -> {
+            if (!games.open(player, com.dierks.homecraft.games.hub.Hub.SPEC.id(), this::reopen) && isOpenFor(player)) {
                 refresh();
             }
         });

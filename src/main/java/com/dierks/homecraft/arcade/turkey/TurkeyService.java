@@ -270,6 +270,27 @@ public final class TurkeyService implements Listener, TurkeyHost {
             for (Player p : List.copyOf(plugin.getServer().getOnlinePlayers())) {
                 offerScheduled(r, p, now);
             }
+            hubShout();
+        }
+    }
+
+    /** 0.44.0: what a run's start tells everyone not in the Hub (the link runs {@code /hcm hub}). */
+    static final String HUB_SHOUT = "&6Gobble gobble! &7Turkeys are out. Catch yours here, or with everyone at ";
+    static final String HUB_LINK = "&b&l[Go to the Hub]";
+
+    /** A scheduled run started: everyone who can play and isn't in the Hub reads the shout with its link. */
+    private void hubShout() {
+        var games = plugin.games();
+        if (!com.dierks.homecraft.games.hub.Hub.offered(games)) {
+            return;
+        }
+        net.kyori.adventure.text.Component line = Text.of(HUB_SHOUT).append(Text.of(HUB_LINK)
+                .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/hcm hub"))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Text.of("&7Click to go to the Hub"))));
+        for (Player p : List.copyOf(plugin.getServer().getOnlinePlayers())) {
+            if (p.hasPermission("hcm.games.play") && !com.dierks.homecraft.games.hub.Hub.visiting(plugin, p)) {
+                p.sendMessage(line);
+            }
         }
     }
 
@@ -391,9 +412,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         World w = p.getWorld();
         var games = plugin.games();
         int groundTop = w.getHighestBlockYAt(at.getBlockX(), at.getBlockZ(), HeightMap.MOTION_BLOCKING);
+        // 0.44.0: a Hub visitor gets one too, as if home in an economy world (what they win goes in their Bag)
+        boolean hub = com.dierks.homecraft.games.hub.Hub.visiting(plugin, p);
         CandyRules.State s = new CandyRules.State(p.isDead(), p.isSleeping(), p.getGameMode(),
-                plugin.sandbox().allowed(w), Whereabouts.gamesWorld(plugin, w),
-                games != null && games.sessions().session(p) != null, games == null || games.sessions().home(p),
+                hub || plugin.sandbox().allowed(w), !hub && Whereabouts.gamesWorld(plugin, w),
+                !hub && games != null && games.sessions().session(p) != null,
+                hub || games == null || games.sessions().home(p),
                 idleMillis(p), p.isGliding(), p.isFlying(), at.getY(), groundTop, p.isInLava(), p.isInWater(),
                 p.isInsideVehicle(), 0, 0);
         return TurkeyRules.skip(s, w.getEnvironment() == World.Environment.NORMAL);
@@ -604,7 +628,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         long paid = TurkeyRules.paidToday(plugin.tokens().totals(since, p.getUniqueId()));
         int pay = TurkeyRules.tokensToPay(paid, c.tokens(), c.dailyTokenCap(), open, pays, false);
         if (pay > 0) {
-            plugin.tokens().award(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            if (com.dierks.homecraft.games.hub.Hub.visiting(plugin, p)) {
+                // 0.44.0: the Hub isn't an economy world, but a turkey there pays as at home (tokens aren't things)
+                plugin.tokens().awardEvent(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            } else {
+                plugin.tokens().award(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            }
         }
     }
 
@@ -647,6 +676,15 @@ public final class TurkeyService implements Listener, TurkeyHost {
             Chicken c = e.getValue().entity();
             Location home = e.getValue().home();
             boolean valid = c.isValid() && !c.isDead();
+            // 0.44.0: its owner went to the Hub (or home from it) mid-run: this one goes, and the run offers them a
+            // new one where they are now (a scheduled run only: a welcome turkey ends with its run)
+            Player owner = e.getValue().owner() == null ? null : Bukkit.getPlayer(e.getValue().owner());
+            Run ownRun = runs.runOf(e.getKey());
+            if (valid && owner != null && ownRun != null && ownRun.kind() == Kind.SCHEDULED
+                    && !owner.getWorld().equals(c.getWorld())) {
+                runs.lost(e.getKey());
+                continue;
+            }
             double distance = valid && c.getWorld().equals(home.getWorld()) ? c.getLocation().distance(home) : -1;
             switch (TurkeyRules.leash(valid, valid && c.isInWater(), valid && c.isInLava(), distance)) {
                 case LOST -> {
@@ -838,9 +876,10 @@ public final class TurkeyService implements Listener, TurkeyHost {
         LastTap before = lastTap.put(id, new LastTap(tid, now));
         Long lastAt = before != null && before.turkey().equals(tid) ? before.at() : null;
         World w = p.getWorld();
-        TurkeyRules.Tap t = new TurkeyRules.Tap(true, lastAt, now, plugin.sandbox().allowed(w),
-                Whereabouts.gamesWorld(plugin, w), Whereabouts.homeFromGames(plugin, p),
-                Whereabouts.inGameSession(plugin, p), r.kind() == Kind.WELCOME, id.equals(l.owner()));
+        boolean hub = com.dierks.homecraft.games.hub.Hub.visiting(plugin, p); // 0.44.0: as if home
+        TurkeyRules.Tap t = new TurkeyRules.Tap(true, lastAt, now, hub || plugin.sandbox().allowed(w),
+                !hub && Whereabouts.gamesWorld(plugin, w), hub || Whereabouts.homeFromGames(plugin, p),
+                !hub && Whereabouts.inGameSession(plugin, p), r.kind() == Kind.WELCOME, id.equals(l.owner()));
         CatchStep step = TurkeyRules.catchStep(t);
         if (step == CatchStep.NOT_YOURS) {
             cluck(id, tid);

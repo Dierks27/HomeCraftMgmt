@@ -4237,8 +4237,10 @@ games' own carry, which already brings home anything that reaches a player durin
 
 1. Give the Hub's world **its own Multiverse-Inventories group** (it may already have one). Never put it in
    your economy worlds' group: then the Hub would see your real things.
-2. Add it to **`games.worlds`** (it stays out of `worlds.economy_enabled`). `/hcm games check` then checks
-   its inventory group and game mode with the other Games worlds.
+2. Add it to **`games.worlds`, after your Games world**: `worlds: [games, fairyhub]`. Never first: the
+   first one is where the Clubhouse, Fresh Courses and Falling Floors look when their own world isn't set.
+   It stays out of `worlds.economy_enabled`. `/hcm games check` then checks its inventory group and game
+   mode with the other Games worlds.
 3. `/mv modify fairyhub set gamemode adventure` (the check asks for it).
 4. Stand where visitors should arrive and type **`/hcm games hub here`** (without it they arrive at the
    world's spawn). `/hcm games hub status` says whether it's open, or why not, and who's in.

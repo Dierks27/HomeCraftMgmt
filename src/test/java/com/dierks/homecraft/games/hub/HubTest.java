@@ -59,4 +59,11 @@ class HubTest {
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"here", "c"}));
         assertEquals(2, admin.help().size());
     }
+
+    @Test
+    void itIsNeverTheFirstGamesWorld() {
+        assertTrue(Hub.firstGamesWorld(List.of("fairyhub", "games"), "fairyhub") != null, "first: closed, and why");
+        assertNull(Hub.firstGamesWorld(List.of("games", "fairyhub"), "FairyHub"));
+        assertNull(Hub.firstGamesWorld(List.of(), "fairyhub"));
+    }
 }

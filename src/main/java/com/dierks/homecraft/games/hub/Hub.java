@@ -223,6 +223,17 @@ public final class Hub implements Game {
             return "'" + s.world() + "' isn't listed in games.worlds (give it its own Multiverse-Inventories group"
                     + " too)";
         }
+        return firstGamesWorld(games().config().common().worlds(), w.getName());
+    }
+
+    /**
+     * Why not, when the Hub's world is first in {@code games.worlds}: the first is where the Clubhouse, Fresh Courses
+     * and Falling Floors look when their own world isn't set. {@code null} when it isn't first.
+     */
+    static String firstGamesWorld(List<String> worlds, String hub) {
+        if (worlds != null && !worlds.isEmpty() && worlds.get(0) != null && worlds.get(0).equalsIgnoreCase(hub)) {
+            return "'" + hub + "' is first in games.worlds - put your Games world first";
+        }
         return null;
     }
 

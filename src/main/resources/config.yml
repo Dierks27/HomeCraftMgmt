@@ -2616,8 +2616,9 @@ games:
   # The Hub (0.44.0): the big first-join spawn world, visited like the Clubhouse (/hcm play hub, the
   # Hub button in /hcm arcade). Your things stay safe at home; you arrive in Adventure mode with Your
   # Bag and Leave. What you win there (a turkey's feather, a Mini) goes in the Bag and comes home with
-  # you. The world must be in games.worlds and have its own Multiverse-Inventories group. Set where
-  # visitors arrive with /hcm games hub here (else the world's spawn).
+  # you. The world must be in games.worlds (after your Games world, never first) and have its own
+  # Multiverse-Inventories group. Set where visitors arrive with /hcm games hub here (else the world's
+  # spawn).
   hub:
     # true = anyone can go (while games.enabled is true). false = no way in.
     enabled: true

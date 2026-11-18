@@ -124,6 +124,14 @@ public final class TurkeyRules {
 
     // ---- when -----------------------------------------------------------------------------
 
+    /** Whether {@code today} is one of the last {@code days} days up to {@code to} (0: every day). */
+    public static boolean lastDays(LocalDate today, LocalDate to, int days) {
+        if (days <= 0) {
+            return true;
+        }
+        return today != null && to != null && !today.isAfter(to) && !today.isBefore(to.minusDays(days - 1L));
+    }
+
     /**
      * How long after a join a turkey of one's own is due (0.44.0), or -1 for none: the welcome turkey's 90 seconds
      * with {@code welcome}, else the catch-up turkey's {@code catchUpMinutes} with {@code catchUp}.
@@ -460,5 +468,18 @@ public final class TurkeyRules {
      */
     public static boolean extraMini(double roll, int percent, boolean hadExtra, boolean test, boolean hasRoom) {
         return !test && !hadExtra && hasRoom && percent > 0 && roll < percent / 100.0;
+    }
+
+    /**
+     * 0.44.0 (the owner: "oh it's a chance not a guarantee!? ... Just make sure Lilah gets a turkey"): on the event's
+     * last days (the catch-up turkey's), a catch by someone without the Turkey Mini yet gives it for sure; before
+     * them, {@code percent} in 100. Still once a season, never in a test, and only with room in the bag.
+     */
+    public static boolean turkeyMini(double roll, int percent, boolean sure, boolean hadOne, boolean test,
+                                     boolean hasRoom) {
+        if (test || hadOne || !hasRoom) {
+            return false;
+        }
+        return sure || (percent > 0 && roll < percent / 100.0);
     }
 }

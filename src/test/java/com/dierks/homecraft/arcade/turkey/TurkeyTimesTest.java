@@ -97,4 +97,19 @@ class TurkeyTimesTest {
         assertFalse(TurkeyRules.ownTurkeyOwed(false, 1), "caught one: no need");
         assertTrue(TurkeyRules.ownTurkeyOwed(true, 3), "a welcome turkey is everyone's");
     }
+
+    /** The Turkey Mini (0.44.0): a chance before the last days, for sure on them; once, never a test, room needed. */
+    @Test
+    void theTurkeyMiniIsSureOnTheLastDays() {
+        assertFalse(TurkeyRules.turkeyMini(0.5, 5, false, false, false, true), "before: a 5 in 100 chance missed");
+        assertTrue(TurkeyRules.turkeyMini(0.01, 5, false, false, false, true), "before: the chance hit");
+        assertTrue(TurkeyRules.turkeyMini(0.99, 5, true, false, false, true), "the last days: for sure");
+        assertTrue(TurkeyRules.turkeyMini(0.99, 0, true, false, false, true), "even with the chance at 0");
+        assertFalse(TurkeyRules.turkeyMini(0.0, 5, true, true, false, true), "never a second");
+        assertFalse(TurkeyRules.turkeyMini(0.0, 5, true, false, true, true), "never in a test run");
+        assertFalse(TurkeyRules.turkeyMini(0.0, 5, true, false, false, false), "a full bag waits for a later catch");
+        assertTrue(TurkeyRules.lastDays(LocalDate.of(2026, 11, 27), LocalDate.of(2026, 11, 29), 3));
+        assertFalse(TurkeyRules.lastDays(LocalDate.of(2026, 11, 26), LocalDate.of(2026, 11, 29), 3));
+        assertTrue(TurkeyRules.lastDays(LocalDate.of(2026, 11, 22), LocalDate.of(2026, 11, 29), 0), "0: every day");
+    }
 }

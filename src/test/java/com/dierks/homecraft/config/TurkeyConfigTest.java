@@ -66,6 +66,11 @@ class TurkeyConfigTest {
         assertEquals(8, d.quietToHour(), "... to 8 in the morning");
         assertTrue(d.catchUp(), "0.44.0: a catch-up turkey for anyone who hasn't caught one");
         assertEquals(10, d.catchUpMinutes());
+        assertEquals(3, d.catchUpLastDays(), "only on the last three days");
+        assertFalse(d.catchUpOn(LocalDate.of(2026, 11, 26)));
+        assertTrue(d.catchUpOn(LocalDate.of(2026, 11, 27)));
+        assertTrue(d.catchUpOn(LocalDate.of(2026, 11, 29)));
+        assertFalse(d.catchUpOn(LocalDate.of(2026, 11, 30)));
         assertEquals(2.0, d.scale());
         assertEquals(3, d.tokens());
         assertEquals(6, d.dailyTokenCap(), "two catches a day pay");

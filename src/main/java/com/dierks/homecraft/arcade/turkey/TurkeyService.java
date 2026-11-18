@@ -364,7 +364,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         if (welcomeDue.isEmpty()) {
             return;
         }
-        if (TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUp(), c.catchUpMinutes()) < 0) {
+        if (TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes()) < 0) {
             welcomeDue.clear();
             return;
         }
@@ -651,11 +651,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
      * own window and cap still apply: past either, nothing is minted and nothing is said.
      */
     private void maybeMini(Player p, TurkeyConfig.Turkey c) {
-        if (c.miniChancePercent() <= 0) {
+        boolean sure = c.catchUpOn(plugin.clock().today()); // 0.44.0: the last days give it for sure
+        if (c.miniChancePercent() <= 0 && !sure) {
             return;
         }
         double roll = random.nextDouble();
-        if (!TurkeyRules.extraMini(roll, c.miniChancePercent(), false, false, MiniService.hasRoom(p))) {
+        if (!TurkeyRules.turkeyMini(roll, c.miniChancePercent(), sure, false, false, MiniService.hasRoom(p))) {
             return;
         }
         UUID id = p.getUniqueId();
@@ -1007,7 +1008,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         UUID id = event.getPlayer().getUniqueId();
         TurkeyConfig.Turkey c = settings();
         LocalDate today = plugin.clock().today();
-        long delay = TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUp(), c.catchUpMinutes());
+        long delay = TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes());
         if (task == null || delay < 0 || !open(c, today)) {
             return;
         }

@@ -125,7 +125,7 @@ class TurkeyCommandTest {
         assertEquals("Window: 22 Nov - 29 Nov 2026 (UTC). Runs at random times, 6 a day, never 2:00-8:00, 3 min each.",
                 Text.plain(TurkeyCommand.windowText(T, ZoneOffset.UTC)), "0.44.0's shipped schedule");
         com.dierks.homecraft.config.TurkeyConfig.Turkey fixed = new com.dierks.homecraft.config.TurkeyConfig.Turkey(true,
-                T.from(), T.to(), 240, 50, 3, true, 2.0, 3, 6, true, 5, false, 2, 8, false, 10);
+                T.from(), T.to(), 240, 50, 3, true, 2.0, 3, 6, true, 5, false, 2, 8, false, 10, 3);
         assertEquals("Window: 22 Nov - 29 Nov 2026 (UTC). Runs every 240 min from 00:50, 3 min each, and a welcome "
                 + "turkey.", Text.plain(TurkeyCommand.windowText(fixed, ZoneOffset.UTC)), "the fixed times, as before");
         assertTrue(Text.plain(TurkeyCommand.windowText(T, ZoneId.of("America/Chicago"))).contains("(America/Chicago)"));

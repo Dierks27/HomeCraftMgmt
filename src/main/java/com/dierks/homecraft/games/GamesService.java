@@ -757,6 +757,30 @@ public final class GamesService {
         }
     }
 
+    // ---- 0.43.0: the Clubhouse's Game Parlor -------------------------------------------------
+
+    private final java.util.Set<UUID> parlorGuests = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Whether the player stands in the Clubhouse's Game Parlor now (the Clubhouse says, once a second). */
+    public boolean inParlor(UUID player) {
+        return player != null && parlorGuests.contains(player);
+    }
+
+    /** One more visitor in the Game Parlor now (a tap there, before the once-a-second word). */
+    public void parlorGuest(UUID player) {
+        if (player != null) {
+            parlorGuests.add(player);
+        }
+    }
+
+    /** The Clubhouse's word on who is in its Game Parlor (everyone else is out). */
+    public void parlorGuests(java.util.Collection<UUID> now) {
+        parlorGuests.retainAll(now == null ? java.util.Set.of() : now);
+        if (now != null) {
+            parlorGuests.addAll(now);
+        }
+    }
+
     // ---- 0.41.0: cheers at a cabinet ---------------------------------------------------------
 
     /** A cabinet game was won, or set a new personal best (Classic): what the Arcade Room cheers. */

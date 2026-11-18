@@ -66,6 +66,15 @@ public final class ClubhouseRoom {
      * ({@code save confirm}, {@code restore}), its id in {@link RoomHost#saves()}.
      */
     public static final String EDIT_KEY = META_PREFIX + "edit";
+    /**
+     * 0.43.0: the owner-built room's secret star and secret room (its arrival spot), the parlor's door and room, and
+     * its machines (one key: "game=place|...").
+     */
+    public static final String SECRET_KEY = META_PREFIX + "hand.secret";
+    public static final String SECRET_ROOM_KEY = META_PREFIX + "hand.secret.room";
+    public static final String PARLOR_DOOR_KEY = META_PREFIX + "hand.parlor.door";
+    public static final String PARLOR_ROOM_KEY = META_PREFIX + "hand.parlor.room";
+    public static final String PARLOR_KEY = META_PREFIX + "hand.parlor.machines";
     public static final String SAVED_KEY = META_PREFIX + "saved";
     /** How many saves are kept (the newest). */
     public static final int SAVES_KEPT = 5;
@@ -196,6 +205,12 @@ public final class ClubhouseRoom {
     /** 0.41.0: the owner-built room's cabinets (game id to place), trophy shelf and door signs, where set. */
     private final Map<String, Place> handCabinets = new java.util.LinkedHashMap<>();
     private Place handTrophyRoom;
+    /** 0.43.0: the owner-built room's secret star and room, and its parlor's door, room and machines. */
+    private Place handSecret;
+    private Place handSecretRoom;
+    private Place handParlorDoor;
+    private Place handParlorRoom;
+    private final Map<String, Place> handParlor = new java.util.LinkedHashMap<>();
     private final Map<String, Place> handDoors = new HashMap<>();
     private BuildJob job;
     private boolean jobScan;
@@ -265,6 +280,12 @@ public final class ClubhouseRoom {
             handJukebox = Place.of(host.meta(JUKEBOX_KEY));
             handFeast = Place.of(host.meta(FEAST_KEY));
             editing = "1".equals(host.meta(EDIT_KEY));
+            handSecret = Place.of(host.meta(SECRET_KEY));
+            handSecretRoom = Place.of(host.meta(SECRET_ROOM_KEY));
+            handParlorDoor = Place.of(host.meta(PARLOR_DOOR_KEY));
+            handParlorRoom = Place.of(host.meta(PARLOR_ROOM_KEY));
+            handParlor.clear();
+            handParlor.putAll(cabinetsOf(host.meta(PARLOR_KEY)));
             savedId = host.meta(SAVED_KEY);
             handCabinets.clear();
             handCabinets.putAll(cabinetsOf(host.meta(CABINETS_KEY)));
@@ -1057,6 +1078,240 @@ public final class ClubhouseRoom {
         return site != null && annexIn && rooms.trophy() && open();
     }
 
+    // ---- 0.43.0: upstairs: the secret trophy room and the Game Parlor -----------------------------------
+
+    /** How near an owner-built upstairs room's arrival spot still counts as in it. */
+    static final double UP_REACH = 10;
+
+    private boolean secretBuilt() {
+        return site != null && annexIn && rooms.secret() && open();
+    }
+
+    private boolean parlorBuilt() {
+        return site != null && annexIn && rooms.parlor() && open();
+    }
+
+    /** A recorded place as a spot (its block's middle, squared), or {@code null}. */
+    private ClubhousePlanner.Place3 place3(Place p, double up) {
+        return p == null || !p.world().equalsIgnoreCase(world()) ? null : new ClubhousePlanner.Place3(
+                Math.floor(p.x()) + 0.5, Math.floor(p.y()) + up, Math.floor(p.z()) + 0.5, WallBoards.snap(p.yaw()));
+    }
+
+    private ClubhouseSite.Spot spot(Place p, int ahead) {
+        if (p == null || !p.world().equalsIgnoreCase(world())) {
+            return null;
+        }
+        int[] a = ahead(p.yaw());
+        return new ClubhouseSite.Spot(Math.floor(p.x()) + 0.5 + a[0] * ahead, Math.floor(p.y()),
+                Math.floor(p.z()) + 0.5 + a[1] * ahead, WallBoards.snap(p.yaw()));
+    }
+
+    /** The secret room's way in: the little gold star (0.43.0), or {@code null}. */
+    public ClubhousePlanner.Place3 secretStar() {
+        if (!mine(handSecret)) {
+            return secretBuilt() ? ClubhousePlanner.secretStar(site.box()) : null;
+        }
+        return place3(handSecret, 1.5);
+    }
+
+    /** Where a visitor stands after coming out of the secret room: in front of the star. */
+    public ClubhouseSite.Spot secretReturn() {
+        if (!mine(handSecret)) {
+            return secretBuilt() ? ClubhousePlanner.secretReturn(site.box()) : null;
+        }
+        return spot(handSecret, 1);
+    }
+
+    /** Where the secret room's visitor arrives. */
+    public ClubhouseSite.Spot secretArrival() {
+        if (!mine(handSecretRoom)) {
+            return secretBuilt() ? ClubhousePlanner.secretArrival(site.box()) : null;
+        }
+        return spot(handSecretRoom, 0);
+    }
+
+    /** The secret room's door back out (behind its arrival spot). */
+    public ClubhousePlanner.Place3 secretExit() {
+        if (!mine(handSecretRoom)) {
+            return secretBuilt() ? ClubhousePlanner.secretExit(site.box()) : null;
+        }
+        ClubhouseSite.Spot s = spot(handSecretRoom, -1);
+        return s == null ? null : new ClubhousePlanner.Place3(s.x(), s.y(), s.z(), s.yaw());
+    }
+
+    /** The secret room's centre pedestal top (the visitor's head), two ahead of the arrival in an owner-built room. */
+    public ClubhousePlanner.Place3 secretCentre() {
+        if (!mine(handSecretRoom)) {
+            return secretBuilt() ? ClubhousePlanner.secretCentre(site.box()) : null;
+        }
+        ClubhouseSite.Spot s = spot(handSecretRoom, 2);
+        return s == null ? null : new ClubhousePlanner.Place3(s.x(), s.y() + 1, s.z(), WallBoards.snap(s.yaw() + 180f));
+    }
+
+    /**
+     * The secret room's trophy places: the generated room's ledges, or (owner-built) a row of {@value #SHELF_ROW} to
+     * the admin's right, three ahead of the arrival, facing back to it.
+     */
+    public List<ClubhousePlanner.Place3> secretShelf() {
+        if (!mine(handSecretRoom)) {
+            return secretBuilt() ? ClubhousePlanner.secretShelf(site.box()) : List.of();
+        }
+        ClubhouseSite.Spot s = spot(handSecretRoom, 3);
+        if (s == null) {
+            return List.of();
+        }
+        int[] r = right(handSecretRoom.yaw());
+        float back = WallBoards.snap(s.yaw() + 180f);
+        List<ClubhousePlanner.Place3> out = new ArrayList<>();
+        for (int n = 0; n < SHELF_ROW; n++) {
+            int d = n - SHELF_ROW / 2;
+            out.add(new ClubhousePlanner.Place3(s.x() + d * r[0], s.y(), s.z() + d * r[1], back));
+        }
+        return out;
+    }
+
+    /** An owner-built secret room's row of trophy places. */
+    static final int SHELF_ROW = 16;
+
+    /** Whether feet are in the secret room (its air; owner-built: near its arrival spot). */
+    public boolean inSecretRoom(String worldName, double x, double y, double z) {
+        if (worldName == null || !worldName.equalsIgnoreCase(world())) {
+            return false;
+        }
+        if (!mine(handSecretRoom)) {
+            return secretBuilt() && ClubhousePlanner.secretInside(site.box()).contains(x, y, z);
+        }
+        return near(handSecretRoom, x, y, z, UP_REACH);
+    }
+
+    /** The Game Parlor's door (in the 19th Hole), and where its visitor comes back out. */
+    public ClubhousePlanner.Place3 parlorDoor() {
+        if (!mine(handParlorDoor)) {
+            return parlorBuilt() ? ClubhousePlanner.parlorDoor(site.box()) : null;
+        }
+        return place3(handParlorDoor, 0);
+    }
+
+    public ClubhouseSite.Spot parlorReturn() {
+        if (!mine(handParlorDoor)) {
+            return parlorBuilt() ? ClubhousePlanner.parlorReturn(site.box()) : null;
+        }
+        return spot(handParlorDoor, 1);
+    }
+
+    /** Where the parlor's visitor arrives, and its door back out (behind it). */
+    public ClubhouseSite.Spot parlorArrival() {
+        if (!mine(handParlorRoom)) {
+            return parlorBuilt() ? ClubhousePlanner.parlorArrival(site.box()) : null;
+        }
+        return spot(handParlorRoom, 0);
+    }
+
+    public ClubhousePlanner.Place3 parlorExit() {
+        if (!mine(handParlorRoom)) {
+            return parlorBuilt() ? ClubhousePlanner.parlorExit(site.box()) : null;
+        }
+        ClubhouseSite.Spot s = spot(handParlorRoom, -1);
+        return s == null ? null : new ClubhousePlanner.Place3(s.x(), s.y(), s.z(), s.yaw());
+    }
+
+    /** The parlor's machines: the generated room's (two Ore Slots, the Wheel, Coin Flip, the two tables), or the owner's. */
+    public List<Cabinet> parlorMachines() {
+        List<Cabinet> out = new ArrayList<>();
+        if (!hand && !(overrides() && !handParlor.isEmpty())) {
+            if (!parlorBuilt()) {
+                return out;
+            }
+            List<ClubhousePlanner.Place3> at = ClubhousePlanner.parlorMachines(site.box());
+            for (int n = 0; n < at.size(); n++) {
+                out.add(new Cabinet(ClubhousePlanner.PARLOR_GAMES.get(n), at.get(n)));
+            }
+            return out;
+        }
+        for (Map.Entry<String, Place> e : handParlor.entrySet()) {
+            ClubhousePlanner.Place3 p = place3(e.getValue(), 0);
+            if (p != null) {
+                out.add(new Cabinet(e.getKey(), p));
+            }
+        }
+        return out;
+    }
+
+    /** Whether feet are in the Game Parlor (its air; owner-built: near its arrival spot). */
+    public boolean inParlor(String worldName, double x, double y, double z) {
+        if (worldName == null || !worldName.equalsIgnoreCase(world())) {
+            return false;
+        }
+        if (!mine(handParlorRoom)) {
+            return parlorBuilt() && ClubhousePlanner.parlorInside(site.box()).contains(x, y, z);
+        }
+        return near(handParlorRoom, x, y, z, UP_REACH);
+    }
+
+    private static boolean near(Place p, double x, double y, double z, double reach) {
+        return p != null && Math.abs(x - p.x()) <= reach && Math.abs(z - p.z()) <= reach && Math.abs(y - p.y()) <= 4;
+    }
+
+    /**
+     * {@code /hcm games clubhouse secret [room] [clear]} and {@code parlor door|room|<game> [clear]} (0.43.0), where
+     * the admin stands: the star (on the block they stand in, facing their way), the secret room's arrival (the door
+     * out behind them, the trophies along a row ahead), the parlor's door and arrival, and a machine per game of chance.
+     */
+    public String upstairs(String what, String sub, Place at, boolean chanceGame) {
+        String key;
+        String said;
+        switch (what) {
+            case "secret" -> {
+                boolean room = "room".equals(sub);
+                key = room ? SECRET_ROOM_KEY : SECRET_KEY;
+                said = room ? "The secret room's visitors arrive where you stand; its door out is behind you and its"
+                        + " trophies along a row three ahead." : "The secret room's gold star is where you stand.";
+            }
+            case "parlor" -> {
+                if ("door".equals(sub) || "room".equals(sub)) {
+                    boolean room = "room".equals(sub);
+                    key = room ? PARLOR_ROOM_KEY : PARLOR_DOOR_KEY;
+                    said = room ? "The Game Parlor's visitors arrive where you stand; its door out is behind you."
+                            : "The Game Parlor's door is where you stand, facing the way you face.";
+                } else {
+                    if (sub == null || sub.isBlank()) {
+                        return "&cWhich? &e/hcm games clubhouse parlor door|room|<game> [clear]";
+                    }
+                    if (at != null && !chanceGame) {
+                        return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
+                                + " twenty_one, higher_lower).";
+                    }
+                    Map<String, Place> next = new java.util.LinkedHashMap<>(handParlor);
+                    if (at == null) {
+                        next.remove(sub);
+                    } else {
+                        next.put(sub, at);
+                    }
+                    if (!setMeta(PARLOR_KEY, next.isEmpty() ? null : cabinetsText(next))) {
+                        return "&cThat can't be saved to the database right now.";
+                    }
+                    handParlor.clear();
+                    handParlor.putAll(next);
+                    return at == null ? "&aThe " + sub + " machine is cleared."
+                            : "&aThe " + sub + " machine stands where you stand." + notOnYet();
+                }
+            }
+            default -> {
+                return "&cThat's secret or parlor.";
+            }
+        }
+        if (!setMeta(key, at == null ? null : at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        switch (key) {
+            case SECRET_ROOM_KEY -> handSecretRoom = at;
+            case SECRET_KEY -> handSecret = at;
+            case PARLOR_ROOM_KEY -> handParlorRoom = at;
+            default -> handParlorDoor = at;
+        }
+        return at == null ? "&aCleared." : "&a" + said + notOnYet();
+    }
+
     // ---- 0.42.0: edit mode and saves -----------------------------------------------------------------
 
     /**
@@ -1721,9 +1976,11 @@ public final class ClubhouseRoom {
         }
         if (hand) {
             return handSpawn != null && Math.abs(x - handSpawn.x()) <= HAND_REACH && Math.abs(z - handSpawn.z())
-                    <= HAND_REACH && Math.abs(y - handSpawn.y()) <= HAND_REACH;
+                    <= HAND_REACH && Math.abs(y - handSpawn.y()) <= HAND_REACH
+                    || near(handSecretRoom, x, y, z, UP_REACH) || near(handParlorRoom, x, y, z, UP_REACH);
         }
-        return site != null && site.in(x, y, z);
+        return site != null && site.in(x, y, z) || (overrides() && (near(handSecretRoom, x, y, z, UP_REACH)
+                || near(handParlorRoom, x, y, z, UP_REACH)));
     }
 
     /** How far from an owner-built room's arrival spot still counts as in it. */

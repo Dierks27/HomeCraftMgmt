@@ -319,7 +319,7 @@ class ClubhouseRoomTest {
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
         assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "cabinet",
-                "trophyroom", "door", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
+                "trophyroom", "door", "secret", "parlor", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
                 "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("arcade", "trophy"), admin.tab(null, new String[]{"door", ""}), "the two doors");
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"door", "arcade", "c"}), "and clear");

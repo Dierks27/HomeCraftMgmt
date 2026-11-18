@@ -340,6 +340,20 @@ public abstract class CabinetGame implements Game {
         return out;
     }
 
+    /**
+     * 0.43.0, the secret trophy room: the best medal {@code score} on {@code board} reaches (3 gold, 2 silver, 1 bronze,
+     * 0 none), from this cabinet's milestones; a board whose thresholds fall is lower-is-better.
+     */
+    public int medalFor(String board, long score) {
+        List<Integer> t = cabinetSettings().milestonesFor(board);
+        if (t == null || t.isEmpty()) {
+            return 0;
+        }
+        boolean lower = t.size() > 1 && t.get(0) > t.get(t.size() - 1);
+        List<Integer> reached = milestonesReached(t, score, lower);
+        return reached.isEmpty() ? 0 : reached.get(reached.size() - 1);
+    }
+
     /** "bronze", "silver", "gold" (and "milestone N" past three). */
     public static String medal(int n) {
         return switch (n) {

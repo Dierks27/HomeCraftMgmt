@@ -57,7 +57,7 @@ public final class ClubhousePlanner {
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
      * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over.
      */
-    public static final int ALGO = 7;
+    public static final int ALGO = 8;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -343,12 +343,23 @@ public final class ClubhousePlanner {
      * Which side rooms the plan has (0.41.0). A room that is off is not built at all: its half of the annex is air
      * and its archway stays wall, so the main room is exactly as it was on that side.
      */
-    public record Rooms(boolean arcade, boolean trophy) {
-        public static final Rooms NONE = new Rooms(false, false);
-        public static final Rooms BOTH = new Rooms(true, true);
+    public record Rooms(boolean arcade, boolean trophy, boolean secret, boolean parlor) {
+        public static final Rooms NONE = new Rooms(false, false, false, false);
+        /** Every room: the two side rooms and (0.43.0) the two upstairs. */
+        public static final Rooms BOTH = new Rooms(true, true, true, true);
+
+        public Rooms {
+            secret = secret && trophy; // the secret room's way in is in the Trophy Room
+            parlor = parlor && arcade; // the Game Parlor stands on the Arcade Room's roof
+        }
+
+        /** 0.41.0's two side rooms alone. */
+        public Rooms(boolean arcade, boolean trophy) {
+            this(arcade, trophy, false, false);
+        }
 
         public boolean any() {
-            return arcade || trophy;
+            return arcade || trophy || secret || parlor;
         }
     }
 
@@ -411,6 +422,12 @@ public final class ClubhousePlanner {
         if (r.trophy()) {
             trophyRoom(b);
         }
+        if (r.secret()) {
+            secretRoom(b);
+        }
+        if (r.parlor()) {
+            parlor(b);
+        }
         b.join();
 
         List<ClubhouseSite.Spot> spawns = new ArrayList<>();
@@ -435,10 +452,17 @@ public final class ClubhousePlanner {
             more.add(arch(box, ARCH_TROPHY_X0));
             more.add(trophyInside(box));
         }
+        if (r.secret()) {
+            more.add(upInside(box, TROPHY_X0));
+        }
+        if (r.parlor()) {
+            more.add(upInside(box, ARCADE_X0));
+        }
         List<String> summary = List.of("the Clubhouse: " + box.describe(), spawns.size() + " arrival spots in the "
                 + "foyer, the Great Hall with a podium of 3 and two banquet tables (feast tables, the Feast Pot), "
                 + "the 19th Hole with its bar and a jukebox, the Trophy Gallery with a putting green"
-                + (r.arcade() ? ", the Arcade Room" : "") + (r.trophy() ? ", the Trophy Room" : ""),
+                + (r.arcade() ? ", the Arcade Room" : "") + (r.trophy() ? ", the Trophy Room" : "")
+                + (r.secret() ? ", a secret room" : "") + (r.parlor() ? ", the Game Parlor" : ""),
                 "plan " + ALGO);
         Plan plan = Plan.of(SLOT, ALGO, 0L, box, b.palette, b.ops, List.of(), List.of(), null, summary, 0);
         return new ClubhouseSite(plan, spawns, podium, board, inside, more);
@@ -1004,6 +1028,232 @@ public final class ClubhousePlanner {
         }
     }
 
+    // ---- 0.43.0: upstairs, reached by a tap (a teleport), never by a passage --------------------------------
+
+    /** The upstairs rooms' floor (over the side rooms' roofs), the walls' top row, and their glass roof (the box's top). */
+    static final int UP_FLOOR = SIDE_ROOF + 1;
+    static final int UP_TOP = 14;
+    /** The secret room's trophy ledges (top slabs) at these heights, and its centre pedestal. */
+    static final int[] LEDGE_Y = {11, 13};
+    static final int SECRET_CX = 23;
+    static final int SECRET_CZ = 40;
+    /** The upstairs rooms' beams (rows clear of the secret room's trophy places, which are on odd rows). */
+    static final int[] UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12};
+    /** The Game Parlor's two card tables (x, z offsets): Twenty-One and Higher or Lower. */
+    static final int[][] PARLOR_TABLE = {{5, 41}, {10, 41}};
+    /** The parlor's machines on its walls (x, z, yaw): two Ore Slots, the Wheel, Coin Flip. */
+    static final int[][] PARLOR_WALL = {{1, 37, -90}, {1, 40, -90}, {14, 37, 90}, {14, 40, 90}};
+    /** The games those stand for, in order: the walls' four, then the two tables. */
+    public static final List<String> PARLOR_GAMES = List.of("ore_slots", "ore_slots", "wheel", "coin_flip",
+            "twenty_one", "higher_lower");
+    public static final String FELT_BLOCK = "minecraft:green_wool";
+    public static final String BRASS = "minecraft:waxed_cut_copper";
+    public static final String LEDGE_SLAB = "minecraft:dark_oak_slab[type=top,waterlogged=false]";
+
+    /** An upstairs room's air in {@code box}: x0 + 1 .. x0 + 14, over the side room. */
+    static Box upInside(Box box, int x0) {
+        return new Box(box.minX() + x0 + 1, box.minY() + UP_FLOOR + 1, box.minZ() + MAIN_Z + 1, box.minX() + x0 + 14,
+                box.minY() + UP_TOP, box.minZ() + SIDE_Z1);
+    }
+
+    /** The secret room's air in {@code box}. */
+    public static Box secretInside(Box box) {
+        return upInside(box, TROPHY_X0);
+    }
+
+    /** The Game Parlor's air in {@code box}. */
+    public static Box parlorInside(Box box) {
+        return upInside(box, ARCADE_X0);
+    }
+
+    /**
+     * An upstairs room's shell, west wall at {@code x0}: a whole floor at {@value #UP_FLOOR} (over the side room's
+     * roof), walls of their own on every side (the main room's south windows look onto a wall), panelling to a chair
+     * rail and plaster above, beams under a glass roof.
+     */
+    private static void upShell(Builder b, int x0, String floor) {
+        int z0 = MAIN_Z;
+        int z1 = MAIN_Z + ANNEX_Z - 1;
+        for (int i = x0; i <= x0 + 15; i++) {
+            for (int k = z0; k <= z1; k++) {
+                b.set(i, UP_FLOOR, k, (i == x0 || i == x0 + 15 || k == z0 || k == z1) ? PLANKS : floor);
+                b.set(i, ROOF, k, ROOF_GLASS);
+                boolean edgeX = i == x0 || i == x0 + 15;
+                boolean edgeZ = k == z0 || k == z1;
+                if (!edgeX && !edgeZ) {
+                    continue;
+                }
+                String axis = edgeZ && !edgeX ? "x" : "z";
+                for (int j = UP_FLOOR + 1; j <= UP_TOP; j++) {
+                    String block;
+                    if (edgeX && edgeZ) {
+                        block = log("y");
+                    } else if (j <= UP_FLOOR + 2) {
+                        block = PLANKS;
+                    } else if (j == UP_FLOOR + 3) {
+                        block = log(axis);
+                    } else {
+                        block = PLASTER;
+                    }
+                    b.set(i, j, k, block);
+                }
+            }
+        }
+        for (int k : UP_BEAM_Z) {
+            for (int i = x0 + 1; i <= x0 + 14; i++) {
+                b.set(i, UP_TOP, k, log("x"));
+            }
+        }
+    }
+
+    /**
+     * The secret trophy room (0.43.0; the owner: "her own little trophy room (make it a secret room) that shows all
+     * her high scores"), over the Trophy Room: cosy dark oak, a brown rug over hidden lights, two rows of trophy ledges
+     * round three walls, a quartz pedestal in the middle (the visitor's own head and name stand on it), lanterns. Its
+     * trophies are each visitor's own, drawn for them alone; the way in is a little gold star in the Trophy Room.
+     */
+    private static void secretRoom(Builder b) {
+        int x0 = TROPHY_X0;
+        upShell(b, x0, PLANKS);
+        for (int i = x0 + 1; i <= x0 + 14; i++) {
+            for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k++) {
+                b.set(i, UP_FLOOR + 1, k, RUG);
+                if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
+                    b.set(i, UP_FLOOR, k, LIGHT);
+                }
+            }
+        }
+        for (int y : LEDGE_Y) {
+            for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
+                b.set(x0 + 1, y, k, LEDGE_SLAB);
+                b.set(x0 + 14, y, k, LEDGE_SLAB);
+            }
+            for (int i = x0 + 2; i <= x0 + 13; i++) {
+                b.set(i, y, SIDE_Z1, LEDGE_SLAB);
+            }
+        }
+        b.set(SECRET_CX, UP_FLOOR + 1, SECRET_CZ, PEDESTAL);
+        for (int i : new int[]{x0 + 4, x0 + 11}) {
+            for (int k : UP_BEAM_Z) {
+                b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
+            }
+        }
+    }
+
+    /**
+     * The Game Parlor (0.43.0; the owner: "maybe that would be fun since we have a bunch of chance games"), over the
+     * Arcade Room and reached from the 19th Hole, never the Foyer: green baize on dark wood, brass trim, warm lamps; two
+     * Ore Slots machines and Coin Flip and the Wheel on its walls, a card table each for Twenty-One and Higher or Lower.
+     * The machines are displays you tap (the games of chance's own gate: {@code hcm.games.chance}, the day's token
+     * limit, Take a break, the click cooldown).
+     */
+    private static void parlor(Builder b) {
+        int x0 = ARCADE_X0;
+        upShell(b, x0, PLANKS);
+        for (int i = x0 + 2; i <= x0 + 13; i++) {
+            for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
+                b.set(i, UP_FLOOR + 1, k, FELT);
+                if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
+                    b.set(i, UP_FLOOR, k, LIGHT);
+                }
+            }
+        }
+        for (int i = x0 + 1; i <= x0 + 14; i++) {
+            b.set(i, UP_FLOOR + 3, SIDE_Z1 + 1, BRASS); // a brass rail along the back wall
+        }
+        for (int[] t : PARLOR_TABLE) {
+            b.set(t[0], UP_FLOOR + 1, t[1], FENCE);
+            b.set(t[0], UP_FLOOR + 2, t[1], FELT_BLOCK);
+            b.seat(t[0] - 1, UP_FLOOR + 1, t[1], chair("west"), "GREEN");
+            b.seat(t[0] + 1, UP_FLOOR + 1, t[1], chair("east"), "GREEN");
+        }
+        for (int[] m : PARLOR_WALL) {
+            b.set(m[0], UP_FLOOR, m[1], MAT);
+        }
+        for (int i : new int[]{x0 + 4, x0 + 11}) {
+            for (int k : UP_BEAM_Z) {
+                b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
+            }
+        }
+    }
+
+    /** Where the secret room's visitor arrives (its north end, facing in), and the door back out (on its north wall). */
+    public static ClubhouseSite.Spot secretArrival(Box box) {
+        return new ClubhouseSite.Spot(box.minX() + SECRET_CX + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + SIDE_Z0 + 2.5,
+                0f);
+    }
+
+    public static Place3 secretExit(Box box) {
+        return new Place3(box.minX() + SECRET_CX + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + SIDE_Z0 + 1.15, 0f);
+    }
+
+    /** The secret room's centre pedestal top (the visitor's head stands there). */
+    public static Place3 secretCentre(Box box) {
+        return new Place3(box.minX() + SECRET_CX + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + SECRET_CZ + 0.5, 180f);
+    }
+
+    /**
+     * The secret room's trophy places, on its ledges (each a ledge top's middle, facing into the room): the lower row
+     * round the three walls first, then the upper row.
+     */
+    public static List<Place3> secretShelf(Box box) {
+        List<Place3> out = new ArrayList<>();
+        for (int y : LEDGE_Y) {
+            double top = box.minY() + y + 1;
+            for (int k = SIDE_Z0 + 3; k <= SIDE_Z1 - 1; k += 2) {
+                out.add(new Place3(box.minX() + TROPHY_X0 + 1.5, top, box.minZ() + k + 0.5, -90f));
+            }
+            for (int i = TROPHY_X0 + 3; i <= TROPHY_X0 + 12; i += 2) {
+                out.add(new Place3(box.minX() + i + 0.5, top, box.minZ() + SIDE_Z1 + 0.5, 180f));
+            }
+            for (int k = SIDE_Z1 - 1; k >= SIDE_Z0 + 3; k -= 2) {
+                out.add(new Place3(box.minX() + TROPHY_X0 + 14.5, top, box.minZ() + k + 0.5, 90f));
+            }
+        }
+        return out;
+    }
+
+    /** The way into the secret room: a little gold star on the Trophy Room's back wall, and where its visitor returns. */
+    public static Place3 secretStar(Box box) {
+        return new Place3(box.minX() + TROPHY_X0 + 13.5, box.minY() + 3.5, box.minZ() + SIDE_Z1 + 0.85, 180f);
+    }
+
+    public static ClubhouseSite.Spot secretReturn(Box box) {
+        return new ClubhouseSite.Spot(box.minX() + TROPHY_X0 + 13.5, box.minY() + 1, box.minZ() + SIDE_Z1 - 1.5, 0f);
+    }
+
+    /** The Game Parlor's door in the 19th Hole (against its west wall, between the nook and the fireplace). */
+    public static Place3 parlorDoor(Box box) {
+        return new Place3(box.minX() + 1.0, box.minY() + 1, box.minZ() + PARLOR_DOOR_Z, -90f);
+    }
+
+    static final int PARLOR_DOOR_Z = 21;
+
+    public static ClubhouseSite.Spot parlorReturn(Box box) {
+        return new ClubhouseSite.Spot(box.minX() + 2.5, box.minY() + 1, box.minZ() + PARLOR_DOOR_Z + 0.5, -90f);
+    }
+
+    public static ClubhouseSite.Spot parlorArrival(Box box) {
+        return new ClubhouseSite.Spot(box.minX() + ARCADE_X0 + 7.5, box.minY() + UP_FLOOR + 1, box.minZ() + SIDE_Z0 + 2.5,
+                0f);
+    }
+
+    public static Place3 parlorExit(Box box) {
+        return new Place3(box.minX() + ARCADE_X0 + 7.5, box.minY() + UP_FLOOR + 1, box.minZ() + SIDE_Z0 + 1.15, 0f);
+    }
+
+    /** The Game Parlor's machines: {@link #PARLOR_GAMES}' places, the walls' four then the two tables' tops. */
+    public static List<Place3> parlorMachines(Box box) {
+        List<Place3> out = new ArrayList<>();
+        for (int[] m : PARLOR_WALL) {
+            out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
+        }
+        for (int[] t : PARLOR_TABLE) {
+            out.add(new Place3(box.minX() + t[0] + 0.5, box.minY() + UP_FLOOR + 3, box.minZ() + t[1] + 0.5, 0f));
+        }
+        return out;
+    }
+
     /**
      * Where "Photo time!" stands on the Trophy Room's podium (0.42.0): 1st, 2nd, 3rd, each in the middle of its
      * 2 x 1 plinth (its cup and head are taken down for the photo), facing the archway.
@@ -1232,6 +1482,14 @@ public final class ClubhousePlanner {
             if (rooms.trophy()) {
                 out.put("trophy", new Box(box.minX() + TROPHY_X0, box.minY(), box.minZ() + MAIN_Z,
                         box.minX() + TROPHY_X0 + 15, box.minY() + SIDE_ROOF, box.maxZ()));
+            }
+            if (rooms.secret()) {
+                out.put("secret", new Box(box.minX() + TROPHY_X0, box.minY() + UP_FLOOR, box.minZ() + MAIN_Z,
+                        box.minX() + TROPHY_X0 + 15, box.maxY(), box.maxZ()));
+            }
+            if (rooms.parlor()) {
+                out.put("parlor", new Box(box.minX() + ARCADE_X0, box.minY() + UP_FLOOR, box.minZ() + MAIN_Z,
+                        box.minX() + ARCADE_X0 + 15, box.maxY(), box.maxZ()));
             }
         }
         return out;

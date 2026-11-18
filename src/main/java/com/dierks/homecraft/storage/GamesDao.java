@@ -644,6 +644,28 @@ public final class GamesDao {
         });
     }
 
+    /** One of a player's boards (0.43.0, the secret trophy room): the game, the board, their best and how many runs. */
+    public record Mine(String game, String board, long score, long runs) {
+    }
+
+    /** Every board the player has a score on (0.43.0): their own bests, nobody else's. */
+    public List<Mine> scoresOf(UUID player) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT game, board, score, runs FROM game_scores WHERE player = ? ORDER BY game, board")) {
+                ps.setString(1, player.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<Mine> out = new ArrayList<>();
+                    while (rs.next()) {
+                        out.add(new Mine(rs.getString(1), rs.getString(2), rs.getLong(3), rs.getLong(4)));
+                    }
+                    return out;
+                }
+            }
+        }
+    }
+
     /** The player's best on the board, or {@code null}. */
     public Long best(UUID player, String game, String board) throws SQLException {
         Connection c = database.connection();

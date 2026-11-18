@@ -75,6 +75,8 @@ public final class ClubModels {
 
     /** The game each cabinet model is for (any other cabinet game uses {@code hcm:cabinet}). */
     private static final Map<String, Model> CABINETS = new LinkedHashMap<>();
+    /** The Game Parlor's machine for each game of chance (0.43.0). */
+    private static final Map<String, Model> MACHINES = new LinkedHashMap<>();
     private static final List<Model> ALL = new ArrayList<>();
 
     private static final String CABINET_SIZE = "1 wide, 2 tall, 1 deep (16 x 32 x 16 units, y from -8 to 24), screen"
@@ -97,7 +99,26 @@ public final class ClubModels {
         ALL.add(new Model("trophy_bronze", Kind.TROPHY, Material.COPPER_INGOT, "minecraft:block/copper_block",
                 TROPHY_SIZE));
         ALL.add(new Model("door_arcade", Kind.DOOR, Material.LEVER, "minecraft:block/red_concrete", DOOR_SIZE));
+        // 0.43.0, the Game Parlor's machines (a cabinet's size; the cards lie on their table)
+        machine("ore_slots", "machine_slots", Material.DIAMOND_ORE, "minecraft:block/diamond_ore", Kind.CABINET);
+        machine("wheel", "machine_wheel", Material.COMPASS, "minecraft:block/target_top", Kind.CABINET);
+        machine("coin_flip", "machine_coin", Material.GOLD_NUGGET, "minecraft:block/gold_block", Kind.CABINET);
+        machine("twenty_one", "machine_cards", Material.PAPER, "minecraft:block/white_wool", Kind.TROPHY);
+        MACHINES.put("higher_lower", named("machine_cards"));
         ALL.add(new Model("door_trophy", Kind.DOOR, Material.TOTEM_OF_UNDYING, "minecraft:block/gold_block", DOOR_SIZE));
+    }
+
+    private static void machine(String game, String name, Material icon, String screen, Kind kind) {
+        Model m = new Model(name, kind, icon, screen, kind == Kind.CABINET ? CABINET_SIZE : CARDS_SIZE);
+        MACHINES.put(game, m);
+        ALL.add(m);
+    }
+
+    private static final String CARDS_SIZE = "1 x 1 x 1 (y from 0 to 16), lying on its card table, front to the north";
+
+    /** The Game Parlor's machine for a game of chance (0.43.0), or {@code null}. */
+    public static Model machineFor(String gameId) {
+        return gameId == null ? null : MACHINES.get(gameId.toLowerCase(Locale.ROOT));
     }
 
     private static void cabinet(String game, String name, Material icon, String screen) {
@@ -183,6 +204,12 @@ public final class ClubModels {
                 parts.add(box(2, 2, 0, 14, 5, 2, "panel"));       // the control panel
             }
             case TROPHY -> {
+                if (m.name().equals("machine_cards")) { // a stack of cards and one face up beside it
+                    tex = "\"card\":\"" + m.screen() + "\",\"back\":\"minecraft:block/red_concrete\"";
+                    parts.add(box(3, 0, 5, 9, 3, 13, "back"));
+                    parts.add(box(9, 0, 4, 14, 1, 11, "card"));
+                    break;
+                }
                 tex = "\"metal\":\"" + m.screen() + "\",\"base\":\"minecraft:block/polished_blackstone\"";
                 parts.add(box(4, 0, 4, 12, 2, 12, "base"));
                 parts.add(box(7, 2, 7, 9, 7, 9, "metal"));

@@ -66,13 +66,25 @@ class ClubhousePlannerTest {
         return b.get(key(BOX.minX() + i, BOX.minY() + j, BOX.minZ() + k));
     }
 
+    private static int x(long key) {
+        return (int) (key >> 38);
+    }
+
+    private static int y(long key) {
+        return (int) ((key << 52) >> 52);
+    }
+
+    private static int z(long key) {
+        return (int) ((key << 26) >> 38);
+    }
+
     private static String id(String state) {
         return state == null ? "minecraft:air" : ClubhousePlanner.id(state);
     }
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("3aad76cdb1bb", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("134d6b2c0179", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -80,7 +92,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(7, ClubhousePlanner.ALGO, "0.42.0's polish: every server builds it once");
+        assertEquals(8, ClubhousePlanner.ALGO, "0.43.0's rooms upstairs: every server builds it once");
     }
 
     @Test
@@ -356,8 +368,8 @@ class ClubhousePlannerTest {
                     && right.contains("_trapdoor") && right.contains("open=true"), "an armchair has two arms: " + op);
             armchairs++;
         }
-        assertEquals(2 * 6 + 2 * 4 + 4, atTables, "three a side at each banquet table, four at each 3 x 3 table, four at"
-                + " the card table");
+        assertEquals(2 * 6 + 2 * 4 + 4 + 2 * 2, atTables, "three a side at each banquet table, four at each 3 x 3 table,"
+                + " four at the card table, two at each of the Game Parlor's two tables (0.43.0)");
         assertEquals(6, armchairs, "two in the reading nook, two by the fire, two facing the trophies");
     }
 
@@ -858,7 +870,7 @@ class ClubhousePlannerTest {
         ClubSave.Saved back = ClubSave.read(ClubSave.text(snap, "abc", regions), BOX);
         assertEquals(b, blocks(back.plan()), "the file reads back the same blocks");
         assertEquals("abc", back.generatedHash());
-        assertEquals(java.util.Set.of("main", "arcade", "trophy"), back.regions());
+        assertEquals(java.util.Set.of("main", "arcade", "trophy", "secret", "parlor"), back.regions());
         Box moved = BOX.translate(160, 0, -64);
         assertEquals(snap.ops().size(), ClubSave.read(ClubSave.text(snap, null, regions), moved).plan().ops().size(),
                 "offsets: a moved origin moves the save");
@@ -896,5 +908,107 @@ class ClubhousePlannerTest {
                 ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH).keySet()), BOX);
         assertEquals(all.plan(), ClubSave.merged(all, SITE.plan(), ClubhousePlanner.regions(BOX,
                 ClubhousePlanner.Rooms.BOTH)), "a save that knows every region is used as it is");
+    }
+
+    // ---- 0.43.0: the two rooms upstairs ----------------------------------------------------------------------
+
+    /** Where a person stands: feet and head free (a carpet is fine), something solid under them. */
+    private static void standsAt(Map<Long, String> b, double x, double y, double z, String what) {
+        int bx = (int) Math.floor(x);
+        int by = (int) Math.floor(y);
+        int bz = (int) Math.floor(z);
+        String feet = b.get(key(bx, by, bz));
+        String head = b.get(key(bx, by + 1, bz));
+        String below = b.get(key(bx, by - 1, bz));
+        assertTrue(feet == null || id(feet).endsWith("_carpet"), what + ": feet free, not " + feet);
+        assertNull(head, what + ": head free");
+        assertTrue(below != null && !ClubhousePlanner.noFooting(below), what + ": a floor under it, not " + below);
+        assertTrue(BOX.contains(bx, by, bz), what + ": inside the box");
+    }
+
+    @Test
+    void theUpstairsRoomsHaveRoomToArriveAndWalkOut() {
+        Map<Long, String> b = blocks(SITE.plan());
+        ClubhouseSite.Spot s = ClubhousePlanner.secretArrival(BOX);
+        standsAt(b, s.x(), s.y(), s.z(), "the secret room's arrival");
+        s = ClubhousePlanner.secretReturn(BOX);
+        standsAt(b, s.x(), s.y(), s.z(), "back in the Trophy Room");
+        s = ClubhousePlanner.parlorArrival(BOX);
+        standsAt(b, s.x(), s.y(), s.z(), "the Game Parlor's arrival");
+        s = ClubhousePlanner.parlorReturn(BOX);
+        standsAt(b, s.x(), s.y(), s.z(), "back in the 19th Hole");
+        assertTrue(ClubhousePlanner.secretInside(BOX).contains((int) Math.floor(ClubhousePlanner.secretCentre(BOX).x()),
+                (int) Math.floor(ClubhousePlanner.secretCentre(BOX).y()), (int) Math.floor(ClubhousePlanner
+                        .secretCentre(BOX).z())), "the pedestal is in the secret room");
+        ClubhousePlanner.Place3 door = ClubhousePlanner.parlorDoor(BOX);
+        for (int j = 0; j < 2; j++) {
+            assertNull(b.get(key((int) Math.floor(door.x()), (int) door.y() + j, (int) Math.floor(door.z()))),
+                    "the Parlor's door stands in air against the 19th Hole's wall");
+        }
+        assertNotNull(b.get(key((int) Math.floor(door.x()) - 1, (int) door.y(), (int) Math.floor(door.z()))),
+                "with the wall behind it");
+        assertEquals(ClubhousePlanner.PARLOR_GAMES.size(), ClubhousePlanner.parlorMachines(BOX).size(),
+                "a place for every machine");
+        for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {
+            assertTrue(ClubhousePlanner.parlorInside(BOX).contains((int) Math.floor(m.x()), (int) Math.floor(m.y()),
+                    (int) Math.floor(m.z())), "a machine stands in the Parlor: " + m);
+            assertNull(b.get(key((int) Math.floor(m.x()), (int) Math.floor(m.y()), (int) Math.floor(m.z()))),
+                    "and in air: " + m);
+        }
+        List<ClubhousePlanner.Place3> shelf = ClubhousePlanner.secretShelf(BOX);
+        assertTrue(shelf.size() >= 30, "room for many trophies: " + shelf.size());
+        for (ClubhousePlanner.Place3 t : shelf) {
+            int x = (int) Math.floor(t.x());
+            int y = (int) Math.floor(t.y());
+            int z = (int) Math.floor(t.z());
+            assertNull(b.get(key(x, y, z)), "a trophy stands in air: " + t);
+            assertNotNull(b.get(key(x, y - 1, z)), "on a ledge: " + t);
+        }
+    }
+
+    /** Upstairs is shut in: walls round both rooms, a floor under them, the glass roof over them. */
+    @Test
+    void theUpstairsRoomsAreShutIn() {
+        Map<Long, String> b = blocks(SITE.plan());
+        for (int x = BOX.minX(); x <= BOX.maxX(); x++) {
+            for (int z = BOX.minZ() + ClubhousePlanner.MAIN_Z; z <= BOX.maxZ(); z++) {
+                assertNotNull(b.get(key(x, BOX.minY() + ClubhousePlanner.UP_FLOOR, z)), "a floor upstairs");
+                assertTrue(ClubhousePlanner.noFooting(b.get(key(x, BOX.minY() + ClubhousePlanner.ROOF, z))),
+                        "glass over upstairs");
+                boolean edge = x == BOX.minX() || x == BOX.maxX() || x == BOX.minX() + 15 || x == BOX.minX() + 16
+                        || z == BOX.minZ() + ClubhousePlanner.MAIN_Z || z == BOX.maxZ();
+                for (int y = BOX.minY() + ClubhousePlanner.UP_FLOOR + 1; edge && y <= BOX.minY()
+                        + ClubhousePlanner.UP_TOP; y++) {
+                    assertNotNull(b.get(key(x, y, z)), "a wall upstairs at " + (x - BOX.minX()) + "," + (y - BOX.minY())
+                            + "," + (z - BOX.minZ()));
+                }
+            }
+        }
+        // a box without the upstairs rooms leaves that space air
+        Map<Long, String> two = blocks(ClubhousePlanner.plan(BOX, new ClubhousePlanner.Rooms(true, true)).plan());
+        assertNull(two.get(key(BOX.minX() + 5, BOX.minY() + ClubhousePlanner.UP_FLOOR, BOX.minZ() + 40)),
+                "the side rooms alone: nothing upstairs");
+        assertFalse(new ClubhousePlanner.Rooms(true, false, true, true).secret(),
+                "no secret room without the Trophy Room (its way in)");
+    }
+
+    /** A 0.42.0 save (main, arcade, trophy) gains the two rooms upstairs from HCM's plan. */
+    @Test
+    void aSaveFrom042GainsTheUpstairsRooms() {
+        Map<Long, String> b = blocks(SITE.plan());
+        Map<Long, String> old = new java.util.HashMap<>(b);
+        for (long k : List.copyOf(old.keySet())) {
+            // what 0.42.0 built: nothing above the side rooms' roof
+            if (ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH).get("secret").contains(x(k), y(k), z(k))
+                    || ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH).get("parlor").contains(x(k), y(k),
+                    z(k))) {
+                old.remove(k);
+            }
+        }
+        Plan snap = ClubSave.snapshot(BOX, at -> old.get(key(at[0], at[1], at[2])));
+        ClubSave.Saved saved = ClubSave.read(ClubSave.text(snap, null, Set.of("main", "arcade", "trophy")), BOX);
+        Map<Long, String> merged = blocks(ClubSave.merged(saved, SITE.plan(),
+                ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH)));
+        assertEquals(b, merged, "the saved room, with the upstairs rooms added");
     }
 }

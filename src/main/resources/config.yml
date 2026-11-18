@@ -2603,3 +2603,13 @@ games:
       # The all-time records as trophies, each with its holder's head beside it, and last week's
       # top three on a podium. Your own trophies sparkle when you walk in. false = not built.
       enabled: true
+    secret_room:
+      # A secret room over the Trophy Room with each player's own trophies (their bests, medals and
+      # firsts). Its way in is a little gold star in the Trophy Room, for players with the
+      # permission hcm.clubhouse.secretroom (nobody has it until you give it). false = not built.
+      enabled: true
+    parlor:
+      # The Game Parlor over the Arcade Room, through a door in the 19th Hole: the games of chance as
+      # machines you tap, with their usual rules (hcm.games.chance, the day's token limit, Take a
+      # break). false = not built.
+      enabled: true

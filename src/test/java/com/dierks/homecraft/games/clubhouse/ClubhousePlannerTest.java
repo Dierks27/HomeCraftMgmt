@@ -72,7 +72,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("96c1f767a3ec", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("3aad76cdb1bb", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -80,7 +80,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(6, ClubhousePlanner.ALGO, "0.41.1's fixes: every server builds it once");
+        assertEquals(7, ClubhousePlanner.ALGO, "0.42.0's polish: every server builds it once");
     }
 
     @Test
@@ -114,29 +114,54 @@ class ClubhousePlannerTest {
         }
     }
 
+    /**
+     * 0.42.0: the podium left the Great Hall (a hedge stands under the results board now) and "Photo time!" is on the
+     * Trophy Room's podium: three heights, 1st in the room's middle and highest, each place in the middle of its plinth
+     * (gold, iron, copper), with air for a player, facing the archway. Without a Trophy Room it is the hall's green.
+     */
     @Test
-    void thePodiumHasThreeHeightsFirstOnTheMiddleLineAndHighest() {
+    void thePodiumIsInTheTrophyRoomThreeHeightsFirstHighest() {
         Map<Long, String> b = blocks(SITE.plan());
         List<ClubhouseSite.Spot> p = SITE.podium();
         assertEquals(3, p.size(), "1st, 2nd and 3rd");
-        assertTrue(p.get(0).y() > p.get(1).y() && p.get(1).y() > p.get(2).y(), "three distinct heights, 1st highest: "
-                + p);
-        assertEquals(BOX.minX() + 16.0, p.get(0).x(), 1e-9, "1st on the room's middle line, between blocks 15 and 16");
-        assertEquals(p.get(0).x() - p.get(1).x(), p.get(2).x() - p.get(0).x(), 1e-9, "2nd and 3rd mirror each other");
-        for (ClubhouseSite.Spot s : p) {
-            // a 2 x 2 plinth: the spot is its middle, so all four blocks under the feet are the plinth's top
+        assertTrue(p.get(0).y() > p.get(1).y() && p.get(1).y() > p.get(2).y(), "three heights, 1st highest: " + p);
+        Box room = ClubhousePlanner.trophyInside(BOX);
+        assertEquals((room.minX() + room.maxX() + 1) / 2.0, p.get(0).x(), 1e-9, "1st in the Trophy Room's middle");
+        String[] tops = {ClubhousePlanner.GOLD, ClubhousePlanner.IRON, ClubhousePlanner.COPPER};
+        for (int n = 0; n < 3; n++) {
+            ClubhouseSite.Spot s = p.get(n);
+            assertTrue(room.contains(s.x(), s.y(), s.z()), "in the Trophy Room: " + s);
             for (double dx : new double[]{-0.5, 0.5}) {
-                for (double dz : new double[]{-0.5, 0.5}) {
-                    assertNotNull(at(b, s.x() + dx, s.y() - 1, s.z() + dz), "each place stands on its plinth: " + s);
-                    assertNull(at(b, s.x() + dx, s.y(), s.z() + dz), "air at the feet");
-                    assertNull(at(b, s.x() + dx, s.y() + 1, s.z() + dz), "and at the head");
+                assertEquals(tops[n], at(b, s.x() + dx, s.y() - 1, s.z()), "on its plinth: " + s);
+                assertNull(at(b, s.x() + dx, s.y(), s.z()), "air at the feet");
+                assertNull(at(b, s.x() + dx, s.y() + 1, s.z()), "and at the head");
+            }
+            assertEquals(180f, s.yaw(), "facing the archway");
+        }
+        // the Great Hall has no podium now: the hedge under the board, the green's floor clear
+        for (int i = 11; i <= 20; i++) {
+            for (int k = 2; k <= 4; k++) {
+                String g = rel(b, i, 1, k);
+                assertTrue(g != null && g.equals(ClubhousePlanner.STAGE_RUG), "the green, nothing on it at " + i + "," + k);
+                assertNull(rel(b, i, 2, k), "nothing standing on the green");
+            }
+        }
+        for (int i = ClubhousePlanner.HEDGE_X0; i <= 31 - ClubhousePlanner.HEDGE_X0; i++) {
+            assertEquals(ClubhousePlanner.PLANTER, rel(b, i, 1, 1), "the hedge under the results board");
+            assertEquals(ClubhousePlanner.SHRUB, rel(b, i, 2, 1));
+        }
+        for (String state : SITE.plan().palette()) {
+            if (state.equals(ClubhousePlanner.GOLD)) {
+                for (BlockOp op : SITE.plan().ops()) {
+                    if (SITE.plan().blockOf(op).equals(ClubhousePlanner.GOLD)) {
+                        assertTrue(op.z() - BOX.minZ() >= ClubhousePlanner.MAIN_Z, "gold only in the Trophy Room: " + op);
+                    }
                 }
             }
-            assertEquals(0f, s.yaw(), "the podium faces the room (south)");
         }
-        assertEquals(ClubhousePlanner.GOLD, at(b, p.get(0).x(), p.get(0).y() - 1, p.get(0).z()), "1st on gold");
-        assertEquals(ClubhousePlanner.IRON, at(b, p.get(1).x(), p.get(1).y() - 1, p.get(1).z()), "2nd on iron");
-        assertEquals(ClubhousePlanner.COPPER, at(b, p.get(2).x(), p.get(2).y() - 1, p.get(2).z()), "3rd on copper");
+        List<ClubhouseSite.Spot> alone = ClubhousePlanner.plan(MAIN).podium();
+        assertEquals(BOX.minX() + 16.0, alone.get(0).x(), 1e-9, "no Trophy Room: 1st on the green's middle line");
+        assertEquals(BOX.minY() + 1.0, alone.get(0).y(), 1e-9, "on the floor");
     }
 
     @Test
@@ -253,8 +278,9 @@ class ClubhousePlannerTest {
             for (int z = BOX.minZ(); z <= BOX.maxZ(); z++) {
                 boolean main = z - BOX.minZ() < ClubhousePlanner.MAIN_Z;
                 int roof = main ? ClubhousePlanner.ROOF : ClubhousePlanner.SIDE_ROOF;
-                assertEquals(ClubhousePlanner.ROOF_GLASS, b.get(key(x, BOX.minY() + roof, z)),
-                        "the roof is closed over " + x + "," + z);
+                String r = b.get(key(x, BOX.minY() + roof, z));
+                assertTrue(ClubhousePlanner.ROOF_GLASS.equals(r) || ClubhousePlanner.TINTED.equals(r),
+                        "the roof is closed over " + x + "," + z + " (the Arcade Room's tinted, 0.42.0): " + r);
                 assertNotNull(b.get(key(x, BOX.minY(), z)), "the floor is whole at " + x + "," + z);
             }
         }
@@ -361,6 +387,9 @@ class ClubhousePlannerTest {
                     if (w != null && e != null && (pairs.contains(w + "|" + e) || pairs.contains(e + "|" + w))) {
                         continue;
                     }
+                    if (w == null && ClubhousePlanner.FLOWERS.equals(e)) {
+                        continue; // 0.42.0: the Feast Pot on the west table is a display; its mirror keeps its flowers
+                    }
                     if (j >= 1 && j <= 3 && k >= ClubhousePlanner.PODIUM_Z && k <= ClubhousePlanner.PODIUM_Z + 1
                             && (i == 12 || i == 13)) {
                         continue; // 2nd's plinth is a block higher than 3rd's: the podium's one asymmetry
@@ -408,7 +437,12 @@ class ClubhousePlannerTest {
         assertEquals(WallBoards.turn(0f), line.yaw(), 0.001f, "facing south, to the arrivals");
         // the 3 x 3 tables
         int[] pot = ClubhousePlanner.pot(BOX);
-        assertEquals(ClubhousePlanner.POT, b.get(key(pot[0], pot[1], pot[2])), "the Feast Pot");
+        assertNull(b.get(key(pot[0], pot[1], pot[2])), "0.42.0: no cauldron block on the table");
+        ClubhousePlanner.Prop potProp = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH).stream()
+                .filter(x -> x.key().equals("feast.pot")).findFirst().orElseThrow();
+        assertEquals(pot[0] + 0.5, potProp.x(), 1e-9, "the Feast Pot, a small pot on the cloth's middle");
+        assertEquals(pot[1], potProp.y() - potProp.sy() / 2, 1e-6, "its bottom on the cloth");
+        assertTrue(potProp.sx() < 1f, "smaller than a block");
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 assertEquals(ClubhousePlanner.CLOTH, b.get(key(pot[0] + dx, pot[1] - 1, pot[2] + dz)),
@@ -432,10 +466,13 @@ class ClubhousePlannerTest {
         Map<Long, String> b = blocks(SITE.plan());
         int[] j = ClubhousePlanner.jukebox(BOX);
         assertEquals(ClubhousePlanner.JUKEBOX, b.get(key(j[0], j[1], j[2])), "the jukebox, empty");
-        assertEquals(ClubhousePlanner.BOOKS, b.get(key(j[0], j[1] + 1, j[2])), "books over it");
-        for (int d = 1; d <= 3; d++) {
-            assertEquals(ClubhousePlanner.BOOKS, b.get(key(j[0], j[1], j[2] - d)), "books either side");
-            assertEquals(ClubhousePlanner.BOOKS, b.get(key(j[0], j[1], j[2] + d)), "books either side");
+        // 0.42.0: a lit alcove over it and a record shelf either side, books beyond
+        assertEquals(ClubhousePlanner.ALCOVE, b.get(key(j[0], j[1] + 1, j[2])), "a lit alcove over it");
+        assertTrue(b.get(key(j[0], j[1], j[2] - 1)).contains("_shelf"), "a record shelf beside it");
+        assertTrue(b.get(key(j[0], j[1], j[2] + 1)).contains("_shelf"), "and on the other side");
+        for (int d = 2; d <= 3; d++) {
+            assertEquals(ClubhousePlanner.BOOKS, b.get(key(j[0], j[1], j[2] - d)), "books beyond");
+            assertEquals(ClubhousePlanner.BOOKS, b.get(key(j[0], j[1], j[2] + d)), "books beyond");
         }
         String front = b.get(key(j[0] + 1, j[1], j[2]));
         assertTrue(front == null || id(front).endsWith("_carpet"), "room to tap it: " + front);
@@ -663,8 +700,9 @@ class ClubhousePlannerTest {
                 }
             }
         }
-        for (int n = 0; n < 4; n++) {
-            assertEquals(180f, cabs.get(n).yaw(), "the south wall's face the archway");
+        for (ClubhousePlanner.Place3 c : cabs) {
+            boolean east = c.x() - BOX.minX() > 7.5;
+            assertEquals(east ? 90f : -90f, c.yaw(), "0.42.0: two facing rows down the side walls: " + c);
         }
         assertFalse(ClubhousePlanner.MAT.contains("magenta") || ClubhousePlanner.MAT.contains("purple"),
                 "never a purple mat: it read as the missing texture");
@@ -735,5 +773,128 @@ class ClubhousePlannerTest {
                 assertFalse(over != null && (over.contains("_trapdoor") || over.contains("_fence")), "at " + op);
             }
         }
+    }
+
+    // ---- 0.42.0 ------------------------------------------------------------------------------------
+
+    /**
+     * The Arcade Room made over: a tinted roof (dim), a neon strip of froglights round its walls, a confetti floor,
+     * a prize counter of glass cases and two claw machines on its back row, the six cabinets clear of them.
+     */
+    @Test
+    void theArcadeRoomLooksLikeAnArcade() {
+        Map<Long, String> b = blocks(SITE.plan());
+        int neon = 0;
+        int confetti = 0;
+        for (int i = 0; i <= 15; i++) {
+            for (int k = ClubhousePlanner.MAIN_Z; k < 48; k++) {
+                assertEquals(ClubhousePlanner.TINTED, rel(b, i, ClubhousePlanner.SIDE_ROOF, k), "a tinted roof");
+                String w = rel(b, i, 6, k);
+                neon += w != null && w.contains("froglight") ? 1 : 0;
+                String f = rel(b, i, 0, k);
+                confetti += f != null && f.endsWith("_concrete") && !f.equals(ClubhousePlanner.ARCADE_FLOOR) ? 1 : 0;
+            }
+        }
+        assertTrue(neon > 40, "a neon strip round its walls: " + neon);
+        assertTrue(confetti > 10, "a colourful arcade carpet: " + confetti);
+        for (int i = ClubhousePlanner.PRIZE_X0; i <= ClubhousePlanner.PRIZE_X1; i++) {
+            assertEquals(ClubhousePlanner.CABINET, rel(b, i, 1, ClubhousePlanner.SIDE_Z1), "the prize counter");
+            assertEquals(ClubhousePlanner.ROOF_GLASS, rel(b, i, 2, ClubhousePlanner.SIDE_Z1), "its glass cases");
+        }
+        for (int i : ClubhousePlanner.CLAW_X) {
+            assertEquals(ClubhousePlanner.CLAW, rel(b, i, 1, ClubhousePlanner.SIDE_Z1), "a claw machine");
+        }
+        assertEquals(ClubhousePlanner.CABINETS, ClubhousePlanner.cabinets(BOX).size(), "all six places");
+        long prizes = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH).stream()
+                .filter(x -> x.key().startsWith("arcade.")).count();
+        assertTrue(prizes >= 6, "prizes on show: " + prizes);
+        assertEquals(0, ClubhousePlanner.decor(MAIN, ClubhousePlanner.Rooms.NONE).stream()
+                .filter(x -> x.key().startsWith("arcade.")).count(), "no Arcade Room: no prizes");
+    }
+
+    /**
+     * The putting green reads as one: a thin pole standing in the open cup (lit), a small flag, a ball by the hole and a
+     * putter; the bar's brewing stand on the counter and its bottles and glasses; the Trophy Room's beams and banners.
+     */
+    @Test
+    void theGreenTheBarAndTheTrophyRoomAreDressed() {
+        Map<Long, String> b = blocks(SITE.plan());
+        int cx = ClubhousePlanner.GREEN_CUP_X;
+        int cz = ClubhousePlanner.GREEN_CUP_Z;
+        assertEquals(ClubhousePlanner.CUP, rel(b, cx, 0, cz), "the cup in the floor");
+        assertEquals(ClubhousePlanner.POLE, rel(b, cx, 1, cz), "a thin pole in it");
+        assertEquals(ClubhousePlanner.POLE, rel(b, cx, 2, cz));
+        assertNull(rel(b, cx, 3, cz), "no block flag on top any more");
+        List<String> keys = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH).stream()
+                .map(ClubhousePlanner.Prop::key).toList();
+        assertTrue(keys.containsAll(List.of("green.flag", "green.ball", "green.putter", "jukebox.sign", "feast.pot")),
+                keys.toString());
+        assertTrue(keys.stream().filter(k -> k.startsWith("bar.bottle.")).count() >= 6, "bottles on the back bar");
+        assertTrue(keys.stream().filter(k -> k.startsWith("bar.glass.")).count() >= 3, "glasses on the counter");
+        assertEquals(keys.size(), new java.util.HashSet<>(keys).size(), "one key each");
+        assertEquals(ClubhousePlanner.BREWING, rel(b, 4, 2, ClubhousePlanner.BREWING_Z), "a brewing stand on the counter");
+        for (int k : ClubhousePlanner.TROPHY_BEAM_Z) {
+            assertEquals("minecraft:stripped_dark_oak_log[axis=x]", rel(b, 20, ClubhousePlanner.SIDE_TOP, k), "a beam");
+        }
+        for (int k : ClubhousePlanner.TROPHY_BANNER_Z) {
+            assertTrue(rel(b, ClubhousePlanner.TROPHY_X0 + 1, 5, k).contains("_wall_banner"), "a banner");
+        }
+        // every decoration stands in the room's air, never inside a block
+        for (ClubhousePlanner.Prop p : ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH)) {
+            if (!p.block()) {
+                assertTrue(SITE.in(p.x(), p.y(), p.z()), "in the room: " + p);
+            }
+        }
+    }
+
+    /** A save: snapshot, file and back give the same blocks; the light check finds the room's dark corners. */
+    @Test
+    void aSaveRoundTripsAndItsChecksFindProblems() {
+        Map<Long, String> b = blocks(SITE.plan());
+        Plan snap = ClubSave.snapshot(BOX, at -> b.get(key(at[0], at[1], at[2])));
+        assertEquals(SITE.plan().ops().size(), snap.ops().size(), "every block of the room");
+        assertEquals(b, blocks(snap), "the same blocks");
+        java.util.Set<String> regions = ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH).keySet();
+        ClubSave.Saved back = ClubSave.read(ClubSave.text(snap, "abc", regions), BOX);
+        assertEquals(b, blocks(back.plan()), "the file reads back the same blocks");
+        assertEquals("abc", back.generatedHash());
+        assertEquals(java.util.Set.of("main", "arcade", "trophy"), back.regions());
+        Box moved = BOX.translate(160, 0, -64);
+        assertEquals(snap.ops().size(), ClubSave.read(ClubSave.text(snap, null, regions), moved).plan().ops().size(),
+                "offsets: a moved origin moves the save");
+        assertThrows(IllegalArgumentException.class, () -> ClubSave.read(ClubSave.text(snap, null, regions), MAIN),
+                "a save of another size doesn't fit");
+        assertEquals(List.of(), ClubSave.dark(snap, SITE, 10), "the generated room has no dark spot");
+        // take every light out of the Arcade Room: its floor goes dark
+        Map<Long, String> dim = new java.util.HashMap<>(b);
+        dim.replaceAll((k, v) -> ClubhousePlanner.lightOf(v) > 0 && ClubhousePlanner.arcadeInside(BOX).contains(
+                (int) (k >> 38), BOX.minY() + 2, (int) ((k << 26) >> 38)) ? "minecraft:stone" : v);
+        Plan dark = ClubSave.snapshot(BOX, at -> dim.get(key(at[0], at[1], at[2])));
+        assertFalse(ClubSave.dark(dark, SITE, 10).isEmpty(), "the dark is found");
+        assertTrue(ClubSave.dark(dark, SITE, 3).size() <= 3, "at most the number asked");
+    }
+
+    /**
+     * A save made before a release that adds a room: the new room's region comes from HCM's plan, the owner's blocks
+     * everywhere else stay.
+     */
+    @Test
+    void aRoomAddedLaterAppearsInASavedRoom() {
+        Map<Long, String> b = blocks(SITE.plan());
+        Map<Long, String> mine = new java.util.HashMap<>(b);
+        long gold = key(BOX.minX() + 5, BOX.minY() + 1, BOX.minZ() + 20);
+        mine.put(gold, "minecraft:gold_block"); // the owner's own block in the 19th Hole
+        Plan snap = ClubSave.snapshot(BOX, at -> mine.get(key(at[0], at[1], at[2])));
+        // a save that knew only the main room: the side rooms come from HCM's plan
+        ClubSave.Saved old = ClubSave.read(ClubSave.text(snap, null, java.util.Set.of("main")), BOX);
+        Map<Long, String> merged = blocks(ClubSave.merged(old, SITE.plan(),
+                ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH)));
+        assertEquals("minecraft:gold_block", merged.get(gold), "the owner's block stays");
+        long arcade = key(BOX.minX() + 1, BOX.minY() + 6, BOX.minZ() + 40);
+        assertEquals(b.get(arcade), merged.get(arcade), "the new room is HCM's");
+        ClubSave.Saved all = ClubSave.read(ClubSave.text(snap, null,
+                ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH).keySet()), BOX);
+        assertEquals(all.plan(), ClubSave.merged(all, SITE.plan(), ClubhousePlanner.regions(BOX,
+                ClubhousePlanner.Rooms.BOTH)), "a save that knows every region is used as it is");
     }
 }

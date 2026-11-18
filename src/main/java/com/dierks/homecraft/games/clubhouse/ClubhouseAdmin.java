@@ -52,7 +52,8 @@ final class ClubhouseAdmin implements GameAdmin {
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
-            "feast", "cabinet", "trophyroom", "door", "generated", "rebuild", "off");
+            "feast", "cabinet", "trophyroom", "door", "edit", "save", "discard", "saves", "restore", "spot", "models",
+            "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -102,7 +103,53 @@ final class ClubhouseAdmin implements GameAdmin {
                 if (room != null) {
                     game.quietMusic();
                 }
-                out.add(room == null ? notRunning(closedWhy()) : room.generated());
+                boolean confirm = args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm");
+                out.add(room == null ? notRunning(closedWhy()) : room.generated(confirm));
+            }
+            case "edit" -> out.add(room == null ? notRunning(closedWhy()) : room.edit());
+            case "discard" -> out.add(room == null ? notRunning(closedWhy()) : room.discard());
+            case "saves" -> {
+                if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    out.addAll(room.savesList());
+                }
+            }
+            case "restore" -> {
+                int n;
+                try {
+                    n = args != null && args.length > 1 ? Integer.parseInt(args[1]) : 0;
+                } catch (NumberFormatException e) {
+                    n = 0;
+                }
+                out.add(room == null ? notRunning(closedWhy()) : room.restore(n));
+            }
+            case "save" -> {
+                if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    boolean confirm = args != null && args.length > 1 && args[1].equalsIgnoreCase("confirm");
+                    room.save(confirm, lines -> {
+                        for (String line : lines) {
+                            sender.sendMessage(Text.of(line));
+                        }
+                    });
+                    out.add("&7Reading the Clubhouse's blocks...");
+                }
+            }
+            case "models" -> out.addAll(models(game.plugin() == null ? null : game.plugin().packModels()));
+            case "spot" -> {
+                if (!(sender instanceof Player p)) {
+                    out.add("&cOnly a player can do that - stand where it goes first.");
+                } else if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    out.add(spot(room, args, p, id -> {
+                        var g = game.games().game(id);
+                        return g == null ? null : g.kind();
+                    }));
+                    game.sideRoomsChanged();
+                }
             }
             case "rebuild" -> {
                 if (room == null) {
@@ -220,6 +267,51 @@ final class ClubhouseAdmin implements GameAdmin {
         };
     }
 
+    /**
+     * 0.42.0, {@code spot <name> [...] [clear]}: move a spot of the edited or saved room to where the admin stands
+     * (their blocks covered it, or they want it elsewhere): {@code arrival}, {@code podium <1|2|3>}, {@code board
+     * [fame|playing|stats]}, {@code trophies}, {@code jukebox}, {@code feast}, {@code cabinet <game>},
+     * {@code trophyroom}, {@code door arcade|trophy}; {@code clear} gives one back to the generated room's place.
+     */
+    static String spot(ClubhouseRoom room, String[] args, Player p,
+                       java.util.function.Function<String, com.dierks.homecraft.games.GameKind> kindOf) {
+        String[] rest = args == null || args.length < 2 ? new String[0] : java.util.Arrays.copyOfRange(args, 1,
+                args.length);
+        if (rest.length == 0) {
+            return "&cWhich spot? &earrival, podium <n>, board [which], trophies, jukebox, feast, cabinet <game>,"
+                    + " trophyroom, door <arcade|trophy> &7(add &eclear &7to put it back)";
+        }
+        String which = rest[0].toLowerCase(Locale.ROOT);
+        boolean clear = rest[rest.length - 1].equalsIgnoreCase("clear");
+        Location l = p.getLocation();
+        String world = l.getWorld() == null ? "" : l.getWorld().getName();
+        ClubhouseRoom.Place at = new ClubhouseRoom.Place(world, l.getX(), l.getY(), l.getZ(), l.getYaw());
+        return switch (which) {
+            case "arrival" -> room.spotArrival(clear ? null : at);
+            case "cabinet", "trophyroom", "door" -> sideRoom(room, which, rest, at, kindOf);
+            default -> {
+                if (clear) {
+                    yield room.clearSpot(which, rest.length > 2 ? rest[1] : null);
+                }
+                yield place(room, which, rest, p);
+            }
+        };
+    }
+
+    /** 0.42.0, {@code models}: each model's id, its size, and whether it's the owner's own or HCM's placeholder. */
+    static List<String> models(com.dierks.homecraft.pack.PackModels pack) {
+        List<String> out = new ArrayList<>();
+        out.add("&6The Clubhouse's models &7(build them in Blockbench; see the README)");
+        java.util.Set<String> owners = pack == null ? java.util.Set.of() : pack.owners();
+        for (com.dierks.homecraft.pack.ClubModels.Model m : com.dierks.homecraft.pack.ClubModels.all()) {
+            out.add("&e" + m.id() + " &7- " + m.size() + " &8| " + (owners.contains(m.name()) ? "&ayours"
+                    : "&7placeholder"));
+        }
+        out.add(pack == null || !pack.active() ? "&cCraftBridge isn't taking HCM's models: everyone sees the vanilla"
+                + " stand-ins." : "&7Drop yours in plugins/CraftBridge/pack/sources/<folder>/assets/hcm/...");
+        return out;
+    }
+
     private static String notRunning(String why) {
         return "&cThe Clubhouse isn't running: " + why + ".";
     }
@@ -325,7 +417,11 @@ final class ClubhouseAdmin implements GameAdmin {
                     + " room you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse cabinet <game>|trophyroom|door arcade|trophy [clear] &7- your room's Arcade Room"
                     + " cabinets, trophy shelf and doorway signs (stand where it goes, facing out)",
-            "&e/hcm games clubhouse generated|rebuild confirm|off &7- the built room, build it again, switch it off");
+            "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
+                    + " save it as the Clubhouse",
+            "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",
+            "&e/hcm games clubhouse generated [confirm]|rebuild confirm|off &7- the built room, build it again, switch"
+                    + " it off");
 
     @Override
     public List<String> help() {

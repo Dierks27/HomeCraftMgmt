@@ -135,10 +135,12 @@ final class SideRooms {
         Set<String> keep = new HashSet<>();
         if (s.arcadeRoom()) {
             List<String> games = kidSet(room.hand() ? room.handCabinetGames() : s.arcadeGames());
-            for (Map.Entry<String, ClubhousePlanner.Place3> e : room.cabinetPlaces(games).entrySet()) {
-                String key = "cab:" + e.getKey();
+            List<ClubhouseRoom.Cabinet> cabs = room.cabinetPlaces(games);
+            for (int n = 0; n < cabs.size(); n++) {
+                ClubhouseRoom.Cabinet c = cabs.get(n);
+                String key = "cab:" + n;
                 keep.add(key);
-                put(w, key, e.getKey() + "@" + e.getValue(), e.getValue(), () -> cabinet(w, e.getKey(), e.getValue()));
+                put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at()));
             }
         }
         for (String which : ClubhouseRoom.DOORS) {
@@ -154,11 +156,26 @@ final class SideRooms {
         if (s.trophyRoom()) {
             pedestals = room.pedestals();
             nowCups = TrophyShelf.cups(club.fame(), pedestals.size());
+            boolean photo = club.photoOnPodium(); // 0.42.0: the podium's cups and heads step down for "Photo time!"
+            Set<Integer> filled = new HashSet<>();
             for (TrophyShelf.Cup c : nowCups) {
+                if (photo && c.slot() < TrophyShelf.PODIUM) {
+                    continue;
+                }
+                filled.add(c.slot());
                 ClubhousePlanner.Pedestal p = pedestals.get(c.slot());
                 String key = "cup:" + c.slot();
                 keep.add(key);
                 put(w, key, c + "@" + p, p.trophy(), () -> cup(w, c, p));
+            }
+            // 0.42.0: an empty record pedestal has a little glass case, "the next trophy goes here"
+            for (int slot = TrophyShelf.PODIUM; slot < pedestals.size(); slot++) {
+                if (!filled.contains(slot)) {
+                    ClubhousePlanner.Pedestal p = pedestals.get(slot);
+                    String key = "case:" + slot;
+                    keep.add(key);
+                    put(w, key, "case@" + p, p.trophy(), () -> glassCase(w, p));
+                }
             }
             for (int slot : TrophyShelf.won(cups, nowCups)) {
                 ClubhousePlanner.Pedestal p = pedestals.get(slot);
@@ -175,7 +192,27 @@ final class SideRooms {
         }
         views(w);
         shimmer(room, w);
+        arcadeSounds(room, w);
     }
+
+    /** 0.42.0: now and then a soft arcade chime for whoever is in the Arcade Room (every few seconds, a random note). */
+    private void arcadeSounds(ClubhouseRoom room, World w) {
+        if (!club.settings().arcadeRoom() || ++arcadeBeat % ARCADE_BEAT != 0) {
+            return;
+        }
+        Sound[] notes = {Sound.BLOCK_NOTE_BLOCK_CHIME, Sound.BLOCK_NOTE_BLOCK_BELL, Sound.BLOCK_NOTE_BLOCK_BIT,
+                Sound.BLOCK_NOTE_BLOCK_XYLOPHONE};
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (Player p : w.getPlayers()) {
+            if (room.inArcadeRoom(w.getName(), p.getX(), p.getY(), p.getZ())) {
+                p.playSound(p.getLocation(), notes[r.nextInt(notes.length)], 0.25f, 0.6f + r.nextFloat() * 1.2f);
+            }
+        }
+    }
+
+    /** Every this many seconds, an arcade chime. */
+    static final int ARCADE_BEAT = 5;
+    private int arcadeBeat;
 
     /** The kid set for {@code ids}: arcade cabinet games only, never a game of chance (each refusal said once). */
     private List<String> kidSet(List<String> ids) {
@@ -296,6 +333,18 @@ final class SideRooms {
         }
         all.add(label(w, loc(w, p.trophy(), CUP_LABEL_UP), c.label(), 0.45f).getUniqueId());
         return new Shown(c.toString(), all, models, plain);
+    }
+
+    /** An empty pedestal's little glass case (0.42.0), on its trophy block. */
+    private Shown glassCase(World w, ClubhousePlanner.Pedestal p) {
+        BlockDisplay b = w.spawn(new Location(w, p.trophy().x() - 0.3, p.trophy().y(), p.trophy().z() - 0.3),
+                BlockDisplay.class, e -> {
+                    WorldEntities.tag(e, club, null);
+                    e.setBlock(Material.GLASS.createBlockData());
+                    e.setTransformation(new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(0.6f, 0.7f,
+                            0.6f), new Quaternionf()));
+                });
+        return new Shown("case", List.of(b.getUniqueId()), List.of(), List.of());
     }
 
     /** A model's display: {@code item_model hcm:<name>}, drawn as built ({@code NONE}), its north side to its yaw. */

@@ -178,6 +178,7 @@ final class JukeboxCorner implements SongMenu.Corner {
         if (!disc.in() && queue.now() == null) {
             return;
         }
+        notes(); // 0.42.0
         Songs.Song next = queue.due(now);
         if (next != null) {
             if (!play(next)) {
@@ -187,6 +188,33 @@ final class JukeboxCorner implements SongMenu.Corner {
         }
         if (queue.now() == null && disc.in()) {
             clearDisc();
+        }
+    }
+
+    /**
+     * 0.42.0: while a song plays, music notes rise in front of the jukebox once a second, so a four-year-old can find
+     * where the music comes from (the jukebox's own notes are too small to see across the wing).
+     */
+    private void notes() {
+        if (queue.now() == null) {
+            return;
+        }
+        Block b = block();
+        if (b == null) {
+            return;
+        }
+        // in front of it: the side with open air at head height (the room's east in the generated nook)
+        int[][] sides = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : sides) {
+            if (b.getRelative(d[0], 1, d[1]).isPassable()) {
+                double x = b.getX() + 0.5 + d[0] * 0.9;
+                double z = b.getZ() + 0.5 + d[1] * 0.9;
+                for (int n = 0; n < 3; n++) {
+                    b.getWorld().spawnParticle(org.bukkit.Particle.NOTE, x + (n - 1) * 0.3 * d[1],
+                            b.getY() + 1.2 + n * 0.3, z + (n - 1) * 0.3 * d[0], 0, (n * 7) / 24.0, 0, 0, 1);
+                }
+                return;
+            }
         }
     }
 

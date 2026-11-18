@@ -1140,6 +1140,28 @@ public final class GamesDao {
         }
     }
 
+    /**
+     * The Clubhouse's Feast Pot (0.42.0): THIS session's saved inventory changed by one item, only if the row is still
+     * ACTIVE and its items are still {@code expected} (a compare-and-swap: a session ending or another tap in
+     * between writes nothing). The restore reads the row when the player leaves.
+     *
+     * @return false if nothing was written
+     */
+    public boolean swapItems(UUID player, String sessionId, byte[] expected, byte[] items) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE game_saved_state SET items = ? WHERE player = ? AND session_id = ? AND phase = 'ACTIVE'"
+                            + " AND items = ?")) {
+                ps.setBytes(1, items);
+                ps.setString(2, player.toString());
+                ps.setString(3, sessionId);
+                ps.setBytes(4, expected);
+                return ps.executeUpdate() == 1;
+            }
+        }
+    }
+
     /** Store items that could not be handed back yet, for arrival or the next join (R2.5). */
     public boolean setCarry(UUID player, String sessionId, byte[] carry) throws SQLException {
         Connection c = database.connection();

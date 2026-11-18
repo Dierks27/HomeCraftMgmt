@@ -904,6 +904,10 @@ public final class PartyRaces {
         String course = race.base().name();
         club.result(ClubRaces.partySheet(course, lines, ++clubResults),
                 p -> new PartyResultsMenu(trials.plugin(), trials, p, course, lines).open(p));
+        List<UUID> top = ClubRaces.photoTop(lines);
+        if (!top.isEmpty()) {
+            club.podium(top); // 0.42.0: every party race of two or more ends with "Photo time!" on the podium
+        }
         Player host = lobby == null ? null : Bukkit.getPlayer(lobby.host());
         if (host != null && club.seatable(host.getUniqueId())) {
             host.sendMessage(Text.of(com.dierks.homecraft.games.clubhouse.ClubhouseText.RACE_AGAIN));

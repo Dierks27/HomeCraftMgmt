@@ -211,4 +211,49 @@ final class LiveRoomHost implements RoomHost {
             p.sendMessage(Text.of(MOVED));
         }
     }
+
+    // ---- 0.42.0: the owner's saves, files in plugins/HomeCraftManagement/clubhouse-saves/ ------------
+
+    private java.nio.file.Path savesFolder() {
+        return game.plugin().getDataFolder().toPath().resolve("clubhouse-saves");
+    }
+
+    @Override
+    public List<String> saves() {
+        java.nio.file.Path dir = savesFolder();
+        if (!java.nio.file.Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (java.util.stream.Stream<java.nio.file.Path> list = java.nio.file.Files.list(dir)) {
+            return list.map(p -> p.getFileName().toString()).filter(n -> n.endsWith(".txt"))
+                    .map(n -> n.substring(0, n.length() - 4)).sorted().toList();
+        } catch (java.io.IOException e) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public String readSave(String id) throws Exception {
+        java.nio.file.Path p = savesFolder().resolve(safe(id) + ".txt");
+        return java.nio.file.Files.isRegularFile(p) ? java.nio.file.Files.readString(p) : null;
+    }
+
+    @Override
+    public void writeSave(String id, String text) throws Exception {
+        java.nio.file.Files.createDirectories(savesFolder());
+        java.nio.file.Path tmp = savesFolder().resolve(safe(id) + ".tmp");
+        java.nio.file.Files.writeString(tmp, text);
+        java.nio.file.Files.move(tmp, savesFolder().resolve(safe(id) + ".txt"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    @Override
+    public void deleteSave(String id) throws Exception {
+        java.nio.file.Files.deleteIfExists(savesFolder().resolve(safe(id) + ".txt"));
+    }
+
+    /** A save's id as a file name: letters, digits and dashes only. */
+    private static String safe(String id) {
+        return id == null ? "_" : id.replaceAll("[^A-Za-z0-9-]", "_");
+    }
 }

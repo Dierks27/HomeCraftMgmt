@@ -202,4 +202,28 @@ public final class ClubRaces {
         }
         return new ClubBoard.Sheet("&6&lParty race: &f" + courseName, rows, false, "party:" + version);
     }
+
+    /**
+     * 0.42.0: the podium's three after a party race of two or more racers: those who finished, in their order;
+     * empty for one racer, or when nobody finished.
+     */
+    public static List<java.util.UUID> photoTop(List<PartyRace.Line> lines) {
+        List<java.util.UUID> out = new java.util.ArrayList<>();
+        if (lines == null || lines.size() < 2) {
+            return out;
+        }
+        List<PartyRace.Line> done = new java.util.ArrayList<>();
+        for (PartyRace.Line l : lines) {
+            if (l.result() == PartyRace.Result.FINISHED && l.id() != null) {
+                done.add(l);
+            }
+        }
+        done.sort(java.util.Comparator.comparingInt(PartyRace.Line::rank));
+        for (PartyRace.Line l : done) {
+            if (out.size() < 3) {
+                out.add(l.id());
+            }
+        }
+        return out;
+    }
 }

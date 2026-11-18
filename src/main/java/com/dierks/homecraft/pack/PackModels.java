@@ -60,6 +60,8 @@ public final class PackModels {
     private Object pack;
     private Method rebuild;
     private Set<String> owners = Set.of();
+    /** 0.41.1: each broken drop-in model is said once (it is looked at once a minute). */
+    private final Set<String> warned = new java.util.HashSet<>();
     private boolean registered;
 
     public PackModels(Plugin plugin) {
@@ -87,6 +89,90 @@ public final class PackModels {
             }
         }
         return out;
+    }
+
+    /**
+     * 0.41.1, the self-test: why model {@code name} in one drop-in source can't be drawn, or {@code null} when it can.
+     * Its item definition must point at a model that is in the source (or a vanilla one); every texture that model
+     * names must be in the source, or a vanilla {@code block/} texture: on 26.x a model's boxes read the block atlas,
+     * and a {@code minecraft:item/} texture there is the purple-black missing texture (0.41.0's own cabinets). A
+     * definition of another type (a composite, a condition) is taken as it is.
+     *
+     * @param json  the source's JSON files by path (as listed: a zip may have one extra folder)
+     * @param paths every path in the source (the textures are looked for here)
+     */
+    public static String problem(String name, Map<String, String> json, Set<String> paths) {
+        String itemPath = null;
+        for (String p : json.keySet()) {
+            String n = p.replace('\\', '/');
+            if (n.endsWith(ClubModels.itemPath(name)) && (n.equals(ClubModels.itemPath(name))
+                    || n.charAt(n.length() - ClubModels.itemPath(name).length() - 1) == '/')) {
+                itemPath = p;
+            }
+        }
+        if (itemPath == null) {
+            return "it has no " + ClubModels.itemPath(name);
+        }
+        String root = itemPath.substring(0, itemPath.length() - ClubModels.itemPath(name).length());
+        String model;
+        try {
+            com.google.gson.JsonObject def = com.google.gson.JsonParser.parseString(json.get(itemPath)).getAsJsonObject();
+            com.google.gson.JsonObject m = def.getAsJsonObject("model");
+            if (m == null) {
+                return ClubModels.itemPath(name) + " has no \"model\"";
+            }
+            String type = m.has("type") ? m.get("type").getAsString() : "";
+            if (!type.equals("minecraft:model") && !type.equals("model")) {
+                return null; // a composite or a condition: drawn as the owner made it
+            }
+            model = m.get("model").getAsString();
+        } catch (RuntimeException e) {
+            return ClubModels.itemPath(name) + " can't be read: " + e.getMessage();
+        }
+        return modelProblem(model, root, json, paths, 0);
+    }
+
+    /** A model's (and its parent's) files and textures, as {@link #problem} says. */
+    private static String modelProblem(String model, String root, Map<String, String> json, Set<String> paths,
+                                       int depth) {
+        String ns = model.contains(":") ? model.substring(0, model.indexOf(':')) : "minecraft";
+        String path = model.contains(":") ? model.substring(model.indexOf(':') + 1) : model;
+        if (ns.equals("minecraft") || depth > 4) {
+            return null; // a vanilla model, drawn by every client
+        }
+        String file = root + "assets/" + ns + "/models/" + path + ".json";
+        String text = json.get(file);
+        if (text == null) {
+            return "its model " + ns + ":" + path + " isn't there (" + file + ")";
+        }
+        try {
+            com.google.gson.JsonObject m = com.google.gson.JsonParser.parseString(text).getAsJsonObject();
+            if (m.has("textures")) {
+                for (Map.Entry<String, com.google.gson.JsonElement> t : m.getAsJsonObject("textures").entrySet()) {
+                    String tex = t.getValue().getAsString();
+                    if (tex.startsWith("#")) {
+                        continue;
+                    }
+                    String tns = tex.contains(":") ? tex.substring(0, tex.indexOf(':')) : "minecraft";
+                    String tpath = tex.contains(":") ? tex.substring(tex.indexOf(':') + 1) : tex;
+                    if (tns.equals("minecraft")) {
+                        if (tpath.startsWith("item/")) {
+                            return "its model uses " + tex + ", an item texture, which 26.x can't draw on a model's"
+                                    + " boxes (purple-black): use a block/ texture or your own";
+                        }
+                    } else if (!paths.contains(root + "assets/" + tns + "/textures/" + tpath + ".png")) {
+                        return "its texture " + tex + " isn't there (" + root + "assets/" + tns + "/textures/" + tpath
+                                + ".png)";
+                    }
+                }
+            }
+            if (m.has("parent")) {
+                return modelProblem(m.get("parent").getAsString(), root, json, paths, depth + 1);
+            }
+        } catch (RuntimeException e) {
+            return file + " can't be read: " + e.getMessage();
+        }
+        return null;
     }
 
     // ---- the server ---------------------------------------------------------------------------------
@@ -197,19 +283,41 @@ public final class PackModels {
         try (Stream<Path> list = Files.list(dropIns)) {
             for (Path entry : list.sorted().toList()) {
                 List<String> paths = new ArrayList<>();
+                Map<String, String> json = new java.util.HashMap<>();
                 String name = entry.getFileName().toString().toLowerCase(Locale.ROOT);
                 if (Files.isDirectory(entry)) {
                     try (Stream<Path> walk = Files.walk(entry, 8)) {
-                        walk.filter(Files::isRegularFile).forEach(p -> paths.add(entry.relativize(p).toString()));
+                        for (Path p : walk.filter(Files::isRegularFile).toList()) {
+                            String rel = entry.relativize(p).toString().replace('\\', '/');
+                            paths.add(rel);
+                            if (rel.endsWith(".json") && rel.contains("assets/")) {
+                                json.put(rel, Files.readString(p, StandardCharsets.UTF_8));
+                            }
+                        }
                     }
                 } else if (name.endsWith(".zip")) {
                     try (ZipFile zip = new ZipFile(entry.toFile())) {
                         for (Enumeration<? extends ZipEntry> e = zip.entries(); e.hasMoreElements(); ) {
-                            paths.add(e.nextElement().getName());
+                            ZipEntry z = e.nextElement();
+                            paths.add(z.getName());
+                            if (!z.isDirectory() && z.getName().endsWith(".json") && z.getName().contains("assets/")) {
+                                try (var in = zip.getInputStream(z)) {
+                                    json.put(z.getName(), new String(in.readAllBytes(), StandardCharsets.UTF_8));
+                                }
+                            }
                         }
                     }
                 }
-                out.addAll(providedBy(paths));
+                Set<String> all = new java.util.HashSet<>(paths);
+                for (String model : providedBy(paths)) {
+                    String why = problem(model, json, all);
+                    if (why == null) {
+                        out.add(model);
+                    } else if (warned.add(name + "/" + model + ": " + why)) {
+                        log.warning("Pack: your model " + ClubModels.NS + ":" + model + " in " + name + " can't be"
+                                + " drawn - " + why + ". HCM keeps its own placeholder for it until it's fixed.");
+                    }
+                }
             }
         } catch (IOException e) {
             log.warning("Pack: couldn't read CraftBridge's drop-ins (" + dropIns + "): " + e.getMessage());

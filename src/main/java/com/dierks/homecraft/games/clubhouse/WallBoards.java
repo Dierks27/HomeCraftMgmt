@@ -72,8 +72,18 @@ public final class WallBoards {
      * @param yaw       the way the text faces (Minecraft yaw: 0 south, 90 west, 180 north, -90 east)
      * @param scale     how big it is drawn (Java only: Geyser ignores it)
      * @param lineWidth where its lines wrap (px)
+     * @param back      0.41.1: what the board's text is drawn on ({@link Back})
      */
-    public record Wall(double x, double y, double z, float yaw, float scale, int lineWidth) {
+    public record Wall(double x, double y, double z, float yaw, float scale, int lineWidth, Back back) {
+
+        public Wall {
+            back = back == null ? Back.TEXT : back;
+        }
+
+        /** A board on its text's own dark background (the feast line; 0.41.0's boards). */
+        public Wall(double x, double y, double z, float yaw, float scale, int lineWidth) {
+            this(x, y, z, yaw, scale, lineWidth, Back.TEXT);
+        }
 
         /** Its widest text box (blocks), the background's pixel round it included. */
         public double width() {
@@ -84,6 +94,19 @@ public final class WallBoards {
         public double height() {
             return LINES * LINE_PX * PX * scale;
         }
+    }
+
+    /**
+     * What a board's text is drawn on (0.41.1; the owner: the board's black screen "grows and shrinks with what it's
+     * showing", and should be one fixed size on every page).
+     */
+    public enum Back {
+        /** The text's own dark background, sized to the text (the feast line over the tables). */
+        TEXT,
+        /** No background: the generated room's framed block panel behind it is the screen, always the same size. */
+        PANEL,
+        /** No background, and a dark screen of the board's full size behind it (an owner-built room's walls). */
+        SCREEN
     }
 
     /**
@@ -101,10 +124,10 @@ public final class WallBoards {
         double midZ = (box.minZ() + 1 + box.maxZ()) / 2.0;
         double y = box.minY() + BOTTOM;
         return switch (which) {
-            case RESULTS -> new Wall(midX, y, box.minZ() + 1 + OFF_WALL, turn(0f), SCALE, LINE_WIDTH);
-            case FAME -> new Wall(box.maxX() - OFF_WALL, y, midZ, turn(90f), SCALE, WALL_WIDTH);
-            case PLAYING -> new Wall(midX, y, box.maxZ() - OFF_WALL, turn(180f), SCALE, WALL_WIDTH);
-            case STATS -> new Wall(box.minX() + 1 + OFF_WALL, y, midZ, turn(-90f), SCALE, WALL_WIDTH);
+            case RESULTS -> new Wall(midX, y, box.minZ() + 1 + OFF_WALL, turn(0f), SCALE, LINE_WIDTH, Back.PANEL);
+            case FAME -> new Wall(box.maxX() - OFF_WALL, y, midZ, turn(90f), SCALE, WALL_WIDTH, Back.PANEL);
+            case PLAYING -> new Wall(midX, y, box.maxZ() - OFF_WALL, turn(180f), SCALE, WALL_WIDTH, Back.PANEL);
+            case STATS -> new Wall(box.minX() + 1 + OFF_WALL, y, midZ, turn(-90f), SCALE, WALL_WIDTH, Back.PANEL);
             default -> null;
         };
     }
@@ -123,7 +146,8 @@ public final class WallBoards {
     }
 
     private static Wall hand(ClubhouseRoom.Place at, int lineWidth) {
-        return at == null ? null : new Wall(at.x(), at.y(), at.z(), turn(snap(at.yaw())), HAND_SCALE, lineWidth);
+        return at == null ? null : new Wall(at.x(), at.y(), at.z(), turn(snap(at.yaw())), HAND_SCALE, lineWidth,
+                Back.SCREEN);
     }
 
     /** {@code yaw} to the nearest of 0, 90, 180 and -90 (a board hangs square to its wall). */

@@ -72,7 +72,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("b9dcc75eef50", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("96c1f767a3ec", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -80,7 +80,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(5, ClubhousePlanner.ALGO, "the side rooms: every server builds it once");
+        assertEquals(6, ClubhousePlanner.ALGO, "0.41.1's fixes: every server builds it once");
     }
 
     @Test
@@ -265,8 +265,9 @@ class ClubhousePlannerTest {
                 boolean arch = y - BOX.minY() >= 1 && y - BOX.minY() <= ClubhousePlanner.ARCH_H
                         && (i >= ClubhousePlanner.ARCH_ARCADE_X0 && i < ClubhousePlanner.ARCH_ARCADE_X0 + 3
                         || i >= ClubhousePlanner.ARCH_TROPHY_X0 && i < ClubhousePlanner.ARCH_TROPHY_X0 + 3);
-                assertEquals(arch, b.get(key(BOX.minX() + i, y, south)) == null, "the Foyer's south wall, open only"
-                        + " at the archways: " + i + "," + (y - BOX.minY()));
+                String w = b.get(key(BOX.minX() + i, y, south));
+                assertEquals(arch, w == null || id(w).endsWith("_carpet"), "the Foyer's south wall, open only"
+                        + " at the archways (a runner on their floor): " + i + "," + (y - BOX.minY()));
                 assertNotNull(b.get(key(BOX.minX(), y, BOX.minZ() + i)), "west wall");
                 assertNotNull(b.get(key(BOX.maxX(), y, BOX.minZ() + i)), "east wall");
             }
@@ -468,6 +469,11 @@ class ClubhousePlannerTest {
             assertTrue(under != null && (under.contains("_stairs") || under.contains("_slab[type=bottom")),
                     "on a seat: " + s + " " + under);
             assertEquals(0.5, s.y() - Math.floor(s.y()), 1e-9, "on the seat's top (half a block up)");
+            // 0.41.1: the cushion's whole footprint is on its seat block (0.40.0's hung a quarter block over the front)
+            double half = ClubhousePlanner.CUSHION_WIDTH / 2;
+            assertTrue(s.x() - half >= Math.floor(s.x()) - 1e-9 && s.x() + half <= Math.floor(s.x()) + 1 + 1e-9
+                    && s.z() - half >= Math.floor(s.z()) - 1e-9 && s.z() + half <= Math.floor(s.z()) + 1 + 1e-9,
+                    "on its seat, never over the edge: " + s);
             assertTrue(seen.add(Math.floor(s.x()) + "," + Math.floor(s.z())), "one a seat");
             assertTrue(Set.of("GREEN", "RED", "BROWN").contains(s.color()), s.color());
             assertTrue(SITE.in(s.x(), s.y(), s.z()), "in the room");
@@ -544,12 +550,12 @@ class ClubhousePlannerTest {
         Set<String> expected = new HashSet<>();
         for (int x0 : new int[]{ClubhousePlanner.ARCH_ARCADE_X0, ClubhousePlanner.ARCH_TROPHY_X0}) {
             for (int i = x0; i < x0 + 3; i++) {
-                for (int j = 0; j <= ClubhousePlanner.ARCH_H; j++) {
-                    expected.add(i + "," + j + ",31"); // the archway and its floor
+                for (int j = 1; j <= ClubhousePlanner.ARCH_H; j++) {
+                    expected.add(i + "," + j + ",31"); // the archway (its runner at j 1)
                 }
-            }
-            for (int k = ClubhousePlanner.FOYER_Z0; k <= 30; k++) {
-                expected.add((x0 + 1) + ",0," + k); // the path
+                for (int k = ClubhousePlanner.FOYER_Z0; k <= 30; k++) {
+                    expected.add(i + ",1," + k); // the runner, three wide
+                }
             }
             for (int j : new int[]{4, 5}) {
                 expected.add((x0 + 1) + "," + j + ",30"); // the old sconce over the archway
@@ -572,7 +578,8 @@ class ClubhousePlannerTest {
                     "nothing of the Trophy Room: " + op);
         }
         assertNotNull(rel(b, ClubhousePlanner.ARCH_TROPHY_X0 + 1, 1, 31), "its archway stays wall");
-        assertNull(rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 1, 31), "the other archway is open");
+        assertNull(rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 2, 31), "the other archway is open");
+        assertEquals(ClubhousePlanner.PATH_ARCADE, rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 1, 31), "its runner");
         for (int i = 0; i < 16; i++) {
             for (int k = 32; k < 48; k++) {
                 for (int j = 0; j <= ClubhousePlanner.SIDE_ROOF; j++) {
@@ -597,16 +604,20 @@ class ClubhousePlannerTest {
             int x0 = (int) r[0];
             int mid = x0 + 1;
             for (int i = x0; i < x0 + 3; i++) {
-                for (int j = 1; j <= 3; j++) {
+                for (int j = 2; j <= 3; j++) {
                     assertNull(rel(b, i, j, 31), "open archway at " + i + "," + j);
+                }
+                for (int j = 1; j <= 3; j++) {
                     assertTrue(SITE.in(BOX.minX() + i + 0.5, BOX.minY() + j, BOX.minZ() + 31.5), "in the Clubhouse");
                 }
                 assertNotNull(rel(b, i, 4, 31), "a lintel over it");
-            }
-            for (int k = ClubhousePlanner.FOYER_Z0; k <= 31; k++) {
-                assertEquals(r[1], rel(b, mid, 0, k), "the path at " + mid + "," + k);
-                String over = rel(b, mid, 1, k);
-                assertTrue(over == null, "nothing on the path: " + over);
+                // 0.41.1: a carpet runner three wide, square with the archway, from the Foyer's first row to its far side
+                for (int k = ClubhousePlanner.FOYER_Z0; k <= 31; k++) {
+                    assertEquals(r[1], rel(b, i, 1, k), "the runner at " + i + "," + k);
+                    assertNull(rel(b, i, 2, k), "nothing on the runner at " + i + "," + k);
+                    assertNotNull(rel(b, i, 0, k), "a floor under it");
+                }
+                assertNotEquals(r[1], rel(b, i, 1, 32), "it ends at the archway: no stripe into the room");
             }
             ClubhousePlanner.Place3 sign = ClubhousePlanner.door(BOX, (boolean) r[2]);
             assertEquals(BOX.minX() + mid + 0.5, sign.x(), 1e-9, "over the archway's middle");
@@ -655,8 +666,8 @@ class ClubhousePlannerTest {
         for (int n = 0; n < 4; n++) {
             assertEquals(180f, cabs.get(n).yaw(), "the south wall's face the archway");
         }
-        assertEquals(ClubhousePlanner.PATH_ARCADE, rel(b, ClubhousePlanner.ARCH_ARCADE_X0 + 1, 0, 44), "the path runs to"
-                + " the cabinets");
+        assertFalse(ClubhousePlanner.MAT.contains("magenta") || ClubhousePlanner.MAT.contains("purple"),
+                "never a purple mat: it read as the missing texture");
     }
 
     /**
@@ -693,5 +704,36 @@ class ClubhousePlannerTest {
                 "1st highest");
         double middle = (room.minX() + room.maxX() + 1) / 2.0;
         assertEquals(middle, (ps.get(0).trophy().x() + ps.get(0).head().x()) / 2, 1e-9, "1st in the room's middle");
+    }
+
+    /**
+     * 0.41.1: an armchair's arm (an open trapdoor, thin) never stands over a floor that shows through: on a rug its
+     * floor is the rug's colour as a whole block, and no hidden light is ever under an arm or anything else thin.
+     */
+    @Test
+    void noHiddenLightOrBareFloorShowsUnderAnArm() {
+        Map<Long, String> b = blocks(SITE.plan());
+        int arms = 0;
+        for (BlockOp op : SITE.plan().ops()) {
+            String s = SITE.plan().blockOf(op);
+            if (!s.contains("_trapdoor")) {
+                continue;
+            }
+            arms++;
+            String under = b.get(key(op.x(), op.y() - 1, op.z()));
+            assertNotEquals(ClubhousePlanner.LIGHT, under, "no hidden light under an arm at " + op);
+            assertTrue(under != null && (under.endsWith("_wool") || under.equals(ClubhousePlanner.PLANTER)
+                    || under.equals(ClubhousePlanner.PLANKS)), "a whole floor block under the arm: " + under);
+        }
+        assertEquals(12, arms, "six armchairs, two arms each");
+        for (BlockOp op : SITE.plan().ops()) {
+            if (ClubhousePlanner.LIGHT.equals(SITE.plan().blockOf(op)) && op.y() == BOX.minY()) {
+                String over = b.get(key(op.x(), op.y() + 1, op.z()));
+                assertTrue(over == null || id(over).endsWith("_carpet") || ClubhousePlanner.SOLID.contains(id(over))
+                        || over.contains("_stairs") || over.contains("_slab"),
+                        "a hidden light is under a carpet or a whole block, never a thin one: " + over);
+                assertFalse(over != null && (over.contains("_trapdoor") || over.contains("_fence")), "at " + op);
+            }
+        }
     }
 }

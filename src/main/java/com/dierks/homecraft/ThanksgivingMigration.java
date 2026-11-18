@@ -210,7 +210,8 @@ final class ThanksgivingMigration {
                 for (Object e : entries) {
                     Map<String, Object> entry = asRow(e);
                     if (entry != null && TURKEY_MINI_ID.equals(miniId(entry))) {
-                        if (!ShopMigration.same(entry, TURKEY_MINI)) {
+                        if (!ShopMigration.same(entry, TURKEY_MINI)
+                                && !ShopMigration.same(entry, TurkeyMinisMigration.TURKEY_MINI)) { // 0.44.0's head
                             log.add("Config migration: kept your own Turkey Mini 2026 in " + SERIES + ".");
                         }
                         return;

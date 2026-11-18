@@ -303,9 +303,13 @@ public final class FeastRules {
         return edition != null && edition.matches("[0-9]{4}");
     }
 
-    /** The Turkey Mini of a year's edition ({@code turkey_mini_<year>}), or null: a test edition gives none. */
+    /**
+     * The Feast's Mini of a year's edition, or null: a test edition gives none. 0.44.0 (the owner: "The food mini
+     * should be a cooked turkey"): the Cooked Turkey ({@code cooked_turkey_<year>}); the Turkey Mini is Catch the
+     * Turkey's.
+     */
     public static String miniId(String edition) {
-        return yearEdition(edition) ? "turkey_mini_" + edition : null;
+        return yearEdition(edition) ? "cooked_turkey_" + edition : null;
     }
 
     /**

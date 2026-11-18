@@ -176,8 +176,11 @@ public final class TurkeyService implements Listener, TurkeyHost {
             return;
         }
         arm();
-        plugin.getLogger().info("Catch the Turkey on through " + DAY_MONTH.format(c.to()) + ": a run every "
-                + c.everyMinutes() + " minutes from " + minuteText(CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes()))
+        plugin.getLogger().info("Catch the Turkey on through " + DAY_MONTH.format(c.to()) + ": a run "
+                + (c.randomTimes() ? "at random times, " + (CandyRules.MINUTES_PER_DAY / c.everyMinutes())
+                + " a day, never " + c.quietFromHour() + ":00-" + c.quietToHour() + ":00"
+                : "every " + c.everyMinutes() + " minutes from "
+                + minuteText(CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes())))
                 + ", " + c.runMinutes() + " minute" + (c.runMinutes() == 1 ? "" : "s") + " each.");
     }
 
@@ -254,7 +257,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         welcomes(now, today, c);
         arrivals(now);
-        long slot = CandyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), 0, false);
+        long slot = TurkeyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), c.randomTimes(), c.runMinutes(),
+                c.quietFromHour(), c.quietToHour());
         if (slot == CandyRules.NO_SLOT || slot == lastSlot) {
             return;
         }
@@ -1105,7 +1109,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         LocalDateTime at = localNow();
         for (int i = 0; i < 100 && at != null; i++) {
-            at = CandyRules.nextSlot(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), 0);
+            at = TurkeyRules.nextStart(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), c.randomTimes(),
+                    c.runMinutes(), c.quietFromHour(), c.quietToHour());
             if (at == null || !heldByRestart(at)) {
                 return at;
             }
@@ -1124,7 +1129,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         LocalDate today = plugin.clock().today();
         int n = 0;
         try {
-            for (long slot : TurkeyRules.slotsOn(today, c.everyMinutes(), c.offsetMinutes())) {
+            for (long slot : TurkeyRules.slotsOn(today, c.everyMinutes(), c.offsetMinutes(), c.randomTimes(),
+                    c.runMinutes(), c.quietFromHour(), c.quietToHour())) {
                 if (counters.counter(player, TurkeyRules.claimKey(c.year(), TurkeyRules.runId(slot))) > 0) {
                     n++;
                 }

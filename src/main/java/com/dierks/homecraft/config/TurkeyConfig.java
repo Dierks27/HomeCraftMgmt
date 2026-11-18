@@ -60,21 +60,30 @@ public final class TurkeyConfig {
      * @param dailyTokenCap     the most tokens a player gets from turkeys in a local day
      * @param feather           each catch also gives a Turkey Feather keepsake
      * @param miniChancePercent the chance in 100 that a catch also gives a Turkey Mini (at most one extra a season)
+     * @param randomTimes       0.44.0: each {@code everyMinutes} window of the day has its run at a random minute
+     *                          (the same for everyone, new every day), instead of at {@code offsetMinutes} past it
+     * @param quietFromHour     0.44.0: no run from this local hour ...
+     * @param quietToHour       ... to this one (the same hour: no quiet hours); the runs share the rest of the day
      */
     public record Turkey(boolean enabled, LocalDate from, LocalDate to, int everyMinutes, int offsetMinutes,
                          int runMinutes, boolean welcome, double scale, int tokens, int dailyTokenCap,
-                         boolean feather, int miniChancePercent) {
+                         boolean feather, int miniChancePercent, boolean randomTimes, int quietFromHour,
+                         int quietToHour) {
 
-        /** The shipped settings: six runs a day (00:50, 04:50 ... 20:50), three minutes each. */
-        public static final Turkey DEFAULTS = new Turkey(true, DEFAULT_FROM, DEFAULT_TO, 240, 50, 3, true, 2.0, 3, 6,
-                true, 5);
+        /**
+         * The shipped settings: six runs a day at random times, never from 2 to 8 in the morning (the owner: "we
+         * aren't playing in the early morning"), three minutes each, and (0.44.0, the owner: "a special event so not
+         * every single time someone logs in") no welcome turkey.
+         */
+        public static final Turkey DEFAULTS = new Turkey(true, DEFAULT_FROM, DEFAULT_TO, 240, 50, 3, false, 2.0, 3, 6,
+                true, 5, true, 2, 8);
         /** Until config.yml has been read: the shipped settings, switched off. */
         public static final Turkey OFF = DEFAULTS.withEnabled(false);
 
         /** The same settings, switched on or off. */
         public Turkey withEnabled(boolean on) {
             return new Turkey(on, from, to, everyMinutes, offsetMinutes, runMinutes, welcome, scale, tokens,
-                    dailyTokenCap, feather, miniChancePercent);
+                    dailyTokenCap, feather, miniChancePercent, randomTimes, quietFromHour, quietToHour);
         }
 
         /** The event's year, from {@code from}: the claim keys, the feather's name and the Mini's id. */
@@ -85,6 +94,11 @@ public final class TurkeyConfig {
         /** Switched on, and {@code today} inside the window. The caller adds {@code arcade.enabled}. */
         public boolean open(LocalDate today) {
             return enabled && CandyRules.open(today, from, to);
+        }
+
+        /** No run at local minute {@code minuteOfDay} (the quiet hours). */
+        public boolean quiet(int minuteOfDay) {
+            return com.dierks.homecraft.arcade.turkey.TurkeyRules.quiet(minuteOfDay, quietFromHour, quietToHour);
         }
 
         /** A run's length in milliseconds. */
@@ -128,7 +142,11 @@ public final class TurkeyConfig {
         int cap = number(root, "daily_token_cap", d.dailyTokenCap(), 0, 50, w);
         boolean feather = root.getBoolean(PATH + ".feather", d.feather());
         int mini = number(root, "mini_chance_percent", d.miniChancePercent(), 0, 100, w);
-        return new Turkey(enabled, from, to, every, offset, run, welcome, scale, tokens, cap, feather, mini);
+        boolean random = root.getBoolean(PATH + ".random_times", d.randomTimes());
+        int quietFrom = number(root, "quiet_from_hour", d.quietFromHour(), 0, 23, w);
+        int quietTo = number(root, "quiet_to_hour", d.quietToHour(), 0, 23, w);
+        return new Turkey(enabled, from, to, every, offset, run, welcome, scale, tokens, cap, feather, mini, random,
+                quietFrom, quietTo);
     }
 
     /** A date key, quoted or bare; missing reads as {@code def}. Null, with one WARN, for anything else. */

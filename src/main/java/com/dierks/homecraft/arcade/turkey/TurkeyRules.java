@@ -124,7 +124,113 @@ public final class TurkeyRules {
 
     // ---- when -----------------------------------------------------------------------------
 
+    /** Mixed into the random times' seed, so they are no simple function of the date. */
+    static final long RANDOM_SALT = 0x7A2B_C0FF_EE15_2026L;
+
+    /** Whether local minute {@code m} is in the quiet hours {@code fromHour}..{@code toHour} (equal: none). */
+    public static boolean quiet(int m, int fromHour, int toHour) {
+        int f = Math.floorMod(fromHour, 24) * 60;
+        int t = Math.floorMod(toHour, 24) * 60;
+        if (f == t) {
+            return false;
+        }
+        return f < t ? m >= f && m < t : m >= f || m < t;
+    }
+
+    /**
+     * The minutes after local midnight the runs of {@code day} start at, in order (0.44.0). The day's waking minutes
+     * (outside the quiet hours) are shared into {@code 1440 / every} equal parts; with {@code random}, each part has one
+     * run at a minute drawn from the day and the part alone: the same on every server and after any restart, new
+     * each day, never two at once, and never starting so late it runs into the quiet hours. Without, every
+     * {@code every} minutes from {@code offset} (as before), but none in the quiet hours.
+     */
+    public static List<Integer> startsOn(LocalDate day, int every, int offset, boolean random, int runMinutes,
+                                         int quietFromHour, int quietToHour) {
+        List<Integer> out = new ArrayList<>();
+        if (day == null || every <= 0) {
+            return out;
+        }
+        if (!random) {
+            for (int m = CandyRules.offsetOn(offset, every); m < CandyRules.MINUTES_PER_DAY; m += every) {
+                if (!quiet(m, quietFromHour, quietToHour)) {
+                    out.add(m);
+                }
+            }
+            return out;
+        }
+        List<Integer> awake = new ArrayList<>();
+        for (int m = 0; m < CandyRules.MINUTES_PER_DAY; m++) {
+            if (!quiet(m, quietFromHour, quietToHour)) {
+                awake.add(m);
+            }
+        }
+        int parts = CandyRules.MINUTES_PER_DAY / every;
+        if (awake.isEmpty() || parts <= 0) {
+            return out;
+        }
+        int part = Math.max(1, awake.size() / parts);
+        int tail = Math.max(0, runMinutes) + CandyRules.FIRE_MINUTES;
+        for (int w = 0; w < parts; w++) {
+            java.util.SplittableRandom r = new java.util.SplittableRandom(day.toEpochDay() * 1_000_003L + w * 7919L
+                    ^ RANDOM_SALT);
+            int v = w * part + r.nextInt(Math.max(1, part - tail));
+            int m = awake.get(Math.min(v, awake.size() - 1));
+            // never into the quiet hours: a start whose run would reach them moves back to end as they begin
+            while (m > 0 && quiet(Math.min(m + tail, CandyRules.MINUTES_PER_DAY - 1), quietFromHour, quietToHour)
+                    && !quiet(m, quietFromHour, quietToHour)) {
+                m--;
+            }
+            out.add(m);
+        }
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    /** The run due at {@code now} (started within {@link CandyRules#FIRE_MINUTES}), or {@link CandyRules#NO_SLOT}. */
+    public static long dueSlot(java.time.LocalDateTime now, int every, int offset, boolean random, int runMinutes,
+                               int quietFromHour, int quietToHour) {
+        if (now == null) {
+            return CandyRules.NO_SLOT;
+        }
+        int m = now.getHour() * 60 + now.getMinute();
+        for (int start : startsOn(now.toLocalDate(), every, offset, random, runMinutes, quietFromHour, quietToHour)) {
+            if (m >= start && m - start < CandyRules.FIRE_MINUTES) {
+                return CandyRules.slotId(now.toLocalDate(), start);
+            }
+        }
+        return CandyRules.NO_SLOT;
+    }
+
+    /** The next run's start after {@code now} inside {@code from}..{@code to}, or null when none is left. */
+    public static java.time.LocalDateTime nextStart(java.time.LocalDateTime now, LocalDate from, LocalDate to,
+                                                    int every, int offset, boolean random, int runMinutes,
+                                                    int quietFromHour, int quietToHour) {
+        if (now == null || from == null || to == null) {
+            return null;
+        }
+        LocalDate day = now.toLocalDate().isBefore(from) ? from : now.toLocalDate();
+        for (; !day.isAfter(to); day = day.plusDays(1)) {
+            for (int start : startsOn(day, every, offset, random, runMinutes, quietFromHour, quietToHour)) {
+                java.time.LocalDateTime at = day.atStartOfDay().plusMinutes(start);
+                if (at.isAfter(now)) {
+                    return at;
+                }
+            }
+        }
+        return null;
+    }
+
     /** Every slot of a local day ({@code every} minutes from {@code offset}): for "caught today". */
+    public static List<Long> slotsOn(LocalDate day, int every, int offset, boolean random, int runMinutes,
+                                     int quietFromHour, int quietToHour) {
+        List<Long> out = new ArrayList<>();
+        for (int m : startsOn(day, every, offset, random, runMinutes, quietFromHour, quietToHour)) {
+            out.add(CandyRules.slotId(day, m));
+        }
+        return out;
+    }
+
+    /** Every slot of a local day, every {@code every} minutes from {@code offset} (no random times). */
     public static List<Long> slotsOn(LocalDate day, int every, int offset) {
         List<Long> out = new ArrayList<>();
         if (day == null || every <= 0) {

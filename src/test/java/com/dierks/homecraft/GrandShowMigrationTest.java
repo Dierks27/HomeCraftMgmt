@@ -100,7 +100,7 @@ class GrandShowMigrationTest {
         assertCandy(c, 60, 30, 3, "0.38.0");
         assertEquals(bundled.getConfigurationSection(CANDY).getValues(false),
                 c.getConfigurationSection(CANDY).getValues(false), "the whole candy section is the bundled one");
-        assertEquals(28, c.getInt("config_revision"), "on through revisions 24, 25, 26, 27 and 28"
+        assertEquals(29, c.getInt("config_revision"), "on through revisions 24, 25, 26, 27 and 28"
                 + " (FireworkRemoteMigrationTest; Sky Rings and the Long Drop; ThanksgivingMigrationTest)");
         assertEquals(List.of(
                 ADDED_ALL,
@@ -113,7 +113,8 @@ class GrandShowMigrationTest {
                 ThanksgivingMigrationTest.NO_WINDOWS.get(0),
                 ThanksgivingMigrationTest.NO_WINDOWS.get(1),
                 ThanksgivingMigrationTest.NO_WINDOWS.get(2),
-                "Config migration: config_revision 22 → 28."), log,
+                TurkeyMinisMigration.RETEXTURED, TurkeyMinisMigration.ADDED,
+                "Config migration: config_revision 22 → 29."), log,
                 "one INFO each, revision 24's rows, revision 25's two, revision 26's three, and the revision");
         List<String> warnings = new ArrayList<>();
         assertEquals(CandyConfig.Candy.DEFAULTS, CandyConfig.parse(LayoutFixtures.reread(c), warnings::add),
@@ -144,9 +145,9 @@ class GrandShowMigrationTest {
         assertTrue(from24.stream().noneMatch(l -> l.contains("Firework Show (") || l.contains("candy")),
                 "no revision-23 or 24 step runs from 24, only 25's: " + from24);
         YamlConfiguration at27 = LayoutFixtures.v0380();
-        at27.set("config_revision", 28);
+        at27.set("config_revision", 29);
         String before = at27.saveToString();
-        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at27, "world"), "no step runs from 28");
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(at27, "world"), "no step runs from 29");
         assertEquals(before, at27.saveToString());
     }
 
@@ -157,7 +158,7 @@ class GrandShowMigrationTest {
         assertEquals(List.of(), warns(log), "nothing the owner changed: " + log);
         assertTrue(ArcadeConfigMigration.sameRows(rows(c), rows(LayoutFixtures.bundled())), "the bundled counter");
         assertCandy(c, 60, 30, 3, "0.37.2");
-        assertEquals("Config migration: config_revision 21 → 28.", log.get(log.size() - 1));
+        assertEquals("Config migration: config_revision 21 → 29.", log.get(log.size() - 1));
     }
 
     // ---- the owner's own values -------------------------------------------------------------------------
@@ -427,11 +428,11 @@ class GrandShowMigrationTest {
         assertNull(HomeCraftManagement.newerConfigWarning(22, ShopMigration.REVISION), "its own file says nothing");
         assertNull(HomeCraftManagement.newerConfigWarning(23, GrandShowMigration.REVISION),
                 "0.38.1's own revision says nothing");
-        assertEquals(HomeCraftManagement.newerConfigWarning(29, 28), HomeCraftManagement.newerConfigWarning(29),
+        assertEquals(HomeCraftManagement.newerConfigWarning(30, 29), HomeCraftManagement.newerConfigWarning(30),
                 "and a newer one's does");
         YamlConfiguration rolledBack = LayoutFixtures.bundled();
-        rolledBack.set("config_revision", 29);
+        rolledBack.set("config_revision", 30);
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(rolledBack, "world"), "no step runs");
-        assertEquals(29, rolledBack.getInt("config_revision"), "and the revision is never lowered");
+        assertEquals(30, rolledBack.getInt("config_revision"), "and the revision is never lowered");
     }
 }

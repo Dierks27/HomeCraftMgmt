@@ -172,7 +172,7 @@ class FeastRulesTest {
 
     @Test
     void aYearsEditionHasATurkeyMiniAndCantBeResetOncePaid() {
-        assertEquals("turkey_mini_2026", FeastRules.miniId("2026"));
+        assertEquals("cooked_turkey_2026", FeastRules.miniId("2026"), "0.44.0: the Feast's Mini is the Cooked Turkey");
         assertNull(FeastRules.miniId("test"), "a test never mints a real Mini");
         assertNull(FeastRules.miniId("20261"));
         assertTrue(FeastRules.resetAllowed("2026", 0, false, false), "before the table filled");

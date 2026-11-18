@@ -210,8 +210,10 @@ public final class TurkeyCommand {
                 : DAY.format(c.from()) + " " + c.from().getYear() + " - " + DAY.format(c.to()) + " " + c.to().getYear();
         int first = CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes());
         return "Window: &f" + window + " &7(" + (zone == null || zone.equals(ZoneOffset.UTC) ? "UTC" : zone.getId())
-                + "). A run every &f" + c.everyMinutes() + " &7min from &f"
-                + String.format(Locale.ROOT, "%02d:%02d", first / 60, first % 60) + "&7, &f" + c.runMinutes()
+                + "). Runs " + (c.randomTimes() ? "at random times, &f" + (1440 / c.everyMinutes()) + " &7a day, never &f"
+                + c.quietFromHour() + ":00-" + c.quietToHour() + ":00"
+                : "every &f" + c.everyMinutes() + " &7min from &f"
+                + String.format(Locale.ROOT, "%02d:%02d", first / 60, first % 60)) + "&7, &f" + c.runMinutes()
                 + " &7min each" + (c.welcome() ? ", and a welcome turkey" : "") + ".";
     }
 

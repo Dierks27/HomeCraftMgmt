@@ -60,7 +60,10 @@ class TurkeyConfigTest {
         assertEquals(240, d.everyMinutes(), "six runs a day");
         assertEquals(50, d.offsetMinutes());
         assertEquals(3, d.runMinutes());
-        assertTrue(d.welcome());
+        assertFalse(d.welcome(), "0.44.0: a special event, not a turkey at every login");
+        assertTrue(d.randomTimes(), "0.44.0: random times");
+        assertEquals(2, d.quietFromHour(), "never from 2 ...");
+        assertEquals(8, d.quietToHour(), "... to 8 in the morning");
         assertEquals(2.0, d.scale());
         assertEquals(3, d.tokens());
         assertEquals(6, d.dailyTokenCap(), "two catches a day pay");

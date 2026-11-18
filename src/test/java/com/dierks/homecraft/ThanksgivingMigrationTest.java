@@ -105,8 +105,8 @@ class ThanksgivingMigrationTest {
     void a0385FileGetsEveryRowInPlaceAndEndsAtTheBundledLists() {
         YamlConfiguration c = v0385();
         List<String> log = HomeCraftManagement.migrateConfig(c, "world");
-        assertEquals(List.of(WINDOWS_INFO, SEASONS_INFO, CATALOG_INFO, MINI_INFO,
-                "Config migration: config_revision 25 → 28."), log, "one INFO a list, and the revision (27, graves,"
+        assertEquals(List.of(WINDOWS_INFO, SEASONS_INFO, CATALOG_INFO, MINI_INFO, TurkeyMinisMigration.RETEXTURED, TurkeyMinisMigration.ADDED,
+                "Config migration: config_revision 25 → 29."), log, "one INFO a list, and the revision (27, graves,"
                         + " refreshes one comment quietly)");
         assertEquals(List.of(), warns(log));
         YamlConfiguration b = bundled();
@@ -122,7 +122,7 @@ class ThanksgivingMigrationTest {
         List<String> catalog = ids(c, ThanksgivingMigration.CATALOG);
         int wheat = catalog.indexOf("wheat");
         assertEquals(NEW_FOODS, catalog.subList(wheat + 1, wheat + 7), "the six right after wheat, in order");
-        assertEquals(28, c.getInt("config_revision"));
+        assertEquals(29, c.getInt("config_revision"));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(c, "world"), "a second start runs nothing");
     }
 
@@ -320,8 +320,10 @@ class ThanksgivingMigrationTest {
                 .filter(s -> ThanksgivingMigration.HOLIDAY_SERIES.equals(s.get("name"))).findFirst().orElseThrow();
         assertEquals("EPIC", holiday.get("rarity"));
         List<Map<String, Object>> entries = ArcadeConfigMigration.mapRows((List<?>) holiday.get("entries"));
-        assertEquals(1, entries.size(), "the Turkey Mini alone, live");
-        assertTrue(ShopMigration.same(entries.get(0), ThanksgivingMigration.TURKEY_MINI));
+        assertEquals(2, entries.size(), "the Turkey Mini and (0.44.0, revision 29) the Cooked Turkey");
+        assertTrue(ShopMigration.same(entries.get(0), TurkeyMinisMigration.TURKEY_MINI),
+                "revision 26's row with (revision 29) the turkey's head");
+        assertTrue(ShopMigration.same(entries.get(1), TurkeyMinisMigration.COOKED_TURKEY));
     }
 
     // ---- Crate's new foods -----------------------------------------------------------------------

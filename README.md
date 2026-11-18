@@ -252,8 +252,10 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
-**Back to 0.43.0 from 0.44.0:** the jar alone (no schema, no config revision; `games.hub` is left in
-config.yml, unread). Nobody can visit the Hub (anyone in it at the swap goes home with their things and
+**Back to 0.43.0 from 0.44.0:** the jar alone (no schema; `games.hub` and the turkey's new keys are left
+in config.yml, unread; config revision 29 stays, and 0.43.0 says once that a newer HomeCraft wrote it). The
+turkey runs go back to fixed times, and the Feast gives the Turkey Mini again (the Cooked Turkey row stays,
+earned by nothing). Nobody can visit the Hub (anyone in it at the swap goes home with their things and
 their Bag, as at any restart). The Clubhouse's Feast Pot goes back to 0.42.0's menu, which can't see food on
 a server whose Games world has its own inventory. Nothing is lost.
 
@@ -1980,9 +1982,9 @@ and pick up your own. A bar, `Harvest Basket 17 / 26`, fills as you collect.
 
 ### Catch the Turkey
 
-**Six times a day** (00:50, 04:50, 08:50, 12:50, 16:50 and 20:50, three minutes each) and once 90 seconds
-after each player's first join of the day, **every player gets their own big turkey** 4 to 6 blocks in
-front of them, in sight, on dry ground with no lava or fire beside it. It gobbles, the title says
+**Six times a day at random times** (0.44.0: new times every day, the same for everyone, spread over the
+day but **never from 2 to 8 in the morning**; three minutes each), **every player gets their own big
+turkey** 4 to 6 blocks in front of them, in sight, on dry ground with no lava or fire beside it. It gobbles, the title says
 "Gobble gobble! / Catch the turkey!", and sparkles hover over it.
 
 - **A tap catches it,** Java or Bedrock, as a hit or a use, empty hand or any item. Everyone who catches a
@@ -1990,11 +1992,14 @@ front of them, in sight, on dry ground with no lava or fire beside it. It gobble
   chime, a **Turkey Feather 2026** (into a free slot; skipped quietly with none) and **3 tokens** (Survival
   and Adventure only, at most 6 a day; ledger source `EVENT_TURKEY`). If her uncles tap hers first she can
   still catch it: **it never runs away and stays until the run ends**. Tapping again only clucks.
-- **A small chance of a Turkey Mini 2026:** 5 in 100 per catch (`mini_chance_percent`), at most one extra
-  per player for the season, while the Mini's window is open and under its cap. A catch with a full bag
+- **A small chance of the Turkey Mini 2026** (a turkey; 0.44.0: Catch the Turkey's own Mini, the Feast's
+  is the Cooked Turkey): 5 in 100 per catch (`mini_chance_percent`), **at most one per player** for the season, while the Mini's window is open and under its cap. A catch with a full bag
   doesn't roll, so the chance is kept for a later catch and no Mini is ever dropped on the ground.
-- **A welcome turkey** counts only for its owner, and is never given twice in a day, even after a restart,
-  a reload or a rejoin. Each catch is saved before the prize, so nothing pays twice.
+- **No welcome turkey** since 0.44.0 (the owner: "a special event so not every single time someone logs
+  in"); `welcome: true` brings back one of your own 90 seconds after your first join of the day, counted
+  only for its owner and never twice in a day. Each catch is saved before the prize, so nothing pays twice.
+- **In the Hub too** (0.44.0): see [The Hub](#the-hub-0440). A run's start tells everyone "Gobble gobble!
+  Turkeys are out" with a **[Go to the Hub]** link.
 - **Nothing can hurt or misuse it:** no damage, leads, breeding, eggs, riding, name tags, mobs going after
   it, portals or teleports. It is never saved; leftovers are removed at start and when a chunk loads. At the
   end of the run it waddles home with a poof.
@@ -2029,14 +2034,14 @@ home world (`/hcm feast pot`). The tables in the Clubhouse show the progress.
   Feast Pot on the 3 x 3 table south of them (0.44.0: its button takes you to the real one). Twenty plates
   fill with food as the total grows, and a line reads `Family Feast 137 / 150` with a bar.
 - **When the table is full** (150 points): every helper is paid **20 tokens once** (ledger source
-  `EVENT_FEAST`, paid even when offline), each helper who is home gets **one Turkey Mini 2026** and their
+  `EVENT_FEAST`, paid even when offline), each helper who is home gets **one Cooked Turkey 2026** Mini and their
   own moment ("The Feast is ready! / Thank you, everyone!", a firework), everyone online reads
   "Thankful for: Dad, Sam, Lee and Lily!" in the order of their first gifts, and a 30-second show goes up
-  over the pot. One loaf counts the same as a stack of pies. **The Turkey Mini goes straight into the bag,
+  over the pot. One loaf counts the same as a stack of pies. **The Mini goes straight into the bag,
   never on the ground:** a helper with a full bag gets it the second a slot is free (inside the window). If
-  one ever fails to arrive (the log says "could not get their turkey_mini_2026"), `/hcm mini give
-  turkey_mini_2026 <player>` gives it back, inside its window.
-- **A helper who missed it** (offline, or in a game) gets the same Turkey Mini and their own moment the
+  one ever fails to arrive (the log says "could not get their cooked_turkey_2026"), `/hcm mini give
+  cooked_turkey_2026 <player>` gives it back, inside its window.
+- **A helper who missed it** (offline, or in a game) gets the same Mini and their own moment the
   first time they are home inside the window; in the Clubhouse the room's ceremony plays when a helper who
   hasn't seen it walks in. Late helpers (after the fill, until 29 Nov) are paid at once. **Outside the
   window nothing is given**, so a helper who first comes back after 29 Nov gets their 20 tokens (paid at the
@@ -2079,8 +2084,9 @@ Both are collectors (one each, kept for good). An earned collector gets no tile 
 
 ### The Holiday Collection and the Turkey Mini 2026
 
-A new Mini series, **Holiday Collection** (EPIC), for Minis you can only earn at their holiday. Its first
-Mini is the **Turkey Mini 2026** (cap 20).
+A new Mini series, **Holiday Collection** (EPIC), for Minis you can only earn at their holiday. Its Minis
+are the **Turkey Mini 2026** (a turkey: Catch the Turkey's) and, since 0.44.0, the **Cooked Turkey 2026**
+(the Family Feast's), cap 20 each, **one of each per player at most**.
 
 - A Mini with `event_only: true` is **never in a random draw**: not in Card Packs (`tag: ''` included), not
   the Arcade Crate's `card` reward (`tag: '*'` included), not the Rare Card, not wild drops or the wild hunt.
@@ -2092,8 +2098,9 @@ Mini is the **Turkey Mini 2026** (cap 20).
 - Only between `earn_from` and `earn_to` (both days included, `clock.time_zone`). After `earn_to` it is
   **closed for good**; copies already owned keep working and can be traded. The Museum shows "Earn: 22 Nov -
   29 Nov 2026", then "Closed". The cap still counts.
-- The Turkey Mini 2026 comes from the Family Feast (one per helper) and, now and then, from Catch the Turkey
-  (one extra at most). At the cap, extras simply stop.
+- The Cooked Turkey 2026 comes from the Family Feast (one per helper); the Turkey Mini 2026 now and then from
+  Catch the Turkey (one per player at most). At the cap, extras simply stop. (Before 0.44.0 the Turkey Mini
+  was both events' Mini.)
 
 **Your commented-out Holiday Collection block.** The update added the Turkey Mini 2026 to a live "Holiday
 Collection" series in your config.yml (or, if you already had that series live, to it), so it is earnable
@@ -2117,8 +2124,10 @@ head Value and its event exists in the plugin.
 | `arcade.events.harvest.goal` | `26` | Treats for the Pilgrim Hat |
 | `arcade.events.harvest.admins_see_all` | `false` | `true`: admins see everyone's treats too, to help a child find hers |
 | `arcade.events.turkey.enabled`, `from`, `to` | `true`, `"2026-11-22"`, `"2026-11-29"` | Catch the Turkey's switch and window |
-| `arcade.events.turkey.every_minutes`, `offset_minutes`, `run_minutes` | `240`, `50`, `3` | Runs at 00:50, 04:50 ... 20:50, three minutes each |
-| `arcade.events.turkey.welcome` | `true` | A turkey of your own 90 s after your first join of the day |
+| `arcade.events.turkey.every_minutes`, `offset_minutes`, `run_minutes` | `240`, `50`, `3` | 1440 / every_minutes runs a day (six), three minutes each; with `random_times: false`, at 00:50, 04:50 ... 20:50 |
+| `arcade.events.turkey.random_times` | `true` | 0.44.0: the runs at random times (new each day, the same for everyone) |
+| `arcade.events.turkey.quiet_from_hour`, `quiet_to_hour` | `2`, `8` | 0.44.0: no run from 2 to 8 in the morning (the same hour: none) |
+| `arcade.events.turkey.welcome` | `false` | `true`: a turkey of your own 90 s after your first join of the day |
 | `arcade.events.turkey.scale` | `2.0` | How big the turkey is (1.0-3.0) |
 | `arcade.events.turkey.tokens`, `daily_token_cap` | `3`, `6` | Tokens per catch (once a run), and the most a day |
 | `arcade.events.turkey.feather` | `true` | A Turkey Feather 2026 with each catch |
@@ -4223,7 +4232,7 @@ and the Bag's screen shows it. When you leave, it is banked before your things c
 at home**: written first, never dropped, and anything that doesn't fit waits for `/hcm leave`. That is the
 games' own carry, which already brings home anything that reaches a player during a game.
 
-**Events in the Hub.**
+**Events in the Hub.** (An event can later set its own rules for the Hub, such as building or flying.)
 
 - **Catch the Turkey:** Hub visitors get their own turkey in every run, as at home. Its tokens pay as at
   home (the day's cap is the same); the feather and any Turkey Mini go in your Bag. If you go to the Hub (or

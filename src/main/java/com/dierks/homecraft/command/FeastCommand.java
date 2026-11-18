@@ -118,7 +118,7 @@ public final class FeastCommand {
                 + (feast.homeShown() ? "&agiven" : "&fnot yet") + "&7, reward " + c.tokens() + " tokens each"
                 + (c.creativeHelpersPaid() ? "" : " (not for Creative-only helpers)"));
         String mini = FeastRules.miniId(c.edition());
-        out.add("&7Turkey Mini: " + (mini == null ? "none for a test edition" : mini + ", one for each helper"));
+        out.add("&7The Feast's Mini: " + (mini == null ? "none for a test edition" : mini + ", one for each helper"));
         FeastRules.Spot pot = feast.pot();
         if (pot == null) {
             out.add("&7Pot: &cnot set &7(look at a block and /hcm feast pot)");

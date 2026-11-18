@@ -233,7 +233,8 @@ class ConfigMigrationTest {
         for (String section : THANKSGIVING_SECTIONS) {
             thanksgiving += shipped.getConfigurationSection(section).getKeys(false).size();
         }
-        assertEquals(12 + 12 + 12 + 8, leaves.size() + thanksgiving, "candy, harvest, turkey and feast");
+        assertEquals(12 + 12 + 15 + 8, leaves.size() + thanksgiving, "candy, harvest, turkey (0.44.0: random_times and"
+                + " the quiet hours) and feast");
         assertEquals(leaves.size() + thanksgiving, added.size(), "and nothing else: " + added);
         assertFalse(shipped.getComments("arcade.events").isEmpty(), "the section ships with its block");
         assertEquals(shipped.getComments("arcade.events"), onDisk.getComments("arcade.events"));
@@ -295,9 +296,9 @@ class ConfigMigrationTest {
     void revision26OnAFileThatHasTheRowsOnlyStampsTheRevision() throws Exception {
         YamlConfiguration onDisk = bundled();
         onDisk.set("config_revision", 25);
-        assertEquals(List.of("Config migration: config_revision 25 → 28."),
+        assertEquals(List.of("Config migration: config_revision 25 → 29."),
                 HomeCraftManagement.migrateConfig(onDisk, "world"), "nothing to add, nothing to say");
-        assertEquals(28, onDisk.getInt("config_revision"));
+        assertEquals(29, onDisk.getInt("config_revision"));
         assertEquals(bundled().getMapList("market.catalog"), onDisk.getMapList("market.catalog"));
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start runs nothing");
     }

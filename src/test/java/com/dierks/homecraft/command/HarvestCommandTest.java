@@ -154,7 +154,7 @@ class HarvestCommandTest {
         assertTrue(tab(ADMIN, "fe").contains("feast"));
         assertEquals(List.of("now", "status", "clear", "hat", "add"), tab(ADMIN, "harvest", ""));
         assertEquals(List.of("hat"), tab(ADMIN, "harvest", "H"));
-        assertEquals(List.of("now", "status", "clear"), tab(ADMIN, "turkey", ""));
+        assertEquals(List.of("now", "status", "clear", "stampede"), tab(ADMIN, "turkey", ""), "0.44.0: and the stampede");
         assertEquals(List.of("pot", "status", "test", "reset"), tab(ADMIN, "feast", ""));
         assertEquals(List.of(), tab(PLAYER, "harvest", ""), "a player has no words to complete");
         assertEquals(List.of("now", "status", "clear", "bag", "add"), tab(ADMIN, "candy", ""), "candy's as it was");

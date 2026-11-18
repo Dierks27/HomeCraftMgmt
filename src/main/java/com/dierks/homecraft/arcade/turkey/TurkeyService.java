@@ -1029,7 +1029,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         startStampede(c, plugin.clock().nowMillis());
         if (stampedeUntil <= 0) {
-            return "&cNo stampede: arcade.events.turkey.hub_stampede is 0.";
+            return "&cNo stampede: the turkey's hub_stampede setting is 0.";
         }
         arm();
         return "&aTurkey Stampede! &7" + c.stampede() + " turkeys for " + c.stampedeMinutes() + " minutes in the Hub"

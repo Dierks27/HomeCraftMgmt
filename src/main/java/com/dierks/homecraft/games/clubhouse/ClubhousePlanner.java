@@ -53,9 +53,10 @@ public final class ClubhousePlanner {
     /**
      * The planner's version: part of the plan, so a change of the room is a change of plan. 2 (0.38.4): the
      * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club. 5 (0.41.0): the side rooms, the
-     * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall.
+     * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
+     * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred.
      */
-    public static final int ALGO = 5;
+    public static final int ALGO = 6;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -204,12 +205,16 @@ public final class ClubhousePlanner {
     public static final String SCREEN = "minecraft:iron_bars[east=false,north=true,south=true,waterlogged=false,west=false]";
     public static final String FIRE = "minecraft:campfire[facing=east,lit=true,signal_fire=false,waterlogged=false]";
     /** 0.41.0: the colour paths (the Arcade Room's blue, the Trophy Room's gold), the Arcade Room's floor and mats. */
-    public static final String PATH_ARCADE = "minecraft:light_blue_concrete";
-    public static final String PATH_TROPHY = "minecraft:yellow_concrete";
+    /**
+     * 0.41.1: the runners to the side rooms, carpet three wide like the hall's red runner, square with the archways:
+     * navy to the Arcade Room, gold to the Trophy Room (0.41.0's one-block concrete stripes looked "kinda weird").
+     */
+    public static final String PATH_ARCADE = "minecraft:blue_carpet";
+    public static final String PATH_TROPHY = "minecraft:yellow_carpet";
     public static final String ARCADE_FLOOR = "minecraft:black_concrete";
-    public static final String MAT = "minecraft:magenta_concrete";
+    /** Where a cabinet stands (0.41.1: dark, never purple: 0.41.0's magenta read as the missing texture). */
+    public static final String MAT = "minecraft:polished_blackstone";
     public static final String TROPHY_RUG = "minecraft:red_carpet";
-    public static final String TROPHY_RUNNER = "minecraft:yellow_carpet";
     public static final String PEDESTAL = "minecraft:quartz_pillar[axis=y]";
 
     /** A log (or stripped log) along an axis. */
@@ -303,6 +308,9 @@ public final class ClubhousePlanner {
      */
     public record Seat(double x, double y, double z, float yaw, String color) {
     }
+
+    /** The 26.3 cushion's width (blocks): its footprint must stay on its seat block. */
+    public static final double CUSHION_WIDTH = 1.0;
 
     /**
      * Which side rooms the plan has (0.41.0). A room that is off is not built at all: its half of the annex is air
@@ -721,12 +729,30 @@ public final class ClubhousePlanner {
     private static void armchair(Builder b, int i, int k, String facing, String color) {
         b.seat(i, 1, k, chair(facing), color);
         if (facing.equals("east") || facing.equals("west")) {
-            b.set(i, 1, k - 1, arm("north"));
-            b.set(i, 1, k + 1, arm("south"));
+            armOver(b, i, k - 1, arm("north"));
+            armOver(b, i, k + 1, arm("south"));
         } else {
-            b.set(i - 1, 1, k, arm("west"));
-            b.set(i + 1, 1, k, arm("east"));
+            armOver(b, i - 1, k, arm("west"));
+            armOver(b, i + 1, k, arm("east"));
         }
+    }
+
+    /**
+     * An armchair's arm at (i, 1, k) (0.41.1): an open trapdoor is thin, so the floor under it shows. Where it stands on
+     * a rug, the floor under it becomes the rug's colour as a whole block (and a hidden light there goes: it showed as
+     * a white strip beside the east wing's armchairs).
+     */
+    private static void armOver(Builder b, int i, int k, String arm) {
+        String under = b.get(i, 1, k);
+        if (id(under).endsWith("_carpet")) {
+            b.set(i, 0, k, underCarpet(id(under)));
+        }
+        b.set(i, 1, k, arm);
+    }
+
+    /** The whole block that looks like a carpet from above: its wool (moss carpet: moss). */
+    static String underCarpet(String carpet) {
+        return carpet.equals("minecraft:moss_carpet") ? PLANTER : carpet.replace("_carpet", "_wool");
     }
 
     // ---- the Trophy Gallery (the east wing) --------------------------------------------------------
@@ -797,13 +823,13 @@ public final class ClubhousePlanner {
             sconce(b, x0[n] - 1, 5, 30);
             sconce(b, x0[n] + ARCH_W, 5, 30);
             for (int i = x0[n]; i < x0[n] + ARCH_W; i++) {
-                for (int j = 1; j <= ARCH_H; j++) {
+                for (int j = 2; j <= ARCH_H; j++) {
                     b.set(i, j, MAIN_Z - 1, AIR);
                 }
-                b.set(i, 0, MAIN_Z - 1, path[n]); // the archway's floor is the path too
-            }
-            for (int k = FOYER_Z0; k < MAIN_Z - 1; k++) {
-                b.set(mid, 0, k, path[n]);
+                // the runner: three wide, from the Foyer's first row through the archway, ending at its far side
+                for (int k = FOYER_Z0; k <= MAIN_Z - 1; k++) {
+                    b.set(i, 1, k, path[n]);
+                }
             }
         }
         // the hall's south corners and the north wall, either side of the podium
@@ -849,7 +875,7 @@ public final class ClubhousePlanner {
 
     /**
      * The Arcade Room (the south-west): a black floor with sea lanterns set in it every few blocks (lit, and fun),
-     * the blue path from the archway down the middle to the cabinets, a magenta mat where each cabinet stands, and
+     * a dark polished-blackstone mat where each cabinet stands (0.41.1: no stripe across the floor), and
      * lanterns hanging from the glass roof.
      */
     private static void arcadeRoom(Builder b) {
@@ -859,10 +885,6 @@ public final class ClubhousePlanner {
             for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k += 4) {
                 b.set(i, 0, k, LIGHT);
             }
-        }
-        int mid = ARCH_ARCADE_X0 + ARCH_W / 2;
-        for (int k = SIDE_Z0; k <= SIDE_Z1 - 2; k++) {
-            b.set(mid, 0, k, PATH_ARCADE);
         }
         for (int[] c : CABINET_AT) {
             b.set(c[0], 0, c[1], MAT);
@@ -875,7 +897,7 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Trophy Room (the south-east): a red rug over hidden lights, the gold runner from the archway, the podium
+     * The Trophy Room (the south-east): a red rug over hidden lights (0.41.1: no stripe across it), the podium
      * for last week's top three at the back, a record pedestal for each all-time record on each side wall, and
      * lanterns hanging from the glass roof. The trophies and the heads are entities, not in the plan.
      */
@@ -883,10 +905,6 @@ public final class ClubhousePlanner {
         int x0 = TROPHY_X0;
         sideShell(b, x0, PLANKS);
         rug(b, x0 + 1, x0 + 14, SIDE_Z0, SIDE_Z1, TROPHY_RUG, 3);
-        int mid = ARCH_TROPHY_X0 + ARCH_W / 2;
-        for (int k = SIDE_Z0; k <= SIDE_Z1 - 2; k++) {
-            b.set(mid, 1, k, TROPHY_RUNNER);
-        }
         String[] top = {GOLD, IRON, COPPER};
         for (int n = 0; n < 3; n++) {
             for (int dx = 0; dx < 2; dx++) {
@@ -1068,35 +1086,26 @@ public final class ClubhousePlanner {
             }
         }
 
-        /** A seat block, and a cushion's place on it: over the seat's low half (a stair's back is "facing"). */
+        /**
+         * A seat block, and a cushion's place on it (0.41.1): centred on the block, on the seat's top (half a block up),
+         * facing the way the sitter faces. The 26.3 cushion is about a block wide and centred on its position, so 0.40.0's
+         * quarter-block nudge toward the seat's front left it hanging over the edge ("a bit wonky"); centred, its whole
+         * footprint is on its seat block ({@link #CUSHION_WIDTH}).
+         */
         void seat(int i, int j, int k, String block, String color) {
             set(i, j, k, block);
-            double x = i + 0.5;
-            double z = k + 0.5;
             float yaw = 90f; // a stool: facing the bar, west
             if (block.contains("_stairs")) {
                 String f = block.substring(block.indexOf("facing=") + 7);
                 f = f.substring(0, f.indexOf(','));
-                switch (f) {
-                    case "north" -> {
-                        z += 0.25;
-                        yaw = 0f;
-                    }
-                    case "south" -> {
-                        z -= 0.25;
-                        yaw = 180f;
-                    }
-                    case "east" -> {
-                        x -= 0.25;
-                        yaw = 90f;
-                    }
-                    default -> {
-                        x += 0.25;
-                        yaw = -90f;
-                    }
-                }
+                yaw = switch (f) {
+                    case "north" -> 0f;
+                    case "south" -> 180f;
+                    case "east" -> 90f;
+                    default -> -90f;
+                };
             }
-            seats.add(new Seat(box.minX() + x, box.minY() + j + 0.5, box.minZ() + z, yaw, color));
+            seats.add(new Seat(box.minX() + i + 0.5, box.minY() + j + 0.5, box.minZ() + k + 0.5, yaw, color));
         }
 
         String get(int i, int j, int k) {
@@ -1150,6 +1159,6 @@ public final class ClubhousePlanner {
     /** The whole solid blocks of the plan (a fence joins them). */
     static final Set<String> SOLID = Set.of(PLANKS, HALL_FLOOR, MARBLE_WHITE, MARBLE_BLACK, PLASTER, LIGHT, // PANEL is MARBLE_BLACK
             GOLD, IRON, COPPER, CLOTH, CABINET, BRICKS, BOOKS, "minecraft:jukebox", "minecraft:barrel", PLANTER,
-            "minecraft:stripped_dark_oak_log", "minecraft:glass", PATH_ARCADE, PATH_TROPHY, ARCADE_FLOOR, MAT,
-            "minecraft:quartz_pillar");
+            "minecraft:stripped_dark_oak_log", "minecraft:glass", ARCADE_FLOOR, MAT,
+            "minecraft:quartz_pillar", "minecraft:green_wool", "minecraft:brown_wool", "minecraft:red_wool");
 }

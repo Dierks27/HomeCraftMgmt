@@ -7,7 +7,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Firework;
@@ -46,6 +48,8 @@ final class BoardDisplay {
     private final TextDisplay.TextAlignment alignment;
     private UUID board;
     private String text;
+    /** 0.41.1: an owner-built wall's fixed-size dark screen behind the text ({@link WallBoards.Back#SCREEN}). */
+    private UUID screen;
 
     /** The results board: its lines centred. */
     BoardDisplay(Game game) {
@@ -81,7 +85,40 @@ final class BoardDisplay {
             d.text(Text.of(text));
             this.text = text;
         }
+        screen(w, at);
         return true;
+    }
+
+    /**
+     * 0.41.1: an owner-built wall's screen, a thin dark slab of the board's full size ({@link WallBoards.Wall#width},
+     * {@link WallBoards.Wall#height}) just behind the text, so the board is one size whatever it shows. None on the
+     * generated room's walls (their block panel is the screen) or on the feast line.
+     */
+    private void screen(World w, WallBoards.Wall at) {
+        Entity e = screen == null ? null : Bukkit.getEntity(screen);
+        boolean want = at.back() == WallBoards.Back.SCREEN;
+        if (e != null && e.isValid() && want && e.getLocation().distanceSquared(new Location(w, at.x(), at.y(), at.z()))
+                < 0.01 && WallBoards.sameWay(e.getLocation().getYaw(), at.yaw())) {
+            return; // as it is
+        }
+        if (e != null) {
+            e.remove();
+        }
+        screen = null;
+        if (!want) {
+            return;
+        }
+        float width = (float) at.width();
+        float height = (float) at.height();
+        screen = w.spawn(new Location(w, at.x(), at.y(), at.z(), at.yaw(), 0f), BlockDisplay.class, b -> {
+            WorldEntities.tag(b, game, null);
+            b.setBlock(Material.BLACK_CONCRETE.createBlockData());
+            b.setRotation(at.yaw(), 0f);
+            // the block spans 0..1 from its corner: centred under the text, a hair behind it (its local -z)
+            b.setTransformation(new Transformation(new Vector3f(-width / 2f, -0.05f, -0.04f), new Quaternionf(),
+                    new Vector3f(width, height + 0.1f, 0.02f), new Quaternionf()));
+            b.setBrightness(new Display.Brightness(4, 4));
+        }).getUniqueId();
     }
 
     /**
@@ -99,7 +136,10 @@ final class BoardDisplay {
                 new Vector3f(at.scale(), at.scale(), at.scale()), new Quaternionf())); // Geyser ignores it
         e.setShadowed(true);
         e.setDefaultBackground(false);
-        e.setBackgroundColor(Color.fromARGB(160, 0, 0, 0));
+        // 0.41.1: on a wall the screen is the panel (or the owner-built wall's screen), never the text's own background,
+        // which grew and shrank with what the board showed
+        e.setBackgroundColor(at.back() == WallBoards.Back.TEXT ? Color.fromARGB(160, 0, 0, 0)
+                : Color.fromARGB(0, 0, 0, 0));
         e.setBrightness(new Display.Brightness(15, 15));
         e.setAlignment(alignment);
     }
@@ -139,13 +179,14 @@ final class BoardDisplay {
 
     /** Take the board away (the Clubhouse stopped or closed). */
     void remove() {
-        if (board != null) {
-            Entity e = Bukkit.getEntity(board);
+        for (UUID id : new UUID[]{board, screen}) {
+            Entity e = id == null ? null : Bukkit.getEntity(id);
             if (e != null) {
                 e.remove();
             }
         }
         board = null;
+        screen = null;
         text = null;
     }
 

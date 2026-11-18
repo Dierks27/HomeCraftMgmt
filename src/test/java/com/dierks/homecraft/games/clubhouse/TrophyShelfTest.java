@@ -104,4 +104,18 @@ class TrophyShelfTest {
                 List.of(new FameBoard.CourseTime("Sky Rings", "Sam", 62_400)), List.of());
         assertNull(TrophyShelf.cups(f, 11).get(0).id(), "0.40.0's rows had no id: a cup with no head");
     }
+
+    /**
+     * 0.41.1: a slot is kept while its signature is the one asked for (0.41.0 stored another, so every door, cup and
+     * cabinet was made again each second and flashed), and a head rests on its block's top, never half inside it.
+     */
+    @Test
+    void slotsAreKeptAndHeadsSitOnTop() {
+        assertTrue(SideRooms.keeps("arcade@Place3[x=1.5]", "arcade@Place3[x=1.5]"));
+        assertFalse(SideRooms.keeps("arcade@Place3[x=1.5]", "door_arcade"), "0.41.0's mismatch");
+        // a player head's model (half a block) sits wholly under the display's point with the NONE transform
+        double bottom = SideRooms.headUp(SideRooms.HEAD_SCALE) - 0.5 * SideRooms.HEAD_SCALE;
+        assertEquals(0.0, bottom, 1e-9, "its bottom on the block's top");
+        assertEquals(1.0, SideRooms.headUp(2.0f), 1e-9, "drawn twice as big, twice as high");
+    }
 }

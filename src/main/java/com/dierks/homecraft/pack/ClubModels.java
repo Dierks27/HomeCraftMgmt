@@ -47,7 +47,8 @@ public final class ClubModels {
      * @param kind     what it is for
      * @param fallback the vanilla stand-in without the pack: a cabinet's floating icon (its game's Games-screen
      *                 icon), a trophy's metal, a door's picture
-     * @param screen   the placeholder's picture (a vanilla texture: a cabinet's screen, a trophy's metal)
+     * @param screen   the placeholder's picture (a vanilla block-atlas texture, {@code minecraft:block/...}: a cabinet's
+     *                 screen, a trophy's metal)
      * @param size     what to build, in words, for the owner
      */
     public record Model(String name, Kind kind, Material fallback, String screen, String size) {
@@ -83,12 +84,14 @@ public final class ClubModels {
             + " side";
 
     static {
-        cabinet("whack_a_zombie", "cabinet_whack", Material.ZOMBIE_HEAD, "minecraft:item/rotten_flesh");
+        // 0.41.1: block-atlas textures only. On 26.x an item model's boxes read the block atlas; an item/ texture
+        // there is the missing texture (0.41.0's Whack-a-Zombie, Mini Match and Tic-Tac-Toe cabinets were purple-black)
+        cabinet("whack_a_zombie", "cabinet_whack", Material.ZOMBIE_HEAD, "minecraft:block/target_side");
         cabinet("simon_says", "cabinet_simon", Material.NOTE_BLOCK, "minecraft:block/note_block");
-        cabinet("mini_match", "cabinet_match", Material.PAINTING, "minecraft:item/painting");
-        cabinet("tic_tac_toe", "cabinet_tictactoe", Material.ITEM_FRAME, "minecraft:item/item_frame");
-        cabinet("snake", "cabinet_snake", Material.LIME_CONCRETE, "minecraft:item/apple");
-        ALL.add(new Model("cabinet", Kind.CABINET, Material.JUKEBOX, "minecraft:item/emerald", CABINET_SIZE));
+        cabinet("mini_match", "cabinet_match", Material.PAINTING, "minecraft:block/chiseled_bookshelf_occupied");
+        cabinet("tic_tac_toe", "cabinet_tictactoe", Material.ITEM_FRAME, "minecraft:block/crafting_table_top");
+        cabinet("snake", "cabinet_snake", Material.LIME_CONCRETE, "minecraft:block/melon_side");
+        ALL.add(new Model("cabinet", Kind.CABINET, Material.JUKEBOX, "minecraft:block/emerald_block", CABINET_SIZE));
         ALL.add(new Model("trophy_gold", Kind.TROPHY, Material.GOLD_INGOT, "minecraft:block/gold_block", TROPHY_SIZE));
         ALL.add(new Model("trophy_silver", Kind.TROPHY, Material.IRON_INGOT, "minecraft:block/iron_block", TROPHY_SIZE));
         ALL.add(new Model("trophy_bronze", Kind.TROPHY, Material.COPPER_INGOT, "minecraft:block/copper_block",

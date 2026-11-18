@@ -72,8 +72,8 @@ class ClubModelsTest {
                     .getAsJsonObject();
             for (Map.Entry<String, com.google.gson.JsonElement> t : json.getAsJsonObject("textures").entrySet()) {
                 String tex = t.getValue().getAsString();
-                assertTrue(tex.startsWith("minecraft:block/") || tex.startsWith("minecraft:item/"),
-                        m.name() + ": vanilla only: " + tex);
+                assertTrue(tex.startsWith("minecraft:block/"), m.name() + ": a vanilla block-atlas texture only"
+                        + " (0.41.1: on 26.x an item/ texture on a model's boxes is the missing texture): " + tex);
             }
             assertFalse(json.getAsJsonArray("elements").isEmpty(), m.name());
             for (com.google.gson.JsonElement e : json.getAsJsonArray("elements")) {
@@ -102,5 +102,44 @@ class ClubModelsTest {
         assertFalse(files.containsKey("assets/hcm/items/trophy_gold.json"));
         assertTrue(files.containsKey("assets/hcm/items/cabinet_simon.json"), "the others are still ours");
         assertEquals(2 * (ClubModels.all().size() - 2), files.size());
+    }
+
+    /**
+     * 0.41.1, the self-test on the owner's drop-ins: a model whose item definition, model file or own texture is
+     * missing, or that puts an item/ texture on its boxes, can't be drawn, so HCM keeps its placeholder for it.
+     */
+    @Test
+    void theSelfTestFindsAModelThatCantBeDrawn() {
+        Map<String, String> json = new java.util.HashMap<>();
+        Set<String> paths = new HashSet<>();
+        json.put("assets/hcm/items/cabinet_whack.json",
+                "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"hcm:item/cabinet_whack\"}}");
+        assertTrue(PackModels.problem("cabinet_whack", json, paths).contains("isn't there"), "no model file");
+        json.put("assets/hcm/models/item/cabinet_whack.json",
+                "{\"textures\":{\"0\":\"hcm:item/cabinet_whack\",\"particle\":\"#0\"},\"elements\":[]}");
+        assertTrue(PackModels.problem("cabinet_whack", json, paths).contains("hcm:item/cabinet_whack"), "no texture");
+        paths.add("assets/hcm/textures/item/cabinet_whack.png");
+        assertEquals(null, PackModels.problem("cabinet_whack", json, paths), "all there: drawn");
+        json.put("assets/hcm/models/item/cabinet_whack.json",
+                "{\"textures\":{\"0\":\"minecraft:item/rotten_flesh\"},\"elements\":[]}");
+        assertTrue(PackModels.problem("cabinet_whack", json, paths).contains("item texture"), "an item/ texture");
+        json.put("assets/hcm/models/item/cabinet_whack.json",
+                "{\"textures\":{\"0\":\"minecraft:block/target_side\"},\"elements\":[]}");
+        assertEquals(null, PackModels.problem("cabinet_whack", json, paths), "a block/ texture is fine");
+        Map<String, String> zipped = new java.util.HashMap<>();
+        for (Map.Entry<String, String> e : json.entrySet()) {
+            zipped.put("my-pack/" + e.getKey(), e.getValue());
+        }
+        assertEquals(null, PackModels.problem("cabinet_whack", zipped, Set.of()), "one extra folder in a zip");
+        assertTrue(PackModels.problem("trophy_gold", json, paths).contains("has no"), "a name it doesn't have");
+    }
+
+    /** HCM's own placeholders pass the same self-test. */
+    @Test
+    void ourOwnPlaceholdersPassTheSelfTest() {
+        Map<String, String> files = ClubModels.placeholderFiles(Set.of());
+        for (ClubModels.Model m : ClubModels.all()) {
+            assertEquals(null, PackModels.problem(m.name(), files, files.keySet()), m.name());
+        }
     }
 }

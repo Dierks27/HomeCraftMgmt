@@ -113,9 +113,9 @@ class WallBoardsTest {
 
     @Test
     void theBoardsChangeNoBlockOfTheRoom() {
-        assertEquals(5, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
-                + " jukebox corner's, 0.38.6's 3 the feast tables', 0.40.0's 4 the golf club's and 0.41.0's 5 the side"
-                + " rooms', not theirs"
+        assertEquals(6, ClubhousePlanner.ALGO, "the boards changed no block: 0.38.3's plan was 1, 0.38.4's 2 is the"
+                + " jukebox corner's, 0.38.6's 3 the feast tables', 0.40.0's 4 the golf club's, 0.41.0's 5 the side"
+                + " rooms' and 0.41.1's 6 the runners and floors, not theirs"
                 + " (ClubhousePlannerTest pins the room)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(ClubhouseSettings.defaults().box()).plan().hash(),
                 "the same blocks");
@@ -162,5 +162,24 @@ class WallBoardsTest {
         assertEquals(ten, WallBoards.pad(ten), "never cut");
         assertEquals(WallBoards.LINES, WallBoards.pad(null).split("\n", -1).length, "nothing: a blank frame");
         assertEquals(9, WallBoards.LINES, "a title and 8 rows");
+    }
+
+    /**
+     * 0.41.1 (the owner: the black screen "grows and shrinks with what it's showing"): every board is one fixed size.
+     * The generated room's walls draw on their framed block panel (no text background), an owner-built room's on a
+     * screen of the board's full size; only the feast line keeps its text's own background.
+     */
+    @Test
+    void everyBoardIsOneFixedSize() {
+        for (String which : List.of(WallBoards.RESULTS, WallBoards.FAME, WallBoards.PLAYING, WallBoards.STATS)) {
+            assertEquals(WallBoards.Back.PANEL, WallBoards.generated(which, BOX).back(), which);
+            assertEquals(WallBoards.Back.SCREEN, WallBoards.hand(which, new ClubhouseRoom.Place("games", 1, 2, 3, 0f))
+                    .back(), which);
+        }
+        assertEquals(WallBoards.Back.TEXT, ClubhousePlanner.feastLine(BOX).back(), "the feast line");
+        assertEquals(WallBoards.Back.TEXT, new WallBoards.Wall(0, 0, 0, 0f, 1f, 100).back(), "0.41.0's shape");
+        WallBoards.Wall w = WallBoards.generated(WallBoards.FAME, BOX);
+        assertEquals(w.height(), WallBoards.LINES * WallBoards.LINE_PX * WallBoards.PX * w.scale(), 1e-9,
+                "its height is its fixed line count, whatever the page");
     }
 }

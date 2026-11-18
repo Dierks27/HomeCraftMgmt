@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.41.0-side-rooms`
+- **Version:** `0.41.1-clubhouse-fixes`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,10 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**Back to 0.41.0 from 0.41.1:** the jar alone (no schema, no config revision). The room converges back to
+0.41.0's (ALGO 6 -> 5: the stripes and magenta mats come back, the runners go) and the side rooms' models
+flash again. Nothing is lost.
 
 **Back to 0.40.0 from 0.41.0:** the jar alone (0.41.0 changes no schema; 0.40.0 reads config revision 28 with
 one WARN and runs nothing, and ignores `arcade_room` and `trophy_room`). The generated Clubhouse is converged
@@ -4471,10 +4475,10 @@ sparkles; text is only ever an extra for the grown-ups.** The golf-club room is 
 archways.
 
 - **Getting there.** Two open archways in the Foyer's south wall (3 wide, 3 high, no door), a big picture
-  over each, and a coloured path in the floor from the Foyer's first row to each archway and on into the
-  room: **blue** to the Arcade Room (a joystick over its door, south-west), **gold** to the Trophy Room (a
-  trophy over its door, south-east). The two sconces that hung over the archways moved to either side of
-  them.
+  over each, and a carpet runner three wide (like the hall's red one) from the Foyer's first row to each
+  archway, ending there: **navy** to the Arcade Room (a joystick over its door, south-west), **gold** to the
+  Trophy Room (a trophy over its door, south-east). The two sconces that hung over the archways moved to
+  either side of them.
 - **The Arcade Room.** A row of cabinets, one per game of `arcade_room.games` (shipped: Whack-a-Zombie,
   Simon Says, Mini Match, Tic-Tac-Toe), each on a magenta mat, facing the door. **Tap a cabinet, either
   click** (left or right, a controller's too: each cabinet is an Interaction entity, so both register):
@@ -4509,6 +4513,18 @@ archways.
   Games-screen icon floating over it, an ingot for a cup, a lever (a joystick) and a totem (a trophy) over
   the doors. Who sees which is set per player, once a second. See
   [Models for the side rooms](#models-for-the-side-rooms-041).
+- **Fixed in 0.41.1** (from the owner's walk on 0.41.0): the Whack-a-Zombie, Mini Match and Tic-Tac-Toe
+  cabinets showed the purple-black missing texture (their placeholder screens used `item/` textures, which
+  26.x can't draw on a model's boxes; every placeholder now uses vanilla `block/` textures only, and the
+  magenta mat under each cabinet, which read the same way, is dark blackstone); the doors, cups and cabinets
+  flashed once a second (each was made again every second: its stored signature never matched); the heads
+  sat half inside their pedestals (they rest on top now); the cushions hung over the front of their seats
+  (centred now); two floor squares showed bare floor and a hidden light beside the east wing's armchairs (a
+  whole block of the rug's colour under every armchair arm now); and every wall board is one fixed size:
+  in the generated room the text has no background of its own, so the framed panel is the screen, and an
+  owner-built room's boards get a dark screen of their full size. On boot (and once a minute) HCM checks your
+  drop-in models: one whose model, texture or `item/` texture can't be drawn gets a WARN, and HCM keeps its
+  placeholder for that name until it's fixed.
 - **Their box.** The side rooms are the last 16 rows of the Clubhouse box, claimed on their own: a server
   that already has its room keeps its claim, and only the new rows are scanned (empty: claimed and built
   with the room). Anything in them, or another games area too close, **leaves the side rooms out** and

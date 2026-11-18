@@ -72,6 +72,18 @@ final class SideRooms {
     /** How high over a cabinet's floor its stand-in icon floats, and its label. */
     static final double ICON_UP = 2.9;
     static final double LABEL_UP = 2.2;
+    /**
+     * A holder's head (0.41.1): drawn {@value #HEAD_SCALE} times, and how far over its pedestal's top the display stands.
+     * With the {@code NONE} transform a player head's model (half a block cube) sits wholly <i>under</i> the display's
+     * point, so 0.41.0's 0.3 left it half inside the block ("the heads are half in the block").
+     */
+    static final float HEAD_SCALE = 1.0f;
+
+    /** How far over its block's top a head's display stands so the head rests on the top, drawn at {@code scale}. */
+    static double headUp(float scale) {
+        return 0.5 * scale;
+    }
+
     /** A trophy's label over its pedestal top, and how long a walker's shimmer lasts (seconds). */
     static final double CUP_LABEL_UP = 1.3;
     static final int SHIMMER_SECONDS = 8;
@@ -194,8 +206,17 @@ final class SideRooms {
         if (s != null) {
             take(s);
         }
-        shown.put(key, make.get());
+        Shown made = make.get();
+        // 0.41.1: kept under the signature it was asked for, so the next second finds it as it is. 0.41.0 kept the
+        // maker's own label (a game id, a model name), which never matched: every slot was made again every second,
+        // and the doors, cups and cabinets flashed
+        shown.put(key, new Shown(sig, made.all(), made.models(), made.plain()));
         generation++;
+    }
+
+    /** Whether slot {@code sig} would be kept as it is (for the tests): its signature is the one asked for. */
+    static boolean keeps(String asked, String stored) {
+        return asked != null && asked.equals(stored);
     }
 
     // ---- the entities --------------------------------------------------------------------------------
@@ -264,11 +285,12 @@ final class SideRooms {
         List<UUID> all = new ArrayList<>(models);
         all.addAll(plain);
         if (c.id() != null) {
-            all.add(w.spawn(loc(w, p.head(), 0.3), ItemDisplay.class, e -> {
+            all.add(w.spawn(loc(w, p.head(), headUp(HEAD_SCALE)), ItemDisplay.class, e -> {
                 WorldEntities.tag(e, club, null);
                 e.setItemStack(head(c.id()));
+                e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
                 e.setBillboard(Display.Billboard.VERTICAL); // the face always to whoever looks
-                e.setTransformation(scale(1.0f));
+                e.setTransformation(scale(HEAD_SCALE));
                 e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
         }

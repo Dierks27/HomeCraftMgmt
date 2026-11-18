@@ -68,6 +68,8 @@ final class ClubBoards {
     private final BoardDisplay fameBoard;
     private final BoardDisplay nowBoard;
     private final ViewerBoards stats;
+    /** 0.41.1: an owner-built room's My stats wall gets its fixed-size screen here (each viewer's text is theirs). */
+    private final BoardDisplay statsScreen;
     private final TrophyWall trophies;
     private final ClubReads reads;
     private final ClubData.Db db;
@@ -80,6 +82,7 @@ final class ClubBoards {
         this.fameBoard = new BoardDisplay(club, TextDisplay.TextAlignment.LEFT);
         this.nowBoard = new BoardDisplay(club, TextDisplay.TextAlignment.LEFT);
         this.stats = new ViewerBoards(club, plugin);
+        this.statsScreen = new BoardDisplay(club);
         this.trophies = new TrophyWall(club);
         GamesDao games = club.games().dao();
         this.db = new LiveDb(games, games.cup(), new TokenDao(plugin.database()));
@@ -139,6 +142,11 @@ final class ClubBoards {
                 } else {
                     stats.show(p, world, mine, WallBoards.pad(StatsCard.board(p.getName(), reads.mine(id))));
                 }
+            }
+            if (mine != null && mine.back() == WallBoards.Back.SCREEN) {
+                statsScreen.show(world, mine, " "); // 0.41.1: the wall's screen, shared; the text is each viewer's
+            } else {
+                statsScreen.remove();
             }
             trophies.redraw(room, reads.fame()); // 0.38.4
         } catch (RuntimeException | LinkageError e) {
@@ -208,6 +216,7 @@ final class ClubBoards {
         fameBoard.remove();
         nowBoard.remove();
         stats.clear();
+        statsScreen.remove();
         trophies.remove();
         reads.clear();
     }

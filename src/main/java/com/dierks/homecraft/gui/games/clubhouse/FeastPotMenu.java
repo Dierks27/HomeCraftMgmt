@@ -3,46 +3,37 @@ package com.dierks.homecraft.gui.games.clubhouse;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.feast.FeastRules;
 import com.dierks.homecraft.arcade.feast.FeastService;
-import com.dierks.homecraft.arcade.feast.HomePantry;
+import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-
-import java.util.List;
 
 /**
- * The Clubhouse's Feast Pot (36; 0.42.0), tapped on the feast table: the food waiting in the visitor's saved home
- * inventory, one picture per food (as many as there are, up to a stack), and a tap puts one in. Pictures, not
- * words; the family bar shows after each tap, the munch and the rising chime say it went in.
+ * The Clubhouse's Feast Pot (27; 0.44.0), tapped on the feast table. Inside the Clubhouse a visitor's own things
+ * aren't on them (the Games world keeps its own inventory), so the food can't go in here: one big button takes them
+ * to the real Feast Pot at home, food and all (the visit ends, their things come back, and they arrive beside the
+ * pot). The family's total is on the pot's picture.
  *
  * <pre>
- *  row 0     4 the pot: the family's total (its name), how it works (lore)
- *  rows 1-2  9-26 one food each, most points first
- *  row 3     31 Close
+ *  row 0     4 the pot: the family's total
+ *  row 1     10-16 Take me to the Feast Pot (one big button), or "not set yet"
+ *  row 2     22 Close
  * </pre>
- * With no food at home, row 1's middle says so with an empty bowl. It belongs to the Clubhouse, so it opens in the
- * Clubhouse's session.
  */
 public final class FeastPotMenu extends GameMenu {
 
     static final int POT = 4;
-    static final int FIRST = 9;
-    static final int MAX = 18;
-    static final int NONE = 13;
+    static final int[] GO = {10, 11, 12, 13, 14, 15, 16};
 
     private final FeastService feast;
-    private final Location pot;
 
-    public FeastPotMenu(HomeCraftManagement plugin, Game clubhouse, Player viewer, FeastService feast, Location pot) {
+    public FeastPotMenu(HomeCraftManagement plugin, Game clubhouse, Player viewer, FeastService feast) {
         super(plugin, clubhouse, viewer, null);
         this.feast = feast;
-        this.pot = pot;
-        init(36, Text.of("&6Feast Pot"));
+        init(27, Text.of("&6Feast Pot"));
     }
 
     @Override
@@ -50,24 +41,26 @@ public final class FeastPotMenu extends GameMenu {
         fill();
         FeastRules.FeastView v = feast.view();
         set(POT, Menus.icon(Material.CAULDRON, FeastRules.line(v.total(), v.goal()),
-                "&7Tap a food to put one in.", "&7It comes from your things at home."), null);
-        List<HomePantry.Food> foods = feast.homeFood(viewer);
-        if (foods.isEmpty()) {
-            set(NONE, Menus.icon(Material.BOWL, "&7No food at home"), null);
-        }
-        for (int i = 0; i < Math.min(MAX, foods.size()); i++) {
-            HomePantry.Food f = foods.get(i);
-            Material m = Material.matchMaterial(f.type());
-            if (m == null) {
-                continue;
+                "&7Your food is at home.", "&7The Feast Pot is there too."), null);
+        if (feast.pot() == null) {
+            set(GO[3], Menus.icon(Material.BARRIER, "&7The Feast Pot isn't set yet"), null);
+        } else {
+            for (int slot : GO) {
+                set(slot, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&lTake me to the Feast Pot",
+                        "&7Home, with your things,", "&7right beside the pot."), true), e -> go());
             }
-            ItemStack icon = Menus.icon(m, "&e+" + f.points() + " &7(" + f.count() + " at home)");
-            icon.setAmount(Math.max(1, Math.min(m.getMaxStackSize(), f.count())));
-            set(FIRST + i, icon, e -> {
-                feast.feedFromHome(viewer, f.type(), pot);
-                refresh();
-            });
         }
         exitTile();
+    }
+
+    private void go() {
+        if (!feast.bringToPot(viewer)) {
+            return;
+        }
+        // a tick later: closing a screen from inside its own click is unsafe
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            viewer.closeInventory();
+            plugin.games().sessions().leave(viewer, EndReason.FINISH);
+        });
     }
 }

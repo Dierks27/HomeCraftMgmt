@@ -60,21 +60,42 @@ public final class TurkeyConfig {
      * @param dailyTokenCap     the most tokens a player gets from turkeys in a local day
      * @param feather           each catch also gives a Turkey Feather keepsake
      * @param miniChancePercent the chance in 100 that a catch also gives a Turkey Mini (at most one extra a season)
+     * @param randomTimes       0.44.0: each {@code everyMinutes} window of the day has its run at a random minute
+     *                          (the same for everyone, new every day), instead of at {@code offsetMinutes} past it
+     * @param quietFromHour     0.44.0: no run from this local hour ...
+     * @param quietToHour       ... to this one (the same hour: no quiet hours); the runs share the rest of the day
+     * @param catchUp           0.44.0: a player who has played {@code catchUpMinutes} today without catching a turkey
+     *                          gets one of their own, once a day (the owner: "so everyone has a clear opportunity")
+     * @param catchUpMinutes    how long they play first (1-60)
+     * @param catchUpLastDays   only on the event's last this many days (the owner: "the closer we get to the end of
+     *                          the event ... within the last 3 days or so"); 0 = every day
+     * @param stampede          0.44.0: turkeys let loose around the Hub at each run's start for everyone there to
+     *                          catch, as many as they can (0: none)
+     * @param stampedeMinutes   how long the stampede lasts (1-30)
+     * @param stampedeRadius    how far from the Hub's arrival spot they are let loose (16-200)
      */
     public record Turkey(boolean enabled, LocalDate from, LocalDate to, int everyMinutes, int offsetMinutes,
                          int runMinutes, boolean welcome, double scale, int tokens, int dailyTokenCap,
-                         boolean feather, int miniChancePercent) {
+                         boolean feather, int miniChancePercent, boolean randomTimes, int quietFromHour,
+                         int quietToHour, boolean catchUp, int catchUpMinutes, int catchUpLastDays, int stampede,
+                         int stampedeMinutes, int stampedeRadius) {
 
-        /** The shipped settings: six runs a day (00:50, 04:50 ... 20:50), three minutes each. */
-        public static final Turkey DEFAULTS = new Turkey(true, DEFAULT_FROM, DEFAULT_TO, 240, 50, 3, true, 2.0, 3, 6,
-                true, 5);
+        /**
+         * The shipped settings: six runs a day at random times, never from 2 to 8 in the morning (the owner: "we
+         * aren't playing in the early morning"), three minutes each, and (0.44.0, the owner: "a special event so not
+         * every single time someone logs in") no welcome turkey, but on the last three days a catch-up turkey for
+         * anyone who has played ten minutes that day without catching one.
+         */
+        public static final Turkey DEFAULTS = new Turkey(true, DEFAULT_FROM, DEFAULT_TO, 240, 50, 3, false, 2.0, 3, 6,
+                true, 5, true, 2, 8, true, 10, 3, 100, 10, 80);
         /** Until config.yml has been read: the shipped settings, switched off. */
         public static final Turkey OFF = DEFAULTS.withEnabled(false);
 
         /** The same settings, switched on or off. */
         public Turkey withEnabled(boolean on) {
             return new Turkey(on, from, to, everyMinutes, offsetMinutes, runMinutes, welcome, scale, tokens,
-                    dailyTokenCap, feather, miniChancePercent);
+                    dailyTokenCap, feather, miniChancePercent, randomTimes, quietFromHour, quietToHour, catchUp,
+                    catchUpMinutes, catchUpLastDays, stampede, stampedeMinutes, stampedeRadius);
         }
 
         /** The event's year, from {@code from}: the claim keys, the feather's name and the Mini's id. */
@@ -85,6 +106,16 @@ public final class TurkeyConfig {
         /** Switched on, and {@code today} inside the window. The caller adds {@code arcade.enabled}. */
         public boolean open(LocalDate today) {
             return enabled && CandyRules.open(today, from, to);
+        }
+
+        /** Whether the catch-up turkey is on {@code today}: switched on, and one of the event's last days. */
+        public boolean catchUpOn(LocalDate today) {
+            return catchUp && com.dierks.homecraft.arcade.turkey.TurkeyRules.lastDays(today, to, catchUpLastDays);
+        }
+
+        /** No run at local minute {@code minuteOfDay} (the quiet hours). */
+        public boolean quiet(int minuteOfDay) {
+            return com.dierks.homecraft.arcade.turkey.TurkeyRules.quiet(minuteOfDay, quietFromHour, quietToHour);
         }
 
         /** A run's length in milliseconds. */
@@ -128,7 +159,18 @@ public final class TurkeyConfig {
         int cap = number(root, "daily_token_cap", d.dailyTokenCap(), 0, 50, w);
         boolean feather = root.getBoolean(PATH + ".feather", d.feather());
         int mini = number(root, "mini_chance_percent", d.miniChancePercent(), 0, 100, w);
-        return new Turkey(enabled, from, to, every, offset, run, welcome, scale, tokens, cap, feather, mini);
+        boolean random = root.getBoolean(PATH + ".random_times", d.randomTimes());
+        int quietFrom = number(root, "quiet_from_hour", d.quietFromHour(), 0, 23, w);
+        int quietTo = number(root, "quiet_to_hour", d.quietToHour(), 0, 23, w);
+        boolean catchUp = root.getBoolean(PATH + ".catch_up", d.catchUp());
+        int catchUpMinutes = number(root, "catch_up_minutes", d.catchUpMinutes(), 1, 60, w);
+        int catchUpLastDays = number(root, "catch_up_last_days", d.catchUpLastDays(), 0, 31, w);
+        int stampede = number(root, "hub_stampede", d.stampede(), 0, 200, w);
+        int stampedeMinutes = number(root, "hub_stampede_minutes", d.stampedeMinutes(), 1, 30, w);
+        int stampedeRadius = number(root, "hub_stampede_radius", d.stampedeRadius(), 16, 200, w);
+        return new Turkey(enabled, from, to, every, offset, run, welcome, scale, tokens, cap, feather, mini, random,
+                quietFrom, quietTo, catchUp, catchUpMinutes, catchUpLastDays, stampede, stampedeMinutes,
+                stampedeRadius);
     }
 
     /** A date key, quoted or bare; missing reads as {@code def}. Null, with one WARN, for anything else. */

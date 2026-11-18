@@ -223,6 +223,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "account" -> looksCommand.account(sender, args);
             case "tokens" -> handleTokens(sender, args);
             case "play" -> gamesCommand.play(sender, args);
+            case "hub" -> gamesCommand.play(sender, new String[]{"play", "hub"}); // 0.44.0: one word to the Hub
             case "leave" -> gamesCommand.leave(sender, args);
             case "games" -> gamesCommand.admin(sender, args);
             case "config" -> {
@@ -2314,7 +2315,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "candy", "harvest", "turkey", "feast", "balance", "tokens", "quests", "courier", "trail", "looks", "achievements", "guide");
             }
             if (sender.hasPermission(GamesCommand.PLAY)) {
-                addMatches(out, args[0], "play", "leave");
+                addMatches(out, args[0], "play", "leave", "hub");
             }
             if (sender.hasPermission(GamesCommand.ADMIN)) {
                 addMatches(out, args[0], "games");

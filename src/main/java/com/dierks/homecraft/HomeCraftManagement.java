@@ -104,10 +104,14 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 27 = graves: the new {@code graves:} section comes with the backfill; the step refreshes the one comment graves
      * make wrong, {@code courier.package.keep_on_death}'s "the grave is the recovery path" (a grave never takes a
      * package), where it is still the plugin's own words ({@link GravesMigration}).
+     * 28 = the Clubhouse's side rooms ({@link ClubhouseRoomsMigration}).
+     * 29 = Thanksgiving's two Minis: the Cooked Turkey 2026 (the Family Feast's) joins the Turkey Mini 2026's series,
+     * the Turkey Mini 2026 (Catch the Turkey's) gets the turkey's head where it is still revision 26's, and the
+     * welcome turkey goes off ({@link TurkeyMinisMigration}).
      * Each of 20, 21, 22, 23, 24, 25 and 27 also refreshes the comments it makes stale, where they are still the
      * plugin's own words ({@link ShippedComments}); 26 makes none stale.
      */
-    static final int CONFIG_REVISION = 28;
+    static final int CONFIG_REVISION = 29;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -1461,6 +1465,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             // The Clubhouse's side rooms: the box is 32 x 16 x 48 now, and games.clubhouse.origin's comment said 32 x 16
             // x 32, where the owner hasn't edited it. The new keys are the backfill's. See ClubhouseRoomsMigration.
             ClubhouseRoomsMigration.apply(c);
+        }
+        if (from < 29) {
+            // Thanksgiving's two Minis: the Cooked Turkey 2026 (the Feast's) added, the Turkey Mini 2026 (Catch the
+            // Turkey's) given the turkey's head where it is still revision 26's; no welcome turkey. See
+            // TurkeyMinisMigration.
+            TurkeyMinisMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

@@ -158,13 +158,6 @@ final class ClubDecor {
         return e != null && potTap != null && potTap.equals(e.getUniqueId());
     }
 
-    /** Where the Feast Pot stands (its steam and sparkles), or {@code null}. */
-    Location potPlace() {
-        Shown pot = shown.get("feast.pot");
-        World w = potAt == null ? null : potAt.getWorld();
-        return pot == null || w == null ? null : new Location(w, pot.prop().x(), pot.prop().y(), pot.prop().z());
-    }
-
     /** Everything comes down (the room closed, moved or stopped). */
     void remove() {
         Entity tap = potTap == null ? null : Bukkit.getEntity(potTap);

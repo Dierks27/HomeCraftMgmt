@@ -67,11 +67,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -176,8 +178,11 @@ public final class TurkeyService implements Listener, TurkeyHost {
             return;
         }
         arm();
-        plugin.getLogger().info("Catch the Turkey on through " + DAY_MONTH.format(c.to()) + ": a run every "
-                + c.everyMinutes() + " minutes from " + minuteText(CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes()))
+        plugin.getLogger().info("Catch the Turkey on through " + DAY_MONTH.format(c.to()) + ": a run "
+                + (c.randomTimes() ? "at random times, " + (CandyRules.MINUTES_PER_DAY / c.everyMinutes())
+                + " a day, never " + c.quietFromHour() + ":00-" + c.quietToHour() + ":00"
+                : "every " + c.everyMinutes() + " minutes from "
+                + minuteText(CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes())))
                 + ", " + c.runMinutes() + " minute" + (c.runMinutes() == 1 ? "" : "s") + " each.");
     }
 
@@ -195,6 +200,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         for (UUID id : new ArrayList<>(live.keySet())) {
             remove(id);
         }
+        endStampede(false);
         welcomeDue.clear();
         lastTap.clear();
         noSpotUntil.clear();
@@ -235,10 +241,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         LocalDate today = local.toLocalDate();
         long now = plugin.clock().nowMillis();
         care();
+        stampedeSecond(now);
         runs.expire(now);
         if (!open(c, today)) {
-            // a test run before the window, or the last minutes of a run at midnight: it finishes first
-            if (runs.isEmpty()) {
+            // a test run (or an admin's stampede) before the window, or the last minutes of a run at midnight: it
+            // finishes first
+            if (runs.isEmpty() && stampedeUntil <= 0) {
                 if (task != null) {
                     task.cancel();
                     task = null;
@@ -254,7 +262,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         welcomes(now, today, c);
         arrivals(now);
-        long slot = CandyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), 0, false);
+        long slot = TurkeyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), c.randomTimes(), c.runMinutes(),
+                c.quietFromHour(), c.quietToHour());
         if (slot == CandyRules.NO_SLOT || slot == lastSlot) {
             return;
         }
@@ -269,6 +278,28 @@ public final class TurkeyService implements Listener, TurkeyHost {
         if (r != null) {
             for (Player p : List.copyOf(plugin.getServer().getOnlinePlayers())) {
                 offerScheduled(r, p, now);
+            }
+            hubShout();
+            startStampede(c, now);
+        }
+    }
+
+    /** 0.44.0: what a run's start tells everyone not in the Hub (the link runs {@code /hcm hub}). */
+    static final String HUB_SHOUT = "&6Gobble gobble! &7Turkeys are out. Catch yours here, or with everyone at ";
+    static final String HUB_LINK = "&b&l[Go to the Hub]";
+
+    /** A scheduled run started: everyone who can play and isn't in the Hub reads the shout with its link. */
+    private void hubShout() {
+        var games = plugin.games();
+        if (!com.dierks.homecraft.games.hub.Hub.offered(games)) {
+            return;
+        }
+        net.kyori.adventure.text.Component line = Text.of(HUB_SHOUT).append(Text.of(HUB_LINK)
+                .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/hcm hub"))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Text.of("&7Click to go to the Hub"))));
+        for (Player p : List.copyOf(plugin.getServer().getOnlinePlayers())) {
+            if (p.hasPermission("hcm.games.play") && !com.dierks.homecraft.games.hub.Hub.visiting(plugin, p)) {
+                p.sendMessage(line);
             }
         }
     }
@@ -339,7 +370,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         if (welcomeDue.isEmpty()) {
             return;
         }
-        if (!c.welcome()) {
+        if (TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes()) < 0) {
             welcomeDue.clear();
             return;
         }
@@ -354,6 +385,10 @@ public final class TurkeyService implements Listener, TurkeyHost {
             Long had = welcomedDay.get(id);
             if (p == null || !p.isOnline() || (had != null && had == day)) {
                 it.remove();
+                continue;
+            }
+            if (!TurkeyRules.ownTurkeyOwed(c.welcome(), caughtToday(id))) {
+                it.remove(); // 0.44.0: caught one today already: no catch-up turkey needed
                 continue;
             }
             Long until = noSpotUntil.get(id);
@@ -391,9 +426,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         World w = p.getWorld();
         var games = plugin.games();
         int groundTop = w.getHighestBlockYAt(at.getBlockX(), at.getBlockZ(), HeightMap.MOTION_BLOCKING);
+        // 0.44.0: a Hub visitor gets one too, as if home in an economy world (what they win goes in their Bag)
+        boolean hub = com.dierks.homecraft.games.hub.Hub.visiting(plugin, p);
         CandyRules.State s = new CandyRules.State(p.isDead(), p.isSleeping(), p.getGameMode(),
-                plugin.sandbox().allowed(w), Whereabouts.gamesWorld(plugin, w),
-                games != null && games.sessions().session(p) != null, games == null || games.sessions().home(p),
+                hub || plugin.sandbox().allowed(w), !hub && Whereabouts.gamesWorld(plugin, w),
+                !hub && games != null && games.sessions().session(p) != null,
+                hub || games == null || games.sessions().home(p),
                 idleMillis(p), p.isGliding(), p.isFlying(), at.getY(), groundTop, p.isInLava(), p.isInWater(),
                 p.isInsideVehicle(), 0, 0);
         return TurkeyRules.skip(s, w.getEnvironment() == World.Environment.NORMAL);
@@ -604,7 +642,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         long paid = TurkeyRules.paidToday(plugin.tokens().totals(since, p.getUniqueId()));
         int pay = TurkeyRules.tokensToPay(paid, c.tokens(), c.dailyTokenCap(), open, pays, false);
         if (pay > 0) {
-            plugin.tokens().award(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            if (com.dierks.homecraft.games.hub.Hub.visiting(plugin, p)) {
+                // 0.44.0: the Hub isn't an economy world, but a turkey there pays as at home (tokens aren't things)
+                plugin.tokens().awardEvent(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            } else {
+                plugin.tokens().award(p, pay, TokenService.Source.EVENT_TURKEY, "Caught the turkey");
+            }
         }
     }
 
@@ -614,11 +657,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
      * own window and cap still apply: past either, nothing is minted and nothing is said.
      */
     private void maybeMini(Player p, TurkeyConfig.Turkey c) {
-        if (c.miniChancePercent() <= 0) {
+        boolean sure = c.catchUpOn(plugin.clock().today()); // 0.44.0: the last days give it for sure
+        if (c.miniChancePercent() <= 0 && !sure) {
             return;
         }
         double roll = random.nextDouble();
-        if (!TurkeyRules.extraMini(roll, c.miniChancePercent(), false, false, MiniService.hasRoom(p))) {
+        if (!TurkeyRules.turkeyMini(roll, c.miniChancePercent(), sure, false, false, MiniService.hasRoom(p))) {
             return;
         }
         UUID id = p.getUniqueId();
@@ -647,6 +691,15 @@ public final class TurkeyService implements Listener, TurkeyHost {
             Chicken c = e.getValue().entity();
             Location home = e.getValue().home();
             boolean valid = c.isValid() && !c.isDead();
+            // 0.44.0: its owner went to the Hub (or home from it) mid-run: this one goes, and the run offers them a
+            // new one where they are now (a scheduled run only: a welcome turkey ends with its run)
+            Player owner = e.getValue().owner() == null ? null : Bukkit.getPlayer(e.getValue().owner());
+            Run ownRun = runs.runOf(e.getKey());
+            if (valid && owner != null && ownRun != null && ownRun.kind() == Kind.SCHEDULED
+                    && !owner.getWorld().equals(c.getWorld())) {
+                runs.lost(e.getKey());
+                continue;
+            }
             double distance = valid && c.getWorld().equals(home.getWorld()) ? c.getLocation().distance(home) : -1;
             switch (TurkeyRules.leash(valid, valid && c.isInWater(), valid && c.isInLava(), distance)) {
                 case LOST -> {
@@ -824,6 +877,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
     /** One tap: {@link TurkeyRules#catchStep}, then the run's catch or cluck. */
     private void tapped(Player p, Entity turkey, boolean mainHand) {
         UUID tid = turkey.getUniqueId();
+        if (flock.contains(tid)) {
+            if (mainHand) {
+                stampedeTap(p, turkey);
+            }
+            return;
+        }
         Live l = live.get(tid);
         Run r = runs.runOf(tid);
         if (l == null || r == null) {
@@ -838,9 +897,10 @@ public final class TurkeyService implements Listener, TurkeyHost {
         LastTap before = lastTap.put(id, new LastTap(tid, now));
         Long lastAt = before != null && before.turkey().equals(tid) ? before.at() : null;
         World w = p.getWorld();
-        TurkeyRules.Tap t = new TurkeyRules.Tap(true, lastAt, now, plugin.sandbox().allowed(w),
-                Whereabouts.gamesWorld(plugin, w), Whereabouts.homeFromGames(plugin, p),
-                Whereabouts.inGameSession(plugin, p), r.kind() == Kind.WELCOME, id.equals(l.owner()));
+        boolean hub = com.dierks.homecraft.games.hub.Hub.visiting(plugin, p); // 0.44.0: as if home
+        TurkeyRules.Tap t = new TurkeyRules.Tap(true, lastAt, now, hub || plugin.sandbox().allowed(w),
+                !hub && Whereabouts.gamesWorld(plugin, w), hub || Whereabouts.homeFromGames(plugin, p),
+                !hub && Whereabouts.inGameSession(plugin, p), r.kind() == Kind.WELCOME, id.equals(l.owner()));
         CatchStep step = TurkeyRules.catchStep(t);
         if (step == CatchStep.NOT_YOURS) {
             cluck(id, tid);
@@ -935,13 +995,17 @@ public final class TurkeyService implements Listener, TurkeyHost {
     @EventHandler
     public void onEntitiesLoad(EntitiesLoadEvent event) {
         for (Entity e : event.getEntities()) {
-            if (isTurkey(e) && !live.containsKey(e.getUniqueId())) {
+            if (isTurkey(e) && !live.containsKey(e.getUniqueId()) && !flock.contains(e.getUniqueId())) {
                 e.remove();
             }
         }
     }
 
     private void gone(Entity e) {
+        if (flock.remove(e.getUniqueId())) {
+            e.remove();
+            return;
+        }
         if (live.containsKey(e.getUniqueId())) {
             runs.lost(e.getUniqueId());
         } else {
@@ -949,20 +1013,235 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
     }
 
+    // ---- 0.44.0: the Hub's Turkey Stampede --------------------------------------------------------
+
+    /**
+     * {@code /hcm turkey stampede}: one now, for an admin to try (before the window too: catches are counted, but give
+     * tokens and the Mini only while Catch the Turkey is open). @return the admin's line
+     */
+    public String stampedeNow() {
+        TurkeyConfig.Turkey c = settings();
+        if (stampedeUntil > 0) {
+            return "&eA stampede is already out (" + flock.size() + " turkeys left).";
+        }
+        if (com.dierks.homecraft.games.hub.Hub.arrivalOf(plugin.games()) == null) {
+            return "&cThe Hub isn't open (/hcm games hub status says why).";
+        }
+        startStampede(c, plugin.clock().nowMillis());
+        if (stampedeUntil <= 0) {
+            return "&cNo stampede: the turkey's hub_stampede setting is 0.";
+        }
+        arm();
+        return "&aTurkey Stampede! &7" + c.stampede() + " turkeys for " + c.stampedeMinutes() + " minutes in the Hub"
+                + (open(c, plugin.clock().today()) ? "." : " (a test: catches count, but give nothing before "
+                + DAY_MONTH.format(c.from()) + ").");
+    }
+
+    /** The stampede's turkeys (let loose in the Hub, everyone's to catch). */
+    private final Set<UUID> flock = new HashSet<>();
+    /** Each visitor's catches this stampede. */
+    private final Map<UUID, Integer> stampedeCatches = new HashMap<>();
+    /** The local day each player last caught a stampede turkey (for "caught today"). */
+    private final Map<UUID, Long> caughtInStampede = new HashMap<>();
+    private final Map<UUID, Long> stampedeTapAt = new HashMap<>();
+    /** When the stampede ends, or 0 with none out. */
+    private long stampedeUntil;
+    /** A stampede's turkeys run a little faster than a player's own. */
+    static final double STAMPEDE_SPEED = 0.32;
+    /** Each second, each turkey has this chance in 100 of dashing somewhere new. */
+    static final int DASH_PERCENT = 25;
+
+    /**
+     * At a run's start (0.44.0, the owner: "place like 100 turkeys all over the hub ... and let us go nuts and catch as
+     * many as we can"): {@code hub_stampede} turkeys let loose around the Hub's arrival spot, a few each tick, on open
+     * ground in loaded chunks. Nothing while the Hub can't be visited, or one is still out.
+     */
+    private void startStampede(TurkeyConfig.Turkey c, long now) {
+        if (c.stampede() <= 0 || stampedeUntil > 0 || Keys.TURKEY == null) {
+            return;
+        }
+        Location centre = com.dierks.homecraft.games.hub.Hub.arrivalOf(plugin.games());
+        if (centre == null || centre.getWorld() == null) {
+            return;
+        }
+        stampedeUntil = now + c.stampedeMinutes() * 60_000L;
+        stampedeCatches.clear();
+        int[] left = {c.stampede()};
+        org.bukkit.scheduler.BukkitTask[] self = new org.bukkit.scheduler.BukkitTask[1];
+        self[0] = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            if (stampedeUntil <= 0 || left[0] <= 0) {
+                self[0].cancel();
+                return;
+            }
+            for (int i = 0; i < 10 && left[0] > 0; i++, left[0]--) {
+                Location at = stampedeSpot(centre, c.stampedeRadius());
+                if (at != null) {
+                    spawnLoose(at, c);
+                }
+            }
+        }, 1L, 1L);
+        for (Player p : com.dierks.homecraft.games.hub.Hub.visitors(plugin.games())) {
+            try {
+                p.showTitle(Title.title(Text.of("&6Turkey Stampede!"), Text.of("&eCatch as many as you can!"),
+                        Title.Times.times(Duration.ofMillis(250), Duration.ofSeconds(3), Duration.ofMillis(500))));
+                p.playSound(p.getLocation(), Sound.EVENT_RAID_HORN, 0.7f, 1.4f);
+            } catch (RuntimeException ignored) {
+                // decoration
+            }
+        }
+    }
+
+    /** Open ground somewhere within {@code radius} of {@code centre} (a few tries), in a loaded chunk, or null. */
+    private Location stampedeSpot(Location centre, int radius) {
+        World w = centre.getWorld();
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (int t = 0; t < 8; t++) {
+            double a = r.nextDouble(Math.PI * 2);
+            double d = 4 + r.nextDouble(Math.max(1, radius - 4));
+            int x = (int) Math.floor(centre.getX() + Math.cos(a) * d);
+            int z = (int) Math.floor(centre.getZ() + Math.sin(a) * d);
+            if (!w.isChunkLoaded(x >> 4, z >> 4)) {
+                continue;
+            }
+            Block top = w.getHighestBlockAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+            Block feet = top.getRelative(0, 1, 0);
+            if (top.isLiquid() || !top.getType().isSolid() || !feet.isPassable() || feet.isLiquid()
+                    || !feet.getRelative(0, 1, 0).isPassable() || top.getType() == Material.MAGMA_BLOCK) {
+                continue;
+            }
+            return feet.getLocation().add(0.5, 0, 0.5);
+        }
+        return null;
+    }
+
+    /** One stampede turkey: as a player's own, faster, tagged as the stampede's. */
+    private void spawnLoose(Location at, TurkeyConfig.Turkey c) {
+        try {
+            Chicken chicken = at.getWorld().spawn(at, Chicken.class, CreatureSpawnEvent.SpawnReason.CUSTOM, e -> {
+                e.setPersistent(false);
+                e.setAdult();
+                e.setAgeLock(true);
+                e.setBreed(false);
+                e.setIsChickenJockey(false);
+                e.setEggLayTime(Integer.MAX_VALUE);
+                e.setCanPickupItems(false);
+                setAttribute(e.getAttribute(Attribute.SCALE), c.scale());
+                setAttribute(e.getAttribute(Attribute.MOVEMENT_SPEED), STAMPEDE_SPEED);
+                e.customName(Text.of("&6Turkey"));
+                e.setCustomNameVisible(true);
+                e.getPersistentDataContainer().set(Keys.TURKEY, PersistentDataType.STRING, TurkeyRules.STAMPEDE_TAG);
+                if (Keys.MOB_ARTIFICIAL != null) {
+                    e.getPersistentDataContainer().set(Keys.MOB_ARTIFICIAL, PersistentDataType.BYTE, (byte) 1);
+                }
+            });
+            if (chicken != null && chicken.isValid()) {
+                flock.add(chicken.getUniqueId());
+            }
+        } catch (RuntimeException e) {
+            // a spawn another plugin refused: one fewer turkey
+        }
+    }
+
+    /** Each second: the turkeys dash about, gobble now and then, and the stampede ends on time. */
+    private void stampedeSecond(long now) {
+        if (stampedeUntil <= 0) {
+            return;
+        }
+        if (now >= stampedeUntil) {
+            endStampede(true);
+            return;
+        }
+        java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
+        for (UUID id : new ArrayList<>(flock)) {
+            Entity e = Bukkit.getEntity(id);
+            if (!(e instanceof Chicken c) || !c.isValid()) {
+                flock.remove(id); // its chunk unloaded it: it is gone
+                continue;
+            }
+            if (r.nextInt(100) < DASH_PERCENT) {
+                Location to = c.getLocation().add(r.nextDouble(-8, 8), 0, r.nextDouble(-8, 8));
+                try {
+                    c.getPathfinder().moveTo(to, 1.6);
+                } catch (RuntimeException ignored) {
+                    // it tries again
+                }
+            }
+            if (r.nextInt(100) < 3) {
+                c.getWorld().playSound(c.getLocation(), Sound.ENTITY_CHICKEN_AMBIENT, 0.5f, 0.6f);
+            }
+        }
+    }
+
+    /** A Hub visitor's tap on a stampede turkey: it poofs, the count goes up, the tokens and the Mini's chance. */
+    private void stampedeTap(Player p, Entity turkey) {
+        UUID id = p.getUniqueId();
+        long now = System.currentTimeMillis();
+        boolean visitor = com.dierks.homecraft.games.hub.Hub.visiting(plugin, p);
+        if (!TurkeyRules.stampedeCatch(visitor, stampedeTapAt.get(id), now)) {
+            if (!visitor) {
+                p.playSound(turkey.getLocation(), Sound.ENTITY_CHICKEN_AMBIENT, 0.6f, 1.5f);
+            }
+            return;
+        }
+        stampedeTapAt.put(id, now);
+        flock.remove(turkey.getUniqueId());
+        Location at = turkey.getLocation();
+        turkey.remove();
+        try {
+            at.getWorld().spawnParticle(Particle.CLOUD, at.clone().add(0, 0.6, 0), 12, 0.3, 0.3, 0.3, 0.02);
+            at.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, at.clone().add(0, 0.8, 0), 6, 0.3, 0.3, 0.3, 0);
+            p.playSound(at, Sound.ENTITY_CHICKEN_HURT, 0.7f, 0.6f);
+            p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.6f, 1.3f);
+        } catch (RuntimeException ignored) {
+            // decoration
+        }
+        int n = stampedeCatches.merge(id, 1, Integer::sum);
+        caughtInStampede.put(id, plugin.clock().today().toEpochDay());
+        p.sendActionBar(Text.of(TurkeyRules.stampedeCount(n)));
+        TurkeyConfig.Turkey c = settings();
+        if (open(c, plugin.clock().today())) {
+            payTokens(p, c);
+            maybeMini(p, c);
+        }
+    }
+
+    /** The stampede ends: every turkey goes; with {@code tell}, each visitor reads how many they caught. */
+    private void endStampede(boolean tell) {
+        for (UUID id : new ArrayList<>(flock)) {
+            Entity e = Bukkit.getEntity(id);
+            if (e != null) {
+                e.remove();
+            }
+        }
+        flock.clear();
+        if (tell && stampedeUntil > 0) {
+            for (Player p : com.dierks.homecraft.games.hub.Hub.visitors(plugin.games())) {
+                p.sendMessage(Text.of(TurkeyRules.stampedeOver(stampedeCatches.getOrDefault(p.getUniqueId(), 0))));
+            }
+        }
+        stampedeUntil = 0;
+        stampedeCatches.clear();
+        stampedeTapAt.clear();
+    }
+
     // ---- join and quit ---------------------------------------------------------------------
 
-    /** The first join of a local day, while it is open: a welcome turkey of their own 90 seconds later. */
+    /**
+     * The first join of a local day, while it is open: a welcome turkey of their own 90 seconds later, or (0.44.0) a
+     * catch-up turkey after {@code catch_up_minutes} if they haven't caught one today by then.
+     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         TurkeyConfig.Turkey c = settings();
         LocalDate today = plugin.clock().today();
-        if (task == null || !c.welcome() || !open(c, today)) {
+        long delay = TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes());
+        if (task == null || delay < 0 || !open(c, today)) {
             return;
         }
         Long had = welcomedDay.get(id);
         if (had == null || had != today.toEpochDay()) {
-            welcomeDue.put(id, plugin.clock().nowMillis() + TurkeyRules.WELCOME_DELAY_MS);
+            welcomeDue.put(id, plugin.clock().nowMillis() + delay); // the welcome turkey, or 0.44.0's catch-up one
         }
     }
 
@@ -1066,7 +1345,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         LocalDateTime at = localNow();
         for (int i = 0; i < 100 && at != null; i++) {
-            at = CandyRules.nextSlot(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), 0);
+            at = TurkeyRules.nextStart(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), c.randomTimes(),
+                    c.runMinutes(), c.quietFromHour(), c.quietToHour());
             if (at == null || !heldByRestart(at)) {
                 return at;
             }
@@ -1085,10 +1365,15 @@ public final class TurkeyService implements Listener, TurkeyHost {
         LocalDate today = plugin.clock().today();
         int n = 0;
         try {
-            for (long slot : TurkeyRules.slotsOn(today, c.everyMinutes(), c.offsetMinutes())) {
+            for (long slot : TurkeyRules.slotsOn(today, c.everyMinutes(), c.offsetMinutes(), c.randomTimes(),
+                    c.runMinutes(), c.quietFromHour(), c.quietToHour())) {
                 if (counters.counter(player, TurkeyRules.claimKey(c.year(), TurkeyRules.runId(slot))) > 0) {
                     n++;
                 }
+            }
+            Long stampedeDay = caughtInStampede.get(player);
+            if (stampedeDay != null && stampedeDay == today.toEpochDay()) {
+                n++; // 0.44.0: a stampede catch counts as a turkey caught today (no catch-up one needed)
             }
             String welcome = TurkeyRules.welcomeRunId(today.toEpochDay(), player);
             if (counters.counter(player, TurkeyRules.claimKey(c.year(), welcome)) > 0) {

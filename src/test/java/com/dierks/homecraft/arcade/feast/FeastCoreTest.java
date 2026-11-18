@@ -205,7 +205,7 @@ class FeastCoreTest {
         assertEquals(20, balance(lily), "her one loaf counts the same");
         assertEquals(20, balance(dad));
         assertEquals(List.of("paid Sam 20", "paid Lily 20", "paid Dad 20",
-                "mini Lily turkey_mini_2026", "moment Lily", "mini Dad turkey_mini_2026", "moment Dad",
+                "mini Lily cooked_turkey_2026", "moment Lily", "mini Dad cooked_turkey_2026", "moment Dad",
                 "all &6Thankful for: &fSam, Lily and Dad&6!", "show"), host.calls,
                 "pay everyone, then each one home: the Mini first, then the moment; the line for all; the show");
 
@@ -232,7 +232,7 @@ class FeastCoreTest {
         assertEquals(List.of(), host.calls, "paid already; not home yet: nothing");
         host.away.remove(sam);
         core.settle(sam);
-        assertEquals(List.of("mini Sam turkey_mini_2026", "moment Sam &6Thankful for: &fSam and Dad&6!"),
+        assertEquals(List.of("mini Sam cooked_turkey_2026", "moment Sam &6Thankful for: &fSam and Dad&6!"),
                 host.calls, "home: their Mini, then their own moment with the line");
         host.calls.clear();
         core.second();
@@ -253,7 +253,7 @@ class FeastCoreTest {
         host.calls.clear();
         core.give(lily, 1, 1, false, false);
         core.afterGift(lily);
-        assertEquals(List.of("paid Lily 20", "mini Lily turkey_mini_2026",
+        assertEquals(List.of("paid Lily 20", "mini Lily cooked_turkey_2026",
                 "moment Lily &6Thankful for: &fDad and Lily&6!"), host.calls);
     }
 

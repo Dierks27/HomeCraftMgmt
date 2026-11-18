@@ -68,8 +68,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * guard, the family bar, each helper's moment, the show over the pot, and what the Clubhouse's tables read.
  *
  * <p><b>The Feast Pot</b> is one block an admin picks ({@code /hcm feast pot}) in an Overworld economy world. A
- * Clubhouse visitor carries only the kit, so the Clubhouse's own pot (0.42.0) feeds from their saved home inventory
- * instead ({@link #feedFromHome}, {@link HomePantry}). A floating "Feast Pot" name and slow sparkles mark it. A tap holding food hands in one item (a sneak-tap
+ * Clubhouse visitor carries only the kit, so the Clubhouse's own pot (0.44.0) takes them here instead
+ * ({@link #bringToPot}). A floating "Feast Pot" name and slow sparkles mark it. A tap holding food hands in one item (a sneak-tap
  * the stack, up to the day's points), with a munch, a chime that rises as the table fills and a 5-second family bar;
  * an empty hand shows the bar; anything the pot won't take gets a soft low note and stays in the hand. The tap is
  * taken at LOWEST with the block and the item denied, so it never eats the food or opens the block, and a tap on the
@@ -162,6 +162,7 @@ public final class FeastService implements Listener, FeastHost {
     private void second() {
         ticks++;
         hideBars();
+        toPotNow();
         FeastConfig.Feast c = settings();
         boolean open = open();
         if (!open) {
@@ -526,126 +527,71 @@ public final class FeastService implements Listener, FeastHost {
         }
     }
 
-    // ---- 0.42.0: the Clubhouse's Feast Pot, fed from the saved home inventory ------------------------
-
-    /** A tap in the Clubhouse pot's menu, at most this often (a double click is one). */
-    static final String CLUB_TAP_KEY = FeastRules.POT_KEY + ".club";
-
-    /** The visitor's saved state as the pot reads it: the row, its items, and each slot as the pot sees it. */
-    private record Home(com.dierks.homecraft.games.world.SavedState row, ItemStack[] items,
-                        List<HomePantry.Slot> slots) {
-    }
-
-    /** The visitor's live, ACTIVE saved state, or {@code null} (none, not readable). */
-    private Home home(Player p) {
-        com.dierks.homecraft.games.world.SavedState row;
-        try {
-            row = new GamesDao(plugin.database()).loadState(p.getUniqueId());
-        } catch (SQLException e) {
-            plugin.getLogger().warning("The Family Feast could not read " + p.getName() + "'s saved things: "
-                    + e.getMessage());
-            return null;
-        }
-        if (row == null || !com.dierks.homecraft.games.world.SavedState.ACTIVE.equals(row.phase())
-                || row.items() == null) {
-            return null;
-        }
-        ItemStack[] items;
-        try {
-            items = ItemStack.deserializeItemsFromBytes(row.items());
-        } catch (RuntimeException e) {
-            return null; // never touched when it can't be read
-        }
-        List<HomePantry.Slot> slots = new ArrayList<>();
-        for (ItemStack i : items) {
-            if (i == null || i.getType().isAir() || i.getAmount() <= 0) {
-                slots.add(null);
-                continue;
-            }
-            String type = i.getType().name();
-            boolean takes = FeastRules.refusal(type, HarvestItems.isHarvest(i), TokenPrizes.carries(i),
-                    CandyItems.isCandy(i), KitItems.isKit(i), named(i), true) == FeastRules.Refusal.NONE;
-            slots.add(new HomePantry.Slot(type, i.getAmount(), takes));
-        }
-        return new Home(row, items, slots);
-    }
-
-    /** The food waiting at home that the Clubhouse pot takes (empty with none, or no saved state). */
-    public List<HomePantry.Food> homeFood(Player p) {
-        Home h = p == null ? null : home(p);
-        return h == null ? List.of() : HomePantry.foods(h.slots());
-    }
+    // ---- 0.44.0: the Clubhouse's Feast Pot takes you to the real one ---------------------------------
 
     /**
-     * One {@code type} from the visitor's saved home inventory into the Feast (the Clubhouse pot's menu): the same
-     * points, day's cap, munch, rising chime and family bar as the home pot, the steam at {@code at}. Main thread.
+     * Inside the Clubhouse a visitor's own things aren't on them (the Games world keeps its own inventory), so the
+     * Clubhouse's pot can't take food: its button ends the visit, and once they are home this brings them to the Feast
+     * Pot (beside it, facing it). Asked within {@link #TO_POT_MS} of the tap, or forgotten.
      */
-    public HomePantry.Fed feedFromHome(Player p, String type, Location at) {
-        if (core == null || !open()) {
-            softNo(p);
-            return HomePantry.Fed.CLOSED;
-        }
-        if (!taps.counts(p.getUniqueId(), CLUB_TAP_KEY, now())) {
-            return HomePantry.Fed.CHANGED; // a double click: once
-        }
-        Home h = home(p);
-        if (h == null) {
-            softNo(p);
-            return HomePantry.Fed.CHANGED;
-        }
-        GamesDao dao = new GamesDao(plugin.database());
-        byte[] before = h.row().items();
-        byte[][] written = new byte[1][];
-        int each = FeastRules.points(type);
-        boolean creative = GameMode.CREATIVE.name().equals(h.row().gameMode());
-        HomePantry.Fed fed = HomePantry.feed(h.slots(), type, slot -> {
-            ItemStack[] next = h.items().clone();
-            ItemStack one = next[slot].clone();
-            one.setAmount(one.getAmount() - 1);
-            next[slot] = one.getAmount() <= 0 ? ItemStack.empty() : one;
-            byte[] blob = ItemStack.serializeItemsAsBytes(next);
-            try {
-                if (dao.swapItems(p.getUniqueId(), h.row().sessionId(), before, blob)) {
-                    written[0] = blob;
-                    return true;
-                }
-            } catch (SQLException e) {
-                plugin.getLogger().warning("The Family Feast could not take food from " + p.getName()
-                        + "'s saved things: " + e.getMessage());
-            }
+    static final long TO_POT_MS = 30_000L;
+    private final Map<UUID, Long> toPot = new HashMap<>();
+
+    /** Once home from the Clubhouse, {@code p} goes to the Feast Pot. @return false with no pot set */
+    public boolean bringToPot(Player p) {
+        if (pot == null || p == null) {
             return false;
-        }, () -> core.give(p.getUniqueId(), each, 1, false, creative), () -> {
-            try {
-                return dao.swapItems(p.getUniqueId(), h.row().sessionId(), written[0], before);
-            } catch (SQLException e) {
-                return false;
-            }
-        });
-        switch (fed) {
-            case TAKEN -> {
-                FeastRules.FeastView v = core.view();
-                p.playSound(p.getLocation(), Sound.ENTITY_GENERIC_EAT, 0.8f, 1.0f);
-                p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.9f, FeastRules.pitch(v.total(), v.goal()));
-                if (at != null && at.getWorld() != null) {
-                    at.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, at.clone().add(0, 0.5, 0), 6, 0.3, 0.2, 0.3,
-                            0);
-                }
-                showBar(p);
-                core.afterGift(p.getUniqueId());
-            }
-            case FULL -> {
-                softNo(p);
-                p.sendActionBar(Text.of("&7Full for today - come back tomorrow!"));
-                showBar(p);
-            }
-            case LOST -> {
-                softNo(p);
-                plugin.getLogger().severe("The Family Feast took one " + type + " from " + p.getName() + "'s saved"
-                        + " things but could not count it or put it back (session " + h.row().sessionId() + ")");
-            }
-            default -> softNo(p);
         }
-        return fed;
+        toPot.put(p.getUniqueId(), now() + TO_POT_MS);
+        return true;
+    }
+
+    /** Each second: anyone asked to the pot who is home now goes there. */
+    private void toPotNow() {
+        if (toPot.isEmpty()) {
+            return;
+        }
+        long now = now();
+        for (UUID id : new ArrayList<>(toPot.keySet())) {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || toPot.get(id) < now) {
+                toPot.remove(id);
+                continue;
+            }
+            if (!Whereabouts.homeFromGames(plugin, p) || Whereabouts.gamesWorld(plugin, p.getWorld())) {
+                continue; // still on the way
+            }
+            toPot.remove(id);
+            Location to = potStand();
+            if (to != null && p.teleport(to)) {
+                p.playSound(to, Sound.ENTITY_ENDERMAN_TELEPORT, 0.6f, 1.2f);
+                showBar(p);
+            }
+        }
+    }
+
+    /** Where to stand at the pot: a free side of it (feet and head clear, a floor), facing it; else on top. */
+    Location potStand() {
+        Location c = potCentre();
+        if (c == null) {
+            return null;
+        }
+        World w = c.getWorld();
+        int x = c.getBlockX();
+        int y = c.getBlockY();
+        int z = c.getBlockZ();
+        int[][] sides = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+        for (int[] d : sides) {
+            Block feet = w.getBlockAt(x + d[0], y, z + d[1]);
+            Block head = feet.getRelative(org.bukkit.block.BlockFace.UP);
+            Block floor = feet.getRelative(org.bukkit.block.BlockFace.DOWN);
+            if (feet.isPassable() && head.isPassable() && !floor.isPassable()) {
+                Location at = feet.getLocation().add(0.5, 0, 0.5);
+                at.setDirection(c.toVector().subtract(at.toVector()));
+                return at;
+            }
+        }
+        return new Location(w, x + 0.5, y + 1, z + 0.5);
     }
 
     /** Whether the item has a name of its own (a renamed sword, a prize): the pot takes plain food only. */

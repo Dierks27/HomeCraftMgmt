@@ -36,8 +36,8 @@ import java.util.Map;
 public final class TurkeyCommand {
 
     /** The admin words (hcm.admin). With no word it is the player's own line (hcm.arcade.use). */
-    static final List<String> VERBS = List.of("now", "status", "clear");
-    static final String USAGE = "Usage: /hcm turkey [now [player]|status|clear]";
+    static final List<String> VERBS = List.of("now", "status", "clear", "stampede");
+    static final String USAGE = "Usage: /hcm turkey [now [player]|status|clear|stampede]";
     static final String DENIED = "&cYou don't have permission.";
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMM", Locale.US);
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
@@ -76,6 +76,12 @@ public final class TurkeyCommand {
                 int n = turkey.clear();
                 plugin.getLogger().info("Admin " + sender.getName() + " cleared " + n + " turkey" + (n == 1 ? "" : "s"));
                 sender.sendMessage(Text.of("&aCleared " + n + " turkey" + (n == 1 ? "" : "s") + "."));
+            }
+            case "stampede" -> { // 0.44.0: the Hub's Turkey Stampede now
+                String line = turkey.stampedeNow();
+                plugin.getLogger().info("Admin " + sender.getName() + " started a turkey stampede: "
+                        + line.replaceAll("&[0-9a-fk-or]", ""));
+                sender.sendMessage(Text.of(line));
             }
             default -> mine(plugin, (Player) sender, turkey);
         }
@@ -210,8 +216,10 @@ public final class TurkeyCommand {
                 : DAY.format(c.from()) + " " + c.from().getYear() + " - " + DAY.format(c.to()) + " " + c.to().getYear();
         int first = CandyRules.offsetOn(c.offsetMinutes(), c.everyMinutes());
         return "Window: &f" + window + " &7(" + (zone == null || zone.equals(ZoneOffset.UTC) ? "UTC" : zone.getId())
-                + "). A run every &f" + c.everyMinutes() + " &7min from &f"
-                + String.format(Locale.ROOT, "%02d:%02d", first / 60, first % 60) + "&7, &f" + c.runMinutes()
+                + "). Runs " + (c.randomTimes() ? "at random times, &f" + (1440 / c.everyMinutes()) + " &7a day, never &f"
+                + c.quietFromHour() + ":00-" + c.quietToHour() + ":00"
+                : "every &f" + c.everyMinutes() + " &7min from &f"
+                + String.format(Locale.ROOT, "%02d:%02d", first / 60, first % 60)) + "&7, &f" + c.runMinutes()
                 + " &7min each" + (c.welcome() ? ", and a welcome turkey" : "") + ".";
     }
 

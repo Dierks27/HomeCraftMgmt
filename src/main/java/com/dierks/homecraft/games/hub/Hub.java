@@ -68,13 +68,6 @@ public final class Hub implements Game {
     static final String LEAVE = "leave";
     /** Where an admin's arrival spot is kept ({@code world,x,y,z,yaw}). */
     static final String SPOT_KEY = "hub.arrival";
-    /** 0.44.1: the exit pad's spot, kept the same way. */
-    static final String EXIT_KEY = "hub.exit";
-    /** The pad's reach: feet within this of its middle, sideways, and within {@link #PAD_UP} up or down. */
-    static final double PAD_REACH = 0.9;
-    static final double PAD_UP = 1.5;
-    /** Someone the pad just sent is left alone this long (a trip that's slow to start isn't sent twice). */
-    static final long PAD_REST_MS = 5_000L;
 
     static final String NAME = "The Hub";
     static final String CLOSED = "&cThe Hub isn't open right now.";
@@ -88,9 +81,6 @@ public final class Hub implements Game {
     private final HubAdmin admin = new HubAdmin(this);
     /** The admin's arrival spot, or {@code null} for the world's spawn. */
     private Spot spot;
-    /** 0.44.1: the exit pad, or {@code null} for none. */
-    private Spot exit;
-    private final java.util.Map<UUID, Long> padSent = new java.util.HashMap<>();
     private final Set<UUID> kitted = new HashSet<>();
     /** Each WARN once a run (the world missing, not a Games world). */
     private final Set<String> warned = new HashSet<>();
@@ -195,24 +185,17 @@ public final class Hub implements Game {
     @Override
     public void start() {
         try {
-            GenMetaDao meta = new GenMetaDao(plugin().database());
-            spot = Spot.of(meta.get(SPOT_KEY));
-            exit = Spot.of(meta.get(EXIT_KEY));
+            spot = Spot.of(new GenMetaDao(plugin().database()).get(SPOT_KEY));
         } catch (SQLException | RuntimeException e) {
             spot = null;
-            exit = null;
-            plugin().getLogger().log(Level.WARNING, "The Hub could not read its spots", e);
+            plugin().getLogger().log(Level.WARNING, "The Hub could not read its arrival spot", e);
         }
         warned.clear();
-        if (plugin().games() != null) {
-            games().every(this, 10, 10, this::pad); // 0.44.1: the exit pad, twice a second
-        }
     }
 
     @Override
     public void stop() {
         kitted.clear();
-        padSent.clear();
     }
 
     @Override
@@ -221,8 +204,6 @@ public final class Hub implements Game {
         String why = whyClosed();
         out.add("hub: " + (why == null ? "open, " + here() + " here" : "closed - " + why));
         out.add("arrival: " + (spot == null ? "the world's spawn" : spot.text()));
-        out.add("exit pad: " + (exit == null ? "not set (/hcm games hub exit)" : exit.text() + " -> home, or "
-                + settings().home() + "'s spawn"));
         return out;
     }
 
@@ -438,85 +419,6 @@ public final class Hub implements Game {
         }
         spot = s;
         return "&aVisitors arrive where you stand, facing the way you face.";
-    }
-
-    // ---- 0.44.1: the exit pad -----------------------------------------------------------------------
-
-    /** Whether feet at (x, y, z) stand on the pad at (px, py, pz). */
-    static boolean onPad(double x, double y, double z, double px, double py, double pz) {
-        double dx = x - px;
-        double dz = z - pz;
-        return dx * dx + dz * dz <= PAD_REACH * PAD_REACH && Math.abs(y - py) <= PAD_UP;
-    }
-
-    /**
-     * Twice a second: the pad's swirl, and anyone standing on it goes. A visitor's visit ends (home, with their things
-     * and their Bag: the session's own way out); anyone else (a new player who spawned in the Hub) goes to
-     * {@code home_world}'s spawn, as the owner's command block did.
-     */
-    private void pad() {
-        Spot e = exit;
-        World w = e == null ? null : Bukkit.getWorld(e.world());
-        if (w == null || !w.isChunkLoaded((int) Math.floor(e.x()) >> 4, (int) Math.floor(e.z()) >> 4)) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        padSent.values().removeIf(t -> now - t > PAD_REST_MS);
-        try {
-            w.spawnParticle(Particle.PORTAL, e.x(), e.y() + 0.6, e.z(), 12, 0.35, 0.4, 0.35, 0.3);
-        } catch (RuntimeException ignored) {
-            // decoration
-        }
-        for (Player p : w.getPlayers()) {
-            Location l = p.getLocation();
-            if (!onPad(l.getX(), l.getY(), l.getZ(), e.x(), e.y(), e.z()) || padSent.containsKey(p.getUniqueId())) {
-                continue;
-            }
-            padSent.put(p.getUniqueId(), now);
-            try {
-                p.playSound(l, Sound.BLOCK_PORTAL_TRAVEL, 0.25f, 1.6f);
-            } catch (RuntimeException ignored) {
-                // decoration
-            }
-            if (games().sessions().session(p) != null) {
-                if (inside(p)) {
-                    games().sessions().leave(p, EndReason.FINISH); // home, things and Bag back
-                }
-                continue; // someone in another game: theirs to move
-            }
-            World home = Bukkit.getWorld(settings().home());
-            if (home != null && !home.equals(w)) {
-                p.teleport(home.getSpawnLocation().add(0.5, 0, 0.5));
-            }
-        }
-    }
-
-    /** The admin's {@code exit}: the pad where they stand (in the Hub's world). */
-    String setExit(Player p) {
-        if (!p.getWorld().getName().equalsIgnoreCase(settings().world())) {
-            return "&cStand in the Hub's world (" + settings().world() + ") first.";
-        }
-        Location l = p.getLocation();
-        Spot s = new Spot(p.getWorld().getName(), l.getBlockX() + 0.5, l.getY(), l.getBlockZ() + 0.5, 0f);
-        try {
-            new GenMetaDao(plugin().database()).set(EXIT_KEY, s.text());
-        } catch (SQLException e) {
-            return "&cThat can't be saved to the database right now.";
-        }
-        exit = s;
-        return "&aThe exit pad is where you stand: visitors step on it to go home; anyone else goes to "
-                + settings().home() + "'s spawn. &7(Remove your command block, or it sends them too.)";
-    }
-
-    /** The admin's {@code exit clear}: no pad. */
-    String clearExit() {
-        try {
-            new GenMetaDao(plugin().database()).set(EXIT_KEY, null);
-        } catch (SQLException e) {
-            return "&cThat can't be saved to the database right now.";
-        }
-        exit = null;
-        return "&aNo exit pad.";
     }
 
     /** The admin's {@code here clear}: back to the world's spawn. */

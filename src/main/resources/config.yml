@@ -2645,6 +2645,3 @@ games:
     enabled: true
     # The Hub's world.
     world: fairyhub
-    # Where the Hub's exit pad (/hcm games hub exit) sends anyone who isn't visiting (a new player who
-    # spawned in the Hub): this world's spawn. A visitor just goes home, with their things and Bag.
-    home_world: world

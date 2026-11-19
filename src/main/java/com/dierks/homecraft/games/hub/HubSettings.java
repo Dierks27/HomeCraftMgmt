@@ -8,20 +8,18 @@ import java.util.List;
  * {@code games.hub} (0.44.0): the Hub, the server's big first-join spawn world, visited like the Clubhouse.
  *
  * @param enabled whether anyone can go (games on, and the world listed in {@code games.worlds})
- * @param world   the Hub's world: one of {@code games.worlds}
- * @param home    0.44.1: where the exit pad sends anyone who isn't visiting (a new player who spawned in the Hub): that
- *                world's spawn
+ * @param world   the Hub's world: one of {@code games.worlds}, with its own Multiverse-Inventories group
  */
-public record HubSettings(boolean enabled, String world, String home) {
+public record HubSettings(boolean enabled, String world) {
 
     /** The keys it ships, in config order. */
-    public static final List<String> KEYS = List.of("enabled", "world", "home_world");
+    public static final List<String> KEYS = List.of("enabled", "world");
 
     /** The shipped world: the first-join spawn. */
     public static final String WORLD = "fairyhub";
 
     public static HubSettings defaults() {
-        return new HubSettings(true, WORLD, "world");
+        return new HubSettings(true, WORLD);
     }
 
     /** Read {@code games.hub} over {@code d}; never throws. */
@@ -32,10 +30,6 @@ public record HubSettings(boolean enabled, String world, String home) {
             n.warn(n.key("world") + " is empty - using " + d.world());
             world = d.world();
         }
-        String home = n.text("home_world", d.home());
-        if (home == null || home.isBlank()) {
-            home = d.home();
-        }
-        return new HubSettings(enabled, world.trim(), home.trim());
+        return new HubSettings(enabled, world.trim());
     }
 }

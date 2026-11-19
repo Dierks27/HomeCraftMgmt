@@ -43,6 +43,8 @@ class HubTest {
 
     @Test
     void theArrivalSpotIsKeptAndReadBack() {
+        assertTrue(com.dierks.homecraft.storage.GenMetaDao.allowed(Hub.SPOT_KEY),
+                "0.44.1: a key the store keeps (0.44.0's hub.arrival switched the Hub off)");
         Hub.Spot s = new Hub.Spot("fairyhub", 10.5, 64.0, -3.25, 90f);
         assertEquals(s, Hub.Spot.of(s.text()));
         assertNull(Hub.Spot.of(null));

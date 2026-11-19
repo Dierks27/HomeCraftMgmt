@@ -252,6 +252,10 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**0.44.1 fixes** `/hcm games hub here`: 0.44.0 kept the spot under a name the settings store refuses, so the
+command switched the Hub off ("That game is taking a break") and saved nothing. Set the spot again after
+updating. **Back to 0.44.0 from 0.44.1:** the jar alone; the saved spot is ignored again.
+
 **Back to 0.43.0 from 0.44.0:** the jar alone (no schema; `games.hub` and the turkey's new keys are left
 in config.yml, unread; config revision 29 stays, and 0.43.0 says once that a newer HomeCraft wrote it). The
 turkey runs go back to fixed times, and the Feast gives the Turkey Mini again (the Cooked Turkey row stays,

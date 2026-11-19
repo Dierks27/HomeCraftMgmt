@@ -66,8 +66,11 @@ public final class Hub implements Game {
     /** The kit's actions. */
     static final String BAG = "bag";
     static final String LEAVE = "leave";
-    /** Where an admin's arrival spot is kept ({@code world,x,y,z,yaw}). */
-    static final String SPOT_KEY = "hub.arrival";
+    /**
+     * Where an admin's arrival spot is kept ({@code world,x,y,z,yaw}): under {@code gen.}, the only keys the store
+     * keeps (0.44.0 used {@code hub.arrival}, which the store refused, switching the Hub off at the first {@code here}).
+     */
+    static final String SPOT_KEY = "gen.hub.arrival";
 
     static final String NAME = "The Hub";
     static final String CLOSED = "&cThe Hub isn't open right now.";

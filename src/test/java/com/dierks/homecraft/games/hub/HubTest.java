@@ -22,8 +22,8 @@ class HubTest {
 
     @Test
     void itShipsOnInTheFirstJoinSpawnWorld() {
-        assertEquals(new HubSettings(true, "fairyhub"), HubSettings.defaults());
-        assertEquals(List.of("enabled", "world"), HubSettings.KEYS);
+        assertEquals(new HubSettings(true, "fairyhub", "world"), HubSettings.defaults());
+        assertEquals(List.of("enabled", "world", "home_world"), HubSettings.KEYS);
         assertTrue(GameCatalog.SPECS.contains(Hub.SPEC), "the games know it");
         assertEquals("hub", Hub.SPEC.id());
     }
@@ -34,7 +34,7 @@ class HubTest {
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("enabled", false);
         raw.put("world", " lobby ");
-        assertEquals(new HubSettings(false, "lobby"), parse(raw, warns));
+        assertEquals(new HubSettings(false, "lobby", "world"), parse(raw, warns));
         assertTrue(warns.isEmpty());
         raw.put("world", "");
         assertEquals("fairyhub", parse(raw, warns).world(), "an empty world is the shipped one");
@@ -54,10 +54,11 @@ class HubTest {
     void theAdminsWords() {
         HubAdmin admin = new HubAdmin(null);
         assertEquals("hub", admin.name());
-        assertEquals(List.of("status", "here"), admin.tab(null, new String[]{""}));
+        assertEquals(List.of("status", "here", "exit"), admin.tab(null, new String[]{""}));
         assertEquals(List.of("here"), admin.tab(null, new String[]{"h"}));
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"here", "c"}));
-        assertEquals(2, admin.help().size());
+        assertEquals(List.of("clear"), admin.tab(null, new String[]{"exit", ""}));
+        assertEquals(3, admin.help().size());
     }
 
     @Test
@@ -65,5 +66,14 @@ class HubTest {
         assertTrue(Hub.firstGamesWorld(List.of("fairyhub", "games"), "fairyhub") != null, "first: closed, and why");
         assertNull(Hub.firstGamesWorld(List.of("games", "fairyhub"), "FairyHub"));
         assertNull(Hub.firstGamesWorld(List.of(), "fairyhub"));
+    }
+
+    /** The exit pad (0.44.1): feet on its block (within 0.9 sideways, 1.5 up or down) and nowhere else. */
+    @Test
+    void theExitPad() {
+        assertTrue(Hub.onPad(10.5, 64, 10.5, 10.5, 64, 10.5), "on it");
+        assertTrue(Hub.onPad(11.2, 64.5, 10.5, 10.5, 64, 10.5), "near the edge");
+        assertTrue(!Hub.onPad(11.6, 64, 10.5, 10.5, 64, 10.5), "the next block over");
+        assertTrue(!Hub.onPad(10.5, 66, 10.5, 10.5, 64, 10.5), "far above");
     }
 }

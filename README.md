@@ -252,6 +252,9 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**Back to 0.44.0 from 0.44.1:** the jar alone (`games.hub.home_world` is left in config.yml, unread). The
+exit pad goes: put your command block back if you want one.
+
 **Back to 0.43.0 from 0.44.0:** the jar alone (no schema; `games.hub` and the turkey's new keys are left
 in config.yml, unread; config revision 29 stays, and 0.43.0 says once that a newer HomeCraft wrote it). The
 turkey runs go back to fixed times, and the Feast gives the Turkey Mini again (the Cooked Turkey row stays,
@@ -4271,7 +4274,13 @@ games' own carry, which already brings home anything that reaches a player durin
    mode with the other Games worlds.
 3. `/mv modify fairyhub set gamemode adventure` (the check asks for it).
 4. Stand where visitors should arrive and type **`/hcm games hub here`** (without it they arrive at the
-   world's spawn). `/hcm games hub status` says whether it's open, or why not, and who's in.
+   world's spawn).
+   **The exit pad (0.44.1):** stand on the spot people should step on to leave and type **`/hcm games hub
+   exit`** (a swirl of portal particles marks it). A visitor who steps on it goes home, with their things and
+   their Bag; anyone else there (a new player who spawned in the Hub) goes to `games.hub.home_world`'s spawn
+   (`world`). It replaces a command block or portal that sends people away: remove those, since a visit ends
+   on any teleport that isn't HCM's own and the visitor would be put back in the Hub. `exit clear` removes
+   the pad. `/hcm games hub status` says whether it's open, or why not, and who's in.
 5. `/hcm reload`. The Hub button shows in `/hcm arcade` once it's open.
 
 New players still arrive in the Hub on their first join and walk through its portal as before; they aren't
@@ -4280,7 +4289,8 @@ visiting (no kit, no session) and the Hub's world is read-only for them too.
 | Key | Shipped | What it does |
 |---|---|---|
 | `games.hub.enabled` | `true` | Whether anyone can go (with `games.enabled`) |
-| `games.hub.world` | `fairyhub` | The Hub's world: in `games.worlds`, with its own inventory group |
+| `games.hub.world` | `fairyhub` | The Hub's world: in `games.worlds` (after your Games world) |
+| `games.hub.home_world` | `world` | 0.44.1: where the exit pad sends anyone who isn't visiting (its spawn) |
 
 ### The Clubhouse
 

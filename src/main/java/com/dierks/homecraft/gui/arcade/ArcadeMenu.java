@@ -111,8 +111,12 @@ public final class ArcadeMenu extends Menu {
         }
         set(18, Menus.icon(Material.YELLOW_STAINED_GLASS_PANE, "&e&lPrize Counter",
                 "&7Pick what you want. No luck needed."), null);
-        set(LUCK_LABEL, Menus.icon(Material.ORANGE_STAINED_GLASS_PANE, "&6&lLuck",
-                "&7Crates, the Scratch Ticket,", "&7Card Packs and Take a break."), null);
+        boolean ticketHere = games == null || games.parlor().ticketListed(player);
+        set(LUCK_LABEL, ticketHere
+                ? Menus.icon(Material.ORANGE_STAINED_GLASS_PANE, "&6&lLuck",
+                "&7Crates, the Scratch Ticket,", "&7Card Packs and Take a break.")
+                : Menus.icon(Material.ORANGE_STAINED_GLASS_PANE, "&6&lLuck",
+                "&7Crates, Card Packs", "&7and Take a break."), null);
         set(YOU_LABEL, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lYou",
                 "&7Your quests, achievements,", "&7looks and how it all works."), null);
 
@@ -137,11 +141,11 @@ public final class ArcadeMenu extends Menu {
                 "&7Open a pack, get a Card,", "&7print it into a Mini.", "&eClick to shop"),
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
         if (play && luck.state() == GamesMenu.Luck.OPEN) {
-            // 0.46.0: while the games of chance are kept to the Clubhouse's Game Parlor, this is the crates and the ticket
+            // 0.46.0: while the games of chance are kept to the Clubhouse's Game Parlor, this is the crates (0.46.1:
+            // the Scratch Ticket went to the Parlor with them)
             boolean parlorOnly = games != null && games.parlor().onlyHere();
             set(LUCK_GAMES, parlorOnly
-                    ? Menus.icon(Material.GOLD_NUGGET, "&6Games of luck", "&7The crates and", "&7the Scratch Ticket.",
-                    "&eClick to see them")
+                    ? Menus.icon(Material.GOLD_NUGGET, "&6Games of luck", "&7The crates.", "&eClick to see them")
                     : Menus.icon(Material.GOLD_NUGGET, "&6Games of luck",
                     "&7Games of chance, the crates", "&7and the Scratch Ticket.", "&eClick to see them"),
                     e -> tab(Game.Tab.LUCK));
@@ -339,6 +343,10 @@ public final class ArcadeMenu extends Menu {
     }
 
     private void scratch(PluginConfig.Arcade arc) {
+        GamesService games = plugin.games();
+        if (games != null && !games.parlor().ticketListed(player)) {
+            return; // 0.46.1: kept to the Clubhouse's Game Parlor with the games of chance
+        }
         int cost = arc.lotto().ticketTokens();
         set(SCRATCH, ArcadeService.ticketClosed(arc.lotto())
                 ? ArcadeIcons.of(plugin, player, "scratch", Material.FILLED_MAP, "&aScratch Ticket",

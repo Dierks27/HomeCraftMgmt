@@ -1275,7 +1275,7 @@ public final class ClubhouseRoom {
                 out.add(new Cabinet(ClubhousePlanner.PARLOR_GAMES.get(n), at.get(n)));
             }
             for (Map.Entry<String, Place> e : handParlor.entrySet()) { // 0.45.0: a moved machine, the rest stay
-                if (overrides() && mine(e.getValue())) {
+                if (overrides() && mine(e.getValue()) && !ClubhousePlanner.TICKET.equals(e.getKey())) {
                     moveFirst(out, e.getKey(), place3(e.getValue(), 0));
                 }
             }
@@ -1283,11 +1283,28 @@ public final class ClubhouseRoom {
         }
         for (Map.Entry<String, Place> e : handParlor.entrySet()) {
             ClubhousePlanner.Place3 p = place3(e.getValue(), 0);
-            if (p != null) {
+            if (p != null && !ClubhousePlanner.TICKET.equals(e.getKey())) {
                 out.add(new Cabinet(e.getKey(), p));
             }
         }
         return out;
+    }
+
+    /**
+     * 0.46.1: where the Scratch Ticket's booth stands in the parlor, or {@code null}: the generated room's place (or
+     * where the owner moved it), or the owner-built room's own ({@code parlor ticket}); none until the owner sets one
+     * there.
+     */
+    public ClubhousePlanner.Place3 parlorTicket() {
+        Place own = handParlor.get(ClubhousePlanner.TICKET);
+        if (!hand) {
+            if (!parlorBuilt()) {
+                return null;
+            }
+            return own != null && overrides() && mine(own) ? place3(own, 0)
+                    : ClubhousePlanner.parlorTicket(site.box());
+        }
+        return own == null ? null : place3(own, 0);
     }
 
     /** Whether feet are in the Game Parlor (its air; owner-built: near its arrival spot). */
@@ -1329,11 +1346,11 @@ public final class ClubhouseRoom {
                             : "The Game Parlor's gold star is where you stand.";
                 } else {
                     if (sub == null || sub.isBlank()) {
-                        return "&cWhich? &e/hcm games clubhouse parlor star|room|<game> [clear]";
+                        return "&cWhich? &e/hcm games clubhouse parlor star|room|<game>|ticket [clear]";
                     }
-                    if (at != null && !chanceGame) {
+                    if (at != null && !chanceGame && !ClubhousePlanner.TICKET.equals(sub)) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
-                                + " twenty_one, higher_lower).";
+                                + " twenty_one, higher_lower) and the Scratch Ticket's booth (ticket).";
                     }
                     Map<String, Place> next = new java.util.LinkedHashMap<>(handParlor);
                     if (at == null) {

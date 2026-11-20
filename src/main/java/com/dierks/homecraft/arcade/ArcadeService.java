@@ -50,9 +50,20 @@ public final class ArcadeService {
      *                 the reveal reads this flag, not the icon it happens to be drawn with.
      */
     public record Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big,
-                          int returned) {
+                          int returned, long cents, boolean dollars) {
+        /** A token outcome (nothing here was money). */
+        public Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big,
+                       int returned) {
+            this(ok, error, icon, label, win, big, returned, 0, false);
+        }
+
         public Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big) {
             this(ok, error, icon, label, win, big, 0);
+        }
+
+        /** 0.46.1: a money ticket's outcome, with what came back in cents (0 for nothing). */
+        static Outcome money(ItemStack icon, String label, boolean win, boolean big, long cents) {
+            return new Outcome(true, null, icon, label, win, big, !win && cents > 0 ? 1 : 0, cents, true);
         }
 
         public Outcome(boolean ok, String error, ItemStack icon, String label, boolean win) {
@@ -403,11 +414,22 @@ public final class ArcadeService {
      * follows is only a reveal, so closing it early can neither lose nor repeat anything.
      */
     public Outcome scratch(Player player) {
-        if (!plugin.sandbox().check(player, "scratch ticket")) {
+        // 0.46.1: the ticket goes where the games of chance go. Kept to the Clubhouse's Game Parlor with them, it is
+        // bought only there; and the Parlor is in the Games world, so standing in it stands in for the economy world.
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        boolean inParlor = games != null && games.inParlor(player.getUniqueId());
+        if (games != null && !games.parlor().ticketListed(player)) {
+            return Outcome.fail(com.dierks.homecraft.games.Parlor.TICKET_ONLY_HERE);
+        }
+        if (!inParlor && !plugin.sandbox().check(player, "scratch ticket")) {
             return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
         PluginConfig.Lotto l = plugin.config().arcade().lotto();
-        String paused = chanceRefusal(plugin, player, l.ticketTokens());
+        // 0.46.1 (the owner: "switch the Scratch Ticket over to $ instead of tokens ... $5 entry"): at the Parlor's
+        // booth the ticket costs dollars and pays dollars, each prize the same share of the price as on the token
+        // ticket. Money stays in the Parlor: anywhere else it is the token ticket.
+        boolean dollars = games != null && games.parlor().ticketForMoney(player);
+        String paused = chanceRefusal(plugin, player, dollars ? 0 : l.ticketTokens());
         if (paused != null) {
             return Outcome.fail(paused);
         }
@@ -418,12 +440,20 @@ public final class ArcadeService {
             return Outcome.fail(TICKET_CLOSED); // config.yml's WARN at load says why
         }
         UUID id = player.getUniqueId();
-        int have = tokens().balance(id);
-        if (have < l.ticketTokens()) {
-            return Outcome.fail("You need " + (l.ticketTokens() - have) + " more tokens.");
-        }
-        if (!tokens().spend(id, l.ticketTokens(), TokenService.Source.LOTTO, "Scratch Ticket")) {
-            return Outcome.fail("You need " + l.ticketTokens() + " tokens.");
+        int price = dollars ? games.parlor().ticketPrice() : 0;
+        if (dollars) {
+            com.dierks.homecraft.games.Refusal no = games.parlor().ticketTake(player);
+            if (no != null) {
+                return Outcome.fail(no.message());
+            }
+        } else {
+            int have = tokens().balance(id);
+            if (have < l.ticketTokens()) {
+                return Outcome.fail("You need " + (l.ticketTokens() - have) + " more tokens.");
+            }
+            if (!tokens().spend(id, l.ticketTokens(), TokenService.Source.LOTTO, "Scratch Ticket")) {
+                return Outcome.fail("You need " + l.ticketTokens() + " tokens.");
+            }
         }
         PluginConfig.Jackpot j = l.jackpot();
         int pot;
@@ -446,14 +476,39 @@ public final class ArcadeService {
             } catch (SQLException e) {
                 plugin.getLogger().warning("Could not reset the Scratch Ticket pot: " + e.getMessage());
             }
-            tokens().grant(id, pot, TokenService.Source.LOTTO, "Scratch Ticket jackpot");
-            shout("&6&l✦ JACKPOT! &e" + player.getName() + " &6won &e" + pot + " tokens &6on a Scratch Ticket!");
+            long potCents = com.dierks.homecraft.games.Parlor.prizeCents(pot, l.ticketTokens(), price);
+            String potText = dollars ? com.dierks.homecraft.games.Parlor.money(potCents) : pot + " tokens";
+            if (dollars) {
+                games.parlor().ticketGive(id, potCents);
+            } else {
+                tokens().grant(id, pot, TokenService.Source.LOTTO, "Scratch Ticket jackpot");
+            }
+            shout("&6&l✦ JACKPOT! &e" + player.getName() + " &6won &e" + potText + " &6on a Scratch Ticket!");
             if (plugin.achievements() != null) {
                 plugin.achievements().tryAward(player, "jackpot");
                 plugin.achievements().increment(player, "jackpots", 1);
             }
+            if (dollars) {
+                return Outcome.money(icon(Material.GOLD_BLOCK, "&6&lJACKPOT! &e" + potText),
+                        "&6the jackpot: " + potText, true, true, potCents);
+            }
             return Outcome.big(icon(Material.GOLD_BLOCK, "&6&lJACKPOT! &e" + pot + " tokens"),
                     "&6the jackpot: " + pot + " tokens");
+        }
+        if (dollars) {
+            long cents = com.dierks.homecraft.games.Parlor.prizeCents(result.tokens(), l.ticketTokens(), price);
+            games.parlor().ticketGive(id, cents);
+            String got = com.dierks.homecraft.games.Parlor.money(cents);
+            String paid = com.dierks.homecraft.games.Parlor.money(price * 100L);
+            if (cents > price * 100L) {
+                return Outcome.money(icon(Material.SUNFLOWER, "&e+" + got), "&e" + got, true, false, cents);
+            }
+            if (cents > 0) {
+                return Outcome.money(icon(Material.IRON_NUGGET, "&7Money back: &f" + got + " &7of &f" + paid),
+                        "&7You got " + (cents >= price * 100L ? "&7your &f" + got : "&f" + got + " &7of your &f"
+                                + paid) + " &7back", false, false, cents);
+            }
+            return Outcome.money(icon(Material.GRAY_DYE, "&7No win this time"), "&7no win", false, false, 0);
         }
         int won = result.tokens();
         if (won > 0) {

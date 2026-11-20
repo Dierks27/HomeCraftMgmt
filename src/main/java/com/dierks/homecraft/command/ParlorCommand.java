@@ -32,7 +32,7 @@ import java.util.Locale;
 final class ParlorCommand {
 
     /** The words after {@code parlor}. */
-    static final List<String> VERBS = List.of("only", "money", "limit", "stake", "payout", "chips");
+    static final List<String> VERBS = List.of("only", "money", "limit", "stake", "payout", "chips", "ticket");
 
     private ParlorCommand() {
     }
@@ -47,7 +47,8 @@ final class ParlorCommand {
                 "&e/hcm games parlor limit <player> <dollars|off|default> &7- one player's own day limit",
                 "&e/hcm games parlor stake <dollars> &7- the biggest stake",
                 "&e/hcm games parlor payout <dollars> &7- the most one play gives back",
-                "&e/hcm games parlor chips <a> [b] [c] &7- the chips a stake is built from");
+                "&e/hcm games parlor chips <a> [b] [c] &7- the chips a stake is built from",
+                "&e/hcm games parlor ticket <dollars|tokens> &7- what a Scratch Ticket costs at the Parlor's booth");
     }
 
     /**
@@ -139,6 +140,19 @@ final class ParlorCommand {
                         + "&a now."));
                 return "parlor chips " + chipsText(parlor.rules().chips());
             }
+            case "ticket" -> {
+                boolean tokens = value.equals("tokens") || value.equals("token") || value.equals("off");
+                int dollars = tokens ? 0 : whole(value, 1, Parlor.TICKET_CEILING);
+                if (dollars < 0) {
+                    return usage(sender, "ticket <dollars 1-" + Parlor.TICKET_CEILING + "|tokens>");
+                }
+                parlor.ticket(dollars);
+                sender.sendMessage(Text.of(dollars == 0
+                        ? "&aThe Scratch Ticket at the Parlor's booth costs tokens again, as config.yml has it."
+                        : "&aA Scratch Ticket at the Parlor's booth costs &6" + Parlor.dollars(dollars)
+                        + " &anow, and pays in dollars: each prize the same share of the price as before."));
+                return "parlor ticket " + (dollars == 0 ? "tokens" : dollars);
+            }
             default -> {
                 for (String line : help()) {
                     sender.sendMessage(Text.of(line));
@@ -205,7 +219,11 @@ final class ParlorCommand {
         } catch (SQLException e) {
             out.add("&7Today: &8couldn't be read");
         }
-        out.add("&8/hcm games parlor only|money|limit|stake|payout|chips");
+        long[] tickets = games.parlor().ticketsToday();
+        out.add("&7Scratch Ticket at the booth: &f" + (r.ticket() > 0 ? Parlor.dollars(r.ticket()) : "tokens")
+                + (r.ticket() > 0 ? " &7· today: &f" + Parlor.dollars((int) tickets[0]) + " &7in, &f"
+                + Parlor.money(tickets[1]) + " &7given back" : ""));
+        out.add("&8/hcm games parlor only|money|limit|stake|payout|chips|ticket");
         return out;
     }
 
@@ -229,6 +247,7 @@ final class ParlorCommand {
                 case "stake" -> List.of("25", "50", "100");
                 case "payout" -> List.of("250", "500", "1000");
                 case "chips" -> List.of("5", "1");
+                case "ticket" -> List.of("5", "10", "tokens");
                 default -> List.of();
             };
         }

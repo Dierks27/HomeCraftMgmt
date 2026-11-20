@@ -291,7 +291,8 @@ class ParlorMoneyTest {
         p.maxStake(100);
         p.maxPayout(1000);
         p.chips(List.of(50, 10, 20));
-        Parlor.Rules set = new Parlor.Rules(false, false, 400, 100, 1000, List.of(10, 20, 50));
+        p.ticket(10);
+        Parlor.Rules set = new Parlor.Rules(false, false, 400, 100, 1000, List.of(10, 20, 50), 10);
         assertEquals(set, p.rules());
         build(); // a restart: the same store
         assertEquals(set, games.parlor().rules(), "read back from where they are kept");
@@ -356,6 +357,111 @@ class ParlorMoneyTest {
         games.parlor().onlyHere(false);
         assertNull(games.canStake(sam.player, slots, 5), "the rule switched off by command");
         assertTrue(games.parlor().listed(slots, sam.player));
+    }
+
+    /** 0.46.1, the owner: "Scratch ticket is lottery... I would put that in the parlor as well". */
+    @Test
+    void theScratchTicketGoesWhereTheGamesOfChanceGo() {
+        Fake sam = new Fake("Sam");
+        assertTrue(games.parlor().ticketListed(sam.player), "no Parlor: the ticket is in the Arcade as ever");
+        slots.parlor = true;
+        assertFalse(games.parlor().ticketListed(sam.player), "kept to the Parlor with the games of chance");
+        assertTrue(games.parlor().ticketListed(alex.player), "and offered to someone standing in it");
+        assertTrue(games.parlor().ticketListed(null), "the console is never refused a listing");
+        games.parlor().onlyHere(false);
+        assertTrue(games.parlor().ticketListed(sam.player), "the rule off: everywhere again");
+    }
+
+    // ---- the Scratch Ticket for dollars (0.46.1: "switch the Scratch Ticket over to $ ... $5 entry") ------------
+
+    @Test
+    void atTheBoothTheTicketCostsFiveDollarsAndCountsAgainstTheDay() {
+        assertTrue(games.parlor().ticketForMoney(alex.player), "in the Parlor, with a bank: a money ticket");
+        assertEquals(5, games.parlor().ticketPrice());
+        assertNull(games.parlor().ticketTake(alex.player), "taken");
+        assertEquals(295.0, money());
+        assertEquals(100, host.balanceOf(alex.id), "no tokens moved");
+        assertEquals(5, games.parlor().inToday(alex.id), "a ticket is money put in today");
+        games.parlor().ticketGive(alex.id, 150);
+        assertEquals(296.5, money(), "$1.50 back");
+        assertEquals(5, games.parlor().ticketsToday()[0], "the owner's status: $5 in");
+        assertEquals(150, games.parlor().ticketsToday()[1], "and $1.50 given back");
+        host.move(5 * 3_600_000L); // past midnight
+        assertEquals(0, games.parlor().inToday(alex.id), "yesterday's tickets aren't today's");
+        assertEquals(0, games.parlor().ticketsToday()[0]);
+    }
+
+    @Test
+    void ticketsAndGamesShareTheDaysMoneyLimit() {
+        games.parlor().limit(12);
+        assertEquals(0, play(10, 0), "$10 into a game");
+        assertEquals(Parlor.limitReached(12), games.parlor().ticketTake(alex.player), "$10 + $5 would pass $12");
+        assertEquals(290.0, money(), "the refused ticket took nothing");
+        games.parlor().limit(15);
+        assertNull(games.parlor().ticketTake(alex.player));
+        assertNull(play(5, 0), "and the ticket counts against the next game");
+    }
+
+    @Test
+    void aMoneyTicketNeedsEverythingMoneyPlayNeeds() {
+        alex.denied.add(Parlor.PERMISSION_MONEY);
+        assertEquals(Parlor.MONEY_NOT_YOURS, games.parlor().ticketTake(alex.player));
+        alex.denied.clear();
+        host.money.put(alex.id, 3.0);
+        assertEquals(Refusal.Reason.BALANCE, games.parlor().ticketTake(alex.player).reason());
+        assertEquals(3.0, money());
+        host.money.put(alex.id, 300.0);
+        games.parlorGuests(List.of());
+        assertFalse(games.parlor().ticketForMoney(alex.player), "outside the Parlor it is the token ticket");
+        games.parlorGuest(alex.id);
+        games.parlor().money(false);
+        assertFalse(games.parlor().ticketForMoney(alex.player), "money play off: the token ticket");
+        games.parlor().money(true);
+        games.parlor().ticket(0);
+        assertFalse(games.parlor().ticketForMoney(alex.player), "set back to tokens by command");
+        games.parlor().ticket(5);
+        host.bankOn = false;
+        assertFalse(games.parlor().ticketForMoney(alex.player), "no economy: the token ticket");
+    }
+
+    @Test
+    void aPrizeTheBankWontTakeIsKeptAndPaidOnce() {
+        host.bankRefusesGive = true;
+        games.parlor().ticketGive(alex.id, 1250);
+        assertEquals(300.0, money(), "not paid");
+        games.parlor().payOwed(alex.player);
+        assertEquals(300.0, money(), "still refused: still kept");
+        host.bankRefusesGive = false;
+        games.sweep();
+        assertEquals(312.5, money(), "the sweep pays it");
+        games.sweep();
+        games.parlor().payOwed(alex.player);
+        assertEquals(312.5, money(), "once");
+    }
+
+    @Test
+    void aMoneyPrizeIsTheSameShareOfThePrice() {
+        // the shipped ticket: 10 tokens, prizes 3, 10, 25 and 60, a pot from 50
+        assertEquals(150, Parlor.prizeCents(3, 10, 5), "3 of 10 tokens is $1.50 of $5");
+        assertEquals(500, Parlor.prizeCents(10, 10, 5));
+        assertEquals(1250, Parlor.prizeCents(25, 10, 5));
+        assertEquals(3000, Parlor.prizeCents(60, 10, 5));
+        assertEquals(2500, Parlor.prizeCents(50, 10, 5), "the pot's 50 tokens are $25");
+        assertEquals(0, Parlor.prizeCents(0, 10, 5));
+        assertEquals(166, Parlor.prizeCents(1, 3, 5), "rounded down to a whole cent");
+        assertEquals("$5", Parlor.money(500));
+        assertEquals("$1.50", Parlor.money(150));
+        assertEquals("$12.05", Parlor.money(1205));
+        assertEquals("$0", Parlor.money(0));
+    }
+
+    @Test
+    void aDaysTallyIsOnlyThatDays() {
+        assertEquals(15, Parlor.dayTally("20000:15:300", 20000)[0]);
+        assertEquals(300, Parlor.dayTally("20000:15:300", 20000)[1]);
+        assertEquals(0, Parlor.dayTally("19999:15:300", 20000)[0], "yesterday's");
+        assertEquals(0, Parlor.dayTally("nonsense", 20000)[0]);
+        assertEquals(0, Parlor.dayTally(null, 20000)[0]);
     }
 
     @Test

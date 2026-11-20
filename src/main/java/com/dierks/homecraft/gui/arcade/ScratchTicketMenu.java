@@ -76,7 +76,7 @@ public final class ScratchTicketMenu extends Menu {
         for (int i = 0; i < SQUARES.length; i++) {
             int square = i;
             if (shown[i] != null) {
-                set(SQUARES[i], symbolIcon(shown[i], outcome.returned()), null);
+                set(SQUARES[i], symbolIcon(shown[i], outcome), null);
             } else {
                 set(SQUARES[i], Menus.icon(Material.GRAY_CONCRETE, "&7Tap to scratch!"), e -> scratch(square));
             }
@@ -90,11 +90,13 @@ public final class ScratchTicketMenu extends Menu {
         });
     }
 
-    private static ItemStack symbolIcon(Material m, int returned) {
+    private static ItemStack symbolIcon(Material m, ArcadeService.Outcome o) {
         String name = switch (m) {
             case NETHER_STAR -> "&6Star!";
-            case SUNFLOWER -> "&eToken!";
-            case IRON_NUGGET -> "&7Tokens back: &f" + returned;
+            case SUNFLOWER -> o.dollars() ? "&eA sun!" : "&eToken!";
+            case IRON_NUGGET -> o.dollars()
+                    ? "&7Money back: &f" + com.dierks.homecraft.games.Parlor.money(o.cents())
+                    : "&7Tokens back: &f" + o.returned();
             default -> "&8Nothing";
         };
         return Menus.glint(Menus.icon(m, name), m == Material.NETHER_STAR);

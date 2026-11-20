@@ -276,6 +276,15 @@ final class GamesKit {
                     money.merge(player, (double) dollars, Double::sum);
                     return true;
                 }
+
+                @Override
+                public boolean giveCents(UUID player, long cents) {
+                    if (!bankOn || bankRefusesGive || cents <= 0) {
+                        return false;
+                    }
+                    money.merge(player, cents / 100.0, Double::sum);
+                    return true;
+                }
             };
         }
 

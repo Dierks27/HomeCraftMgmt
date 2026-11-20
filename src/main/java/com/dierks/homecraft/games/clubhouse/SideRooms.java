@@ -280,6 +280,11 @@ final class SideRooms {
                 keep.add(key);
                 put(w, key, m.game() + "@" + m.at(), m.at(), () -> machine(w, m.game(), m.at()));
             }
+            ClubhousePlanner.Place3 booth = room.parlorTicket(); // 0.46.1: the Scratch Ticket is the Parlor's
+            if (booth != null && club.ticketOpen()) {
+                keep.add("pticket");
+                put(w, "pticket", "ticket@" + booth, booth, () -> machine(w, ClubhousePlanner.TICKET, booth));
+            }
         }
     }
 
@@ -355,7 +360,8 @@ final class SideRooms {
             }
         }
         Game g = club.games().game(gameId);
-        all.add(label(w, loc(w, at, table ? 0.9 : LABEL_UP), "&a" + (g == null ? gameId : g.name()), 0.5f)
+        String name = g != null ? g.name() : ClubhousePlanner.TICKET.equals(gameId) ? "Scratch Ticket" : gameId;
+        all.add(label(w, loc(w, at, table ? 0.9 : LABEL_UP), "&a" + name, 0.5f)
                 .getUniqueId());
         all.addAll(models);
         all.addAll(plain);
@@ -438,7 +444,12 @@ final class SideRooms {
                     if (room.inParlor(p.getWorld().getName(), p.getX(), p.getY(), p.getZ())) {
                         club.games().parlorGuest(p.getUniqueId()); // in now, for this tap's gate
                     }
-                    club.games().open(p, tap.substring("machine:".length()), null);
+                    String what = tap.substring("machine:".length());
+                    if (ClubhousePlanner.TICKET.equals(what)) {
+                        club.ticketBooth(p); // 0.46.1
+                    } else {
+                        club.games().open(p, what, null);
+                    }
                 }
             }
         }

@@ -2236,6 +2236,104 @@ games:
       # Three wilds take the pot. This times the price is what the pot starts at
       # (10 x $1 = $10). Never under another line here.
       wild: 10
+  # ---- deep_mine ----
+  # Deep Mine: the slot machine with three rows that all count. The screen shows three
+  # rows of three reels, and the top, middle and bottom rows are each a line, so one
+  # spin can pay more than once. A spin always plays all three rows. On a row, three the
+  # same pays that ore's multiple (a Wild stands in for any ore), two the same pays `two`,
+  # Tuff never pays. The game works out Tuff's weight so it gives back `rtp`.
+  deep_mine:
+    # false = Deep Mine is closed.
+    enabled: true
+    # The tokens a player can put on EACH row. A spin is three rows, so it costs three
+    # times this: 3, 6 or 15 tokens as shipped.
+    stakes: [1, 2, 5]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
+    rtp: 90
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Tuff is worked out).
+    reels:
+      # Coal, the most common ore.
+      coal: 10
+      # Copper.
+      copper: 8
+      # Iron.
+      iron: 6
+      # Gold.
+      gold: 4
+      # Diamond, the rarest ore.
+      diamond: 2
+      # Wild (a lantern): stands in for any ore.
+      wild: 4
+    # What a row pays, as a multiple of the tokens on that row. One row never pays more
+    # than a third of max_payout, so three rows together never pay more than max_payout.
+    pays:
+      # Any two the same ore on a row (a Wild counts). 1 = that row's tokens back.
+      two: 1
+      # Three coal (3 = the whole spin back).
+      coal: 3
+      # Three copper.
+      copper: 4
+      # Three iron.
+      iron: 6
+      # Three gold.
+      gold: 10
+      # Three diamonds.
+      diamond: 15
+      # Three wilds (5 on a row → 80; three rows of it are 240, under the max_payout).
+      wild: 16
+  # ---- mob_slots ----
+  # Mob Slots: the slot machine with free spins. Three reels, one line, like Ore Slots,
+  # with what the mobs drop on the reels. The Creeper stands in for any drop, and three
+  # Creepers on the line pay their own line AND give free spins at the same stake. The
+  # free spins are played at once and added to the same spin's result; a free spin
+  # never gives more free spins. Cobweb never pays; the game works out its weight so a
+  # whole spin, free spins counted, gives back `rtp`.
+  mob_slots:
+    # false = Mob Slots is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [1, 2]
+    # Spins per player per day (resets at local midnight). Free spins are not counted.
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95), the free spins counted; the
+    # screen shows what it really reaches.
+    rtp: 90
+    # How many free spins three Creepers give (0-10). 0 = no free spins: a plain machine.
+    free_spins: 5
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Cobweb is worked out).
+    reels:
+      # Rotten Flesh (the Zombie's), the most common drop.
+      rotten_flesh: 10
+      # Bone (the Skeleton's).
+      bone: 8
+      # String (the Spider's).
+      string: 6
+      # Ender Pearl (the Enderman's).
+      ender_pearl: 4
+      # Blaze Rod (the Blaze's), the rarest drop.
+      blaze_rod: 2
+      # Creeper: stands in for any drop. More Creepers = free spins come more often.
+      creeper: 10
+    # What a line pays, as a multiple of the tokens put in. One spin never pays more
+    # than max_payout shared between the spin and its free spins (250 / 6 = 41 as shipped).
+    pays:
+      # Any two the same drop (a Creeper counts). 1 = your tokens back.
+      two: 1
+      # Three rotten flesh.
+      rotten_flesh: 2
+      # Three bones.
+      bone: 3
+      # Three strings.
+      string: 4
+      # Three ender pearls.
+      ender_pearl: 6
+      # Three blaze rods.
+      blaze_rod: 10
+      # Three Creepers, which also give the free spins (2 in → 40). Never under
+      # another line here.
+      creeper: 20
   # ---- creeper_sweeper ----
   # Creeper Sweeper: dig every safe square without digging a creeper.
   creeper_sweeper:

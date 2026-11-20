@@ -67,7 +67,8 @@ class SlotThemeTest {
 
     @Test
     void everyThemeNamesEveryRoleAndLineWithAPictureEach() {
-        assertEquals(List.of(SlotTheme.ORE, SlotTheme.NETHER, SlotTheme.FARM, SlotTheme.MOTHERLODE), SlotTheme.all());
+        assertEquals(List.of(SlotTheme.ORE, SlotTheme.NETHER, SlotTheme.FARM, SlotTheme.MOTHERLODE, SlotTheme.DEEP,
+                SlotTheme.MOB), SlotTheme.all());
         Set<String> ids = new HashSet<>();
         for (SlotTheme t : SlotTheme.all()) {
             assertTrue(ids.add(t.id()), t + ": its own id");
@@ -82,8 +83,15 @@ class SlotThemeTest {
                 assertNotNull(t.icon(s), t + " " + s + " has a picture");
                 assertTrue(icons.add(t.icon(s)), t + ": no picture twice, " + t.icon(s));
             }
-            assertEquals("wild", t.key(Symbol.WILD), t + ": the Wild is `wild` on every machine");
-            assertEquals("Wild", t.label(Symbol.WILD), t + ": and is called the Wild");
+            if (t == SlotTheme.MOB) {
+                // Mob Slots' Wild is the Creeper: it stands in for any drop, and three of them give the free spins
+                assertEquals("creeper", t.key(Symbol.WILD));
+                assertEquals("Creeper", t.label(Symbol.WILD));
+            } else {
+                assertEquals("wild", t.key(Symbol.WILD), t + ": the Wild is `wild` on every other machine");
+                assertEquals("Wild", t.label(Symbol.WILD), t + ": and is called the Wild");
+            }
+            assertEquals(t.label(Symbol.WILD), t.wild());
             assertFalse(keys.contains("two"), t + ": `two` is the pair line's key");
             assertEquals(t.label(Symbol.STONE), t.blank());
             Set<String> lines = new HashSet<>();

@@ -70,9 +70,35 @@ public final class PlayGate {
 
     /** Every step, for putting {@code stake} tokens in. {@code null} = go ahead. */
     public Refusal check(Player player, Game game, int stake) {
+        return check(player, game, stake, false);
+    }
+
+    /**
+     * Every step, for putting {@code stake} in: tokens, or (0.46.0, {@code money}) dollars in the Game Parlor. For
+     * money, steps 7 and 8 are the Parlor's own ({@link Parlor#check}: may play for money here, the day's money
+     * limit, the balance); everything before them is the same.
+     */
+    public Refusal check(Player player, Game game, int stake, boolean money) {
         Refusal r = basics(player, game);
         if (r != null) {
             return r;
+        }
+        if (money) {
+            if (!chance(game)) {
+                return Parlor.MONEY_CLOSED;
+            }
+            Breaks.Today today = today(player);
+            if (today == null) {
+                return Refusal.CHANCE_CLOSED;
+            }
+            r = pause(today);
+            if (r == null) {
+                r = cooldown(player);
+            }
+            if (r == null) {
+                r = dailyLimit(player, game);
+            }
+            return r != null ? r : games.parlor().check(player, stake, true);
         }
         if (chance(game)) {
             Breaks.Today today = today(player);
@@ -98,9 +124,22 @@ public final class PlayGate {
 
     /** Steps 2, 4, 7 and 8 for {@code extra} more tokens mid-round. {@code null} = go ahead. */
     public Refusal extra(Player player, Game game, int extra) {
+        return extra(player, game, extra, false);
+    }
+
+    /** {@link #extra(Player, Game, int)}, or (0.46.0, {@code money}) for {@code extra} more dollars in the Parlor. */
+    public Refusal extra(Player player, Game game, int extra, boolean money) {
         Refusal r = permission(player, game);
         if (r != null) {
             return r;
+        }
+        if (money) {
+            Breaks.Today today = today(player);
+            if (today == null) {
+                return Refusal.CHANCE_CLOSED;
+            }
+            r = pause(today);
+            return r != null ? r : games.parlor().check(player, extra, false);
         }
         if (chance(game)) {
             Breaks.Today today = today(player);
@@ -194,7 +233,12 @@ public final class PlayGate {
      * played on its screen right there).
      */
     private Refusal session(Player player, Game game) {
-        return session(games.sessions().session(player), game, games.inParlor(player.getUniqueId()));
+        boolean inParlor = games.inParlor(player.getUniqueId());
+        Refusal r = session(games.sessions().session(player), game, inParlor);
+        if (r == null && chance(game) && !inParlor && games.parlor().onlyHere()) {
+            return Parlor.ONLY_HERE; // 0.46.0: the games of chance are the Parlor's while it is there
+        }
+        return r;
     }
 
     /** {@link #session(Player, Game)} over the player's session, or {@code null} for none (pure, tested). */

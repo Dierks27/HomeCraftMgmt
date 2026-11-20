@@ -66,7 +66,7 @@ public final class GamesCommand {
     static final Set<String> IN_SESSION = Set.of("play", "leave", "games", "help");
     /** The {@code /hcm games} verbs, in the order help and tab completion list them. */
     static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved", "boat",
-            "movement");
+            "movement", "parlor");
     /** The {@code /hcm games boat} verbs (MOUNTAIN-V21-SPEC D17). */
     static final List<String> BOAT_VERBS = List.of("flights");
     /** The help line of {@code /hcm games boat flights}. */
@@ -434,6 +434,12 @@ public final class GamesCommand {
             case "feature" -> feature(sender, games, args);
             case "scores" -> scores(sender, games, args);
             case "boat" -> boat(sender, games, args);
+            case "parlor" -> { // 0.46.0: the Game Parlor's rules (money play, only in the Parlor)
+                String did = ParlorCommand.handle(plugin, games, sender, Arrays.copyOfRange(args, 2, args.length));
+                if (did != null) {
+                    log(sender, did);
+                }
+            }
             default -> {
                 Game owner = adminOwner(games, verb);
                 if (owner == null) {
@@ -863,6 +869,7 @@ public final class GamesCommand {
         out.add("&e/hcm games saved <player> show|restore|return|discard confirm &7- a player's saved things");
         out.add(BOAT_HELP);
         out.add("&e/hcm games movement [player] &7- what the courses' fair-play watch reads on a player (changes nothing)");
+        out.addAll(ParlorCommand.help());
         GamesService games = plugin.games();
         if (games != null) {
             for (Game g : games.games()) {
@@ -954,6 +961,13 @@ public final class GamesCommand {
                 }
             }
             case "scores" -> scoreCompletions(out, games, args, last);
+            case "parlor" -> {
+                List<String> offers = ParlorCommand.tab(Arrays.copyOfRange(args, 2, args.length));
+                if (n == 4 && args[2].equalsIgnoreCase("limit")) {
+                    players(out, last);
+                }
+                match(out, last, offers.toArray(new String[0]));
+            }
             case "movement" -> {
                 if (n == 3) {
                     players(out, last);
@@ -1032,6 +1046,9 @@ public final class GamesCommand {
         for (Game g : games.games()) {
             if (!games.enabled(g) || (g.kind().chance() && !chance)) {
                 continue;
+            }
+            if (!games.parlor().listed(g, sender instanceof Player p ? p : null)) {
+                continue; // 0.46.0: kept to the Clubhouse's Game Parlor
             }
             match(out, prefix, g.id());
             for (Game.Playable p : games.guard(g, g::playables, List.<Game.Playable>of())) {

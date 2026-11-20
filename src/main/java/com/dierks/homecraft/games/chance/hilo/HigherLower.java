@@ -176,6 +176,26 @@ public final class HigherLower implements Game {
         return p.size() == 1 ? Integer.toString(p.get(0)) : p.get(0) + " to " + p.get(p.size() - 1);
     }
 
+    /** What a run pays at each dollar stake asked for so far (0.46.0): solved once and kept. */
+    private final java.util.Map<String, java.util.Optional<HigherLowerSettings.Odds>> moneyOdds =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 0.46.0, the Game Parlor's money play: what a run pays with {@code dollars} in, solved exactly as a token stake
+     * is (the same target, the same 85-95 band) under the Parlor's biggest payout; {@code null} when no whole-dollar
+     * pots fit the band at that stake.
+     */
+    public HigherLowerSettings.Odds moneyOdds(int dollars) {
+        if (dollars <= 0) {
+            return null;
+        }
+        HigherLowerSettings s = settings();
+        int cap = ctx.games().parlor().rules().capFor(dollars);
+        String key = dollars + ":" + cap + ":" + s.rtp() + ":" + s.maxMultiplier() + ":" + s.maxGuesses();
+        return moneyOdds.computeIfAbsent(key, k -> HigherLowerSettings.solve(List.of(dollars), s.rtp(),
+                s.maxMultiplier(), s.maxGuesses(), cap, null, null, null).stream().findFirst()).orElse(null);
+    }
+
     /** The live settings — the engine object (read on every use, never cached across a reload). */
     public HigherLowerSettings settings() {
         return ctx.games().settings(SPEC);

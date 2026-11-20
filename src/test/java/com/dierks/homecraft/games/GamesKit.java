@@ -134,6 +134,13 @@ final class GamesKit {
         GamesConfig.Parsed config;
         boolean stopping;
         boolean canSchedule = true;
+        /** 0.46.0: the server's money, as far as the Game Parlor can tell (off until a test turns it on). */
+        boolean bankOn;
+        /** The bank takes the money but won't give any (a provider that is down for deposits). */
+        boolean bankRefusesGive;
+        final Map<UUID, Double> money = new LinkedHashMap<>();
+        /** The Parlor's rules as kept ({@code hcm_meta}'s stand-in); null = memory only. */
+        Map<String, String> parlorKept;
 
         Host(long now) {
             this(now, c -> c);
@@ -237,6 +244,57 @@ final class GamesKit {
         @Override
         public int balance(UUID player) {
             return balanceOf(player);
+        }
+
+        @Override
+        public Bank bank() {
+            return new Bank() {
+                @Override
+                public boolean on() {
+                    return bankOn;
+                }
+
+                @Override
+                public double balance(UUID player) {
+                    return money.getOrDefault(player, 0.0);
+                }
+
+                @Override
+                public boolean take(UUID player, int dollars) {
+                    if (!bankOn || dollars <= 0 || balance(player) < dollars) {
+                        return false;
+                    }
+                    money.merge(player, (double) -dollars, Double::sum);
+                    return true;
+                }
+
+                @Override
+                public boolean give(UUID player, int dollars) {
+                    if (!bankOn || bankRefusesGive || dollars <= 0) {
+                        return false;
+                    }
+                    money.merge(player, (double) dollars, Double::sum);
+                    return true;
+                }
+            };
+        }
+
+        @Override
+        public Parlor.Store parlorStore() {
+            if (parlorKept == null) {
+                return null;
+            }
+            return new Parlor.Store() {
+                @Override
+                public String get(String key) {
+                    return parlorKept.get(key);
+                }
+
+                @Override
+                public void set(String key, String value) {
+                    parlorKept.put(key, value);
+                }
+            };
         }
 
         @Override
@@ -401,12 +459,19 @@ final class GamesKit {
     }
 
     /** A game that does what the test says and counts what happened to it. */
-    static final class TestGame implements Game {
+    static final class TestGame implements Game, GamesService.ParlorHost {
         final String id;
         final GameKind kind;
         final String name;
         final TokenService.Source source;
         boolean open = true;
+        /** 0.46.0: stands in for the Clubhouse: whether there is a Game Parlor to keep the games of chance to. */
+        boolean parlor;
+
+        @Override
+        public boolean parlorOpen() {
+            return parlor;
+        }
         boolean throwOnOpen;
         List<Game.Playable> playables = new ArrayList<>();
         List<String> aliases = List.of();

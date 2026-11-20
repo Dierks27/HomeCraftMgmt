@@ -137,7 +137,12 @@ public final class ArcadeMenu extends Menu {
                 "&7Open a pack, get a Card,", "&7print it into a Mini.", "&eClick to shop"),
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
         if (play && luck.state() == GamesMenu.Luck.OPEN) {
-            set(LUCK_GAMES, Menus.icon(Material.GOLD_NUGGET, "&6Games of luck",
+            // 0.46.0: while the games of chance are kept to the Clubhouse's Game Parlor, this is the crates and the ticket
+            boolean parlorOnly = games != null && games.parlor().onlyHere();
+            set(LUCK_GAMES, parlorOnly
+                    ? Menus.icon(Material.GOLD_NUGGET, "&6Games of luck", "&7The crates and", "&7the Scratch Ticket.",
+                    "&eClick to see them")
+                    : Menus.icon(Material.GOLD_NUGGET, "&6Games of luck",
                     "&7Games of chance, the crates", "&7and the Scratch Ticket.", "&eClick to see them"),
                     e -> tab(Game.Tab.LUCK));
         }

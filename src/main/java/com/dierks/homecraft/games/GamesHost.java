@@ -44,6 +44,57 @@ interface GamesHost {
     /** A player's token balance (0 if it can't be read). */
     int balance(UUID player);
 
+    /**
+     * The server's money (0.46.0, the Game Parlor's money play): whole dollars in and out of a player's balance. It is
+     * not this plugin's database, so nothing here shares a transaction with a round.
+     */
+    interface Bank {
+
+        /** No bank: money play is closed. */
+        Bank NONE = new Bank() {
+            @Override
+            public boolean on() {
+                return false;
+            }
+
+            @Override
+            public double balance(UUID player) {
+                return 0;
+            }
+
+            @Override
+            public boolean take(UUID player, int dollars) {
+                return false;
+            }
+
+            @Override
+            public boolean give(UUID player, int dollars) {
+                return false;
+            }
+        };
+
+        /** Whether the server has an economy to play with. */
+        boolean on();
+
+        double balance(UUID player);
+
+        /** Take {@code dollars} from the player (online or not). @return true only if they were taken */
+        boolean take(UUID player, int dollars);
+
+        /** Give {@code dollars} to the player (online or not). @return true only if they were given */
+        boolean give(UUID player, int dollars);
+    }
+
+    /** The server's money; {@link Bank#NONE} when there is none. */
+    default Bank bank() {
+        return Bank.NONE;
+    }
+
+    /** Where the Game Parlor's rules are kept, or {@code null} for memory only (a test). */
+    default Parlor.Store parlorStore() {
+        return null;
+    }
+
     /** The online player with this id, or {@code null}. */
     Player online(UUID player);
 
@@ -104,6 +155,50 @@ interface GamesHost {
             @Override
             public int balance(UUID player) {
                 return plugin.tokens() == null ? 0 : plugin.tokens().balance(player);
+            }
+
+            @Override
+            public Bank bank() {
+                return new Bank() {
+                    @Override
+                    public boolean on() {
+                        return plugin.economy() != null && plugin.economy().isEnabled();
+                    }
+
+                    @Override
+                    public double balance(UUID player) {
+                        return on() ? plugin.economy().balance(plugin.getServer().getOfflinePlayer(player)) : 0;
+                    }
+
+                    @Override
+                    public boolean take(UUID player, int dollars) {
+                        return dollars > 0 && on()
+                                && plugin.economy().withdraw(plugin.getServer().getOfflinePlayer(player), dollars);
+                    }
+
+                    @Override
+                    public boolean give(UUID player, int dollars) {
+                        return dollars > 0 && on()
+                                && plugin.economy().deposit(plugin.getServer().getOfflinePlayer(player), dollars);
+                    }
+                };
+            }
+
+            @Override
+            public Parlor.Store parlorStore() {
+                com.dierks.homecraft.storage.GenMetaDao meta =
+                        new com.dierks.homecraft.storage.GenMetaDao(plugin.database());
+                return new Parlor.Store() {
+                    @Override
+                    public String get(String key) throws java.sql.SQLException {
+                        return meta.get(key);
+                    }
+
+                    @Override
+                    public void set(String key, String value) throws java.sql.SQLException {
+                        meta.set(key, value);
+                    }
+                };
             }
 
             @Override

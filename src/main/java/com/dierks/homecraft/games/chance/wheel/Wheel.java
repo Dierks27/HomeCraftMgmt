@@ -147,6 +147,38 @@ public final class Wheel implements Game {
      * instant round. {@code null} when refused; the player has been told.
      */
     public WheelSpin play(Player player, WheelSettings s, int stake) {
+        return play(player, s, stake, false);
+    }
+
+    /** What the Wheel pays at each dollar stake asked for so far (0.46.0): one-stake settings, solved once and kept. */
+    private final Map<String, java.util.Optional<WheelSettings>> moneyTables =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 0.46.0, the Game Parlor's money play: {@code s} with its ring solved for {@code dollars} in (the same target and
+     * the same 85-95 band as a token stake, under the Parlor's biggest payout), as settings whose one stake is that
+     * many dollars; {@code null} when the ring can't land in the band there.
+     */
+    public WheelSettings moneySettings(WheelSettings s, int dollars) {
+        if (dollars <= 0) {
+            return null;
+        }
+        int cap = ctx.games().parlor().rules().capFor(dollars);
+        String key = dollars + ":" + cap + ":" + s.rtp() + ":" + s.segments();
+        return moneyTables.computeIfAbsent(key, k -> {
+            List<WheelOdds> odds = WheelSettings.solve("games.wheel", List.of(dollars), s.rtp(), s.segments(), cap,
+                    w -> { }, i -> { });
+            return odds.isEmpty() ? java.util.Optional.<WheelSettings>empty()
+                    : java.util.Optional.of(new WheelSettings(s.enabled(), List.of(dollars), s.dailyLimit(), s.rtp(),
+                    s.segments(), odds));
+        }).orElse(null);
+    }
+
+    /**
+     * {@link #play(Player, WheelSettings, int)}, or (0.46.0, {@code money}) one spin for dollars: {@code s} is then
+     * {@link #moneySettings} for that stake.
+     */
+    public WheelSpin play(Player player, WheelSettings s, int stake, boolean money) {
         GamesService games = ctx.games();
         if (s.odds(stake) == null) {
             games.tell(player, Refusal.CLOSED);
@@ -167,7 +199,23 @@ public final class Wheel implements Game {
             games.tell(player, r);
             return null;
         }
-        return games.rounds().play(player, this, stake, s);
+        return games.rounds().play(player, this, stake, s, money);
+    }
+
+    /** {@link #blocker(Player, WheelSettings, int)} for a spin for dollars. */
+    public String moneyBlocker(Player player, WheelSettings s, int dollars) {
+        if (playsLeft(player, s) == 0) {
+            return "no spins left today";
+        }
+        Refusal r = ctx.games().parlor().check(player, dollars, true);
+        if (r == null) {
+            return null;
+        }
+        return switch (r.reason()) {
+            case PERSONAL_LIMIT -> "over your limit today";
+            case BALANCE -> "not enough money";
+            default -> "closed right now";
+        };
     }
 
     /** Spins left today, or -1 if they can't be counted right now. */

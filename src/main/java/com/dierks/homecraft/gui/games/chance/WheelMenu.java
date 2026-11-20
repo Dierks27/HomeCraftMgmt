@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.games.chance;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.wheel.Wheel;
 import com.dierks.homecraft.games.chance.wheel.WheelOdds;
 import com.dierks.homecraft.games.chance.wheel.WheelRing;
@@ -52,6 +53,9 @@ public final class WheelMenu extends GameMenu {
     private static final int SPIN = 50;
     private static final int BALANCE = 51;
     private static final int HOW = 52;
+    /** 0.46.0, in the Game Parlor: tokens or money, and the chips' stake (a click takes them back). */
+    private static final int SWITCH = 53;
+    private static final int CHIPS_BACK = 45;
     /** Win tiles by size, smallest first; bigger prizes than there are colours share the last. */
     private static final Material[] WINS = {Material.YELLOW_CONCRETE, Material.ORANGE_CONCRETE,
             Material.LIME_CONCRETE, Material.LIGHT_BLUE_CONCRETE, Material.MAGENTA_CONCRETE, Material.PURPLE_CONCRETE};
@@ -72,6 +76,11 @@ public final class WheelMenu extends GameMenu {
     private int frame;
     private long ticks;
     private BukkitTask task;
+    /** 0.46.0: tokens or money for the next spin. */
+    private final MoneyPlay money;
+    /** Whether the spin on screen is (or was) for dollars, and the ring it was spun on. */
+    private boolean spinMoney;
+    private WheelOdds spinOdds;
 
     public WheelMenu(HomeCraftManagement plugin, Wheel wheel, Player viewer, Runnable back, WheelSettings settings) {
         super(plugin, wheel, viewer, back);
@@ -80,15 +89,50 @@ public final class WheelMenu extends GameMenu {
         this.plan = Bedrock.is(viewer) ? WheelRing.BEDROCK : WheelRing.JAVA;
         List<Integer> open = settings.open();
         this.stake = open.isEmpty() ? 0 : open.get(0);
+        this.money = new MoneyPlay(plugin, plugin.games(), viewer);
         init(54, Text.of("&5The Wheel"));
+    }
+
+    /** The settings the next spin plays: the screen's own, or the ring solved for the dollars the chips add up to. */
+    private WheelSettings table() {
+        return money.on() ? wheel.moneySettings(settings, money.stake()) : settings;
+    }
+
+    /** What the next spin puts in: tokens picked, or the chips' dollars. */
+    private int in() {
+        return money.on() ? money.stake() : stake;
+    }
+
+    /** A line written for tokens, as this screen says it now. */
+    private String say(String line) {
+        return MoneyPlay.say(money.on(), line);
     }
 
     @Override
     protected void build() {
         fill();
-        WheelOdds odds = settings.odds(stake);
+        boolean dollars = money.on();
+        WheelSettings table = table();
+        int stake = in();
+        // while a spin is shown, the ring is the one it was spun on (the chips may have changed since)
+        WheelOdds odds = spinning && spinOdds != null ? spinOdds : table == null ? null : table.odds(stake);
         exitTile();
+        if (money.offered() || dollars) {
+            set(SWITCH, money.switchTile(), spinning ? null : e -> {
+                money.flip();
+                spin = null;
+                refresh();
+            });
+        }
+        if (dollars) {
+            chipButtons();
+            set(BALANCE, money.balanceTile(), null);
+        }
         if (odds == null) {
+            if (dollars) {
+                set(RESULT, Menus.icon(Material.PAPER, money.stake() <= 0 ? "&eAdd your chips, then Spin"
+                        : "&7The Wheel can't be spun for " + Parlor.dollars(money.stake())), null);
+            }
             return;
         }
         for (int i = 0; i < WheelRing.SLOTS.length; i++) {
@@ -98,20 +142,41 @@ public final class WheelMenu extends GameMenu {
             set(WheelRing.SLOTS[at], highlight(odds, at), null);
         }
         set(RULES, rulesTile(game.rules()), null);
-        set(GIVE_BACK, Menus.icon(Material.COMPARATOR, "&e" + odds.giveBack(),
-                "&7At " + stake + " tokens a spin.", "&7Every space is just as likely."), null);
+        set(GIVE_BACK, Menus.icon(Material.COMPARATOR, "&e" + say(odds.giveBack()),
+                say("&7At " + odds.stake() + " tokens a spin."), "&7Every space is just as likely."), null);
         int left = wheel.playsLeft(viewer, settings);
         set(PLAYS, Menus.icon(Material.CLOCK, left < 0 ? "&ePlays left today" : "&ePlays left today: &f" + left,
                 "&7" + settings.dailyLimit() + " spins a day. More at midnight."), null);
         set(RESULT, resultTile(odds), null);
-        set(TODAY, Menus.icon(Material.GOLD_NUGGET, "&e" + wheel.today(viewer),
-                "&7Tokens put into games of chance today."), null);
-        stakeButtons();
+        if (dollars) {
+            set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
+        } else {
+            set(TODAY, Menus.icon(Material.GOLD_NUGGET, "&e" + wheel.today(viewer),
+                    "&7Tokens put into games of chance today."), null);
+            stakeButtons();
+            set(BALANCE, balanceTile(), null);
+        }
         set(SPIN, spinTile(), e -> spin());
-        set(BALANCE, balanceTile(), null);
         List<String> how = odds.howItPays();
-        set(HOW, Menus.icon(Material.PAPER, "&eHow it pays &7- " + stake + " tokens in",
-                how.toArray(new String[0])), null);
+        set(HOW, Menus.icon(Material.PAPER, "&eHow it pays &7- " + say(odds.stake() + " tokens") + " in",
+                MoneyPlay.say(dollars, how)), null);
+    }
+
+    /** The chips (money play): each adds to the stake; the stake's own tile takes them back. */
+    private void chipButtons() {
+        for (int i = 0; i < money.chips() && i < STAKES.length; i++) {
+            int chip = money.chip(i);
+            set(STAKES[i], money.chipTile(i), spinning ? null : e -> {
+                money.add(chip);
+                spin = null;
+                refresh();
+            });
+        }
+        set(CHIPS_BACK, money.stakeTile(), spinning ? null : e -> {
+            money.clear();
+            spin = null;
+            refresh();
+        });
     }
 
     /** Up to three stake buttons; with more stakes, a window of three around the chosen one. */
@@ -138,8 +203,8 @@ public final class WheelMenu extends GameMenu {
     /** A space: its exact prize for the chosen stake in the name, and how many spaces show it. */
     private ItemStack space(WheelOdds odds, int space) {
         int prize = odds.prize(space);
-        return Menus.icon(material(odds, prize), odds.label(prize) + " &8· " + odds.spaces(prize) + " of 24",
-                "&7" + odds.odds(prize) + " give this", "&7for " + stake + " tokens in.");
+        return Menus.icon(material(odds, prize), say(odds.label(prize)) + " &8· " + odds.spaces(prize) + " of 24",
+                "&7" + odds.odds(prize) + " give this", say("&7for " + odds.stake() + " tokens in."));
     }
 
     private static Material material(WheelOdds odds, int prize) {
@@ -162,11 +227,12 @@ public final class WheelMenu extends GameMenu {
     private ItemStack highlight(WheelOdds odds, int space) {
         int prize = odds.prize(space);
         if (spinning || spin == null) {
-            return Menus.glint(Menus.icon(Material.SEA_LANTERN, "&e» " + odds.label(prize)), false);
+            return Menus.glint(Menus.icon(Material.SEA_LANTERN, "&e» " + say(odds.label(prize))), false);
         }
         return switch (spin.result()) {
-            case WIN -> Menus.glint(Menus.icon(Material.SEA_LANTERN, "&a» You won &6" + spin.prize() + " tokens"), true);
-            case BACK -> Menus.glint(Menus.icon(Material.SEA_LANTERN, "&f» Your " + spin.prize() + " back"), false);
+            case WIN -> Menus.glint(Menus.icon(Material.SEA_LANTERN, "&a» You won &6" + won(spin.prize())), true);
+            case BACK -> Menus.glint(Menus.icon(Material.SEA_LANTERN, "&f» Your " + back(spin.prize()) + " back"),
+                    false);
             case NOTHING -> Menus.glint(Menus.icon(Material.SEA_LANTERN, "&7» No win this time."), false);
         };
     }
@@ -176,14 +242,14 @@ public final class WheelMenu extends GameMenu {
             return Menus.icon(Material.COMPASS, "&eSpinning…", "&7Close the screen to skip.");
         }
         if (spin == null) {
-            return Menus.icon(Material.PAPER, "&ePick your tokens, then Spin",
-                    "&7Each space shows what it gives.", "&7The biggest: &6" + odds.top() + " tokens");
+            return Menus.icon(Material.PAPER, money.on() ? "&eAdd your chips, then Spin" : "&ePick your tokens, then Spin",
+                    "&7Each space shows what it gives.", "&7The biggest: &6" + say(odds.top() + " tokens"));
         }
         return switch (spin.result()) {
-            case WIN -> Menus.glint(Menus.icon(Material.GOLD_INGOT, "&aYou won &6" + spin.prize() + " tokens",
-                    "&7You put in " + spin.stake() + "."), true);
-            case BACK -> Menus.glint(Menus.icon(Material.WHITE_DYE, "&fYour " + spin.prize() + " back",
-                    "&7The tokens you put in came back."), false);
+            case WIN -> Menus.glint(Menus.icon(Material.GOLD_INGOT, "&aYou won &6" + won(spin.prize()),
+                    "&7You put in " + back(spin.stake()) + "."), true);
+            case BACK -> Menus.glint(Menus.icon(Material.WHITE_DYE, "&fYour " + back(spin.prize()) + " back",
+                    spinMoney ? "&7The money you put in came back." : "&7The tokens you put in came back."), false);
             case NOTHING -> Menus.glint(Menus.icon(Material.GRAY_DYE, "&7No win this time."), false);
         };
     }
@@ -193,11 +259,23 @@ public final class WheelMenu extends GameMenu {
         if (spinning) {
             return Menus.glint(Menus.icon(Material.LEVER, "&7Spinning…"), false);
         }
-        String why = wheel.blocker(viewer, settings, stake);
+        String why = money.on() ? wheel.moneyBlocker(viewer, settings, money.stake())
+                : wheel.blocker(viewer, settings, stake);
         if (why != null) {
             return Menus.glint(Menus.icon(Material.LEVER, "&7Spin &8- " + why), false);
         }
-        return Menus.glint(Menus.icon(Material.LEVER, "&aSpin &7- &6" + stake + " tokens", "&eClick to spin"), true);
+        return Menus.glint(Menus.icon(Material.LEVER, "&aSpin &7- &6" + say(in() + " tokens"), "&eClick to spin"),
+                true);
+    }
+
+    /** A prize of the spin on screen, as won: "17 tokens" or "$17". */
+    private String won(int prize) {
+        return spinMoney ? Parlor.dollars(prize) : prize + " tokens";
+    }
+
+    /** An amount of the spin on screen: "10" or "$10". */
+    private String back(int amount) {
+        return spinMoney ? Parlor.dollars(amount) : Integer.toString(amount);
     }
 
     // ---- the spin ----------------------------------------------------------------------------
@@ -206,12 +284,21 @@ public final class WheelMenu extends GameMenu {
         if (spinning) {
             return;
         }
-        WheelSpin s = wheel.play(viewer, settings, stake);
+        boolean dollars = money.on();
+        WheelSettings table = table();
+        int stake = in();
+        if (table == null || table.odds(stake) == null) {
+            refresh();
+            return;
+        }
+        WheelSpin s = wheel.play(viewer, table, stake, dollars);
         if (s == null) {
             refresh(); // refused and told: show the fresh numbers
             return;
         }
         spin = s;
+        spinMoney = dollars;
+        spinOdds = table.odds(stake);
         told = false;
         spinning = true;
         path = WheelRing.path(at, s.space(), plan);
@@ -227,7 +314,7 @@ public final class WheelMenu extends GameMenu {
         if (!spinning) {
             return;
         }
-        WheelOdds odds = settings.odds(stake);
+        WheelOdds odds = spinOdds;
         ticks++;
         boolean moved = false;
         while (frame < path.length && ticks >= schedule[frame]) {
@@ -268,11 +355,11 @@ public final class WheelMenu extends GameMenu {
         switch (spin.result()) {
             case WIN -> {
                 Sounds.won(viewer);
-                viewer.sendMessage(Text.of("&aThe Wheel: you won &6" + spin.prize() + " tokens&a."));
+                viewer.sendMessage(Text.of("&aThe Wheel: you won &6" + won(spin.prize()) + "&a."));
             }
             case BACK -> {
                 Sounds.received(viewer);
-                viewer.sendMessage(Text.of("&fThe Wheel: your " + spin.prize() + " back."));
+                viewer.sendMessage(Text.of("&fThe Wheel: your " + back(spin.prize()) + " back."));
             }
             case NOTHING -> {
                 Sounds.miss(viewer);

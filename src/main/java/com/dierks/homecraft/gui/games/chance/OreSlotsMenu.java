@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.games.chance;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.chance.slots.Line;
@@ -67,6 +68,10 @@ public final class OreSlotsMenu extends GameMenu {
     private static final int PLAYS = 47;
     private static final int TODAY = 48;
     private static final int BALANCE = 50;
+    /** 0.46.0, in the Game Parlor: tokens or money, the chips (on the stakes' row) and what they add up to. */
+    private static final int SWITCH = 53;
+    private static final int[] CHIPS = {39, 40, 41};
+    private static final int CHIPS_BACK = 42;
 
     private final OreSlots slots;
     private final OreSlotsSettings settings;
@@ -83,6 +88,11 @@ public final class OreSlotsMenu extends GameMenu {
     private int stopped;
     private SplittableRandom cosmetic;
     private BukkitTask task;
+    /** 0.46.0: tokens or money for the next spin. */
+    private final MoneyPlay money;
+    /** Whether the spin on screen is (or was) for dollars, and the engine it was decided by. */
+    private boolean spinMoney;
+    private SlotsEngine spinEngine;
 
     public OreSlotsMenu(HomeCraftManagement plugin, OreSlots game, Player viewer, Runnable back,
                         OreSlotsSettings settings) {
@@ -92,14 +102,34 @@ public final class OreSlotsMenu extends GameMenu {
         this.engine = settings.engine();
         this.bedrock = Bedrock.is(viewer);
         this.stake = engine.stakes().isEmpty() ? 0 : engine.stakes().get(0);
+        this.spinEngine = engine;
+        this.money = new MoneyPlay(plugin, plugin.games(), viewer);
         init(54, Text.of("&6Ore Slots"));
+    }
+
+    /** The engine the next spin is decided by: the screen's own, or the reels solved for the chips' dollars. */
+    private SlotsEngine live() {
+        return money.on() ? slots.moneyEngine(settings, money.stake()) : engine;
+    }
+
+    /** What the next spin puts in: tokens picked, or the chips' dollars. */
+    private int in() {
+        return money.on() ? money.stake() : stake;
+    }
+
+    /** A line written for tokens, as this screen says it now. */
+    private String say(String line) {
+        return MoneyPlay.say(money.on(), line);
     }
 
     @Override
     protected void build() {
         fill();
+        boolean dollars = money.on();
+        SlotsEngine live = live();
+        int stake = in();
         set(RULES, rulesTile(game.rules()), null);
-        StakeOdds odds = engine.odds(stake);
+        StakeOdds odds = live == null ? null : live.odds(stake);
         if (odds != null) {
             for (Line line : Line.values()) {
                 LineOdds l = odds.line(line);
@@ -107,8 +137,8 @@ public final class OreSlotsMenu extends GameMenu {
                     set(PAYTABLE + line.ordinal(), payTile(l), null);
                 }
             }
-            set(GIVE_BACK, Menus.glint(Menus.icon(Material.KNOWLEDGE_BOOK, SlotsCopy.giveBack(odds),
-                    "&7For " + SlotsCopy.tokens(stake) + " in, worked out", "&7exactly from the paytable.",
+            set(GIVE_BACK, Menus.glint(Menus.icon(Material.KNOWLEDGE_BOOK, say(SlotsCopy.giveBack(odds)),
+                    say("&7For " + SlotsCopy.tokens(stake) + " in, worked out"), "&7exactly from the paytable.",
                     SlotsCopy.hitLine(odds)), false), null);
         }
         set(RESULT, resultTile(), null);
@@ -119,25 +149,53 @@ public final class OreSlotsMenu extends GameMenu {
         }
         int left = slots.playsLeft(viewer.getUniqueId(), settings);
         set(SPIN, spinTile(left), e -> spin());
-        List<Integer> stakes = engine.stakes();
-        int first = STAKES_CENTRE - (stakes.size() - 1) / 2;
-        for (int i = 0; i < stakes.size(); i++) {
-            int s = stakes.get(i);
-            set(first + i, stakeTile(s), e -> pick(s));
-        }
         set(PLAYS, Menus.icon(Material.CLOCK, "&ePlays left today: &f" + (left < 0 ? "?" : left),
                 "&7" + settings.dailyLimit() + " spins a day.", "&7They come back at midnight."), null);
-        set(TODAY, Menus.icon(Material.HOPPER, slots.todayLine(viewer.getUniqueId()),
-                "&7Tokens put into games of chance today.", "&7You can set a lower limit in Take a break."), null);
-        set(BALANCE, balanceTile(), null);
+        if (dollars) {
+            for (int i = 0; i < money.chips() && i < CHIPS.length; i++) {
+                int chip = money.chip(i);
+                set(CHIPS[i], money.chipTile(i), e -> {
+                    if (!spinning) {
+                        money.add(chip);
+                        refresh();
+                    }
+                });
+            }
+            set(CHIPS_BACK, money.stakeTile(), e -> {
+                if (!spinning) {
+                    money.clear();
+                    refresh();
+                }
+            });
+            set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
+            set(BALANCE, money.balanceTile(), null);
+        } else {
+            List<Integer> stakes = engine.stakes();
+            int first = STAKES_CENTRE - (stakes.size() - 1) / 2;
+            for (int i = 0; i < stakes.size(); i++) {
+                int s = stakes.get(i);
+                set(first + i, stakeTile(s), e -> pick(s));
+            }
+            set(TODAY, Menus.icon(Material.HOPPER, slots.todayLine(viewer.getUniqueId()),
+                    "&7Tokens put into games of chance today.", "&7You can set a lower limit in Take a break."), null);
+            set(BALANCE, balanceTile(), null);
+        }
+        if (money.offered() || dollars) {
+            set(SWITCH, money.switchTile(), e -> {
+                if (!spinning) {
+                    money.flip();
+                    refresh();
+                }
+            });
+        }
         exitTile();
     }
 
     // ---- tiles ---------------------------------------------------------------------------------
 
     private ItemStack payTile(LineOdds l) {
-        ItemStack icon = Menus.icon(lineMaterial(l.line()), SlotsCopy.lineName(l),
-                SlotsCopy.lineLore(l).toArray(new String[0]));
+        ItemStack icon = Menus.icon(lineMaterial(l.line()), say(SlotsCopy.lineName(l)),
+                MoneyPlay.say(money.on(), SlotsCopy.lineLore(l)));
         if (l.line() == Line.TWO_THE_SAME) {
             Menus.count(icon, 2);
         }
@@ -156,9 +214,10 @@ public final class OreSlotsMenu extends GameMenu {
             return Menus.icon(Material.PAPER, "&7Spinning…");
         }
         if (spin == null) {
-            return Menus.icon(Material.PAPER, "&7Pick your tokens, then Spin.", "&7Only the line between the arrows counts.");
+            return Menus.icon(Material.PAPER, money.on() ? "&7Add your chips, then Spin." : "&7Pick your tokens, then Spin.",
+                    "&7Only the line between the arrows counts.");
         }
-        return Menus.glint(Menus.icon(Material.PAPER, SlotsCopy.result(spin)), spin.win());
+        return Menus.glint(Menus.icon(Material.PAPER, MoneyPlay.say(spinMoney, SlotsCopy.result(spin))), spin.win());
     }
 
     private ItemStack spinTile(int left) {
@@ -168,6 +227,20 @@ public final class OreSlotsMenu extends GameMenu {
         if (left == 0) {
             return Menus.icon(Material.GRAY_CONCRETE, "&7No plays left today",
                     "&7Ore Slots gives " + settings.dailyLimit() + " spins a day.", "&7They come back at midnight.");
+        }
+        if (money.on()) {
+            int dollars = money.stake();
+            if (dollars <= 0) {
+                return Menus.icon(Material.GRAY_CONCRETE, "&7Add a chip first");
+            }
+            SlotsEngine live = live();
+            String why = live == null ? "Ore Slots can't be played for " + Parlor.dollars(dollars)
+                    : slots.moneyBlocker(viewer, dollars);
+            if (why != null) {
+                return Menus.icon(Material.GRAY_CONCRETE, "&c" + why);
+            }
+            return Menus.icon(Material.LIME_CONCRETE, "&a&lSpin &7- &6" + Parlor.dollars(dollars) + " in",
+                    "&7The spin is decided the moment you click.", "&7Closing the screen just shows the result.");
         }
         int balance = plugin.tokens() == null ? 0 : plugin.tokens().balance(viewer.getUniqueId());
         if (balance < stake) {
@@ -225,18 +298,27 @@ public final class OreSlotsMenu extends GameMenu {
             Sounds.refused(viewer);
             return;
         }
-        Spin result = games.rounds().play(viewer, game, stake, engine);
+        boolean dollars = money.on();
+        SlotsEngine live = live();
+        int stake = in();
+        if (live == null || live.odds(stake) == null) {
+            refresh();
+            return;
+        }
+        Spin result = games.rounds().play(viewer, game, stake, live, dollars);
         if (result == null) {
             refresh(); // refused, and already told why
             return;
         }
+        spinMoney = dollars;
+        spinEngine = live;
         spin = result;
         spinning = true;
         told = false;
         tick = 0;
         stopped = 0;
         cosmetic = new SplittableRandom(ThreadLocalRandom.current().nextLong());
-        shown = ReelShow.frame(engine, stake, result.reels(), 0, cosmetic);
+        shown = ReelShow.frame(live, stake, result.reels(), 0, cosmetic);
         getInventory().setItem(RESULT, resultTile());
         getInventory().setItem(SPIN, spinTile(1));
         paintReels();
@@ -250,7 +332,7 @@ public final class OreSlotsMenu extends GameMenu {
         }
         tick += ReelShow.period(bedrock);
         int now = ReelShow.stopped(bedrock, tick);
-        shown = ReelShow.frame(engine, spin.stake(), spin.reels(), now, cosmetic);
+        shown = ReelShow.frame(spinEngine, spin.stake(), spin.reels(), now, cosmetic);
         paintReels();
         if (now > stopped) {
             stopped = now;
@@ -283,7 +365,7 @@ public final class OreSlotsMenu extends GameMenu {
             return;
         }
         told = true;
-        viewer.sendMessage(Text.of(SlotsCopy.result(spin)));
+        viewer.sendMessage(Text.of(MoneyPlay.say(spinMoney, SlotsCopy.result(spin))));
         if (!spin.win()) {
             Sounds.miss(viewer);
             return;
@@ -292,7 +374,7 @@ public final class OreSlotsMenu extends GameMenu {
         if (spin.big()) {
             String[] t = SlotsCopy.title(spin);
             try {
-                viewer.showTitle(Title.title(Text.of(t[0]), Text.of(t[1]),
+                viewer.showTitle(Title.title(Text.of(t[0]), Text.of(MoneyPlay.say(spinMoney, t[1])),
                         Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2000), Duration.ofMillis(500))));
             } catch (RuntimeException ignored) {
                 // cosmetic: the tokens are already paid and the chat line said so

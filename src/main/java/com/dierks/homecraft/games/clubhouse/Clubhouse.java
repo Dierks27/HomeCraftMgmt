@@ -108,7 +108,7 @@ import java.util.logging.Logger;
  * <p>Nothing here moves a token, and nothing counts toward a board, quest, achievement or the Cup.
  * It runs inside the framework's guard: a bug switches the Clubhouse off, never a race.
  */
-public final class Clubhouse implements Game, ClubDoor {
+public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.games.GamesService.ParlorHost {
 
     /** Built: it follows its config switch (shipped on). */
     static final boolean IMPLEMENTED = true;
@@ -2043,6 +2043,16 @@ public final class Clubhouse implements Game, ClubDoor {
     /** The running room, or {@code null} while the Clubhouse is off. */
     ClubhouseRoom room() {
         return room;
+    }
+
+    /**
+     * 0.46.0: whether the Game Parlor is there to walk into (its way in, somewhere to arrive, and a machine): while
+     * it is, the games of chance can be kept to it.
+     */
+    @Override
+    public boolean parlorOpen() {
+        ClubhouseRoom r = room;
+        return r != null && r.parlorStar() != null && r.parlorArrival() != null && !r.parlorMachines().isEmpty();
     }
 
     /** The visitors (for the admin tool and the tests). */

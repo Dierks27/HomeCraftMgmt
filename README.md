@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.42.0-edit-mode`
+- **Version:** `0.46.0-parlor-money`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,24 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.46.0: money in the Game Parlor, and the games of chance kept to it.** The owner: "For the Casino I think we
+should be able to play with our money instead of tokens ... Being able to choose between if you want to play for
+tokens or money would be ideal", "Only in the parlor - Not in the arcade. In fact the games can then come off the
+arcade so kiddos dont even see them". See [Money in the Game Parlor](#money-in-the-game-parlor-0460). In short:
+Ore Slots, the Wheel, Twenty-One and Higher or Lower can be played for dollars in the Parlor by players with
+`hcm.games.money` (nobody has it until you give it); the stake is built from chips ($5, $10, $25); a player may put
+in $250 a day; all of it is set with `/hcm games parlor`, never in config.yml. While the Clubhouse has its Parlor,
+the games of chance are played only there: the Games screen, the Arcade's "Games of luck" and `/hcm play` no longer
+offer them (crates, the Scratch Ticket and Card Packs are where they were). Database schema 41 (two columns on
+`game_rounds`); no config revision.
+
+**Back to 0.45.0 from 0.46.0:** first `/hcm games parlor money off`, then wait until `/hcm games status` shows no
+open rounds (ten minutes at most), then swap the jar. 0.45.0 reads the database as it is (it says once that a newer
+HomeCraft wrote it, and ignores the two new columns), but it doesn't know a round can be for dollars: **a money
+hand still open at the swap would be finished as a token hand**, and a payout the bank had refused stays owed until
+0.46.0 is back. The games of chance return to the Arcade, `/hcm games parlor` is gone and `hcm.games.money` does
+nothing. The rules you set stay in the database for the upgrade.
 
 **0.45.0** carries 0.44.2 (which was never released on its own): the holders' heads on the Trophy Room's
 pedestals and the secret room's middle pedestal face you; the secret room's trophy labels are plaques on the
@@ -4309,12 +4327,15 @@ games' own carry, which already brings home anything that reaches a player durin
 
 **Setting it up (once):**
 
-1. Give the Hub's world **its own Multiverse-Inventories group** (it may already have one). Never put it in
-   your economy worlds' group: then the Hub would see your real things.
+1. The Hub's world may have **its own Multiverse-Inventories group**, or share your main world's (0.46.0: the
+   owner's does, and is an economy world as well). Either way a visit saves your things first and gives you
+   the kit, and they come back when you leave. With its own group nothing you carry at home is ever in the
+   Hub's world at all, which is the tidier of the two.
 2. Add it to **`games.worlds`, after your Games world**: `worlds: [games, fairyhub]`. Never first: the
    first one is where the Clubhouse, Fresh Courses and Falling Floors look when their own world isn't set.
-   It stays out of `worlds.economy_enabled`. `/hcm games check` then checks its inventory group and game
-   mode with the other Games worlds.
+   `/hcm games check` then checks its inventory group and game mode with the other Games worlds (on a Hub that
+   shares the main world's group or is an economy world it says so: that is the check's advice for a Games
+   world, not a fault in the Hub).
 3. `/mv modify fairyhub set gamemode adventure` (the check asks for it).
 4. Stand where visitors should arrive and type **`/hcm games hub here`** (without it they arrive at the
    world's spawn). `/hcm games hub status` says whether it's open, or why not, and who's in.
@@ -4658,6 +4679,51 @@ Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same ga
 - Green felt floor, two card tables with chairs, a brass rail, lanterns from the beams. The door on its
   north wall takes you back to the 19th Hole.
 - `parlor.enabled: false` (under `games.clubhouse`) doesn't build it.
+
+##### Money in the Game Parlor (0.46.0)
+
+A player with **`hcm.games.money`** who is standing in the Parlor sees one more tile on Ore Slots, the Wheel,
+Twenty-One and Higher or Lower: **Playing for tokens** (click: **Playing for money**). Nobody has the permission
+until you give it (ops have it through `hcm.admin`):
+
+```
+/lp user <player> permission set hcm.games.money true
+```
+
+- **Chips.** Playing for money, the stake buttons become chips: **+$5, +$10, +$25**. Each click adds to the stake;
+  the stake's own tile takes the chips back. The stake stays on the table for the next hand.
+- **The same game.** Each game works out what it pays for the dollars put in exactly as it does for tokens: the same
+  rules, the same target, the same band (it gives back 85 to 95 of every 100, and the screen says which). A stake
+  that can't land in the band isn't offered ("not at this stake").
+- **The limits.** No more than **$250 a day** a player, a stake no bigger than **$50**, and no play gives back more
+  than **$500**. The game's own plays a day, Take a break's pause and the click cooldown all still apply. Money put
+  in never counts against the day's token limit, and tokens never against the money limit.
+- **Only in the Parlor.** Anywhere else there is no switch, and a hand can't be dealt for money. Coin Flip stays
+  tokens only (it is between two players).
+- **Safe across a crash.** The stake is taken from the player's balance (Vault) as the round is written, and put
+  straight back if the round can't be written. A finished round records what it owes before it pays, and pays
+  once; if the economy refuses or isn't there, the round keeps what it owes and it is tried again every minute and
+  at start-up. A hand left open is finished by the game's exit rule (as a token hand is) and paid in dollars.
+- **It is whole dollars**, in and out. The console logs every payment (`[Parlor] ...`).
+
+**Everything is set by command** (admins, `hcm.games.admin`), and kept in the database:
+
+| Command | What it does | Shipped |
+|---|---|---|
+| `/hcm games parlor` | What is set, and today's money in and given back | |
+| `/hcm games parlor only on\|off` | Games of chance are played only in the Parlor (while the Clubhouse has one) | on |
+| `/hcm games parlor money on\|off` | Playing for money | on |
+| `/hcm games parlor limit <dollars\|off>` | The most a player may put in a day; `off` is no limit | 250 |
+| `/hcm games parlor limit <player> <dollars\|off\|default>` | One player's own day limit; `default` follows everyone's again | |
+| `/hcm games parlor stake <dollars>` | The biggest stake | 50 |
+| `/hcm games parlor payout <dollars>` | The most one play gives back | 500 |
+| `/hcm games parlor chips <a> [b] [c]` | The chips (one to three) | 5 10 25 |
+
+**Only in the Parlor.** With `only on` (shipped) and a Parlor in the Clubhouse, a game of chance opened anywhere
+else answers "That game is played in the Clubhouse's Game Parlor."; the Games screen, the Arcade's "Games of
+luck" button (then: the crates and the Scratch Ticket) and `/hcm play`'s Tab don't offer them. With no Parlor
+(the Clubhouse off, `parlor.enabled: false`, or the room not built yet) they are where they always were, so
+nobody loses the games by switching the Clubhouse off. A hand already open can still be finished from anywhere.
 
 **Owner-built spots** (stand there first):
 

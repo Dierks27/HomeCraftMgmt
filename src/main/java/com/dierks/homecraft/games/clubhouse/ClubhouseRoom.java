@@ -974,6 +974,14 @@ public final class ClubhouseRoom {
         return out;
     }
 
+    /** The back bar's shelves to stock (0.44.2): the generated or saved room's, none in an owner-built one. */
+    public List<int[]> barShelves() {
+        if (hand || site == null || !open()) {
+            return List.of();
+        }
+        return ClubhousePlanner.barShelves(site.box());
+    }
+
     /** The Feast Pot by an owner-built feast table: one cell on from the first row's last plate, or {@code null}. */
     ClubhousePlanner.Prop handPot() {
         List<int[]> cells = feastCells();

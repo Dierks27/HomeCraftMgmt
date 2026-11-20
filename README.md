@@ -252,6 +252,14 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**0.44.2 fixes** from the owner's walk of the Clubhouse: the holders' heads on the Trophy Room's pedestals and
+the secret room's middle pedestal face you (you saw the backs of their heads); the secret room's trophy labels are
+plaques on the front of each ledge, under their trophy (they were inside the ledge, unreadable); the Game Parlor's
+card tables are one block high, so Twenty-One and Higher or Lower are tapped from the floor, no jumping; the bar's
+bottles stand on its shelves (the shelves' own items; nobody can take them) instead of floating in front; and the
+secret room is open to everyone (`hcm.clubhouse.secretroom` defaults to true: it only shows each player their own
+trophies). The room is rebuilt once (ALGO 8 -> 9). **Back to 0.44.1 from 0.44.2:** the jar alone.
+
 **0.44.1 fixes** `/hcm games hub here`: 0.44.0 kept the spot under a name the settings store refuses, so the
 command switched the Hub off ("That game is taking a break") and saved nothing. Set the spot again after
 updating. **Back to 0.44.0 from 0.44.1:** the jar alone; the saved spot is ignored again.
@@ -4585,9 +4593,9 @@ corner). Each has its own walls, a glass roof and lights; you reach them by tapp
 room) that shows all her high scores."
 
 - **The way in** is a little gold star on the Trophy Room's back wall (east end). One tap, either click: a
-  whoosh, a sparkle, and you're in. **Only players with `hcm.clubhouse.secretroom` see the star at all**
-  (nobody has it until you give it: `/lp user <player> permission set hcm.clubhouse.secretroom true`).
-  Anyone else sees a wall and gets no message.
+  whoosh, a sparkle, and you're in. **Everyone can** (0.44.2: `hcm.clubhouse.secretroom` is everyone's by
+  default, since the room only ever shows each player their own trophies). Take it from someone with
+  `/lp user <player> permission set hcm.clubhouse.secretroom false`: they see no star and get no message.
 - **Every visitor sees only their own trophies.** They're drawn for that player alone, so two visitors stand
   in the same room and each sees their own shelves. Your head and name stand on the pedestal in the middle.
 - **Trophies come from what the games already keep**, with no new scoring: **firsts** (first arcade game,

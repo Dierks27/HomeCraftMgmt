@@ -319,7 +319,8 @@ final class SideRooms {
         List<UUID> plain = new ArrayList<>();
         List<UUID> all = new ArrayList<>();
         boolean table = m != null && m.kind() == ClubModels.Kind.TROPHY;
-        all.add(tapTarget(w, loc(w, at, table ? -0.1 : 0), table ? 1.0f : 1.0f, table ? 0.8f : 2.0f,
+        // 0.44.2: a table game's tap reaches from the floor up over its cards (the table itself, or the cards)
+        all.add(tapTarget(w, loc(w, at, table ? -1.02 : 0), table ? 1.1f : 1.0f, table ? 1.9f : 2.0f,
                 "machine:" + gameId).getUniqueId());
         if (m != null) {
             models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
@@ -577,10 +578,13 @@ final class SideRooms {
                     }).getUniqueId());
                 }
             }
-            mine.add(w.spawn(loc(w, at, -0.15), TextDisplay.class, e -> {
+            // 0.44.2: a plaque on the ledge's front, under the trophy, big enough to read (it was under the ledge's
+            // top, inside the block, where nobody could see it)
+            mine.add(w.spawn(out(loc(w, at, SECRET_LABEL_UP), SECRET_LABEL_OUT), TextDisplay.class, e -> {
                 hidden(e);
-                e.setBillboard(Display.Billboard.CENTER);
-                e.setTransformation(scale(0.3f));
+                e.setBillboard(Display.Billboard.FIXED); // flat on the plank's edge, facing into the room
+                e.setRotation(at.yaw(), 0f);
+                e.setTransformation(scale(SECRET_LABEL_SCALE));
                 e.setDefaultBackground(false);
                 e.setBackgroundColor(Color.fromARGB(110, 0, 0, 0));
                 e.setAlignment(TextDisplay.TextAlignment.CENTER);
@@ -602,7 +606,7 @@ final class SideRooms {
                 e.setItemStack(head(p.getUniqueId()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
                 e.setBillboard(Display.Billboard.VERTICAL);
-                e.setTransformation(scale(1.4f));
+                e.setTransformation(headTurn(1.4f));
             }).getUniqueId());
             mine.add(w.spawn(loc(w, centre, 1.0), TextDisplay.class, e -> {
                 hidden(e);
@@ -761,7 +765,7 @@ final class SideRooms {
                 e.setItemStack(head(c.id()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
                 e.setBillboard(Display.Billboard.VERTICAL); // the face always to whoever looks
-                e.setTransformation(scale(HEAD_SCALE));
+                e.setTransformation(headTurn(HEAD_SCALE));
                 e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
         }
@@ -838,8 +842,31 @@ final class SideRooms {
         return head;
     }
 
+    /**
+     * A head's transformation (0.44.2): scaled, and turned half round. A billboarded display shows its back (+Z) to
+     * whoever looks, and a head item's face is on its other side, so without the turn everyone saw the back of the head.
+     */
+    static Transformation headTurn(float s) {
+        return new Transformation(new Vector3f(), new Quaternionf().rotateY((float) Math.PI), new Vector3f(s, s, s),
+                new Quaternionf());
+    }
+
     private static Transformation scale(float s) {
         return new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(s, s, s), new Quaternionf());
+    }
+
+    /**
+     * The secret room's trophy plaques: just in front of the ledge's face (its middle is 0.5 from the trophy's), a
+     * little under the ledge's top, and their size.
+     */
+    static final double SECRET_LABEL_OUT = 0.52;
+    static final double SECRET_LABEL_UP = -0.42;
+    static final float SECRET_LABEL_SCALE = 0.42f;
+
+    /** {@code l} moved {@code by} blocks the way its yaw faces (into the room, for a place facing it). */
+    static Location out(Location l, double by) {
+        double rad = Math.toRadians(l.getYaw());
+        return l.clone().add(-Math.sin(rad) * by, 0, Math.cos(rad) * by);
     }
 
     private static Location loc(World w, ClubhousePlanner.Place3 at, double up) {

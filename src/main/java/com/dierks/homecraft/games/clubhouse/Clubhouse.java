@@ -420,6 +420,23 @@ public final class Clubhouse implements Game, ClubDoor {
                 e -> watch.arrived(e.getPlayer()));
         g.on(this, org.bukkit.event.player.PlayerInteractEvent.class, EventPriority.LOWEST, false,
                 e -> jukebox.tapped(e)); // 0.38.4: a tap on the jukebox opens Songs, and never pops the disc
+        // 0.44.2: the room's shelves (the bar's bottles) are decoration: nobody takes from or puts on them, but an admin
+        // in edit mode
+        g.on(this, org.bukkit.event.player.PlayerInteractEvent.class, EventPriority.LOWEST, false, e -> {
+            org.bukkit.block.Block b = e.getClickedBlock();
+            ClubhouseRoom r = room;
+            if (b == null || r == null || e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
+                    || !b.getType().name().endsWith("_SHELF")) {
+                return;
+            }
+            if (!r.contains(b.getWorld().getName(), b.getX() + 0.5, b.getY() + 0.5, b.getZ() + 0.5)) {
+                return;
+            }
+            if (r.editing() && e.getPlayer().hasPermission("hcm.games.admin")) {
+                return;
+            }
+            e.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+        });
         // 0.41.0: a cabinet in the Arcade Room answers either click (a controller's too). The games' guard cancels
         // any touch of a game entity first, so these read cancelled events as well, and cancel them themselves.
         g.on(this, org.bukkit.event.player.PlayerInteractEntityEvent.class, EventPriority.HIGH, false, e -> {

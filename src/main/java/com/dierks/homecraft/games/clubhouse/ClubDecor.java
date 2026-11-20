@@ -80,6 +80,9 @@ final class ClubDecor {
                 }
             }
         }
+        if (beat % SHELF_EVERY == 0) {
+            stockBar(room, w);
+        }
         // a little steam off the Feast Pot while anyone is in, every other second
         Shown pot = shown.get("feast.pot");
         potTap(w, pot == null ? null : pot.prop());
@@ -156,6 +159,58 @@ final class ClubDecor {
     /** Whether {@code e} is the Feast Pot's tap target. */
     boolean isPot(Entity e) {
         return e != null && potTap != null && potTap.equals(e.getUniqueId());
+    }
+
+    /** The bar's shelves are looked at this often (seconds). */
+    static final int SHELF_EVERY = 10;
+
+    /**
+     * The back bar's shelves (0.44.2, the owner: "We should place those into the shelves not have them just
+     * floating"): each shelf block holds three bottles of its own (honey, potions of a few colours, a bottle o'
+     * enchanting, an empty glass), put back whenever they differ (a rebuild empties a shelf). A shelf block that isn't
+     * there (an edited room) is left alone. Nobody can take them: {@link Clubhouse} refuses a use of any shelf in the
+     * room.
+     */
+    void stockBar(ClubhouseRoom room, World w) {
+        List<int[]> shelves = room.barShelves();
+        for (int n = 0; n < shelves.size(); n++) {
+            int[] at = shelves.get(n);
+            if (!w.isChunkLoaded(at[0] >> 4, at[2] >> 4)) {
+                continue;
+            }
+            org.bukkit.block.Block b = w.getBlockAt(at[0], at[1], at[2]);
+            if (!(b.getState() instanceof org.bukkit.block.Shelf shelf)) {
+                continue;
+            }
+            org.bukkit.inventory.Inventory inv = shelf.getInventory();
+            for (int slot = 0; slot < Math.min(3, inv.getSize()); slot++) {
+                ItemStack want = bottle(n * 3 + slot);
+                ItemStack have = inv.getItem(slot);
+                if (have == null || !have.isSimilar(want)) {
+                    inv.setItem(slot, want);
+                }
+            }
+        }
+    }
+
+    /** The bottle for shelf slot {@code i}: a fixed mix, the same every time. */
+    static ItemStack bottle(int i) {
+        int pick = Math.floorMod(i * 7 + 3, 8);
+        Material m = switch (pick) {
+            case 0 -> Material.HONEY_BOTTLE;
+            case 1 -> Material.EXPERIENCE_BOTTLE;
+            case 2 -> Material.GLASS_BOTTLE;
+            default -> Material.POTION;
+        };
+        ItemStack item = new ItemStack(m);
+        if (m == Material.POTION && item.getItemMeta() instanceof org.bukkit.inventory.meta.PotionMeta meta) {
+            org.bukkit.potion.PotionType[] colours = {org.bukkit.potion.PotionType.HEALING,
+                    org.bukkit.potion.PotionType.SWIFTNESS, org.bukkit.potion.PotionType.FIRE_RESISTANCE,
+                    org.bukkit.potion.PotionType.LEAPING, org.bukkit.potion.PotionType.NIGHT_VISION};
+            meta.setBasePotionType(colours[Math.floorMod(i, colours.length)]);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     /** Everything comes down (the room closed, moved or stopped). */

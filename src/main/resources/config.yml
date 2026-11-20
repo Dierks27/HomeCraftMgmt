@@ -2626,8 +2626,8 @@ games:
       enabled: true
     secret_room:
       # A secret room over the Trophy Room with each player's own trophies (their bests, medals and
-      # firsts). Its way in is a little gold star in the Trophy Room, for players with the
-      # permission hcm.clubhouse.secretroom (nobody has it until you give it). false = not built.
+      # firsts). Its way in is a little gold star in the Trophy Room, for every player (the
+      # permission hcm.clubhouse.secretroom, everyone's unless you take it away). false = not built.
       enabled: true
     parlor:
       # The Game Parlor over the Arcade Room, through a door in the 19th Hole: the games of chance as

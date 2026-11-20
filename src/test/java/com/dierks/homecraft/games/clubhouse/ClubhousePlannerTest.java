@@ -84,7 +84,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("134d6b2c0179", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("cf8b71ca3994", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -92,7 +92,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(8, ClubhousePlanner.ALGO, "0.43.0's rooms upstairs: every server builds it once");
+        assertEquals(9, ClubhousePlanner.ALGO, "0.44.2's lower card tables: every server builds it once");
     }
 
     @Test
@@ -358,7 +358,8 @@ class ClubhousePlannerTest {
                 default -> 0;
             };
             String front = b.get(key(op.x() + dx, op.y(), op.z() + dz));
-            if (ClubhousePlanner.CLOTH.equals(front) || (front != null && id(front).endsWith("_fence"))) {
+            if (ClubhousePlanner.CLOTH.equals(front) || ClubhousePlanner.FELT_BLOCK.equals(front)
+                    || (front != null && id(front).endsWith("_fence"))) { // 0.44.2: the Parlor's felt card tables
                 atTables++;
                 continue;
             }
@@ -841,7 +842,14 @@ class ClubhousePlannerTest {
                 .map(ClubhousePlanner.Prop::key).toList();
         assertTrue(keys.containsAll(List.of("green.flag", "green.ball", "green.putter", "jukebox.sign", "feast.pot")),
                 keys.toString());
-        assertTrue(keys.stream().filter(k -> k.startsWith("bar.bottle.")).count() >= 6, "bottles on the back bar");
+        assertEquals(0, keys.stream().filter(k -> k.startsWith("bar.bottle.")).count(),
+                "0.44.2: no floating bottles: the back bar's shelves hold them (ClubDecor.stockBar)");
+        List<int[]> shelves = ClubhousePlanner.barShelves(BOX);
+        assertEquals(18, shelves.size(), "two rows of nine shelves");
+        for (int[] at : shelves) {
+            assertTrue(id(b.get(key(at[0], at[1], at[2]))).endsWith("_shelf"), "a shelf block at each: "
+                    + java.util.Arrays.toString(at));
+        }
         assertTrue(keys.stream().filter(k -> k.startsWith("bar.glass.")).count() >= 3, "glasses on the counter");
         assertEquals(keys.size(), new java.util.HashSet<>(keys).size(), "one key each");
         assertEquals(ClubhousePlanner.BREWING, rel(b, 4, 2, ClubhousePlanner.BREWING_Z), "a brewing stand on the counter");

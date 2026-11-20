@@ -242,9 +242,10 @@ permissions:
   hcm.clubhouse.secretroom:
     description: >-
       The Clubhouse's secret trophy room (0.43.0): a tap on the little gold star in the Trophy Room takes
-      you in, to your own trophies. Without it the star is only decoration (no message). Give it to the
-      kids you want to have it: /lp user <player> permission set hcm.clubhouse.secretroom true
-    default: false
+      you in, to your own trophies. Everyone has it (0.44.2: it only ever shows each player their own);
+      without it the star isn't shown at all. Take it away with
+      /lp user <player> permission set hcm.clubhouse.secretroom false
+    default: true
   hcm.games.admin:
     description: >-
       Run the Games (/hcm games): status, time-trial and golf courses, the featured game, a

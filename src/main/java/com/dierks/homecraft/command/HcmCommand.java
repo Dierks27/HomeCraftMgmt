@@ -940,6 +940,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 ? CANDY_DAY.format(c.from()) + " - " + CANDY_DAY.format(c.to()) + " " + c.to().getYear()
                 : CANDY_DAY.format(c.from()) + " " + c.from().getYear() + " - " + CANDY_DAY.format(c.to()) + " "
                         + c.to().getYear();
+        if (c.randomADay() > 0) { // 0.48.1
+            return "Window: &f" + window + " &7(" + zoneName(zone) + "). &f" + c.randomADay()
+                    + " &7a day at random times, never from &f" + CandyRules.QUIET_FROM_HOUR + " &7to &f"
+                    + CandyRules.QUIET_TO_HOUR + " &7in the morning.";
+        }
         int every = c.everyMinutes();
         String out = "Window: &f" + window + " &7(" + zoneName(zone) + "). Every &f" + every + " &7min from &f"
                 + minuteText(CandyRules.offsetOn(c.offsetMinutes(), every));
@@ -969,7 +974,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         LocalDateTime at = after;
         // A hold covers minutes, so a few slots at most; the bound only stops a hold that never lets go.
         for (int i = 0; i < 1000 && at != null; i++) {
-            at = CandyRules.nextSlot(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes());
+            at = CandyRules.nextSlot(at, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes(),
+                    c.randomADay());
             if (at == null || held == null || !held.test(at)) {
                 return at;
             }
@@ -996,7 +1002,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return "&f- none";
         }
         LocalDateTime first = CandyRules.nextSlot(now, c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(),
-                c.lastDayEveryMinutes());
+                c.lastDayEveryMinutes(), c.randomADay());
         if (first == null) {
             return "&f- none left this year";
         }

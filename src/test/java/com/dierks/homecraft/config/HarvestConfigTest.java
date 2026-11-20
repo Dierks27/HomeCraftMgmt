@@ -64,6 +64,7 @@ class HarvestConfigTest {
         assertEquals(6, h.dailyTokenCap(), "at most 6 a day for an adult");
         assertEquals(26, h.goal(), "26 treats for the Pilgrim Hat");
         assertFalse(h.adminsSeeAll());
+        assertEquals(3, h.randomADay(), "0.48.1: three showers a day at random times, not one an hour");
         assertEquals(2026, h.year());
     }
 
@@ -75,9 +76,9 @@ class HarvestConfigTest {
         assertEquals(List.of(), warnings, "the bundled file parses without a WARN");
         assertEquals(List.of("enabled", "from", "to", "every_minutes", "offset_minutes", "last_day_every_minutes",
                         "apples_per_shower", "golden_percent", "golden_tokens", "daily_token_cap", "goal",
-                        "admins_see_all"),
+                        "admins_see_all", "random_a_day"),
                 new ArrayList<>(c.getConfigurationSection(CandyConfig.HARVEST_PATH).getKeys(false)),
-                "every key, in the candy section's order");
+                "every key, in the candy section's order, then the Harvest's own random_a_day (0.48.1)");
         assertTrue(c.isString(P + "from") && c.isString(P + "to"), "the dates ship quoted");
     }
 

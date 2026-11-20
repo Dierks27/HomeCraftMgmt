@@ -216,6 +216,95 @@ public final class CandyRules {
         return NO_SLOT;
     }
 
+    // ---- showers at random times (0.48.1) -----------------------------------------------------
+
+    /** No random shower starts from this local hour ... */
+    public static final int QUIET_FROM_HOUR = 2;
+    /** ... to this one (the owner's hours for Catch the Turkey: nobody is playing). */
+    public static final int QUIET_TO_HOUR = 8;
+    /** The most random showers in a day. */
+    public static final int MAX_RANDOM_A_DAY = 24;
+    /** Mixed into the random times' seed, so they are no simple function of the date (and not the turkey's). */
+    static final long RANDOM_SALT = 0x4A27_5EED_0B45_2026L;
+
+    /**
+     * The minutes after local midnight the showers of {@code day} start at when they come at random times (0.48.1; the
+     * owner: "Cut the Harvest showers to only happen simply randomly from here on out"), in order. The day's minutes
+     * outside the quiet hours ({@value #QUIET_FROM_HOUR} to {@value #QUIET_TO_HOUR} in the morning) are shared into
+     * {@code aDay} equal parts, and each part has one shower at a minute drawn from the day and the part alone: the
+     * same on every server and after any restart, new each day, never two at once. None for {@code aDay} below 1.
+     */
+    public static List<Integer> randomStarts(LocalDate day, int aDay) {
+        List<Integer> out = new ArrayList<>();
+        if (day == null || aDay <= 0) {
+            return out;
+        }
+        List<Integer> awake = new ArrayList<>();
+        for (int m = 0; m < MINUTES_PER_DAY; m++) {
+            int hour = m / 60;
+            if (hour < QUIET_FROM_HOUR || hour >= QUIET_TO_HOUR) {
+                awake.add(m);
+            }
+        }
+        int parts = Math.min(aDay, MAX_RANDOM_A_DAY);
+        int part = awake.size() / parts;
+        for (int w = 0; w < parts; w++) {
+            java.util.SplittableRandom r = new java.util.SplittableRandom(day.toEpochDay() * 1_000_003L + w * 7919L
+                    ^ RANDOM_SALT);
+            // never in a part's last minutes, so two showers are never closer than the firing window
+            int at = w * part + r.nextInt(Math.max(1, part - 2 * FIRE_MINUTES));
+            out.add(awake.get(Math.min(at, awake.size() - 1)));
+        }
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    /**
+     * {@link #dueSlot(LocalDateTime, int, int, int, boolean)}, or with {@code randomADay} above 0 the random shower
+     * due at {@code now} (started within {@value #FIRE_MINUTES} minutes): the clock's schedule is not used then, on
+     * the last day either.
+     */
+    public static long dueSlot(LocalDateTime now, int every, int offset, int lastDayEvery, boolean isLastDay,
+                               int randomADay) {
+        if (randomADay <= 0) {
+            return dueSlot(now, every, offset, lastDayEvery, isLastDay);
+        }
+        if (now == null) {
+            return NO_SLOT;
+        }
+        int m = now.getHour() * 60 + now.getMinute();
+        for (int start : randomStarts(now.toLocalDate(), randomADay)) {
+            if (m >= start && m - start < FIRE_MINUTES) {
+                return slotId(now.toLocalDate(), start);
+            }
+        }
+        return NO_SLOT;
+    }
+
+    /**
+     * {@link #nextSlot(LocalDateTime, LocalDate, LocalDate, int, int, int)}, or with {@code randomADay} above 0 the
+     * next random shower after {@code after} inside the window.
+     */
+    public static LocalDateTime nextSlot(LocalDateTime after, LocalDate from, LocalDate to, int every, int offset,
+                                         int lastDayEvery, int randomADay) {
+        if (randomADay <= 0) {
+            return nextSlot(after, from, to, every, offset, lastDayEvery);
+        }
+        if (after == null || from == null || to == null || from.isAfter(to)) {
+            return null;
+        }
+        LocalDate day = after.toLocalDate().isBefore(from) ? from : after.toLocalDate();
+        for (; !day.isAfter(to); day = day.plusDays(1)) {
+            for (int m : randomStarts(day, randomADay)) {
+                LocalDateTime start = day.atStartOfDay().plusMinutes(m);
+                if (start.isAfter(after)) {
+                    return start;
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * Whether a restart is close at the slot's start: it is then marked fired and skipped, because the
      * candy isn't saved and the restart would wipe it. {@code zone} is the clock's ({@code clock.time_zone}).

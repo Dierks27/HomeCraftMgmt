@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.arcade.ScratchTicketMenu;
@@ -42,21 +43,34 @@ public final class TicketBoothMenu extends GameMenu {
     protected void build() {
         fill();
         PluginConfig.Lotto lotto = plugin.config().arcade().lotto();
-        int cost = lotto.ticketTokens();
+        Parlor parlor = plugin.games() == null ? null : plugin.games().parlor();
+        // 0.46.1: at the booth the ticket is bought for dollars ("$5 entry"), unless the owner set it back to tokens
+        boolean dollars = parlor != null && parlor.ticketForMoney(viewer);
+        String cost = dollars ? Parlor.dollars(parlor.ticketPrice()) : lotto.ticketTokens() + " tokens";
+        String top = dollars
+                ? Parlor.money(Parlor.prizeCents(plugin.arcade() == null ? 0 : plugin.arcade().pot(),
+                lotto.ticketTokens(), parlor.ticketPrice()))
+                : (plugin.arcade() == null ? 0 : plugin.arcade().pot()) + " tokens";
         boolean closed = plugin.arcade() == null || lotto.payouts().isEmpty() || ArcadeService.ticketClosed(lotto);
         if (closed) {
             set(TICKET, Menus.icon(Material.FILLED_MAP, "&aScratch Ticket", "&7" + ArcadeService.TICKET_CLOSED), null);
         } else {
-            set(TICKET, Menus.glint(Menus.icon(Material.FILLED_MAP, "&aScratch Ticket &7- &6" + cost + " tokens",
-                    "&7Top prize right now: &6" + plugin.arcade().pot() + " tokens",
-                    "&7It " + RtpLimits.playerLine(ArcadeService.rtp(lotto)) + ",", "&7over lots of tickets.",
+            set(TICKET, Menus.glint(Menus.icon(Material.FILLED_MAP, "&aScratch Ticket &7- &6" + cost,
+                    "&7Top prize right now: &6" + top,
+                    "&7It gives back about " + RtpLimits.wholePercent(ArcadeService.rtp(lotto)) + " of every 100",
+                    "&7put in, over lots of tickets.",
                     "&7Scratch three squares to see what you get."), true), null);
             for (int slot : BUY) {
-                set(slot, Menus.icon(Material.LIME_CONCRETE, "&a&lBuy one &7- &6" + cost + " tokens",
+                set(slot, Menus.icon(Material.LIME_CONCRETE, "&a&lBuy one &7- &6" + cost,
                         "&7The ticket is decided when you buy it.", "&7Scratching just shows it."), e -> buy());
             }
         }
-        set(TOKENS, balanceTile(), null);
+        if (dollars) {
+            double have = plugin.economy() == null ? 0 : plugin.economy().balance(viewer);
+            set(TOKENS, Menus.icon(Material.GOLD_INGOT, "&eYou have " + Menus.money(plugin, have)), null);
+        } else {
+            set(TOKENS, balanceTile(), null);
+        }
         exitTile();
     }
 

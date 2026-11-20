@@ -51,6 +51,15 @@ public final class Parlor {
     static final String KEY_STAKE = KEY + "max_stake";
     static final String KEY_PAYOUT = KEY + "max_payout";
     static final String KEY_CHIPS = KEY + "chips";
+    static final String KEY_TICKET = KEY + "ticket";
+    /** Today's Scratch Tickets sold for money, everyone's: {@code day:dollars in:cents back}. */
+    static final String KEY_TICKETS = KEY + "tickets";
+    /** A player's Scratch Tickets bought for money today ({@code game_prefs}): {@code day:dollars}. */
+    static final String PREF_TICKETS = "parlor.tickets";
+    /** Cents of a Scratch Ticket prize the bank would not take ({@code game_prefs}): paid when it will. */
+    static final String PREF_OWED = "parlor.owed";
+    /** The most a Scratch Ticket may cost, in dollars. */
+    public static final int TICKET_CEILING = 1000;
     /** A player's own day limit ({@code game_prefs}): dollars, or {@link #NO_LIMIT}. */
     static final String PREF_LIMIT = "parlor.limit";
 
@@ -71,16 +80,23 @@ public final class Parlor {
      * @param maxStake  the biggest stake, in dollars
      * @param maxPayout the most one play gives back, in dollars
      * @param chips     the chips a stake is built from, smallest first (1 to {@link #MAX_CHIPS})
+     * @param ticket    what a Scratch Ticket costs at the Parlor's booth, in dollars (0: tokens, as configured)
      */
-    public record Rules(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout, List<Integer> chips) {
+    public record Rules(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout, List<Integer> chips,
+                        int ticket) {
 
         public Rules {
             chips = List.copyOf(chips);
         }
 
-        /** As shipped: the owner's numbers. */
+        /** As shipped: the owner's numbers ("$5 entry" for the ticket). */
         public static Rules defaults() {
-            return new Rules(true, true, 250, 50, 500, List.of(5, 10, 25));
+            return new Rules(true, true, 250, 50, 500, List.of(5, 10, 25), 5);
+        }
+
+        private Rules with(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout,
+                           List<Integer> chips) {
+            return new Rules(onlyHere, money, limit, maxStake, maxPayout, chips, ticket);
         }
 
         /** The smallest stake: the smallest chip. */
@@ -128,7 +144,8 @@ public final class Parlor {
                     whole(store.get(KEY_LIMIT), d.limit(), NO_LIMIT, Integer.MAX_VALUE),
                     whole(store.get(KEY_STAKE), d.maxStake(), 1, STAKE_CEILING),
                     whole(store.get(KEY_PAYOUT), d.maxPayout(), 1, PAYOUT_CEILING),
-                    chips(store.get(KEY_CHIPS), d.chips()));
+                    chips(store.get(KEY_CHIPS), d.chips()),
+                    whole(store.get(KEY_TICKET), d.ticket(), 0, TICKET_CEILING));
         } catch (SQLException | RuntimeException e) {
             games.host().logger().log(Level.WARNING, "Could not read the Game Parlor's rules - using the shipped ones",
                     e);
@@ -139,38 +156,45 @@ public final class Parlor {
     // ---- setting them (the admin command) ---------------------------------------------------------------
 
     public void onlyHere(boolean on) {
-        save(KEY_ONLY, on ? "1" : "0", new Rules(on, rules.money(), rules.limit(), rules.maxStake(),
+        save(KEY_ONLY, on ? "1" : "0", rules.with(on, rules.money(), rules.limit(), rules.maxStake(),
                 rules.maxPayout(), rules.chips()));
     }
 
     public void money(boolean on) {
-        save(KEY_MONEY, on ? "1" : "0", new Rules(rules.onlyHere(), on, rules.limit(), rules.maxStake(),
+        save(KEY_MONEY, on ? "1" : "0", rules.with(rules.onlyHere(), on, rules.limit(), rules.maxStake(),
                 rules.maxPayout(), rules.chips()));
     }
 
     /** The day's limit for everyone: dollars, or {@link #NO_LIMIT}. */
     public void limit(int dollars) {
         int v = dollars < 0 ? NO_LIMIT : dollars;
-        save(KEY_LIMIT, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), v, rules.maxStake(),
+        save(KEY_LIMIT, Integer.toString(v), rules.with(rules.onlyHere(), rules.money(), v, rules.maxStake(),
                 rules.maxPayout(), rules.chips()));
     }
 
     public void maxStake(int dollars) {
         int v = Math.max(1, Math.min(STAKE_CEILING, dollars));
-        save(KEY_STAKE, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(), v,
+        save(KEY_STAKE, Integer.toString(v), rules.with(rules.onlyHere(), rules.money(), rules.limit(), v,
                 rules.maxPayout(), rules.chips()));
     }
 
     public void maxPayout(int dollars) {
         int v = Math.max(1, Math.min(PAYOUT_CEILING, dollars));
-        save(KEY_PAYOUT, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(),
+        save(KEY_PAYOUT, Integer.toString(v), rules.with(rules.onlyHere(), rules.money(), rules.limit(),
                 rules.maxStake(), v, rules.chips()));
     }
 
     public void chips(List<Integer> chips) {
         List<Integer> v = chips(text(chips), rules.chips());
-        save(KEY_CHIPS, text(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(), rules.maxStake(),
+        save(KEY_CHIPS, text(v), rules.with(rules.onlyHere(), rules.money(), rules.limit(), rules.maxStake(),
                 rules.maxPayout(), v));
+    }
+
+    /** What a Scratch Ticket costs at the Parlor's booth: dollars, or 0 for tokens as configured. */
+    public void ticket(int dollars) {
+        int v = Math.max(0, Math.min(TICKET_CEILING, dollars));
+        save(KEY_TICKET, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(),
+                rules.maxStake(), rules.maxPayout(), rules.chips(), v));
     }
 
     /**
@@ -277,10 +301,14 @@ public final class Parlor {
         }
     }
 
-    /** Dollars the player put in today, or -1 when it can't be read (money play then fails closed). */
+    /**
+     * Dollars the player put in today (the games, and Scratch Tickets bought for money), or -1 when it can't be read
+     * (money play then fails closed).
+     */
     public int inToday(UUID player) {
         try {
-            return games.dao().moneyInToday(player, games.host().clock().dayKey());
+            long day = games.host().clock().dayKey();
+            return games.dao().moneyInToday(player, day) + (int) dayTally(games.dao().pref(player, PREF_TICKETS), day)[0];
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not read a player's Game Parlor money today", e);
             return -1;
@@ -327,7 +355,163 @@ public final class Parlor {
         return null;
     }
 
+    // ---- the Scratch Ticket for money (0.46.1) ----------------------------------------------------------
+
+    /**
+     * Whether a Scratch Ticket bought by {@code player} now is a money ticket (the owner: "switch the Scratch Ticket
+     * over to $ instead of tokens ... $5 entry"): money play is on, a price is set, the server has its bank, and they
+     * stand in the Parlor. Anywhere else the ticket is the Arcade's token ticket, so money stays in the Parlor. (It
+     * needs {@link #PERMISSION_MONEY} like all money play: {@link #ticketTake} says so to a player without it.)
+     */
+    public boolean ticketForMoney(Player player) {
+        return rules.money() && rules.ticket() > 0 && games.host().bank().on()
+                && games.inParlor(player.getUniqueId());
+    }
+
+    /** What a money ticket costs, in dollars. */
+    public int ticketPrice() {
+        return rules.ticket();
+    }
+
+    /**
+     * Take a money ticket's price from {@code player}: the money steps of the gate first (money play on, the
+     * permission, in the Parlor, the day's limit, the balance), then the bank, then the day's tally.
+     *
+     * @return why not, or {@code null} when the price was taken
+     */
+    public Refusal ticketTake(Player player) {
+        int price = rules.ticket();
+        Refusal r = check(player, price, false);
+        if (r != null) {
+            return r;
+        }
+        UUID id = player.getUniqueId();
+        if (!games.host().bank().take(id, price)) {
+            return needMore(price);
+        }
+        long day = games.host().clock().dayKey();
+        try {
+            long[] mine = dayTally(games.dao().pref(id, PREF_TICKETS), day);
+            games.dao().setPref(id, PREF_TICKETS, day + ":" + (mine[0] + price));
+        } catch (SQLException e) {
+            games.host().logger().log(Level.WARNING, "Could not count a Scratch Ticket against the day's limit", e);
+        }
+        tally(day, price, 0);
+        return null;
+    }
+
+    /**
+     * Pay a money ticket's prize: into the bank, or (the bank won't take it) kept as owed to the player and paid when
+     * it will ({@link #payOwed}). Never lost.
+     */
+    public void ticketGive(UUID player, long cents) {
+        if (cents <= 0) {
+            return;
+        }
+        tally(games.host().clock().dayKey(), 0, cents);
+        if (games.host().bank().giveCents(player, cents)) {
+            games.host().logger().info("[Parlor] Scratch Ticket paid " + player + " " + money(cents));
+            return;
+        }
+        try {
+            long owed = whole(games.dao().pref(player, PREF_OWED), 0, 0, Integer.MAX_VALUE);
+            games.dao().setPref(player, PREF_OWED, Long.toString(owed + cents));
+            games.host().logger().warning("[Parlor] The bank refused a Scratch Ticket prize of " + money(cents)
+                    + " for " + player + " - it is kept and paid when the bank takes it");
+        } catch (SQLException e) {
+            games.host().logger().log(Level.SEVERE, "[Parlor] Could not pay or keep a Scratch Ticket prize of "
+                    + money(cents) + " for " + player + " - give it by hand", e);
+        }
+    }
+
+    /** Pay {@code player} any Scratch Ticket prize the bank would not take before (the sweep asks, once a minute). */
+    public void payOwed(Player player) {
+        if (!games.host().bank().on()) {
+            return;
+        }
+        UUID id = player.getUniqueId();
+        try {
+            String kept = games.dao().pref(id, PREF_OWED);
+            long cents = kept == null ? 0 : whole(kept, 0, 0, Integer.MAX_VALUE);
+            if (cents <= 0) {
+                return;
+            }
+            games.dao().deletePref(id, PREF_OWED); // first: it is never paid twice
+            if (games.host().bank().giveCents(id, cents)) {
+                games.host().logger().info("[Parlor] Scratch Ticket prize paid late to " + id + ": " + money(cents));
+            } else {
+                games.dao().setPref(id, PREF_OWED, Long.toString(cents));
+            }
+        } catch (SQLException e) {
+            games.host().logger().log(Level.WARNING, "Could not pay a kept Scratch Ticket prize", e);
+        }
+    }
+
+    /** Today's money tickets, everyone's: {dollars in, cents back}. */
+    public long[] ticketsToday() {
+        if (store == null) {
+            return memoryTickets.clone();
+        }
+        try {
+            return dayTally(store.get(KEY_TICKETS), games.host().clock().dayKey());
+        } catch (SQLException | RuntimeException e) {
+            return new long[] {0, 0};
+        }
+    }
+
+    private final long[] memoryTickets = new long[2];
+
+    private void tally(long day, int dollarsIn, long centsBack) {
+        if (store == null) {
+            memoryTickets[0] += dollarsIn;
+            memoryTickets[1] += centsBack;
+            return;
+        }
+        try {
+            long[] t = dayTally(store.get(KEY_TICKETS), day);
+            store.set(KEY_TICKETS, day + ":" + (t[0] + dollarsIn) + ":" + (t[1] + centsBack));
+        } catch (SQLException | RuntimeException e) {
+            games.host().logger().log(Level.WARNING, "Could not keep today's Scratch Ticket totals", e);
+        }
+    }
+
     // ---- pure rules (tested) ----------------------------------------------------------------------------
+
+    /**
+     * A day's tally read back: {@code day:a[:b]} is {a, b} when it is this {@code day}'s, else {0, 0} (yesterday's
+     * numbers are not today's).
+     */
+    static long[] dayTally(String text, long day) {
+        long[] out = new long[2];
+        if (text == null) {
+            return out;
+        }
+        String[] parts = text.split(":");
+        try {
+            if (parts.length >= 2 && Long.parseLong(parts[0]) == day) {
+                out[0] = Math.max(0, Long.parseLong(parts[1]));
+                out[1] = parts.length >= 3 ? Math.max(0, Long.parseLong(parts[2])) : 0;
+            }
+        } catch (NumberFormatException e) {
+            return new long[2];
+        }
+        return out;
+    }
+
+    /**
+     * What a prize of {@code tokens} on the token ticket is on a money ticket, in cents: the same share of the price
+     * ({@code tokens / ticketTokens} of {@code priceDollars}), so the money ticket gives back exactly what the token
+     * ticket does. Rounded down to a whole cent.
+     */
+    public static long prizeCents(long tokens, int ticketTokens, int priceDollars) {
+        return ticketTokens <= 0 ? 0 : Math.max(0, tokens) * priceDollars * 100L / ticketTokens;
+    }
+
+    /** "$5" or "$1.50": dollars and, only when there are any, cents. */
+    public static String money(long cents) {
+        long c = Math.max(0, cents);
+        return c % 100 == 0 ? "$" + c / 100 : "$" + c / 100 + "." + (c % 100 < 10 ? "0" : "") + c % 100;
+    }
 
     /** Whether putting {@code stake} more in would pass {@code limit} with {@code in} already in today. */
     static boolean over(int limit, int in, int stake) {

@@ -957,6 +957,7 @@ public final class GamesService {
         quietly(invites::expireLapsed);
         for (Player p : online()) { // fx2-C #7
             settleOwed(p, false);
+            quietly(() -> parlor.payOwed(p)); // 0.46.1: a Scratch Ticket prize the bank would not take before
         }
     }
 

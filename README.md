@@ -257,9 +257,19 @@ in the parlor as well." While the games of chance are kept to the Parlor (`/hcm 
 a Parlor in the Clubhouse), the Scratch Ticket is too: its tile is gone from the Arcade's Luck row and from the
 Games screen's Luck tab, and buying one anywhere else answers "The Scratch Ticket is in the Clubhouse's Game
 Parlor." In the Parlor a **ticket booth** stands against the back wall: tap it for a screen that says what a ticket
-costs, the top prize right now and what it gives back, with one **Buy one** button. It is the same ticket: the same
-price, prizes, pot, Take a break and day's token limit. Tokens only. Crates and Card Packs stay in the Arcade. With
-no Parlor, or with `only off`, the ticket is in the Arcade as before (and at the booth, if there is one). The booth
+costs, the top prize right now and what it gives back, with one **Buy one** button.
+
+**At the booth the ticket costs $5 and pays in dollars** (the owner: "switch the Scratch Ticket over to $ instead of
+tokens ... $5 entry"). It is the same ticket with the same chances: each prize is the same share of the price as on
+the token ticket, so with the shipped table (10 tokens: 3, 10, 25, 60, and a pot from 50) a $5 ticket gives $1.50,
+$5, $12.50 or $30, and the pot starts at $25 (it is one pot, grown by every ticket). It gives back exactly what the
+token ticket does. Like all money play it needs `hcm.games.money` and the Parlor, it counts against the day's money
+limit ($250), and Take a break's pause stops it. A prize the economy won't take is kept for the player and paid
+within a minute of it working again. `/hcm games parlor ticket <dollars|tokens>` changes the price or puts the
+booth back on tokens; with money play off, or no economy, the booth sells the token ticket.
+
+Crates and Card Packs stay in the Arcade. With no Parlor, or with `only off`, the ticket is in the Arcade as before,
+for tokens (money stays in the Parlor). The booth
 is a display, not a block: nothing is rebuilt, and a saved room gets it too. Its model is `machine_ticket`; in an
 owner-built room, stand where it goes and type `/hcm games clubhouse parlor ticket`. No schema change, no config
 revision. **Back to 0.46.0 from 0.46.1:** the jar alone; the ticket is in the Arcade again and the booth is gone.
@@ -4730,6 +4740,7 @@ until you give it (ops have it through `hcm.admin`):
 | `/hcm games parlor stake <dollars>` | The biggest stake | 50 |
 | `/hcm games parlor payout <dollars>` | The most one play gives back | 500 |
 | `/hcm games parlor chips <a> [b] [c]` | The chips (one to three) | 5 10 25 |
+| `/hcm games parlor ticket <dollars\|tokens>` | What a Scratch Ticket costs at the Parlor's booth (0.46.1) | 5 |
 
 **Only in the Parlor.** With `only on` (shipped) and a Parlor in the Clubhouse, a game of chance opened anywhere
 else answers "That game is played in the Clubhouse's Game Parlor."; the Games screen, the Arcade's "Games of

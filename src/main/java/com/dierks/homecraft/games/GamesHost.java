@@ -71,6 +71,11 @@ interface GamesHost {
             public boolean give(UUID player, int dollars) {
                 return false;
             }
+
+            @Override
+            public boolean giveCents(UUID player, long cents) {
+                return false;
+            }
         };
 
         /** Whether the server has an economy to play with. */
@@ -83,6 +88,9 @@ interface GamesHost {
 
         /** Give {@code dollars} to the player (online or not). @return true only if they were given */
         boolean give(UUID player, int dollars);
+
+        /** Give {@code cents} (a Scratch Ticket's prize, 0.46.1). @return true only if they were given */
+        boolean giveCents(UUID player, long cents);
     }
 
     /** The server's money; {@link Bank#NONE} when there is none. */
@@ -180,6 +188,12 @@ interface GamesHost {
                     public boolean give(UUID player, int dollars) {
                         return dollars > 0 && on()
                                 && plugin.economy().deposit(plugin.getServer().getOfflinePlayer(player), dollars);
+                    }
+
+                    @Override
+                    public boolean giveCents(UUID player, long cents) {
+                        return cents > 0 && on() && plugin.economy()
+                                .deposit(plugin.getServer().getOfflinePlayer(player), cents / 100.0);
                     }
                 };
             }

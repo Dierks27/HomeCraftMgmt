@@ -51,6 +51,16 @@ public enum Line {
         return symbol;
     }
 
+    /** The line three of {@code symbol} make ({@link #THREE_WILDS} for the Wild); {@code null} for the blank one. */
+    public static Line of(Symbol symbol) {
+        for (Line l : values()) {
+            if (l.symbol == symbol && symbol != null) {
+                return l;
+            }
+        }
+        return null;
+    }
+
     /** Whether these three symbols make this line (whatever it pays). */
     public boolean matches(Symbol a, Symbol b, Symbol c) {
         if (this == THREE_WILDS) {

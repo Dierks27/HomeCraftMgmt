@@ -273,12 +273,19 @@ final class SideRooms {
             List<ClubhouseRoom.Cabinet> machines = room.parlorMachines();
             for (int n = 0; n < machines.size(); n++) {
                 ClubhouseRoom.Cabinet m = machines.get(n);
-                if (club.games().game(m.game()) == null) {
+                Game g = club.games().game(m.game());
+                if (g == null) {
                     continue; // a game not built on this server
+                }
+                if (ClubhousePlanner.PARLOR_ROW_GAMES.contains(g.id()) && !club.games().enabled(g)) {
+                    continue; // The back row's slot machines stand only while their game is open
                 }
                 String key = "mach:" + n;
                 keep.add(key);
-                put(w, key, m.game() + "@" + m.at(), m.at(), () -> machine(w, m.game(), m.at()));
+                // A pot machine's label says what its pot holds, so the machine is drawn again when it changes
+                String label = club.games().guard(g, g::machineLabel, g.name());
+                String sig = m.game() + "@" + m.at() + (label.equals(g.name()) ? "" : "#" + label);
+                put(w, key, sig, m.at(), () -> machine(w, m.game(), m.at()));
             }
             ClubhousePlanner.Place3 booth = room.parlorTicket(); // 0.46.1: the Scratch Ticket is the Parlor's
             if (booth != null && club.ticketOpen()) {
@@ -360,7 +367,8 @@ final class SideRooms {
             }
         }
         Game g = club.games().game(gameId);
-        String name = g != null ? g.name() : ClubhousePlanner.TICKET.equals(gameId) ? "Scratch Ticket" : gameId;
+        String name = g != null ? club.games().guard(g, g::machineLabel, g.name())
+                : ClubhousePlanner.TICKET.equals(gameId) ? "Scratch Ticket" : gameId;
         all.add(label(w, loc(w, at, table ? 0.9 : LABEL_UP), "&a" + name, 0.5f)
                 .getUniqueId());
         all.addAll(models);

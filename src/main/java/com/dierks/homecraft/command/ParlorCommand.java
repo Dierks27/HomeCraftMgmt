@@ -3,6 +3,8 @@ package com.dierks.homecraft.command;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Parlor;
+import com.dierks.homecraft.games.chance.slots.PotSlots;
+import com.dierks.homecraft.games.chance.slots.SlotSettings;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -27,12 +29,17 @@ import java.util.Locale;
  *  /hcm games parlor stake &lt;dollars&gt;                   the biggest stake
  *  /hcm games parlor payout &lt;dollars&gt;                  the most one play gives back
  *  /hcm games parlor chips &lt;a&gt; [b] [c]                 the chips a stake is built from
+ *  /hcm games parlor ticket &lt;dollars|tokens&gt;            what a Scratch Ticket costs at the Parlor's booth
+ *  /hcm games parlor pot cap &lt;dollars|off&gt;             the most a pot machine's pot may hold
  * </pre>
+ *
+ * <p>A pot machine's price and the share of it that goes into its pot are its own numbers and stay in config.yml
+ * ({@code games.motherlode}, {@code games.farm_slots}), like every other machine's stakes.
  */
 final class ParlorCommand {
 
     /** The words after {@code parlor}. */
-    static final List<String> VERBS = List.of("only", "money", "limit", "stake", "payout", "chips", "ticket");
+    static final List<String> VERBS = List.of("only", "money", "limit", "stake", "payout", "chips", "ticket", "pot");
 
     private ParlorCommand() {
     }
@@ -48,7 +55,8 @@ final class ParlorCommand {
                 "&e/hcm games parlor stake <dollars> &7- the biggest stake",
                 "&e/hcm games parlor payout <dollars> &7- the most one play gives back",
                 "&e/hcm games parlor chips <a> [b] [c] &7- the chips a stake is built from",
-                "&e/hcm games parlor ticket <dollars|tokens> &7- what a Scratch Ticket costs at the Parlor's booth");
+                "&e/hcm games parlor ticket <dollars|tokens> &7- what a Scratch Ticket costs at the Parlor's booth",
+                "&e/hcm games parlor pot cap <dollars|off> &7- the most a pot machine's pot may hold");
     }
 
     /**
@@ -153,6 +161,20 @@ final class ParlorCommand {
                         + " &anow, and pays in dollars: each prize the same share of the price as before."));
                 return "parlor ticket " + (dollars == 0 ? "tokens" : dollars);
             }
+            case "pot" -> {
+                String amount = rest.length >= 3 ? rest[2].toLowerCase(Locale.ROOT) : "";
+                boolean off = amount.equals("off") || amount.equals("none");
+                int dollars = off ? 0 : whole(amount, 1, Parlor.POT_CEILING);
+                if (!value.equals("cap") || dollars < 0) {
+                    return usage(sender, "pot cap <dollars 1-" + Parlor.POT_CEILING + "|off>");
+                }
+                parlor.potCap(dollars);
+                sender.sendMessage(Text.of(dollars == 0
+                        ? "&aThere is no cap on the pots now: they grow until someone takes them."
+                        : "&aA pot stops growing at &6" + Parlor.dollars(dollars) + " &anow. &7One already over it"
+                        + " stays as it is until it is taken."));
+                return "parlor pot cap " + (dollars == 0 ? "off" : dollars);
+            }
             default -> {
                 for (String line : help()) {
                     sender.sendMessage(Text.of(line));
@@ -160,6 +182,29 @@ final class ParlorCommand {
                 return null;
             }
         }
+    }
+
+    /** A line for each pot machine (what its pot holds, where it starts, what feeds it), then the cap. */
+    static List<String> pots(GamesService games) {
+        List<String> out = new ArrayList<>();
+        for (com.dierks.homecraft.games.Game g : games.games()) {
+            if (!(g instanceof PotSlots pot)) {
+                continue;
+            }
+            SlotSettings s = pot.settings();
+            out.add("&7" + g.name() + "'s pot: &f" + Parlor.money(pot.potCents()) + " &7· starts at &f"
+                    + Parlor.money(pot.seedCents(s)) + " &7· " + Parlor.dollars(s.price()) + " a spin, "
+                    + Parlor.money(pot.feedCents(s)) + " of it into the pot"
+                    + (games.enabled(g) ? "" : " &8(closed)"));
+        }
+        if (!out.isEmpty()) {
+            int cap = games.parlor().rules().potCap();
+            long taken = games.parlor().pots().takenToday();
+            out.add("&7A pot stops growing at: &f" + (cap > 0 ? Parlor.dollars(cap) : "no cap")
+                    + (taken > 0 ? " &7· pots taken today: &f" + Parlor.money(taken)
+                    + " &7on top of what the rounds gave back" : ""));
+        }
+        return out;
     }
 
     private static String limit(Parlor parlor, CommandSender sender, String[] rest) {
@@ -223,7 +268,8 @@ final class ParlorCommand {
         out.add("&7Scratch Ticket at the booth: &f" + (r.ticket() > 0 ? Parlor.dollars(r.ticket()) : "tokens")
                 + (r.ticket() > 0 ? " &7· today: &f" + Parlor.dollars((int) tickets[0]) + " &7in, &f"
                 + Parlor.money(tickets[1]) + " &7given back" : ""));
-        out.add("&8/hcm games parlor only|money|limit|stake|payout|chips|ticket");
+        out.addAll(pots(games));
+        out.add("&8/hcm games parlor only|money|limit|stake|payout|chips|ticket|pot");
         return out;
     }
 
@@ -248,8 +294,12 @@ final class ParlorCommand {
                 case "payout" -> List.of("250", "500", "1000");
                 case "chips" -> List.of("5", "1");
                 case "ticket" -> List.of("5", "10", "tokens");
+                case "pot" -> List.of("cap");
                 default -> List.of();
             };
+        }
+        if (rest.length == 3 && rest[0].equalsIgnoreCase("pot")) {
+            return rest[1].equalsIgnoreCase("cap") ? List.of("off", "500", "1000", "2500") : List.of();
         }
         if (rest.length == 3 && rest[0].equalsIgnoreCase("limit")) {
             return List.of("default", "off", "100", "250", "500");

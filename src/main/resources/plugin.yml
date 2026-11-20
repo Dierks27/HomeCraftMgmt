@@ -114,7 +114,7 @@ commands:
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
       /hcm games boat flights  - admin: how far Ice Boats really jump off the Mountain Run's drops
       /hcm games movement [player]  - admin: what the courses' fair-play watch reads on a player (it only looks)
-      /hcm games parlor [only on|off | money on|off | limit <dollars|off> | limit <player> <dollars|off|default> | stake <dollars> | payout <dollars> | chips <a> [b] [c] | ticket <dollars|tokens>]  - admin: the Game Parlor's rules (games of chance only there; playing for money)
+      /hcm games parlor [only on|off | money on|off | limit <dollars|off> | limit <player> <dollars|off|default> | stake <dollars> | payout <dollars> | chips <a> [b] [c] | ticket <dollars|tokens> | pot cap <dollars|off>]  - admin: the Game Parlor's rules (games of chance only there; playing for money; the pot machines' cap)
       /hcm trade <player>    - trade with someone (the same as /trade, if another plugin owns /trade)
       /hcm trades [player] [n]  - admin: the last trades, one line each
       /hcm trades show <id>  - admin: one trade in full, and its Mailbox rows

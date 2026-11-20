@@ -52,14 +52,21 @@ public final class Parlor {
     static final String KEY_PAYOUT = KEY + "max_payout";
     static final String KEY_CHIPS = KEY + "chips";
     static final String KEY_TICKET = KEY + "ticket";
+    /** The most a pot machine's pot may hold, in dollars (0: no cap). */
+    static final String KEY_POT_CAP = KEY + "pot_cap";
     /** Today's Scratch Tickets sold for money, everyone's: {@code day:dollars in:cents back}. */
     static final String KEY_TICKETS = KEY + "tickets";
     /** A player's Scratch Tickets bought for money today ({@code game_prefs}): {@code day:dollars}. */
     static final String PREF_TICKETS = "parlor.tickets";
-    /** Cents of a Scratch Ticket prize the bank would not take ({@code game_prefs}): paid when it will. */
+    /**
+     * Cents the Parlor owes a player outside any round that the bank would not take ({@code game_prefs}): a Scratch
+     * Ticket prize, the part of a pot the spins added. Paid when it will.
+     */
     static final String PREF_OWED = "parlor.owed";
     /** The most a Scratch Ticket may cost, in dollars. */
     public static final int TICKET_CEILING = 1000;
+    /** The biggest pot cap an admin can set, in dollars. */
+    public static final int POT_CEILING = 100_000;
     /** A player's own day limit ({@code game_prefs}): dollars, or {@link #NO_LIMIT}. */
     static final String PREF_LIMIT = "parlor.limit";
 
@@ -67,6 +74,8 @@ public final class Parlor {
     public static final Refusal MONEY_NOT_YOURS = new Refusal(Refusal.Reason.NO_PERMISSION,
             "Playing for money isn't open to you.");
     public static final Refusal MONEY_NOT_HERE = Refusal.of("Playing for money is only in the Game Parlor.");
+    /** A machine with one set price in dollars, asked to take tokens. It never does. */
+    public static final Refusal MONEY_ONLY = Refusal.of("That machine is played for money, in the Game Parlor.");
     /** A game of chance opened anywhere but the Parlor while they are kept to it. */
     public static final Refusal ONLY_HERE = new Refusal(Refusal.Reason.CLOSED,
             "That game is played in the Clubhouse's Game Parlor.");
@@ -81,22 +90,33 @@ public final class Parlor {
      * @param maxPayout the most one play gives back, in dollars
      * @param chips     the chips a stake is built from, smallest first (1 to {@link #MAX_CHIPS})
      * @param ticket    what a Scratch Ticket costs at the Parlor's booth, in dollars (0: tokens, as configured)
+     * @param potCap    the most a pot machine's pot may hold, in dollars (0: no cap); at the cap a spin's
+     *                  share simply isn't added
      */
     public record Rules(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout, List<Integer> chips,
-                        int ticket) {
+                        int ticket, int potCap) {
+
+        /** The shipped pot cap, in dollars. */
+        public static final int POT_CAP = 1000;
 
         public Rules {
             chips = List.copyOf(chips);
         }
 
+        /** The rules with the shipped pot cap. */
+        public Rules(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout, List<Integer> chips,
+                     int ticket) {
+            this(onlyHere, money, limit, maxStake, maxPayout, chips, ticket, POT_CAP);
+        }
+
         /** As shipped: the owner's numbers ("$5 entry" for the ticket). */
         public static Rules defaults() {
-            return new Rules(true, true, 250, 50, 500, List.of(5, 10, 25), 5);
+            return new Rules(true, true, 250, 50, 500, List.of(5, 10, 25), 5, POT_CAP);
         }
 
         private Rules with(boolean onlyHere, boolean money, int limit, int maxStake, int maxPayout,
                            List<Integer> chips) {
-            return new Rules(onlyHere, money, limit, maxStake, maxPayout, chips, ticket);
+            return new Rules(onlyHere, money, limit, maxStake, maxPayout, chips, ticket, potCap);
         }
 
         /** The smallest stake: the smallest chip. */
@@ -120,12 +140,19 @@ public final class Parlor {
 
     private final GamesService games;
     private final Store store;
+    private final Pots pots;
     private volatile Rules rules = Rules.defaults();
 
     Parlor(GamesService games, Store store) {
         this.games = games;
         this.store = store;
+        this.pots = new Pots(games, this, store);
         load();
+    }
+
+    /** The pot machines' pots: The Motherlode's and Farm Slots'. */
+    public Pots pots() {
+        return pots;
     }
 
     /** The rules now. */
@@ -145,7 +172,8 @@ public final class Parlor {
                     whole(store.get(KEY_STAKE), d.maxStake(), 1, STAKE_CEILING),
                     whole(store.get(KEY_PAYOUT), d.maxPayout(), 1, PAYOUT_CEILING),
                     chips(store.get(KEY_CHIPS), d.chips()),
-                    whole(store.get(KEY_TICKET), d.ticket(), 0, TICKET_CEILING));
+                    whole(store.get(KEY_TICKET), d.ticket(), 0, TICKET_CEILING),
+                    whole(store.get(KEY_POT_CAP), d.potCap(), 0, POT_CEILING));
         } catch (SQLException | RuntimeException e) {
             games.host().logger().log(Level.WARNING, "Could not read the Game Parlor's rules - using the shipped ones",
                     e);
@@ -194,7 +222,14 @@ public final class Parlor {
     public void ticket(int dollars) {
         int v = Math.max(0, Math.min(TICKET_CEILING, dollars));
         save(KEY_TICKET, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(),
-                rules.maxStake(), rules.maxPayout(), rules.chips(), v));
+                rules.maxStake(), rules.maxPayout(), rules.chips(), v, rules.potCap()));
+    }
+
+    /** The most a pot machine's pot may hold: dollars, or 0 for no cap. A pot already over it stays as it is. */
+    public void potCap(int dollars) {
+        int v = Math.max(0, Math.min(POT_CEILING, dollars));
+        save(KEY_POT_CAP, Integer.toString(v), new Rules(rules.onlyHere(), rules.money(), rules.limit(),
+                rules.maxStake(), rules.maxPayout(), rules.chips(), rules.ticket(), v));
     }
 
     /**
@@ -328,7 +363,9 @@ public final class Parlor {
      * The money steps of the play gate for {@code stake} dollars: may play for money at all, the stake is one the
      * chips can make and no bigger than the biggest, the day's limit, and the balance. {@code null} = go ahead.
      *
-     * @param fresh a new play (the stake's shape is checked); false for more put in mid-round (a Double)
+     * @param fresh a new play built from the chips (the stake's shape is checked); false for more put in mid-round
+     *              (a Double) and for a set price that is not the chips' to make (a Scratch Ticket, a pot machine's
+     *              spin: {@link Game#setPrice()})
      */
     public Refusal check(Player player, int stake, boolean fresh) {
         Refusal r = allowed(player);
@@ -409,22 +446,42 @@ public final class Parlor {
             return;
         }
         tally(games.host().clock().dayKey(), 0, cents);
+        giveCents(player, cents, "Scratch Ticket prize");
+    }
+
+    /**
+     * Pay {@code cents} the Parlor owes a player outside any round (a Scratch Ticket's prize, 0.46.1; the part of a
+     * pot the spins added): into the bank, or (the bank won't take it) kept as owed to the player and paid
+     * when it will ({@link #payOwed}). Never lost, and never paid twice: it is either in the bank or in the one kept
+     * amount.
+     *
+     * @param what what it is, for the console ("Scratch Ticket prize")
+     * @return true when the bank took it now; false when it is kept (or, logged SEVERE, could not even be kept)
+     */
+    public boolean giveCents(UUID player, long cents, String what) {
+        if (cents <= 0) {
+            return true;
+        }
         if (games.host().bank().giveCents(player, cents)) {
-            games.host().logger().info("[Parlor] Scratch Ticket paid " + player + " " + money(cents));
-            return;
+            games.host().logger().info("[Parlor] " + what + " paid " + player + " " + money(cents));
+            return true;
         }
         try {
             long owed = whole(games.dao().pref(player, PREF_OWED), 0, 0, Integer.MAX_VALUE);
             games.dao().setPref(player, PREF_OWED, Long.toString(owed + cents));
-            games.host().logger().warning("[Parlor] The bank refused a Scratch Ticket prize of " + money(cents)
+            games.host().logger().warning("[Parlor] The bank refused a " + what + " of " + money(cents)
                     + " for " + player + " - it is kept and paid when the bank takes it");
         } catch (SQLException e) {
-            games.host().logger().log(Level.SEVERE, "[Parlor] Could not pay or keep a Scratch Ticket prize of "
+            games.host().logger().log(Level.SEVERE, "[Parlor] Could not pay or keep a " + what + " of "
                     + money(cents) + " for " + player + " - give it by hand", e);
         }
+        return false;
     }
 
-    /** Pay {@code player} any Scratch Ticket prize the bank would not take before (the sweep asks, once a minute). */
+    /**
+     * Pay {@code player} anything kept for them that the bank would not take before: a Scratch Ticket prize, a pot
+     * (the sweep asks, once a minute).
+     */
     public void payOwed(Player player) {
         if (!games.host().bank().on()) {
             return;
@@ -438,12 +495,21 @@ public final class Parlor {
             }
             games.dao().deletePref(id, PREF_OWED); // first: it is never paid twice
             if (games.host().bank().giveCents(id, cents)) {
-                games.host().logger().info("[Parlor] Scratch Ticket prize paid late to " + id + ": " + money(cents));
+                games.host().logger().info("[Parlor] A kept prize paid late to " + id + ": " + money(cents));
             } else {
                 games.dao().setPref(id, PREF_OWED, Long.toString(cents));
             }
         } catch (SQLException e) {
-            games.host().logger().log(Level.WARNING, "Could not pay a kept Scratch Ticket prize", e);
+            games.host().logger().log(Level.WARNING, "Could not pay a kept Game Parlor prize", e);
+        }
+    }
+
+    /** Cents kept for {@code player} that the bank has not taken yet (0 for none, or when it can't be read). */
+    public long owed(UUID player) {
+        try {
+            return whole(games.dao().pref(player, PREF_OWED), 0, 0, Integer.MAX_VALUE);
+        } catch (SQLException e) {
+            return 0;
         }
     }
 

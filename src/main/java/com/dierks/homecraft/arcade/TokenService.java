@@ -86,7 +86,12 @@ public final class TokenService {
         // from the Harvest Basket, a caught turkey, and the Family Feast's one reward for every helper.
         EVENT_HARVEST("Harvest Basket"),
         EVENT_TURKEY("Catch the Turkey"),
-        EVENT_FEAST("Family Feast");
+        EVENT_FEAST("Family Feast"),
+        // The Game Parlor's three more slot machines, each its own game of chance with its own line here.
+        // The Motherlode and Farm Slots are played for money only, so their lines are only ever a round put right.
+        ARCADE_NETHER_SLOTS("Nether Slots"),
+        ARCADE_MOTHERLODE("The Motherlode"),
+        ARCADE_FARM_SLOTS("Farm Slots");
 
         private final String label;
 

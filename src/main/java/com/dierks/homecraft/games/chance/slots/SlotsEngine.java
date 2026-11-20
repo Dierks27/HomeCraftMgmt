@@ -214,19 +214,24 @@ public final class SlotsEngine implements ChanceRounds.InstantEngine<SlotsEngine
      * chance, in multiples when every stake pays the same, else one set per stake in tokens.
      */
     public List<FeedWriter.PayRow> feedRows() {
+        return feedRows(SlotTheme.ORE);
+    }
+
+    /** {@link #feedRows()} with each line named as {@code theme} names it ("3 ghast_tear"). */
+    public List<FeedWriter.PayRow> feedRows(SlotTheme theme) {
         List<FeedWriter.PayRow> rows = new ArrayList<>();
         if (odds.isEmpty()) {
             return rows;
         }
         if (sameAtEveryStake()) {
             for (LineOdds l : odds.values().iterator().next().lines()) {
-                rows.add(new FeedWriter.PayRow(null, l.line().combo(), l.multiple(), l.chance(), null, null));
+                rows.add(new FeedWriter.PayRow(null, theme.combo(l.line()), l.multiple(), l.chance(), null, null));
             }
             return rows;
         }
         for (StakeOdds o : odds.values()) {
             for (LineOdds l : o.lines()) {
-                rows.add(new FeedWriter.PayRow(o.stake(), l.line().combo(), l.payout(), l.chance(), null, null));
+                rows.add(new FeedWriter.PayRow(o.stake(), theme.combo(l.line()), l.payout(), l.chance(), null, null));
             }
         }
         return rows;
@@ -244,7 +249,7 @@ public final class SlotsEngine implements ChanceRounds.InstantEngine<SlotsEngine
     public Spin decide(long seed, int stake) {
         Table t = tables.get(stake);
         if (t == null) {
-            throw new IllegalArgumentException("Ore Slots does not take " + stake + " tokens (it takes " + stakes() + ")");
+            throw new IllegalArgumentException("This machine does not take " + stake + " (it takes " + stakes() + ")");
         }
         SplittableRandom random = new SplittableRandom(seed);
         int a = t.draw(random.nextInt(t.total));

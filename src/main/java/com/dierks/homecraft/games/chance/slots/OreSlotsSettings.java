@@ -1,13 +1,11 @@
 package com.dierks.homecraft.games.chance.slots;
 
 import com.dierks.homecraft.config.GamesConfig;
-import com.dierks.homecraft.games.RtpLimits;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
 
 /**
  * Ore Slots's settings: {@code games.ore_slots} (spec §5.3, R1.4).
@@ -23,6 +21,9 @@ import java.util.TreeSet;
  * 85-95 band is dropped with one WARN naming it; if no stake is left the game closes with one WARN
  * the moment it loads; a stake that could only land just above its target logs one INFO line.
  *
+ * <p>It is a {@link SlotTable}, the shape the shared machine and its screen read, so the themed machines
+ * ({@link SlotSettings}) run through the same code. Its keys and its lines are as they always were.
+ *
  * @param enabled    the game's own switch (it also needs {@code games.enabled})
  * @param stakes     the choices of tokens to put in, smallest first, as configured
  * @param dailyLimit spins a player gets a day
@@ -32,7 +33,8 @@ import java.util.TreeSet;
  * @param engine     the solved odds and the draw, from exactly these values and the payout cap
  */
 public record OreSlotsSettings(boolean enabled, List<Integer> stakes, int dailyLimit, double rtp,
-                               Map<String, Integer> reels, Map<String, Integer> pays, SlotsEngine engine) {
+                               Map<String, Integer> reels, Map<String, Integer> pays, SlotsEngine engine)
+        implements SlotTable {
 
     /** The leaves under {@code games.ore_slots}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "stakes", "daily_limit", "rtp", "reels.coal",
@@ -56,8 +58,8 @@ public record OreSlotsSettings(boolean enabled, List<Integer> stakes, int dailyL
     public static OreSlotsSettings defaults() {
         List<Integer> stakes = List.of(1, 2, 5);
         return of(true, stakes, 50, 90,
-                map("coal", 10, "copper", 8, "iron", 6, "gold", 4, "diamond", 2, "wild", 2),
-                map("two", 2, "coal", 4, "copper", 6, "iron", 10, "gold", 20, "diamond", 40, "wild", 50),
+                SlotsTables.map("coal", 10, "copper", 8, "iron", 6, "gold", 4, "diamond", 2, "wild", 2),
+                SlotsTables.map("two", 2, "coal", 4, "copper", 6, "iron", 10, "gold", 20, "diamond", 40, "wild", 50),
                 GamesConfig.Common.defaults().maxPayoutFor(stakes));
     }
 
@@ -71,78 +73,36 @@ public record OreSlotsSettings(boolean enabled, List<Integer> stakes, int dailyL
     /** Read {@code games.ore_slots} over {@code d}, then solve; never throws. */
     public static OreSlotsSettings parse(GamesConfig.Node n, OreSlotsSettings d) {
         boolean enabled = n.enabled(d.enabled());
-        List<Integer> stakes = sortedDistinct(n.intList("stakes", d.stakes(), 1, 1000));
-        if (stakes.size() > MAX_STAKES) {
-            List<Integer> kept = List.copyOf(stakes.subList(0, MAX_STAKES));
-            n.warn(n.key("stakes") + " " + stakes + " has more than " + MAX_STAKES
-                    + " stakes, which is all the screen shows - using " + kept);
-            stakes = kept;
-        }
+        List<Integer> stakes = SlotsTables.stakes(n, d.stakes(), MAX_STAKES);
         int dailyLimit = n.whole("daily_limit", d.dailyLimit(), 1, 10_000);
         double rtp = n.rtp("rtp", d.rtp());
         Map<String, Integer> reels = n.wholeMap("reels", d.reels(), 0, MAX_WEIGHT);
         Map<String, Integer> pays = n.wholeMap("pays", d.pays(), 0, MAX_MULTIPLE);
         GamesConfig.Common common = n.common() != null ? n.common() : GamesConfig.Common.defaults();
         OreSlotsSettings s = of(enabled, stakes, dailyLimit, rtp, reels, pays, common.maxPayoutFor(stakes));
-        report(n, s);
+        SlotsTables.report(n, "ore_slots", "Ore Slots", "tokens", s.engine(), s.rtp(), s.reels(), s.pays(), false);
         return s;
     }
 
-    /** The solve's WARN and INFO lines (spec §5.1): a dropped stake, no stake left, just above target. */
-    private static void report(GamesConfig.Node n, OreSlotsSettings s) {
-        SlotsEngine e = s.engine();
-        String band = "85-95 of every 100 tokens";
-        if (!e.playable()) {
-            n.invalid(n.path() + " can't give back " + band + " at any stake (" + why(s) + ")");
-            return;
-        }
-        for (SlotsEngine.Dropped d : e.dropped()) {
-            n.warn(n.key("stakes") + " " + d.stake() + " can't give back " + band + " (nearest " + d.nearest()
-                    + " with max_payout " + e.cap() + ") - Ore Slots doesn't take " + d.stake() + " tokens");
-        }
-        for (SlotsEngine.StakeOdds o : e.odds().values()) {
-            if (o.aboveTarget()) {
-                n.info("ore_slots stake " + o.stake() + ": " + RtpLimits.tenthPercent(o.rtp()) + "% (target "
-                        + fmt(s.rtp()) + " not reachable with whole weights)");
-            }
-        }
+    /** Ore Slots' own look: the ores. */
+    @Override
+    public SlotTheme theme() {
+        return SlotTheme.ORE;
     }
 
-    /** Why nothing could be solved, for the one WARN. */
-    private static String why(OreSlotsSettings s) {
-        if (s.reels().values().stream().allMatch(w -> w == 0)) {
-            return "every reel weight is 0";
-        }
-        if (s.pays().values().stream().allMatch(p -> p == 0)) {
-            return "no line pays anything";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (SlotsEngine.Dropped d : s.engine().dropped()) {
-            sb.append(sb.length() == 0 ? "" : ", ").append("stake ").append(d.stake()).append(": nearest ")
-                    .append(d.nearest());
-        }
-        return sb.toString();
+    /** Its reels are already written with the engine's keys. */
+    @Override
+    public Map<String, Integer> engineReels() {
+        return reels;
+    }
+
+    @Override
+    public Map<String, Integer> enginePays() {
+        return pays;
     }
 
     /** The target return as a fraction (0.90). */
     public double rtpFraction() {
         return rtp / 100.0;
-    }
-
-    /** An ordered, unmodifiable map from key, value pairs. */
-    private static Map<String, Integer> map(Object... kv) {
-        Map<String, Integer> out = new LinkedHashMap<>();
-        for (int i = 0; i < kv.length; i += 2) {
-            out.put((String) kv[i], (Integer) kv[i + 1]);
-        }
-        return Collections.unmodifiableMap(out);
-    }
-
-    private static List<Integer> sortedDistinct(List<Integer> in) {
-        return List.copyOf(new TreeSet<>(in));
-    }
-
-    private static String fmt(double v) {
-        return v == Math.rint(v) ? Long.toString((long) v) : String.valueOf(v);
     }
 }

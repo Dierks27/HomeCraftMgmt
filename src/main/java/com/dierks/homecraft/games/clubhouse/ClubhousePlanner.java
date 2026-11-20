@@ -1260,6 +1260,26 @@ public final class ClubhousePlanner {
                 box.minZ() + PARLOR_TICKET[1] + 0.5, PARLOR_TICKET[2]);
     }
 
+    /**
+     * The slot machines along the Parlor's back row (x, z, yaw): Nether Slots, Farm Slots and The Motherlode,
+     * standing against the back wall and facing the room, the Scratch Ticket's booth (x 7) between them. Like the
+     * booth, each is a display with NO block of its own, so adding them changes no block and {@link #ALGO} stays as
+     * it is. x 11 and x 13 on the same row are kept free for two machines still to come.
+     */
+    static final int[][] PARLOR_ROW = {{3, SIDE_Z1, 180}, {5, SIDE_Z1, 180}, {9, SIDE_Z1, 180}};
+    /** The games those stand for, in order. Each is drawn only while its game is there and open. */
+    public static final List<String> PARLOR_ROW_GAMES = List.of("nether_slots", "farm_slots", "motherlode");
+
+    /** Where the back row's slot machines stand in the Game Parlor: {@link #PARLOR_ROW_GAMES}' places. */
+    public static List<Place3> parlorRow(Box box) {
+        List<Place3> out = new ArrayList<>();
+        for (int[] m : PARLOR_ROW) {
+            out.add(new Place3(box.minX() + ARCADE_X0 + m[0] + 0.5, box.minY() + UP_FLOOR + 1,
+                    box.minZ() + m[1] + 0.5, m[2]));
+        }
+        return out;
+    }
+
     /** The Game Parlor's machines: {@link #PARLOR_GAMES}' places, the walls' four then the two tables' tops. */
     public static List<Place3> parlorMachines(Box box) {
         List<Place3> out = new ArrayList<>();

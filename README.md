@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.48.1-harvest-random`
+- **Version:** `0.49.0-deep-mine-mob-slots`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,14 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.49.0: Deep Mine and Mob Slots, the last two slot machines.** The owner, of the six machine types: "I want them
+all :)". **Deep Mine** shows a 3 x 3 grid and all three rows count, so one spin can win more than once. **Mob Slots**
+has a bonus: three Creepers on the line give five free spins. See
+[The slot machines](#the-slot-machines-0480). Each is its own game with its own section in config.yml (added to
+yours at the first start, no config revision) and its own machine at the end of the Parlor's back wall (displays:
+nothing is rebuilt). No schema change. **Back to 0.48.1 from 0.49.0:** the jar alone; the two machines and their
+config sections are ignored.
 
 **0.48.1: the Harvest showers come at random times.** The owner: "Cut the Harvest showers to only happen simply
 randomly from here on out" (they came once an hour, on the clock, and the food piled up). Now **three showers a
@@ -4745,6 +4753,22 @@ and how much.
 | **Nether Slots** (`nether_slots`) | tokens, or dollars with money play | Rare and big: a spin pays about 1 in 12, two the same pays nothing | stakes 1, 2; lines 6x to 100x, three Wilds 125x |
 | **The Motherlode** (`motherlode`) | **$5 a spin**, money only | The big pot: three Wilds (about 1 spin in 594) takes it all | pot starts at $50; every spin adds 25 cents |
 | **Farm Slots** (`farm_slots`) | **$1 a spin**, money only | The small pot, taken often: three Wilds about 1 spin in 146 | pot starts at $10; every spin adds 5 cents |
+| **Deep Mine** (`deep_mine`, 0.49.0) | tokens, or dollars with money play | Three rows, all of them lines: at least one row pays about 92 spins in 100 | stake per row 1, 2, 5 (a spin costs 3, 6, 15); lines 3x to 16x the row's stake |
+| **Mob Slots** (`mob_slots`, 0.49.0) | tokens, or dollars with money play | A bonus round: three Creepers (about 1 spin in 182) give 5 free spins | stakes 1, 2; lines 2x to 20x |
+
+- **Deep Mine's three rows.** You pick what goes on each row, and a spin costs three times that: all three rows are
+  always played. Each row is a line of its own, drawn and paid exactly like a one-line machine's, so two or three
+  rows can pay on the same spin; the screen says what each winning row paid and the total. In dollars the chips
+  build the per-row amount, and a chip is offered only while the whole spin still fits the biggest stake ($15 a row
+  is the most with the shipped $50). Deepslate ores; the Wild is a lantern.
+- **Mob Slots' free spins.** The Creeper is this machine's Wild: it stands in for any drop, and three of them pay
+  the top line **and** give `free_spins` (shipped 5) free spins at the same stake. They are played at once, one
+  after another on the screen with a running total; a free spin that lands three Creepers pays its line but gives
+  no more. The whole round (the first spin and its free spins) is decided and paid as one before anything is
+  shown, and "gives back about N" on its screen is the whole round's exact return, the free spins counted.
+- **Never over the cap.** Neither machine can decide a round that pays more than the round's cap: Deep Mine's rows
+  are each held to a third of it, and a Mob Slots spin to a sixth (one spin and five free spins), by how the tables
+  are solved, never by cutting a total afterwards.
 
 - **The pot machines.** One set price, no chips. A share of every spin (`feed_percent`, shipped 5) goes into that
   machine's pot, which everyone can read on the machine in the Parlor ("The Motherlode · $212") and on its screen.
@@ -4761,7 +4785,7 @@ and how much.
 - **A cap.** No pot grows past `/hcm games parlor pot cap <dollars|off>` (shipped $1000); at the cap, spins simply
   stop adding to it. `/hcm games parlor` shows each pot, the cap, and what was taken from pots today.
 - **Where they stand.** Along the Parlor's back wall beside the ticket booth: Nether Slots, Farm Slots, the booth,
-  The Motherlode. They are displays, so nothing is rebuilt and a saved room gets them too; in an owner-built room,
+  The Motherlode, and since 0.49.0 Deep Mine and Mob Slots (models `machine_deepmine`, `machine_mobs`). They are displays, so nothing is rebuilt and a saved room gets them too; in an owner-built room,
   stand where one goes and type `/hcm games clubhouse parlor <game>`. A machine whose game is switched off isn't
   drawn. Models: `machine_nether`, `machine_farm`, `machine_motherlode` (placeholders until you drop your own in).
 - **Their numbers are in config.yml**, like every machine's: `games.nether_slots`, `games.motherlode` and

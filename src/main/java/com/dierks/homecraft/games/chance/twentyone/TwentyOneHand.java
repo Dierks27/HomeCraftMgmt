@@ -508,6 +508,9 @@ public final class TwentyOneHand {
      * recorded yet ({@code stake} is twice the hand's), the Double is taken, as it was paid for.
      */
     public static int settleOnExit(long seed, int stake, String data) {
+        if (TableRound.isTable(data)) {
+            return TableRound.settleOnExit(seed, stake, data); // 0.47.0: a hand played at a table of up to four
+        }
         Saved s = read(data);
         TwentyOneHand h = replay(seed, s);
         if (!h.done() && !h.doubled() && stake >= 2 * s.terms().in() && h.canDouble()) {

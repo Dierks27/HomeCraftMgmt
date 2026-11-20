@@ -153,11 +153,35 @@ public final class TwentyOne implements Game {
                 lore.toArray(new String[0]));
     }
 
-    /** Resume the player's open hand, or (gate steps 0-4) open the table. */
+    /** 0.47.0: the Game Parlor's table, where up to four play one shoe together. */
+    private final TwentyOneTable table = new TwentyOneTable(this);
+
+    /** The Game Parlor's Twenty-One table. */
+    public TwentyOneTable table() {
+        return table;
+    }
+
+    /**
+     * Resume the player's open hand, or (gate steps 0-4) open the table. In the Game Parlor (0.47.0) that is the
+     * table everyone there shares; anywhere else it is a hand alone, as before.
+     */
     @Override
     public void open(Player player, Runnable back) {
         GamesService games = ctx.games();
+        if (games.inParlor(player.getUniqueId())) {
+            Refusal refusal = games.canOpen(player, this);
+            if (refusal != null) {
+                games.tell(player, refusal);
+                return;
+            }
+            new com.dierks.homecraft.gui.games.chance.TwentyOneTableMenu(ctx.plugin(), this, player, back).open(player);
+            return;
+        }
         ChanceRounds.Round round = games.rounds().openRound(player.getUniqueId(), id());
+        if (round != null && TableRound.isTable(round.data())) {
+            games.rounds().finishNow(round); // a table hand met away from the table: it stands, and is paid
+            round = null;
+        }
         if (round == null) {
             Refusal refusal = games.canOpen(player, this);
             if (refusal != null) {

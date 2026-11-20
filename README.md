@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.46.1-parlor-ticket`
+- **Version:** `0.47.0-group-table`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,16 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.47.0: Twenty-One at a table of up to four.** The owner: "It would be pretty great if we could play as a group
+around the table!! ... its much more a social event", and of the pace "the player has unlimited time unless the
+other players at the table hit a 'Hurry Up' Button ... Then they have like 30 seconds." In the Game Parlor, the
+Twenty-One table is now one table everyone there shares: see
+[The Twenty-One table](#the-twenty-one-table-0470). A hand alone (anywhere a server plays Twenty-One outside a
+Parlor) is unchanged. No schema change, no config revision, nothing rebuilt.
+
+**Back to 0.46.1 from 0.47.0:** the jar alone. A table hand still open at the swap can't be read by 0.46.1, which
+gives its stake back (tokens or dollars) and says so once in the console.
 
 **0.46.1: the Scratch Ticket moves to the Game Parlor.** The owner: "Scratch ticket is lottery... I would put that
 in the parlor as well." While the games of chance are kept to the Parlor (`/hcm games parlor only on`, shipped, and
@@ -4701,6 +4711,36 @@ Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same ga
 - Green felt floor, two card tables with chairs, a brass rail, lanterns from the beams. The door on its
   north wall takes you back to the 19th Hole.
 - `parlor.enabled: false` (under `games.clubhouse`) doesn't build it.
+
+##### The Twenty-One table (0.47.0)
+
+Tap the Twenty-One card table in the Parlor and you sit down at it. **Up to four** can sit; a fifth is told the
+table is full. Everyone at the table has the same screen open and sees the same cards: the Arcade's hand along the
+top, a row for each seat (the player, their cards and total, and what they put in or how it came out), and your own
+buttons along the bottom.
+
+- **One shoe, one Arcade hand.** The cards come off the table's own 4-deck shoe in a real table's order: a card to
+  each seat, the Arcade's up card, a second card to each seat, the Arcade's hole card. The seats then play in the
+  order they sat down, and the Arcade draws to 17 once, for everyone. The shoe carries on from round to round and is
+  shuffled fresh at the cut card (three quarters in) and whenever the table has emptied.
+- **Each seat its own stake.** Pick what you put in (tokens, or dollars with money play: the same switch and chips
+  as before), then click **Ready**. One seat can play for 5 tokens beside another playing for $25. Each hand pays by
+  its own stake exactly as a hand alone does.
+- **The cards come when every seat is ready.** A table of one never waits for anybody.
+- **The pace is yours.** Nobody is ever on a clock by themselves. If the table is waiting on someone, any other seat
+  can click **Hurry Up**: whoever it is waiting on then has **30 seconds**, shown to everyone. When it runs out, a
+  seat that wasn't ready sits that round out (nothing of theirs goes in) and a seat that hadn't played stands. The
+  clock is cleared the moment the table moves, and the next player is not on one until someone asks again.
+- **Getting up.** Closing the screen frees your seat. With a hand out, the hand waits for you: tap the table again
+  and it is still yours to play (or the others can Hurry Up, and it stands). A player who leaves the server
+  mid-hand is finished by the same exit rule as a hand alone (they stand), and the table goes on.
+- **The same gate.** Every seat's stake goes in through the same checks as a hand alone, at the moment the cards are
+  dealt: the permission, Take a break, the day's limits, the hands a day, the balance. A seat whose stake is refused
+  is told why and sits out; the others play. A Double is checked again when it goes in.
+- **Safe across a crash.** Each seat's hand is its own saved round carrying its cards, the Arcade's two cards and the
+  shoe's place, so any hand can be finished from its own record. The table itself is only memory.
+
+Higher or Lower, Ore Slots and the Wheel are still played one at a time.
 
 ##### Money in the Game Parlor (0.46.0)
 

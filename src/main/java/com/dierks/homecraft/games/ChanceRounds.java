@@ -373,6 +373,16 @@ public final class ChanceRounds {
         settleOpen(player, games.host().online(player) == null);
     }
 
+    /**
+     * 0.47.0: finish this one OPEN round by its game's exit rule now, and tell its player (a table that finds a hand
+     * left over from before it existed). Nothing happens if it was already settled.
+     */
+    public void finishNow(Round round) {
+        if (round != null) {
+            settle(round, games.host().online(round.player()) == null);
+        }
+    }
+
     /** As {@link #settleOpen(UUID)}; {@code queue} keeps the line for the next join (a quit, a join). */
     void settleOpen(UUID player, boolean queue) {
         try {

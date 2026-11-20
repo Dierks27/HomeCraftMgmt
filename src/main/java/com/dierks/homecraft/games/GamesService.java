@@ -1076,6 +1076,15 @@ public final class GamesService {
         }
     }
 
+    /** The online player with this id, or {@code null} (0.47.0: a table asks who is still here). */
+    public Player online(UUID player) {
+        try {
+            return player == null ? null : host.online(player);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     private Collection<? extends Player> online() {
         try {
             return new ArrayList<>(host.online());

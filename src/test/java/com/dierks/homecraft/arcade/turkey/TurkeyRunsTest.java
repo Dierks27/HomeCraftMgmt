@@ -171,6 +171,30 @@ class TurkeyRunsTest {
         assertEquals(Offer.CAP, runs.offer("s1", UUID.randomUUID()));
     }
 
+    /**
+     * 0.45.0: her catch-up turkey appears at home and she goes to the Hub: it follows her (the old one goes, the run
+     * stays, another is offered with no second mark), and she can still catch it, once.
+     */
+    @Test
+    void aWelcomeTurkeyFollowsItsOwnerToAnotherWorld() {
+        FakeHost host = new FakeHost();
+        TurkeyRuns runs = new TurkeyRuns(host);
+        Run w = runs.start("w1-cccc", Kind.WELCOME, LITTLE, 0, 180_000, false);
+        assertEquals(Offer.SPAWNED, runs.offer("w1-cccc", LITTLE));
+        UUID first = w.turkeys().get(LITTLE);
+        assertTrue(runs.followed(first), "a welcome run's turkey");
+        assertTrue(host.removed.contains(first), "the one left behind goes");
+        assertTrue(w.turkeys().isEmpty(), "and the run waits for her");
+        assertEquals(Offer.SPAWNED, runs.offer("w1-cccc", LITTLE), "another, where she is now");
+        assertEquals(1L, host.counters.get(LITTLE + "|welcome"), "the day's mark is written once");
+        UUID second = w.turkeys().get(LITTLE);
+        assertEquals(Tap.CAUGHT, runs.tap(LITTLE, second));
+        assertEquals(1, host.prizes.size(), "one prize");
+        Run s = runs.start("s1", Kind.SCHEDULED, null, 0, 180_000, false);
+        assertEquals(Offer.SPAWNED, runs.offer("s1", DAD));
+        assertFalse(runs.followed(s.turkeys().get(DAD)), "a scheduled run's turkey is let go and offered again");
+    }
+
     @Test
     void aWelcomeTurkeyIsItsOwnersAndOnceADay() {
         FakeHost host = new FakeHost();

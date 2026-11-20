@@ -115,6 +115,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
                     e -> whack.scores(viewer, daily == null ? Scores.CLASSIC : whack.todayBoard(), back));
             if (kid) {
                 bigAgain(slots(9, 53), this::again); // everything under the score: one big Play again
+                kidExit(); // 0.45.0: and a door out
             }
         }
     }
@@ -138,6 +139,9 @@ public final class WhackAZombiePlayMenu extends GameMenu {
         }
         if (engine.over()) {
             finish = whack.finish(viewer, daily, engine.score());
+            if (kid) {
+                hold(KID_SETTLE_MS); // 0.45.0: the holes turn into Play again under a tapping finger: a pause first
+            }
             refresh();
             return;
         }

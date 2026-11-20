@@ -110,6 +110,7 @@ public final class MiniMatchPlayMenu extends GameMenu {
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> match.scores(viewer, daily == null ? Scores.CLASSIC : match.todayBoard(), back));            if (kid) {
                 bigAgain(slots(45, 53), this::again);
+                kidExit(); // 0.45.0: and a door out
             }
         }
     }

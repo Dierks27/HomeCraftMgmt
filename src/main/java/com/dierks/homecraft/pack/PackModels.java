@@ -274,51 +274,99 @@ public final class PackModels {
         }
     }
 
-    /** Every model name any drop-in (folder or zip) gives an item definition for. */
+    /** What one drop-in gave last time it was read: its stamp (see {@link #scan}) and the models it supplies. */
+    private record Seen(String stamp, Set<String> good) {
+    }
+
+    private final Map<String, Seen> seen = new java.util.HashMap<>();
+
+    /**
+     * Every model name any drop-in (folder or zip) gives an item definition for.
+     *
+     * <p>0.45.0: a drop-in's files are read only when it changed (its stamp: for a zip its size and time, for a folder
+     * its files' count, sizes and newest time) and only when it has an {@code hcm:} model at all. Before, every JSON of
+     * every drop-in was read on the server thread each minute.
+     */
     private Set<String> scan(Path dropIns) {
         Set<String> out = new LinkedHashSet<>();
         if (dropIns == null || !Files.isDirectory(dropIns)) {
             return out;
         }
+        Set<String> here = new java.util.HashSet<>();
         try (Stream<Path> list = Files.list(dropIns)) {
             for (Path entry : list.sorted().toList()) {
-                List<String> paths = new ArrayList<>();
-                Map<String, String> json = new java.util.HashMap<>();
                 String name = entry.getFileName().toString().toLowerCase(Locale.ROOT);
-                if (Files.isDirectory(entry)) {
+                boolean folder = Files.isDirectory(entry);
+                if (!folder && !name.endsWith(".zip")) {
+                    continue;
+                }
+                here.add(name);
+                List<String> paths = new ArrayList<>();
+                List<Path> files = new ArrayList<>();
+                String stamp;
+                if (folder) {
+                    long newest = 0;
+                    long bytes = 0;
                     try (Stream<Path> walk = Files.walk(entry, 8)) {
                         for (Path p : walk.filter(Files::isRegularFile).toList()) {
-                            String rel = entry.relativize(p).toString().replace('\\', '/');
-                            paths.add(rel);
+                            paths.add(entry.relativize(p).toString().replace('\\', '/'));
+                            files.add(p);
+                            newest = Math.max(newest, Files.getLastModifiedTime(p).toMillis());
+                            bytes += Files.size(p);
+                        }
+                    }
+                    stamp = "d:" + paths.size() + ":" + bytes + ":" + newest;
+                } else {
+                    stamp = "z:" + Files.size(entry) + ":" + Files.getLastModifiedTime(entry).toMillis();
+                }
+                Seen was = seen.get(name);
+                if (was != null && was.stamp().equals(stamp)) {
+                    out.addAll(was.good());
+                    continue;
+                }
+                Map<String, String> json = new java.util.HashMap<>();
+                if (folder) {
+                    if (!providedBy(paths).isEmpty()) {
+                        for (int n = 0; n < paths.size(); n++) {
+                            String rel = paths.get(n);
                             if (rel.endsWith(".json") && rel.contains("assets/")) {
-                                json.put(rel, Files.readString(p, StandardCharsets.UTF_8));
+                                json.put(rel, Files.readString(files.get(n), StandardCharsets.UTF_8));
                             }
                         }
                     }
-                } else if (name.endsWith(".zip")) {
+                } else {
                     try (ZipFile zip = new ZipFile(entry.toFile())) {
                         for (Enumeration<? extends ZipEntry> e = zip.entries(); e.hasMoreElements(); ) {
-                            ZipEntry z = e.nextElement();
-                            paths.add(z.getName());
-                            if (!z.isDirectory() && z.getName().endsWith(".json") && z.getName().contains("assets/")) {
-                                try (var in = zip.getInputStream(z)) {
-                                    json.put(z.getName(), new String(in.readAllBytes(), StandardCharsets.UTF_8));
+                            paths.add(e.nextElement().getName());
+                        }
+                        if (!providedBy(paths).isEmpty()) {
+                            for (Enumeration<? extends ZipEntry> e = zip.entries(); e.hasMoreElements(); ) {
+                                ZipEntry z = e.nextElement();
+                                if (!z.isDirectory() && z.getName().endsWith(".json")
+                                        && z.getName().contains("assets/")) {
+                                    try (var in = zip.getInputStream(z)) {
+                                        json.put(z.getName(), new String(in.readAllBytes(), StandardCharsets.UTF_8));
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 Set<String> all = new java.util.HashSet<>(paths);
+                Set<String> good = new LinkedHashSet<>();
                 for (String model : providedBy(paths)) {
                     String why = problem(model, json, all);
                     if (why == null) {
-                        out.add(model);
+                        good.add(model);
                     } else if (warned.add(name + "/" + model + ": " + why)) {
                         log.warning("Pack: your model " + ClubModels.NS + ":" + model + " in " + name + " can't be"
                                 + " drawn - " + why + ". HCM keeps its own placeholder for it until it's fixed.");
                     }
                 }
+                seen.put(name, new Seen(stamp, good));
+                out.addAll(good);
             }
+            seen.keySet().retainAll(here);
         } catch (IOException e) {
             log.warning("Pack: couldn't read CraftBridge's drop-ins (" + dropIns + "): " + e.getMessage());
         }

@@ -54,10 +54,14 @@ public final class BagMenu extends GameMenu {
     protected void build() {
         fill();
         List<ItemStack> in = contents(viewer.getInventory().getContents());
-        set(BAG, Menus.icon(Material.BUNDLE, "&6Your Bag &7- " + in.size() + (in.size() == 1 ? " thing" : " things"),
+        int things = 0;
+        for (ItemStack i : in) {
+            things += i.getAmount();
+        }
+        set(BAG, Menus.icon(Material.BUNDLE, "&6Your Bag &7- " + things + (things == 1 ? " thing" : " things"),
                 "&7It all comes home with you", "&7when you leave."), null);
         if (in.isEmpty()) {
-            set(EMPTY, Menus.icon(Material.FEATHER, "&7Empty - catch a turkey!"), null);
+            set(EMPTY, Menus.icon(Material.FEATHER, "&7Empty - what you win here goes in"), null);
         }
         for (int i = 0; i < Math.min(MAX, in.size()); i++) {
             set(FIRST + i, in.get(i).clone(), null);

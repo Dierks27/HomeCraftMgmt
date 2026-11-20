@@ -297,8 +297,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
         net.kyori.adventure.text.Component line = Text.of(HUB_SHOUT).append(Text.of(HUB_LINK)
                 .clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/hcm hub"))
                 .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Text.of("&7Click to go to the Hub"))));
+        Location hub = com.dierks.homecraft.games.hub.Hub.arrivalOf(games);
         for (Player p : List.copyOf(plugin.getServer().getOnlinePlayers())) {
-            if (p.hasPermission("hcm.games.play") && !com.dierks.homecraft.games.hub.Hub.visiting(plugin, p)) {
+            if (hub != null && p.getWorld().equals(hub.getWorld())) {
+                continue; // in the Hub already (visiting, or a new player still in the spawn): nowhere to send them
+            }
+            if (p.hasPermission("hcm.games.play")) {
                 p.sendMessage(line);
             }
         }
@@ -347,6 +351,18 @@ public final class TurkeyService implements Listener, TurkeyHost {
     /** Players who arrive (or come back from a game) mid-run get a turkey while a minute or more is left. */
     private void arrivals(long now) {
         List<Run> going = new ArrayList<>();
+        for (Run r : List.copyOf(runs.live())) {
+            // 0.45.0: a welcome or catch-up run whose turkey was left behind in another world: another, where they are
+            if (r.kind() == Kind.WELCOME && r.turkeys().isEmpty() && r.owner() != null
+                    && r.msLeft(now) > TurkeyRules.JOIN_MIN_LEFT_MS / 4) {
+                Player owner = Bukkit.getPlayer(r.owner());
+                Long until = noSpotUntil.get(r.owner());
+                if (owner != null && skip(owner) == null && (until == null || until <= now)
+                        && runs.offer(r.id(), r.owner()) == Offer.NO_SPOT) {
+                    noSpotUntil.put(r.owner(), now + NO_SPOT_RETRY_MS);
+                }
+            }
+        }
         for (Run r : runs.live()) {
             if (r.kind() == Kind.SCHEDULED && r.msLeft(now) > TurkeyRules.JOIN_MIN_LEFT_MS) {
                 going.add(r);
@@ -367,14 +383,20 @@ public final class TurkeyService implements Listener, TurkeyHost {
      * have one yet (in a game, idle, a turkey out already, no room, a restart close) is tried again each second.
      */
     private void welcomes(long now, LocalDate today, TurkeyConfig.Turkey c) {
-        if (welcomeDue.isEmpty()) {
-            return;
-        }
-        if (TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes()) < 0) {
+        long delay = TurkeyRules.ownTurkeyDelayMs(c.welcome(), c.catchUpOn(today), c.catchUpMinutes());
+        if (delay < 0) {
             welcomeDue.clear();
             return;
         }
         long day = today.toEpochDay();
+        // 0.45.0: everyone online is owed one, not only whoever joined today (a /hcm reload forgot the list, and a
+        // player online over midnight into a catch-up day never joined on it)
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            Long had = welcomedDay.get(p.getUniqueId());
+            if (had == null || had != day) {
+                welcomeDue.putIfAbsent(p.getUniqueId(), now + delay);
+            }
+        }
         for (Iterator<Map.Entry<UUID, Long>> it = welcomeDue.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<UUID, Long> e = it.next();
             UUID id = e.getKey();
@@ -387,12 +409,14 @@ public final class TurkeyService implements Listener, TurkeyHost {
                 it.remove();
                 continue;
             }
-            if (!TurkeyRules.ownTurkeyOwed(c.welcome(), caughtToday(id))) {
-                it.remove(); // 0.44.0: caught one today already: no catch-up turkey needed
-                continue;
-            }
             Long until = noSpotUntil.get(id);
             if (runs.hasTurkey(id) || skip(p) != null || (until != null && until > now)) {
+                continue;
+            }
+            // after the cheap checks (0.45.0): this reads the database, and ran each second for anyone who was away
+            if (!c.welcome() && !TurkeyRules.ownTurkeyOwed(false, caughtToday(id))) {
+                welcomedDay.put(id, day); // caught one today already: no catch-up turkey needed
+                it.remove();
                 continue;
             }
             if (TurkeyRules.welcomeHeld(now, c.runMillis(), restartHold())) {
@@ -692,12 +716,13 @@ public final class TurkeyService implements Listener, TurkeyHost {
             Location home = e.getValue().home();
             boolean valid = c.isValid() && !c.isDead();
             // 0.44.0: its owner went to the Hub (or home from it) mid-run: this one goes, and the run offers them a
-            // new one where they are now (a scheduled run only: a welcome turkey ends with its run)
+            // new one where they are now
             Player owner = e.getValue().owner() == null ? null : Bukkit.getPlayer(e.getValue().owner());
             Run ownRun = runs.runOf(e.getKey());
-            if (valid && owner != null && ownRun != null && ownRun.kind() == Kind.SCHEDULED
-                    && !owner.getWorld().equals(c.getWorld())) {
-                runs.lost(e.getKey());
+            if (valid && owner != null && ownRun != null && !owner.getWorld().equals(c.getWorld())) {
+                if (!runs.followed(e.getKey())) { // 0.45.0: a welcome or catch-up turkey follows too (arrivals)
+                    runs.lost(e.getKey());
+                }
                 continue;
             }
             double distance = valid && c.getWorld().equals(home.getWorld()) ? c.getLocation().distance(home) : -1;
@@ -1022,7 +1047,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
     public String stampedeNow() {
         TurkeyConfig.Turkey c = settings();
         if (stampedeUntil > 0) {
-            return "&eA stampede is already out (" + flock.size() + " turkeys left).";
+            return "&eA stampede is already out (" + (flock.size() + stampedeLeft) + " turkeys left).";
         }
         if (com.dierks.homecraft.games.hub.Hub.arrivalOf(plugin.games()) == null) {
             return "&cThe Hub isn't open (/hcm games hub status says why).";
@@ -1053,8 +1078,10 @@ public final class TurkeyService implements Listener, TurkeyHost {
 
     /**
      * At a run's start (0.44.0, the owner: "place like 100 turkeys all over the hub ... and let us go nuts and catch as
-     * many as we can"): {@code hub_stampede} turkeys let loose around the Hub's arrival spot, a few each tick, on open
-     * ground in loaded chunks. Nothing while the Hub can't be visited, or one is still out.
+     * many as we can"): {@code hub_stampede} turkeys let loose around the Hub's arrival spot, on ground at about its
+     * height, in loaded chunks. 0.45.0: they come {@link #STAMPEDE_A_SECOND} a second and only while a visitor is in
+     * the Hub (its chunks are loaded then): before, every try was spent in the first half second, so a stampede that
+     * began with the Hub empty let none loose at all. Nothing while the Hub can't be visited, or one is still out.
      */
     private void startStampede(TurkeyConfig.Turkey c, long now) {
         if (c.stampede() <= 0 || stampedeUntil > 0 || Keys.TURKEY == null) {
@@ -1066,20 +1093,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
         stampedeUntil = now + c.stampedeMinutes() * 60_000L;
         stampedeCatches.clear();
-        int[] left = {c.stampede()};
-        org.bukkit.scheduler.BukkitTask[] self = new org.bukkit.scheduler.BukkitTask[1];
-        self[0] = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            if (stampedeUntil <= 0 || left[0] <= 0) {
-                self[0].cancel();
-                return;
-            }
-            for (int i = 0; i < 10 && left[0] > 0; i++, left[0]--) {
-                Location at = stampedeSpot(centre, c.stampedeRadius());
-                if (at != null) {
-                    spawnLoose(at, c);
-                }
-            }
-        }, 1L, 1L);
+        stampedeLeft = c.stampede(); // let loose a few a second while someone is there to see them (stampedeSecond)
         for (Player p : com.dierks.homecraft.games.hub.Hub.visitors(plugin.games())) {
             try {
                 p.showTitle(Title.title(Text.of("&6Turkey Stampede!"), Text.of("&eCatch as many as you can!"),
@@ -1091,6 +1105,29 @@ public final class TurkeyService implements Listener, TurkeyHost {
         }
     }
 
+    /** Turkeys still to let loose this stampede. */
+    private int stampedeLeft;
+    /** How many are let loose a second, and how far above or below the arrival spot's height a turkey may stand. */
+    static final int STAMPEDE_A_SECOND = 20;
+    static final int STAMPEDE_UP_DOWN = 10;
+
+    /** Let the next few loose, while anyone is in the Hub to see them; a try that finds no spot costs nothing. */
+    private void letLoose(TurkeyConfig.Turkey c) {
+        if (stampedeLeft <= 0 || com.dierks.homecraft.games.hub.Hub.visitors(plugin.games()).isEmpty()) {
+            return;
+        }
+        Location centre = com.dierks.homecraft.games.hub.Hub.arrivalOf(plugin.games());
+        if (centre == null || centre.getWorld() == null) {
+            return;
+        }
+        for (int i = 0; i < STAMPEDE_A_SECOND && stampedeLeft > 0; i++) {
+            Location at = stampedeSpot(centre, c.stampedeRadius());
+            if (at != null && spawnLoose(at, c)) {
+                stampedeLeft--;
+            }
+        }
+    }
+
     /** Open ground somewhere within {@code radius} of {@code centre} (a few tries), in a loaded chunk, or null. */
     private Location stampedeSpot(Location centre, int radius) {
         World w = centre.getWorld();
@@ -1098,24 +1135,32 @@ public final class TurkeyService implements Listener, TurkeyHost {
         for (int t = 0; t < 8; t++) {
             double a = r.nextDouble(Math.PI * 2);
             double d = 4 + r.nextDouble(Math.max(1, radius - 4));
-            int x = (int) Math.floor(centre.getX() + Math.cos(a) * d);
-            int z = (int) Math.floor(centre.getZ() + Math.sin(a) * d);
+            final int x = (int) Math.floor(centre.getX() + Math.cos(a) * d);
+            final int z = (int) Math.floor(centre.getZ() + Math.sin(a) * d);
             if (!w.isChunkLoaded(x >> 4, z >> 4)) {
                 continue;
             }
-            Block top = w.getHighestBlockAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
-            Block feet = top.getRelative(0, 1, 0);
-            if (top.isLiquid() || !top.getType().isSolid() || !feet.isPassable() || feet.isLiquid()
-                    || !feet.getRelative(0, 1, 0).isPassable() || top.getType() == Material.MAGMA_BLOCK) {
+            // 0.45.0: ground at about the arrival spot's height (a floor, not the roof over it)
+            int cy = centre.getBlockY();
+            int y = TurkeyRules.nearestStand(cy, STAMPEDE_UP_DOWN, yy -> {
+                if (yy <= w.getMinHeight() || yy >= w.getMaxHeight() - 1) {
+                    return false;
+                }
+                Block floor = w.getBlockAt(x, yy - 1, z);
+                Block feet = w.getBlockAt(x, yy, z);
+                return floor.getType().isSolid() && floor.getType() != Material.MAGMA_BLOCK && !floor.isLiquid()
+                        && feet.isPassable() && !feet.isLiquid() && feet.getRelative(0, 1, 0).isPassable();
+            });
+            if (y == Integer.MIN_VALUE) {
                 continue;
             }
-            return feet.getLocation().add(0.5, 0, 0.5);
+            return new Location(w, x + 0.5, y, z + 0.5);
         }
         return null;
     }
 
     /** One stampede turkey: as a player's own, faster, tagged as the stampede's. */
-    private void spawnLoose(Location at, TurkeyConfig.Turkey c) {
+    private boolean spawnLoose(Location at, TurkeyConfig.Turkey c) {
         try {
             Chicken chicken = at.getWorld().spawn(at, Chicken.class, CreatureSpawnEvent.SpawnReason.CUSTOM, e -> {
                 e.setPersistent(false);
@@ -1136,10 +1181,12 @@ public final class TurkeyService implements Listener, TurkeyHost {
             });
             if (chicken != null && chicken.isValid()) {
                 flock.add(chicken.getUniqueId());
+                return true;
             }
         } catch (RuntimeException e) {
-            // a spawn another plugin refused: one fewer turkey
+            // a spawn another plugin refused: tried again next second
         }
+        return false;
     }
 
     /** Each second: the turkeys dash about, gobble now and then, and the stampede ends on time. */
@@ -1151,6 +1198,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
             endStampede(true);
             return;
         }
+        letLoose(settings());
         java.util.concurrent.ThreadLocalRandom r = java.util.concurrent.ThreadLocalRandom.current();
         for (UUID id : new ArrayList<>(flock)) {
             Entity e = Bukkit.getEntity(id);
@@ -1220,6 +1268,7 @@ public final class TurkeyService implements Listener, TurkeyHost {
             }
         }
         stampedeUntil = 0;
+        stampedeLeft = 0;
         stampedeCatches.clear();
         stampedeTapAt.clear();
     }
@@ -1314,6 +1363,8 @@ public final class TurkeyService implements Listener, TurkeyHost {
         for (UUID id : new ArrayList<>(live.keySet())) {
             remove(id);
         }
+        n += flock.size();
+        endStampede(false); // 0.45.0: "every turkey goes" means the stampede's too
         return n;
     }
 

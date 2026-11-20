@@ -80,7 +80,7 @@ public final class TwentyOneMenu extends GameMenu {
         if (resume != null) {
             TwentyOneHand.Saved saved = TwentyOneHand.read(resume.data());
             this.round = resume;
-            this.hand = TwentyOneHand.replay(resume.seed(), saved.terms(), saved.actions());
+            this.hand = TwentyOneHand.replay(resume.seed(), saved);
             this.stake = saved.terms().in();
         }
         init(54, Text.of("&2Twenty-One"));
@@ -90,7 +90,7 @@ public final class TwentyOneMenu extends GameMenu {
     @Override
     public void open(Player player) {
         if (round != null && hand != null && hand.done()) {
-            settle(TwentyOneHand.data(hand.terms(), hand.actions()));
+            settle(hand.data());
         }
         super.open(player);
     }
@@ -335,14 +335,17 @@ public final class TwentyOneMenu extends GameMenu {
             refresh();
             return;
         }
+        TwentyOneHand.Shoe shoe = twentyOne.shoeFor(viewer.getUniqueId()); // 0.45.0: the player's 4-deck shoe
         ChanceRounds.Round opened = games().rounds().open(viewer, game, odds.stake(),
-                TwentyOneHand.data(odds.terms(), ""));
+                TwentyOneHand.data(odds.terms(), "", shoe));
         if (opened == null) {
             ChanceRounds.Round open = games().rounds().openRound(viewer.getUniqueId(), game.id());
             if (open != null) {
                 TwentyOneHand.Saved saved = TwentyOneHand.read(open.data());
                 round = open;
-                hand = TwentyOneHand.replay(open.seed(), saved.terms(), saved.actions());
+                hand = TwentyOneHand.replay(open.seed(), saved);
+                stake = saved.terms().in(); // the hand on the table, not the tile last picked
+                gone = false;
             }
             refresh();
             return;
@@ -350,9 +353,9 @@ public final class TwentyOneMenu extends GameMenu {
         Sounds.paid(viewer);
         gone = false;
         round = opened;
-        hand = TwentyOneHand.deal(opened.seed(), odds.terms());
+        hand = TwentyOneHand.deal(opened.seed(), odds.terms(), shoe);
         if (hand.done()) {
-            settle(TwentyOneHand.data(hand.terms(), ""));
+            settle(hand.data());
         }
         refresh();
     }
@@ -364,7 +367,7 @@ public final class TwentyOneMenu extends GameMenu {
         }
         TwentyOneHand next = copy();
         next.hit();
-        String data = TwentyOneHand.data(next.terms(), next.actions());
+        String data = next.data();
         if (next.done()) {
             hand = next;
             settle(data);
@@ -389,7 +392,7 @@ public final class TwentyOneMenu extends GameMenu {
         TwentyOneHand next = copy();
         next.stand();
         hand = next;
-        settle(TwentyOneHand.data(next.terms(), next.actions()));
+        settle(next.data());
         refresh();
     }
 
@@ -401,7 +404,7 @@ public final class TwentyOneMenu extends GameMenu {
         int extra = hand.terms().in();
         TwentyOneHand next = copy();
         next.doubleDown();
-        String data = TwentyOneHand.data(next.terms(), next.actions());
+        String data = next.data();
         ChanceRounds.Round withDouble = new ChanceRounds.Round(round.id(), round.gameId(), round.player(),
                 round.seed(), round.stake(), data, round.state());
         if (!games().rounds().raise(viewer, withDouble, extra)) {
@@ -418,7 +421,7 @@ public final class TwentyOneMenu extends GameMenu {
 
     /** The hand as it stands, to try the next action on without touching the one on the table. */
     private TwentyOneHand copy() {
-        return TwentyOneHand.replay(round.seed(), hand.terms(), hand.actions());
+        return TwentyOneHand.replay(round.seed(), new TwentyOneHand.Saved(hand.terms(), hand.actions(), hand.shoe()));
     }
 
     /** Pay the finished hand once, then the sound that matches it (never a win's for a loss). */
@@ -428,6 +431,7 @@ public final class TwentyOneMenu extends GameMenu {
             return;
         }
         round = null;
+        twentyOne.dealt(viewer.getUniqueId(), hand); // 0.45.0: the shoe carries on from here
         int back = hand.payout();
         if (back > hand.putIn()) {
             Sounds.won(viewer);

@@ -125,6 +125,7 @@ public final class TicTacToePlayMenu extends GameMenu {
                 over ? e -> ttt.scores(viewer, back) : null);
         if (kid && over) {
             bigAgain(slots(45, 53), this::newGame);
+            kidExit(); // 0.45.0: and a door out
         }
         seen = match.version();
     }

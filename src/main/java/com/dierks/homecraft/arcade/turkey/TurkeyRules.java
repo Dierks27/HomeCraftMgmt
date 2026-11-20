@@ -124,6 +124,23 @@ public final class TurkeyRules {
 
     // ---- when -----------------------------------------------------------------------------
 
+    /**
+     * The height nearest {@code y} (within {@code reach} up or down, the same height first, then below before above)
+     * where {@code stands} says a turkey can stand, or {@link Integer#MIN_VALUE} for none: a floor at about the arrival
+     * spot's height, never the roof over it.
+     */
+    public static int nearestStand(int y, int reach, java.util.function.IntPredicate stands) {
+        for (int d = 0; d <= reach; d++) {
+            if (stands.test(y - d)) {
+                return y - d;
+            }
+            if (d > 0 && stands.test(y + d)) {
+                return y + d;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
     /** The stampede's turkeys' tag prefix ({@code stampede|<run>}): never anyone's own. */
     public static final String STAMPEDE_TAG = "stampede";
 

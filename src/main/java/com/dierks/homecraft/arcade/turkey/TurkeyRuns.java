@@ -39,6 +39,8 @@ public final class TurkeyRuns {
         private final Set<UUID> catchers = new LinkedHashSet<>();
         /** Who had already claimed this run before it was offered (a restart): never offered again. */
         private final Set<UUID> declined = new HashSet<>();
+        /** A welcome run whose turkey has been out once: the day's mark is written, a second turkey needs no new one. */
+        private boolean given;
 
         Run(String id, Kind kind, UUID owner, long endsAt, boolean test) {
             this.id = id;
@@ -165,7 +167,7 @@ public final class TurkeyRuns {
             return Offer.CAUGHT;
         }
         boolean claimed = !r.test && host.claimed(player, r.id);
-        boolean welcomeGiven = r.kind == Kind.WELCOME && !r.test && host.welcomeGiven(player);
+        boolean welcomeGiven = r.kind == Kind.WELCOME && !r.test && !r.given && host.welcomeGiven(player);
         if (!TurkeyRules.spawnFor(claimed, welcomeGiven, r.kind)) {
             if (claimed) {
                 r.declined.add(player);
@@ -180,13 +182,14 @@ public final class TurkeyRuns {
         if (turkey == null) {
             return Offer.NO_SPOT;
         }
-        if (r.kind == Kind.WELCOME && !r.test && !host.markWelcome(player)) {
+        if (r.kind == Kind.WELCOME && !r.test && !r.given && !host.markWelcome(player)) {
             // given already (a second join raced this one): this one goes again at once
             host.remove(turkey);
             return Offer.WELCOME_GIVEN;
         }
         r.turkeys.put(player, turkey);
         byTurkey.put(turkey, r);
+        r.given |= r.kind == Kind.WELCOME;
         return Offer.SPAWNED;
     }
 
@@ -243,6 +246,22 @@ public final class TurkeyRuns {
         if (r.kind == Kind.WELCOME) {
             end(r);
         }
+    }
+
+    /**
+     * A welcome turkey's owner went to another world (0.45.0: to the Hub, or home from it): the turkey goes but its
+     * run stays, so they can be offered another where they are now ({@link #offer}; the day's mark is already
+     * written and isn't asked for again). @return whether it was a welcome run's turkey
+     */
+    public boolean followed(UUID turkey) {
+        Run r = byTurkey.get(turkey);
+        if (r == null || r.kind != Kind.WELCOME) {
+            return false;
+        }
+        byTurkey.remove(turkey);
+        r.turkeys.values().remove(turkey);
+        host.remove(turkey);
+        return true;
     }
 
     /** The player left: their turkeys go. */

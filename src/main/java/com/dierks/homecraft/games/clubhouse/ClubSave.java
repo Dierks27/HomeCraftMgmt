@@ -149,9 +149,10 @@ public final class ClubSave {
     }
 
     /**
-     * A save's file read into {@code box} (the room's box now: its corner; its size must be the save's).
+     * A save's file read into {@code box} (the room's box now: its corner; its width and height must be the save's, its
+     * depth may differ).
      *
-     * @throws IllegalArgumentException when the text isn't a save, or was taken of a box of another size
+     * @throws IllegalArgumentException when the text isn't a save, or was taken of a box of another width or height
      */
     public static Saved read(String text, Box box) {
         if (text == null) {
@@ -163,11 +164,15 @@ public final class ClubSave {
             throw new IllegalArgumentException("not a Clubhouse save");
         }
         String[] size = lines[n++].trim().split(" ");
-        if (size.length != 4 || Integer.parseInt(size[1]) != box.sizeX() || Integer.parseInt(size[2]) != box.sizeY()
-                || Integer.parseInt(size[3]) != box.sizeZ()) {
+        // 0.45.0: the depth may differ (a save of the main room alone read into the room with its annex, or the other
+        // way round): the main room is the first rows of both, so the save still fits; blocks past the box are left
+        // out and whatever the save doesn't cover comes from HCM's plan (merged). Before, such a save was refused and
+        // HCM's room was built over the owner's.
+        if (size.length != 4 || Integer.parseInt(size[1]) != box.sizeX() || Integer.parseInt(size[2]) != box.sizeY()) {
             throw new IllegalArgumentException("the save is of a " + String.join(" x ", size[1], size[2], size[3])
                     + " box, the room is " + box.sizeX() + " x " + box.sizeY() + " x " + box.sizeZ());
         }
+        int savedDepth = Integer.parseInt(size[3]);
         String gen = lines[n++].trim().substring("generated ".length()).trim();
         java.util.Set<String> regions = new java.util.TreeSet<>();
         if (lines[n].startsWith("regions ")) {
@@ -189,8 +194,20 @@ public final class ClubSave {
             if (state < 0 || state >= palette.size()) {
                 throw new IllegalArgumentException("a block names no palette entry");
             }
-            ops.add(new BlockOp(box.minX() + Integer.parseInt(p[0]), box.minY() + Integer.parseInt(p[1]),
-                    box.minZ() + Integer.parseInt(p[2]), (short) state));
+            int x = box.minX() + Integer.parseInt(p[0]);
+            int y = box.minY() + Integer.parseInt(p[1]);
+            int z = box.minZ() + Integer.parseInt(p[2]);
+            if (!box.contains(x, y, z)) {
+                if (savedDepth > box.sizeZ() && x >= box.minX() && x <= box.maxX() && y >= box.minY()
+                        && y <= box.maxY()) {
+                    continue; // a deeper save's annex, which the room doesn't have now
+                }
+                throw new IllegalArgumentException("a block is outside the room");
+            }
+            ops.add(new BlockOp(x, y, z, (short) state));
+        }
+        if (savedDepth < box.sizeZ()) {
+            regions.retainAll(java.util.Set.of("main")); // a save of the main room alone covers nothing else
         }
         Plan plan = Plan.of(ClubhousePlanner.SLOT, ClubhousePlanner.ALGO, 0L, box, palette, ops, List.of(), List.of(),
                 null, List.of("the Clubhouse as saved: " + box.describe()), 0);

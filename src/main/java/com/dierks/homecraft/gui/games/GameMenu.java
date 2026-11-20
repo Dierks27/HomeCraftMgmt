@@ -165,6 +165,23 @@ public abstract class GameMenu extends Menu implements GameScreen {
         }
     }
 
+    /**
+     * 0.45.0: the kid screen's way out, a door in the bottom row's middle, set after {@link #bigAgain} (which had
+     * painted over Back, leaving a child no button to stop with).
+     */
+    protected void kidExit() {
+        set(getInventory().getSize() - 5, Menus.icon(Material.OAK_DOOR, "&cAll done"), e -> {
+            if (back != null) {
+                back.run();
+            } else {
+                e.getWhoClicked().closeInventory();
+            }
+        });
+    }
+
+    /** How long a kid screen that just ended ignores taps, so the result is seen before Play again (ms). */
+    protected static final long KID_SETTLE_MS = 900;
+
     /** Slots {@code from} to {@code to}, both in: a kid screen's big button. */
     protected static int[] slots(int from, int to) {
         int[] out = new int[to - from + 1];

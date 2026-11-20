@@ -130,6 +130,7 @@ public final class SimonSaysPlayMenu extends GameMenu {
                     e -> simon.scores(viewer, daily == null ? Scores.CLASSIC : simon.todayBoard(), back));
             if (kid) {
                 bigAgain(slots(9, 53), this::again);
+                kidExit(); // 0.45.0: and a door out
             }
         }
     }
@@ -184,6 +185,9 @@ public final class SimonSaysPlayMenu extends GameMenu {
             case WRONG -> finish = simon.finish(viewer, daily, engine.score());
             default -> {
             }
+        }
+        if (kid && engine.over()) {
+            hold(KID_SETTLE_MS); // 0.45.0: the pads turn into Play again under a tapping finger: a pause first
         }
         refresh();
     }

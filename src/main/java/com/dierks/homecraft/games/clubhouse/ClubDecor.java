@@ -80,10 +80,14 @@ final class ClubDecor {
                 }
             }
         }
+        beat++; // every second (0.45.0: it only moved with someone in, so the shelves were stocked each second)
+        if (beat % SHELF_EVERY == 0 && !room.editing()) {
+            stockBar(room, w);
+        }
         // a little steam off the Feast Pot while anyone is in, every other second
         Shown pot = shown.get("feast.pot");
         potTap(w, pot == null ? null : pot.prop());
-        if (anyoneIn && pot != null && (beat++ & 1) == 0) {
+        if (anyoneIn && pot != null && (beat & 1) == 0) {
             w.spawnParticle(Particle.WHITE_SMOKE, pot.prop().x(), pot.prop().y() + 0.4, pot.prop().z(), 2, 0.08, 0.05,
                     0.08, 0.005);
         }
@@ -141,6 +145,11 @@ final class ClubDecor {
         if (e != null) {
             e.remove();
         }
+        if (!w.isChunkLoaded(at.getBlockX() >> 4, at.getBlockZ() >> 4)) {
+            potTap = null; // 0.45.0: made when its chunk is back (it was spawned again every second while unloaded)
+            potAt = null;
+            return;
+        }
         potAt = at;
         potTap = w.spawn(at, org.bukkit.entity.Interaction.class, i -> {
             WorldEntities.tag(i, club, null);
@@ -156,6 +165,58 @@ final class ClubDecor {
     /** Whether {@code e} is the Feast Pot's tap target. */
     boolean isPot(Entity e) {
         return e != null && potTap != null && potTap.equals(e.getUniqueId());
+    }
+
+    /** The bar's shelves are looked at this often (seconds). */
+    static final int SHELF_EVERY = 10;
+
+    /**
+     * The back bar's shelves (0.44.2, the owner: "We should place those into the shelves not have them just
+     * floating"): each shelf block holds three bottles of its own (honey, potions of a few colours, a bottle o'
+     * enchanting, an empty glass), put on every empty place (a rebuild empties a shelf). A shelf block that isn't
+     * there is left alone, and nothing is stocked in edit mode. Nobody can take them: {@link Clubhouse} refuses a use of any shelf in the
+     * room.
+     */
+    void stockBar(ClubhouseRoom room, World w) {
+        List<int[]> shelves = room.barShelves();
+        for (int n = 0; n < shelves.size(); n++) {
+            int[] at = shelves.get(n);
+            if (!w.isChunkLoaded(at[0] >> 4, at[2] >> 4)) {
+                continue;
+            }
+            org.bukkit.block.Block b = w.getBlockAt(at[0], at[1], at[2]);
+            if (!(b.getState() instanceof org.bukkit.block.Shelf shelf)) {
+                continue;
+            }
+            org.bukkit.inventory.Inventory onShelf = shelf.getInventory();
+            for (int slot = 0; slot < Math.min(3, onShelf.getSize()); slot++) {
+                ItemStack have = onShelf.getItem(slot);
+                if (have == null || have.getType().isAir()) {
+                    // only an empty place: never over the owner's own item (a shelf block's, nobody's inventory)
+                    onShelf.setItem(slot, bottle(n * 3 + slot));
+                }
+            }
+        }
+    }
+
+    /** The bottle for shelf slot {@code i}: a fixed mix, the same every time. */
+    static ItemStack bottle(int i) {
+        int pick = Math.floorMod(i * 7 + 3, 8);
+        Material m = switch (pick) {
+            case 0 -> Material.HONEY_BOTTLE;
+            case 1 -> Material.EXPERIENCE_BOTTLE;
+            case 2 -> Material.GLASS_BOTTLE;
+            default -> Material.POTION;
+        };
+        ItemStack item = new ItemStack(m);
+        if (m == Material.POTION && item.getItemMeta() instanceof org.bukkit.inventory.meta.PotionMeta meta) {
+            org.bukkit.potion.PotionType[] colours = {org.bukkit.potion.PotionType.HEALING,
+                    org.bukkit.potion.PotionType.SWIFTNESS, org.bukkit.potion.PotionType.FIRE_RESISTANCE,
+                    org.bukkit.potion.PotionType.LEAPING, org.bukkit.potion.PotionType.NIGHT_VISION};
+            meta.setBasePotionType(colours[Math.floorMod(i, colours.length)]);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     /** Everything comes down (the room closed, moved or stopped). */

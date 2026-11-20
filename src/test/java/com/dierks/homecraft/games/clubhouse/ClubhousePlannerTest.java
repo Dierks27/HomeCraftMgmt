@@ -84,7 +84,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("134d6b2c0179", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("cf8b71ca3994", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -92,7 +92,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(8, ClubhousePlanner.ALGO, "0.43.0's rooms upstairs: every server builds it once");
+        assertEquals(9, ClubhousePlanner.ALGO, "0.44.2's lower card tables: every server builds it once");
     }
 
     @Test
@@ -358,7 +358,8 @@ class ClubhousePlannerTest {
                 default -> 0;
             };
             String front = b.get(key(op.x() + dx, op.y(), op.z() + dz));
-            if (ClubhousePlanner.CLOTH.equals(front) || (front != null && id(front).endsWith("_fence"))) {
+            if (ClubhousePlanner.CLOTH.equals(front) || ClubhousePlanner.FELT_BLOCK.equals(front)
+                    || (front != null && id(front).endsWith("_fence"))) { // 0.44.2: the Parlor's felt card tables
                 atTables++;
                 continue;
             }
@@ -841,7 +842,14 @@ class ClubhousePlannerTest {
                 .map(ClubhousePlanner.Prop::key).toList();
         assertTrue(keys.containsAll(List.of("green.flag", "green.ball", "green.putter", "jukebox.sign", "feast.pot")),
                 keys.toString());
-        assertTrue(keys.stream().filter(k -> k.startsWith("bar.bottle.")).count() >= 6, "bottles on the back bar");
+        assertEquals(0, keys.stream().filter(k -> k.startsWith("bar.bottle.")).count(),
+                "0.44.2: no floating bottles: the back bar's shelves hold them (ClubDecor.stockBar)");
+        List<int[]> shelves = ClubhousePlanner.barShelves(BOX);
+        assertEquals(18, shelves.size(), "two rows of nine shelves");
+        for (int[] at : shelves) {
+            assertTrue(id(b.get(key(at[0], at[1], at[2]))).endsWith("_shelf"), "a shelf block at each: "
+                    + java.util.Arrays.toString(at));
+        }
         assertTrue(keys.stream().filter(k -> k.startsWith("bar.glass.")).count() >= 3, "glasses on the counter");
         assertEquals(keys.size(), new java.util.HashSet<>(keys).size(), "one key each");
         assertEquals(ClubhousePlanner.BREWING, rel(b, 4, 2, ClubhousePlanner.BREWING_Z), "a brewing stand on the counter");
@@ -874,8 +882,23 @@ class ClubhousePlannerTest {
         Box moved = BOX.translate(160, 0, -64);
         assertEquals(snap.ops().size(), ClubSave.read(ClubSave.text(snap, null, regions), moved).plan().ops().size(),
                 "offsets: a moved origin moves the save");
-        assertThrows(IllegalArgumentException.class, () -> ClubSave.read(ClubSave.text(snap, null, regions), MAIN),
-                "a save of another size doesn't fit");
+        // 0.45.0: a save of another DEPTH still fits (the main room is the first rows of both boxes): refusing it built
+        // HCM's room over the owner's. The 48-deep save read into the 32-deep box keeps the main room's blocks...
+        ClubSave.Saved shallow = ClubSave.read(ClubSave.text(snap, null, regions), MAIN);
+        Map<Long, String> mainOnly = blocks(shallow.plan());
+        for (Map.Entry<Long, String> e : b.entrySet()) {
+            boolean inMain = MAIN.contains(x(e.getKey()), y(e.getKey()), z(e.getKey()));
+            assertEquals(inMain ? e.getValue() : null, mainOnly.get(e.getKey()), "the main room's blocks, no annex");
+        }
+        // ...and a save of the main room alone read into the full box covers only "main": the rest is HCM's (merged)
+        Plan small = ClubSave.snapshot(MAIN, at -> b.get(key(at[0], at[1], at[2])));
+        ClubSave.Saved deep = ClubSave.read(ClubSave.text(small, null, regions), BOX);
+        assertEquals(java.util.Set.of("main"), deep.regions(), "whatever it claimed, a main-room save covers main");
+        assertEquals(b, blocks(ClubSave.merged(deep, SITE.plan(), ClubhousePlanner.regions(BOX,
+                ClubhousePlanner.Rooms.BOTH))), "the saved main room with HCM's side rooms");
+        Box wide = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 48, 16, 48);
+        assertThrows(IllegalArgumentException.class, () -> ClubSave.read(ClubSave.text(snap, null, regions), wide),
+                "a save of another width doesn't fit");
         assertEquals(List.of(), ClubSave.dark(snap, SITE, 10), "the generated room has no dark spot");
         // take every light out of the Arcade Room: its floor goes dark
         Map<Long, String> dim = new java.util.HashMap<>(b);
@@ -940,13 +963,23 @@ class ClubhousePlannerTest {
         assertTrue(ClubhousePlanner.secretInside(BOX).contains((int) Math.floor(ClubhousePlanner.secretCentre(BOX).x()),
                 (int) Math.floor(ClubhousePlanner.secretCentre(BOX).y()), (int) Math.floor(ClubhousePlanner
                         .secretCentre(BOX).z())), "the pedestal is in the secret room");
-        ClubhousePlanner.Place3 door = ClubhousePlanner.parlorDoor(BOX);
+        // 0.45.0: the dark door (in the Trophy Room) is the secret room's, the little star (in the 19th Hole) the Parlor's
+        ClubhousePlanner.Place3 door = ClubhousePlanner.secretDoor(BOX);
+        assertTrue(ClubhousePlanner.trophyInside(BOX).contains((int) Math.floor(door.x()), (int) door.y(),
+                (int) Math.floor(door.z())), "the secret room's door is in the Trophy Room");
         for (int j = 0; j < 2; j++) {
-            assertNull(b.get(key((int) Math.floor(door.x()), (int) door.y() + j, (int) Math.floor(door.z()))),
-                    "the Parlor's door stands in air against the 19th Hole's wall");
+            String at = b.get(key((int) Math.floor(door.x()), (int) door.y() + j, (int) Math.floor(door.z())));
+            assertTrue(at == null || id(at).endsWith("_carpet"), "the door stands in air (over the rug): " + at);
         }
-        assertNotNull(b.get(key((int) Math.floor(door.x()) - 1, (int) door.y(), (int) Math.floor(door.z()))),
-                "with the wall behind it");
+        assertNotNull(b.get(key((int) Math.floor(door.x()), (int) door.y(), (int) Math.floor(door.z()) + 1)),
+                "against the Trophy Room's back wall");
+        assertEquals(180f, door.yaw(), "facing into the room");
+        ClubhousePlanner.Place3 star = ClubhousePlanner.parlorStar(BOX);
+        assertNull(b.get(key((int) Math.floor(star.x()), (int) Math.floor(star.y()), (int) Math.floor(star.z()))),
+                "the Parlor's star hangs in air");
+        assertNotNull(b.get(key((int) Math.floor(star.x()) - 1, (int) Math.floor(star.y()), (int) Math.floor(star.z()))),
+                "on the 19th Hole's west wall");
+        assertTrue(star.x() - Math.floor(star.x()) < 0.3, "close to the wall, easy to miss");
         assertEquals(ClubhousePlanner.PARLOR_GAMES.size(), ClubhousePlanner.parlorMachines(BOX).size(),
                 "a place for every machine");
         for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {

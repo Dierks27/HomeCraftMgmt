@@ -201,16 +201,29 @@ final class SideRooms {
 
     // ---- 0.43.0: ways in only their own players see ------------------------------------------------------
 
-    /** Entities seen only by players with a permission (the secret room's star, the Game Parlor's door). */
+    /**
+     * Entities seen only by players with every one of some permissions (the secret room's door, the Game Parlor's
+     * star): the permissions, joined by {@code +}.
+     */
     private final Map<UUID, String> gatedBy = new HashMap<>();
     /** Each player's gated entities shown to them now. */
     private final Map<UUID, Set<UUID>> gateShown = new HashMap<>();
 
-    /** A way in nobody sees but the players with {@code permission} ({@link #gates}). */
-    private void gated(Entity e, String permission) {
+    /** A way in nobody sees but the players with {@code permissions}, all of them ({@link #gates}). */
+    private void gated(Entity e, String permissions) {
         WorldEntities.tag(e, club, null);
         e.setVisibleByDefault(false);
-        gatedBy.put(e.getUniqueId(), permission);
+        gatedBy.put(e.getUniqueId(), permissions);
+    }
+
+    /** Whether {@code has} grants every permission of {@code permissions} ("a+b"). */
+    static boolean allOf(String permissions, java.util.function.Predicate<String> has) {
+        for (String one : permissions.split("\\+")) {
+            if (!one.isBlank() && !has.test(one)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Show each gated way in to the players allowed it, and hide it from the rest (a permission can change). */
@@ -220,7 +233,7 @@ final class SideRooms {
             Set<UUID> mine = gateShown.computeIfAbsent(p.getUniqueId(), k -> new HashSet<>());
             mine.retainAll(gatedBy.keySet());
             for (Map.Entry<UUID, String> g : gatedBy.entrySet()) {
-                boolean may = p.hasPermission(g.getValue());
+                boolean may = allOf(g.getValue(), p::hasPermission);
                 if (may && mine.add(g.getKey())) {
                     show(p, g.getKey(), true);
                 } else if (!may && mine.remove(g.getKey())) {
@@ -235,27 +248,27 @@ final class SideRooms {
     /** The secret room's star and door, the Game Parlor's doors and machines. */
     private void upstairs(ClubhouseRoom room, World w, ClubhouseSettings s, Set<String> keep) {
         if (s.secretRoom()) {
-            ClubhousePlanner.Place3 star = room.secretStar();
-            if (star != null) {
-                keep.add("star");
-                put(w, "star", "star@" + star, star, () -> star(w, star));
+            ClubhousePlanner.Place3 in = room.secretDoor(); // 0.45.0: the dark door is the secret room's
+            if (in != null) {
+                keep.add("sdoor");
+                put(w, "sdoor", "sdoor@" + in, in, () -> door(w, in, "secret:in", SECRET_PERMISSION));
             }
             ClubhousePlanner.Place3 out = room.secretExit();
             if (out != null) {
                 keep.add("sexit");
-                put(w, "sexit", "sexit@" + out, out, () -> door(w, out, "secret:out"));
+                put(w, "sexit", "sexit@" + out, out, () -> door(w, out, "secret:out", null));
             }
         }
         if (s.parlor()) {
-            ClubhousePlanner.Place3 in = room.parlorDoor();
+            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.45.0: the little star is the Parlor's
             if (in != null) {
-                keep.add("pdoor");
-                put(w, "pdoor", "pdoor@" + in, in, () -> door(w, in, "parlor:in"));
+                keep.add("pstar");
+                put(w, "pstar", "pstar@" + in, in, () -> star(w, in, "parlor:in", PARLOR_WAY_IN));
             }
             ClubhousePlanner.Place3 out = room.parlorExit();
             if (out != null) {
                 keep.add("pexit");
-                put(w, "pexit", "pexit@" + out, out, () -> door(w, out, "parlor:out"));
+                put(w, "pexit", "pexit@" + out, out, () -> door(w, out, "parlor:out", null));
             }
             List<ClubhouseRoom.Cabinet> machines = room.parlorMachines();
             for (int n = 0; n < machines.size(); n++) {
@@ -270,24 +283,27 @@ final class SideRooms {
         }
     }
 
-    /** The secret room's way in: a little gold star on the wall, and its tap target. */
-    private Shown star(World w, ClubhousePlanner.Place3 at) {
+    /** A little gold star on the wall and its tap target, to {@code tap}, for players with {@code permissions}. */
+    private Shown star(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
         List<UUID> all = new ArrayList<>();
         all.add(w.spawn(loc(w, at, 0), ItemDisplay.class, e -> {
-            gated(e, SECRET_PERMISSION);
+            gated(e, permissions);
             e.setItemStack(new ItemStack(Material.NETHER_STAR));
             e.setBillboard(Display.Billboard.CENTER);
             e.setTransformation(scale(0.45f));
             e.setBrightness(new Display.Brightness(15, 15));
         }).getUniqueId());
-        Entity target = tapTarget(w, loc(w, at, -0.35), 0.7f, 0.7f, "secret:in");
-        gated(target, SECRET_PERMISSION);
+        Entity target = tapTarget(w, loc(w, at, -0.35), 0.7f, 0.7f, tap);
+        gated(target, permissions);
         all.add(target.getUniqueId());
-        return new Shown("star", all, List.of(), List.of());
+        return new Shown(tap, all, List.of(), List.of());
     }
 
-    /** A door you tap (a dark-oak door against the wall, two high), to {@code tap}. */
-    private Shown door(World w, ClubhousePlanner.Place3 at, String tap) {
+    /**
+     * A door you tap (a dark-oak door against the wall, two high), to {@code tap}; with {@code permissions}, only the
+     * players who have them all see it ({@code null}: everyone).
+     */
+    private Shown door(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
         List<UUID> all = new ArrayList<>();
         String facing = facing(at.yaw());
         double bx = Math.floor(at.x());
@@ -299,14 +315,14 @@ final class SideRooms {
             all.add(w.spawn(new Location(w, bx, at.y() + h, bz), BlockDisplay.class, e -> {
                 WorldEntities.tag(e, club, null);
                 e.setBlock(Bukkit.createBlockData(data));
-                if ("parlor:in".equals(tap)) {
-                    gated(e, com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE);
+                if (permissions != null) {
+                    gated(e, permissions);
                 }
             }).getUniqueId());
         }
         Entity target = tapTarget(w, new Location(w, bx + 0.5, at.y(), bz + 0.5), 1.0f, 2.0f, tap);
-        if ("parlor:in".equals(tap)) {
-            gated(target, com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE);
+        if (permissions != null) {
+            gated(target, permissions);
         }
         all.add(target.getUniqueId());
         return new Shown(tap, all, List.of(), List.of());
@@ -319,7 +335,8 @@ final class SideRooms {
         List<UUID> plain = new ArrayList<>();
         List<UUID> all = new ArrayList<>();
         boolean table = m != null && m.kind() == ClubModels.Kind.TROPHY;
-        all.add(tapTarget(w, loc(w, at, table ? -0.1 : 0), table ? 1.0f : 1.0f, table ? 0.8f : 2.0f,
+        // 0.44.2: a table game's tap reaches from the floor up over its cards (the table itself, or the cards)
+        all.add(tapTarget(w, loc(w, at, table ? -1.02 : 0), table ? 1.1f : 1.0f, table ? 1.9f : 2.0f,
                 "machine:" + gameId).getUniqueId());
         if (m != null) {
             models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
@@ -403,8 +420,8 @@ final class SideRooms {
                 club.moveTo(p, room.secretReturn());
             }
             case "parlor:in" -> {
-                if (!p.hasPermission(com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE)) {
-                    return; // the door stays a door
+                if (!allOf(PARLOR_WAY_IN, p::hasPermission)) {
+                    return; // nothing at all: no message, no sound
                 }
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorArrival());
@@ -427,8 +444,15 @@ final class SideRooms {
         }
     }
 
-    /** The secret room's permission (0.43.0, default false). */
+    /** The secret room's permission (0.43.0; everyone's since 0.44.2). */
     static final String SECRET_PERMISSION = "hcm.clubhouse.secretroom";
+    /**
+     * The Game Parlor's permission (0.45.0, the owner: "make a permission that I can set for folks. Right now keep it
+     * open for everyone but later have the option to lock it down"): everyone's until it is taken away.
+     */
+    static final String PARLOR_PERMISSION = "hcm.clubhouse.parlor";
+    /** What the Parlor's star needs: its own permission, and the games of chance's (a child without it never sees it). */
+    static final String PARLOR_WAY_IN = PARLOR_PERMISSION + "+" + com.dierks.homecraft.games.PlayGate.PERMISSION_CHANCE;
 
     private static void whoosh(Player p) {
         p.playSound(p.getLocation(), Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 0.8f, 1.3f);
@@ -487,7 +511,7 @@ final class SideRooms {
                 rows = club.games().dao().scoresOf(id);
                 seen = room.meta(SEEN_KEY + id);
             } catch (Exception e) {
-                rows = List.of();
+                rows = null; // 0.45.0: not read: nothing is drawn or marked seen (it wiped the list before)
                 seen = null;
             }
             List<com.dierks.homecraft.storage.GamesDao.Mine> got = rows;
@@ -510,6 +534,7 @@ final class SideRooms {
                             String seenText) {
         World w = p.getWorld();
         GamesService games = club.games();
+        boolean read = rows != null;
         List<SecretShelf.Trophy> trophies = SecretShelf.trophies(rows, new SecretShelf.Games() {
             @Override
             public GameKind kind(String game) {
@@ -541,11 +566,19 @@ final class SideRooms {
         for (SecretShelf.Trophy t : SecretShelf.fresh(trophies, SecretShelf.seen(seenText))) {
             fresh.add(t.key());
         }
+        boolean ledges = room.secretOnLedges();
+        double topRow = shelf.stream().mapToDouble(ClubhousePlanner.Place3::y).max().orElse(0);
+        double lowRow = shelf.stream().mapToDouble(ClubhousePlanner.Place3::y).min().orElse(0);
+        Map<String, Material> icons = new HashMap<>(); // one read of a game's tile, not one a trophy
+        List<SecretShelf.Trophy> drawn = new ArrayList<>();
         for (int n = 0; n < trophies.size() && n < shelf.size(); n++) {
             SecretShelf.Trophy t = trophies.get(n);
             ClubhousePlanner.Place3 at = shelf.get(n);
+            drawn.add(t);
             ClubModels.Model m = ClubModels.trophy(t.metal());
-            float size = t.big() ? 1.25f : 0.85f;
+            // 0.45.0: the upper ledge has one block under the glass roof: a grand cup is no taller than that there
+            boolean upper = ledges && topRow > lowRow && at.y() == topRow;
+            float size = t.big() ? (upper ? 0.95f : 1.25f) : 0.85f;
             boolean useModel = models;
             mine.add(w.spawn(loc(w, at, useModel ? m.up() * size : 0.45), ItemDisplay.class, e -> {
                 hidden(e);
@@ -560,27 +593,38 @@ final class SideRooms {
                 e.setTransformation(scale(size));
             }).getUniqueId());
             Game g = t.game() == null ? null : games.game(t.game());
-            if (g != null) { // the game's Games-screen icon on the plaque: which game it is, with no reading
-                ItemStack icon;
-                try {
-                    icon = new ItemStack(g.tile(p).getType());
-                } catch (RuntimeException ex) {
-                    icon = null;
-                }
-                ItemStack i = icon;
-                if (i != null) {
-                    mine.add(w.spawn(loc(w, at, 1.15 * size + 0.1), ItemDisplay.class, e -> {
+            if (g != null) { // the game's Games-screen icon by its trophy: which game it is, with no reading
+                Material icon = icons.computeIfAbsent(t.game(), k -> {
+                    try {
+                        return g.tile(p).getType();
+                    } catch (RuntimeException ex) {
+                        return Material.AIR;
+                    }
+                });
+                if (icon != Material.AIR) {
+                    // 0.45.0: beside the trophy on its ledge (over it, it was inside the ledge above or the roof)
+                    Location il = ledges ? side(loc(w, at, 0.3), SECRET_ICON_SIDE) : loc(w, at, 1.15 * size + 0.1);
+                    mine.add(w.spawn(il, ItemDisplay.class, e -> {
                         hidden(e);
-                        e.setItemStack(i);
+                        e.setItemStack(new ItemStack(icon));
                         e.setBillboard(Display.Billboard.CENTER);
                         e.setTransformation(scale(0.35f));
                     }).getUniqueId());
                 }
             }
-            mine.add(w.spawn(loc(w, at, -0.15), TextDisplay.class, e -> {
+            // 0.44.2: a plaque on the ledge's front, under the trophy, big enough to read (it was under the ledge's
+            // top, inside the block, where nobody could see it)
+            // 0.45.0: an owner-built room has no ledge (its trophies stand on the floor): the label goes over the trophy
+            Location ll = ledges ? out(loc(w, at, SECRET_LABEL_UP), SECRET_LABEL_OUT) : loc(w, at, 1.15 * size + 0.55);
+            mine.add(w.spawn(ll, TextDisplay.class, e -> {
                 hidden(e);
-                e.setBillboard(Display.Billboard.CENTER);
-                e.setTransformation(scale(0.3f));
+                if (ledges) {
+                    e.setBillboard(Display.Billboard.FIXED); // flat on the plank's edge, facing into the room
+                    e.setRotation(at.yaw(), 0f);
+                } else {
+                    e.setBillboard(Display.Billboard.CENTER);
+                }
+                e.setTransformation(scale(SECRET_LABEL_SCALE));
                 e.setDefaultBackground(false);
                 e.setBackgroundColor(Color.fromARGB(110, 0, 0, 0));
                 e.setAlignment(TextDisplay.TextAlignment.CENTER);
@@ -592,7 +636,7 @@ final class SideRooms {
                 p.spawnParticle(Particle.END_ROD, l, 10, 0.3, 0.4, 0.3, 0.01);
             }
         }
-        if (!fresh.isEmpty() && !trophies.isEmpty()) {
+        if (drawn.stream().anyMatch(t -> fresh.contains(t.key()))) {
             p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.9f, 1.1f);
         }
         ClubhousePlanner.Place3 centre = room.secretCentre();
@@ -602,9 +646,9 @@ final class SideRooms {
                 e.setItemStack(head(p.getUniqueId()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
                 e.setBillboard(Display.Billboard.VERTICAL);
-                e.setTransformation(scale(1.4f));
+                e.setTransformation(headTurn(1.4f));
             }).getUniqueId());
-            mine.add(w.spawn(loc(w, centre, 1.0), TextDisplay.class, e -> {
+            mine.add(w.spawn(loc(w, centre, 1.25), TextDisplay.class, e -> { // over the head, not through it
                 hidden(e);
                 e.setBillboard(Display.Billboard.CENTER);
                 e.setTransformation(scale(0.8f));
@@ -619,7 +663,10 @@ final class SideRooms {
             show(p, e, true); // theirs alone
         }
         secretShown.put(p.getUniqueId(), mine);
-        String seenNow = SecretShelf.seenText(trophies);
+        if (!read) {
+            return; // nothing was read: nothing is marked seen
+        }
+        String seenNow = SecretShelf.seenText(SecretShelf.seen(seenText), drawn);
         Bukkit.getScheduler().runTaskAsynchronously(club.plugin(), () -> {
             try {
                 room.meta(SEEN_KEY + p.getUniqueId(), seenNow);
@@ -761,7 +808,7 @@ final class SideRooms {
                 e.setItemStack(head(c.id()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
                 e.setBillboard(Display.Billboard.VERTICAL); // the face always to whoever looks
-                e.setTransformation(scale(HEAD_SCALE));
+                e.setTransformation(headTurn(HEAD_SCALE));
                 e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
         }
@@ -838,8 +885,40 @@ final class SideRooms {
         return head;
     }
 
+    /**
+     * A head's transformation (0.44.2): scaled, and turned half round. A billboarded display shows its back (+Z) to
+     * whoever looks, and a head item's face is on its other side, so without the turn everyone saw the back of the head.
+     */
+    static Transformation headTurn(float s) {
+        return new Transformation(new Vector3f(), new Quaternionf().rotateY((float) Math.PI), new Vector3f(s, s, s),
+                new Quaternionf());
+    }
+
     private static Transformation scale(float s) {
         return new Transformation(new Vector3f(), new Quaternionf(), new Vector3f(s, s, s), new Quaternionf());
+    }
+
+    /**
+     * The secret room's trophy plaques: just in front of the ledge's face (its middle is 0.5 from the trophy's), a
+     * little under the ledge's top, and their size.
+     */
+    static final double SECRET_LABEL_OUT = 0.52;
+    static final double SECRET_LABEL_UP = -0.42;
+    static final float SECRET_LABEL_SCALE = 0.42f;
+
+    /** How far beside its trophy, along the ledge, a game's icon sits. */
+    static final double SECRET_ICON_SIDE = 0.6;
+
+    /** {@code l} moved {@code by} blocks to the right of the way its yaw faces (along the wall, for a ledge's place). */
+    static Location side(Location l, double by) {
+        double rad = Math.toRadians(l.getYaw());
+        return l.clone().add(-Math.cos(rad) * by, 0, -Math.sin(rad) * by);
+    }
+
+    /** {@code l} moved {@code by} blocks the way its yaw faces (into the room, for a place facing it). */
+    static Location out(Location l, double by) {
+        double rad = Math.toRadians(l.getYaw());
+        return l.clone().add(-Math.sin(rad) * by, 0, Math.cos(rad) * by);
     }
 
     private static Location loc(World w, ClubhousePlanner.Place3 at, double up) {

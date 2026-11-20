@@ -43,7 +43,7 @@ public final class FeastPotMenu extends GameMenu {
         set(POT, Menus.icon(Material.CAULDRON, FeastRules.line(v.total(), v.goal()),
                 "&7Your food is at home.", "&7The Feast Pot is there too."), null);
         if (feast.pot() == null) {
-            set(GO[3], Menus.icon(Material.BARRIER, "&7The Feast Pot isn't set yet"), null);
+            set(GO[3], Menus.icon(Material.GRAY_DYE, "&7The Feast Pot isn't set yet"), null); // never Close's icon
         } else {
             for (int slot : GO) {
                 set(slot, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&lTake me to the Feast Pot",

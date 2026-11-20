@@ -57,7 +57,7 @@ public final class ClubhousePlanner {
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
      * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over.
      */
-    public static final int ALGO = 8;
+    public static final int ALGO = 9;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -1162,8 +1162,8 @@ public final class ClubhousePlanner {
             b.set(i, UP_FLOOR + 3, SIDE_Z1 + 1, BRASS); // a brass rail along the back wall
         }
         for (int[] t : PARLOR_TABLE) {
-            b.set(t[0], UP_FLOOR + 1, t[1], FENCE);
-            b.set(t[0], UP_FLOOR + 2, t[1], FELT_BLOCK);
+            // 0.44.2: a one-block card table (felt on the floor) beside its chairs, the cards on top: no jumping
+            b.set(t[0], UP_FLOOR + 1, t[1], FELT_BLOCK);
             b.seat(t[0] - 1, UP_FLOOR + 1, t[1], chair("west"), "GREEN");
             b.seat(t[0] + 1, UP_FLOOR + 1, t[1], chair("east"), "GREEN");
         }
@@ -1213,18 +1213,25 @@ public final class ClubhousePlanner {
         return out;
     }
 
-    /** The way into the secret room: a little gold star on the Trophy Room's back wall, and where its visitor returns. */
-    public static Place3 secretStar(Box box) {
-        return new Place3(box.minX() + TROPHY_X0 + 13.5, box.minY() + 3.5, box.minZ() + SIDE_Z1 + 0.85, 180f);
+    /**
+     * The way into the secret room (0.45.0, the owner: "Make the dark door the secret room and the star the casino"):
+     * a dark-oak door standing against the Trophy Room's back wall, east of the podium, facing into the room; and
+     * where its visitor returns. (0.43.0-0.44.2: a gold star on that wall.)
+     */
+    public static Place3 secretDoor(Box box) {
+        return new Place3(box.minX() + TROPHY_X0 + 13, box.minY() + 1, box.minZ() + SIDE_Z1, 180f);
     }
 
     public static ClubhouseSite.Spot secretReturn(Box box) {
         return new ClubhouseSite.Spot(box.minX() + TROPHY_X0 + 13.5, box.minY() + 1, box.minZ() + SIDE_Z1 - 1.5, 0f);
     }
 
-    /** The Game Parlor's door in the 19th Hole (against its west wall, between the nook and the fireplace). */
-    public static Place3 parlorDoor(Box box) {
-        return new Place3(box.minX() + 1.0, box.minY() + 1, box.minZ() + PARLOR_DOOR_Z, -90f);
+    /**
+     * The Game Parlor's way in (0.45.0): a little gold star on the 19th Hole's west wall, between the nook and the
+     * fireplace, at eye height, so you have to know it is there. (0.43.0-0.44.2: a door there.)
+     */
+    public static Place3 parlorStar(Box box) {
+        return new Place3(box.minX() + 1.15, box.minY() + 2.6, box.minZ() + PARLOR_DOOR_Z + 0.5, -90f);
     }
 
     static final int PARLOR_DOOR_Z = 21;
@@ -1249,7 +1256,7 @@ public final class ClubhousePlanner {
             out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
         }
         for (int[] t : PARLOR_TABLE) {
-            out.add(new Place3(box.minX() + t[0] + 0.5, box.minY() + UP_FLOOR + 3, box.minZ() + t[1] + 0.5, 0f));
+            out.add(new Place3(box.minX() + t[0] + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + t[1] + 0.5, 0f));
         }
         return out;
     }
@@ -1414,18 +1421,8 @@ public final class ClubhousePlanner {
                 POT_SIZE, "fixed"));
         out.add(Prop.item("feast.bread", "BREAD", x0 + POT_X - 0.1, y0 + 2.02, z0 + POT_Z + 1.2, 0f, 0.4f, "flat"));
         out.add(Prop.item("feast.pie", "PUMPKIN_PIE", x0 + POT_X + 1.1, y0 + 2.02, z0 + POT_Z - 0.2, 0f, 0.4f, "flat"));
-        // the back bar's bottles (in front of its shelves) and glasses on the counter
-        String[] bottles = {"HONEY_BOTTLE", "GLASS_BOTTLE", "EXPERIENCE_BOTTLE", "POTION"};
-        int n = 0;
-        for (int k = 2; k <= 10; k++) {
-            for (int j = 2; j <= 3; j++) {
-                if ((k + j) % 2 == 0) {
-                    out.add(Prop.item("bar.bottle." + n, bottles[n % bottles.length], x0 + 2.12, y0 + j + 0.3,
-                            z0 + k + 0.5, -90f, 0.4f, "face"));
-                    n++;
-                }
-            }
-        }
+        // the back bar's bottles stand ON its shelves (0.44.2: the shelves' own items, ClubDecor.stockBar); glasses
+        // on the counter
         for (int k : new int[]{3, 6, 9}) {
             out.add(Prop.item("bar.glass." + k, "GLASS_BOTTLE", x0 + 4.5, y0 + 2.2, z0 + k + 0.5, -90f, 0.4f, "face"));
         }
@@ -1458,6 +1455,17 @@ public final class ClubhousePlanner {
                 }
                 out.add(Prop.item("arcade.claw." + c + ".hook", "CHAIN", x0 + CLAW_X[c] + 0.5, y0 + 3.5,
                         z0 + SIDE_Z1 + 0.5, 0f, 0.6f, "face"));
+            }
+        }
+        return out;
+    }
+
+    /** The back bar's shelves in {@code box} (0.44.2), {x, y, z} each: two rows along the bar's wall. */
+    public static List<int[]> barShelves(Box box) {
+        List<int[]> out = new ArrayList<>();
+        for (int k = 2; k <= 10; k++) {
+            for (int j = 2; j <= 3; j++) {
+                out.add(new int[]{box.minX() + 1, box.minY() + j, box.minZ() + k});
             }
         }
         return out;

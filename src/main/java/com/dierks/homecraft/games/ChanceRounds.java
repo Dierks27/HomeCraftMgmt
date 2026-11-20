@@ -61,8 +61,21 @@ public final class ChanceRounds {
      * @param stake  tokens put in so far (a Double included)
      * @param data   the engine's own record: its version, every payout parameter, every action
      * @param state  {@link #OPEN}, {@link #SETTLED} or {@link #DAILY}
+     * @param money  0.46.0: played for dollars in the Game Parlor (the stake and payout are whole dollars, and no
+     *               tokens move for it)
      */
-    public record Round(long id, String gameId, UUID player, long seed, int stake, String data, String state) {
+    public record Round(long id, String gameId, UUID player, long seed, int stake, String data, String state,
+                        boolean money) {
+
+        /** A round played for tokens. */
+        public Round(long id, String gameId, UUID player, long seed, int stake, String data, String state) {
+            this(id, gameId, player, seed, stake, data, state, false);
+        }
+
+        /** This round with new {@code data} (an action recorded) and {@code stake}. */
+        public Round with(String data, int stake) {
+            return new Round(id, gameId, player, seed, stake, data, state, money);
+        }
 
         /** Whether it is still being played. */
         public boolean open() {
@@ -121,10 +134,19 @@ public final class ChanceRounds {
      * player has already been told).
      */
     public <O> O play(Player player, Game game, int stake, InstantEngine<O> engine) {
+        return play(player, game, stake, engine, false);
+    }
+
+    /**
+     * {@link #play(Player, Game, int, InstantEngine)}, or (0.46.0, {@code money}) the same play for dollars in the
+     * Game Parlor: the stake is taken from the player's balance, the SETTLED round is written saying what it owes,
+     * and what it owes is paid ({@link #pay}). The engine must be the one built for that many dollars.
+     */
+    public <O> O play(Player player, Game game, int stake, InstantEngine<O> engine, boolean money) {
         if (stake <= 0) {
             throw new IllegalArgumentException("a play puts tokens in: " + stake);
         }
-        Refusal refusal = games.canStake(player, game, stake);
+        Refusal refusal = games.gate().check(player, game, stake, money);
         if (refusal != null) {
             games.tell(player, refusal);
             return null;
@@ -132,7 +154,7 @@ public final class ChanceRounds {
         long seed = ThreadLocalRandom.current().nextLong();
         O outcome = engine.decide(seed, stake);
         int decided = Math.max(0, engine.payout(outcome));
-        int payout = capped(game, stake, decided);
+        int payout = capped(game, stake, decided, money);
         if (payout != decided) {
             // The screen shows the engine's number, so paying anything else would tell the player
             // one thing and pay another. It happens only when the engine didn't cap (a bug) or a
@@ -141,19 +163,29 @@ public final class ChanceRounds {
             games.tell(player, CHANGED);
             return null;
         }
+        UUID id = player.getUniqueId();
+        if (money && !games.host().bank().take(id, stake)) {
+            games.tell(player, Parlor.needMore(stake));
+            return null;
+        }
         Round round;
         try {
-            round = games.dao().settleRound(player.getUniqueId(), game.id(), game.source(), clock().dayKey(), stake,
+            round = games.dao().settleRound(id, game.id(), game.source(), clock().dayKey(), stake,
                     payout, seed, engine.data(outcome), stakeDetail(game.name(), stake),
-                    payoutDetail(game.name(), stake, payout), clock().nowMillis());
+                    payoutDetail(game.name(), stake, payout), clock().nowMillis(), money);
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not settle a " + game.id() + " play - nothing was taken", e);
+            giveBack(id, stake, money, game.id());
             games.tell(player, Refusal.CLOSED);
             return null;
         }
         if (round == null) {
+            giveBack(id, stake, money, game.id());
             games.tell(player, shortBy(player, stake));
             return null;
+        }
+        if (money) {
+            pay(round.id());
         }
         games.gate().clicked(player);
         return outcome;
@@ -170,16 +202,25 @@ public final class ChanceRounds {
      * ({@link #play}) aren't either: they are over as soon as they start.
      */
     public Round open(Player player, Game game, int stake, String data) {
+        return open(player, game, stake, data, false);
+    }
+
+    /**
+     * {@link #open(Player, Game, int, String)}, or (0.46.0, {@code money}) the same round for dollars in the Game
+     * Parlor: the stake is taken from the player's balance and put straight back if the round can't be written.
+     */
+    public Round open(Player player, Game game, int stake, String data, boolean money) {
         if (stake <= 0) {
             throw new IllegalArgumentException("a round puts tokens in: " + stake);
         }
-        Refusal refusal = games.canStake(player, game, stake);
+        Refusal refusal = games.gate().check(player, game, stake, money);
         if (refusal != null) {
             games.tell(player, refusal);
             return null;
         }
         UUID id = player.getUniqueId();
         Round round;
+        boolean taken = false;
         try {
             if (games.dao().openRoundFor(id, game.id()) != null) {
                 return null; // the game resumes that one
@@ -189,15 +230,27 @@ public final class ChanceRounds {
                 games.tell(player, held);
                 return null;
             }
+            if (money) {
+                if (!games.host().bank().take(id, stake)) {
+                    games.tell(player, Parlor.needMore(stake));
+                    return null;
+                }
+                taken = true;
+            }
             round = games.dao().openRound(id, game.id(), game.source(), clock().dayKey(), stake,
-                    ThreadLocalRandom.current().nextLong(), data, stakeDetail(game.name(), stake), clock().nowMillis());
+                    ThreadLocalRandom.current().nextLong(), data, stakeDetail(game.name(), stake), clock().nowMillis(),
+                    money);
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not open a " + game.id() + " round - nothing was taken", e);
+            giveBack(id, stake, taken, game.id());
             games.tell(player, Refusal.CLOSED);
             return null;
         }
         if (round == null) {
-            games.tell(player, shortBy(player, stake));
+            giveBack(id, stake, taken, game.id());
+            if (!money) {
+                games.tell(player, shortBy(player, stake));
+            }
             return null;
         }
         games.gate().clicked(player);
@@ -219,26 +272,40 @@ public final class ChanceRounds {
             games.tell(player, Refusal.CLOSED);
             return false;
         }
-        Refusal refusal = games.gate().extra(player, game, extra);
+        boolean money = round.money();
+        Refusal refusal = games.gate().extra(player, game, extra, money);
         if (refusal != null) {
             games.tell(player, refusal);
             return false;
         }
         UUID id = player.getUniqueId();
+        if (money && !games.host().bank().take(id, extra)) {
+            games.tell(player, Parlor.needMore(extra));
+            return false;
+        }
         boolean ok;
         try {
             // The pause and the day's limit again, inside the transaction that takes the tokens.
             ok = games.dao().raiseStake(round.id(), id, game.source(), extra, () -> {
                 Breaks.Today today = games.breaks() == null ? null : games.breaks().today(id);
-                return today != null && !today.paused(clock().nowMillis()) && !today.over(extra);
+                if (today == null || today.paused(clock().nowMillis())) {
+                    return false;
+                }
+                if (!money) {
+                    return !today.over(extra);
+                }
+                int in = games.parlor().inToday(id);
+                return in >= 0 && !Parlor.over(games.parlor().limit(id), in, extra);
             }, round.data(), stakeDetail(game.name(), extra), clock().nowMillis()); // the action lands with the tokens
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not add to a " + game.id() + " round - nothing was taken", e);
+            giveBack(id, extra, money, game.id());
             games.tell(player, Refusal.CLOSED);
             return false;
         }
         if (!ok) {
-            Refusal why = games.gate().extra(player, game, extra);
+            giveBack(id, extra, money, game.id());
+            Refusal why = games.gate().extra(player, game, extra, money);
             games.tell(player, why != null ? why : Refusal.CLOSED);
         }
         return ok;
@@ -259,7 +326,8 @@ public final class ChanceRounds {
             log().log(Level.SEVERE, "Could not record a " + round.gameId() + " move", e);
             return null;
         }
-        return new Round(round.id(), round.gameId(), round.player(), round.seed(), round.stake(), data, OPEN);
+        return new Round(round.id(), round.gameId(), round.player(), round.seed(), round.stake(), data, OPEN,
+                round.money());
     }
 
     /**
@@ -274,8 +342,12 @@ public final class ChanceRounds {
                 return false;
             }
             int pay = Math.max(0, payout);
-            return games.dao().closeRound(round.id(), pay, data, source(current.gameId()),
+            boolean closed = games.dao().closeRound(round.id(), pay, data, source(current.gameId()),
                     payoutDetail(name(current.gameId()), current.stake(), pay), clock().nowMillis());
+            if (closed && current.money()) {
+                pay(current.id());
+            }
+            return closed;
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not settle a " + round.gameId() + " round - it stays open", e);
             return false;
@@ -324,6 +396,63 @@ public final class ChanceRounds {
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not read the open rounds", e);
         }
+        payOwed();
+    }
+
+    /**
+     * 0.46.0: pay every settled money round that still owes its player (the bank was not there when it settled, or
+     * refused). Start-up and the one-minute sweep do this; it does nothing while there is no bank.
+     */
+    void payOwed() {
+        if (!games.host().bank().on()) {
+            return;
+        }
+        try {
+            for (com.dierks.homecraft.storage.GamesDao.Owed o : games.dao().owed()) {
+                pay(o.roundId());
+            }
+        } catch (SQLException e) {
+            log().log(Level.SEVERE, "Could not read the Game Parlor's unpaid rounds", e);
+        }
+    }
+
+    /**
+     * Pay what a settled money round owes, once: what it owes is zeroed first (one transaction: only one caller gets
+     * the dollars), then given to the player; if the bank refuses, the round owes it again and the sweep tries later.
+     *
+     * @return the dollars paid now (0 when it owed nothing, or the bank refused)
+     */
+    int pay(long roundId) {
+        if (!games.host().bank().on()) {
+            return 0; // it stays owed
+        }
+        try {
+            Round r = games.dao().round(roundId);
+            int dollars = games.dao().takeOwed(roundId);
+            if (dollars <= 0 || r == null) {
+                return 0;
+            }
+            if (games.host().bank().give(r.player(), dollars)) {
+                log().info("[Parlor] " + r.gameId() + " round " + roundId + " paid " + r.player() + " "
+                        + Parlor.dollars(dollars) + " (" + Parlor.dollars(r.stake()) + " in)");
+                return dollars;
+            }
+            games.dao().putBackOwed(roundId, dollars);
+            once("bank:give", Level.WARNING, "The bank refused a Game Parlor payment (round " + roundId + ", "
+                    + Parlor.dollars(dollars) + ") - it is kept and tried again every minute", null);
+            return 0;
+        } catch (SQLException e) {
+            log().log(Level.SEVERE, "Could not pay Game Parlor round " + roundId + " - it is tried again", e);
+            return 0;
+        }
+    }
+
+    /** Put back a stake the bank gave up for a round that was then never written. */
+    private void giveBack(UUID player, int dollars, boolean taken, String gameId) {
+        if (taken && !games.host().bank().give(player, dollars)) {
+            log().severe("[Parlor] Could not put back " + Parlor.dollars(dollars) + " to " + player + " after a "
+                    + gameId + " play that was not kept - give it back by hand");
+        }
     }
 
     /**
@@ -346,6 +475,7 @@ public final class ChanceRounds {
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not read the open rounds at start-up", e);
         }
+        payOwed();
     }
 
     /** A game was switched off: finish its OPEN rounds now (R2.6). */
@@ -417,10 +547,24 @@ public final class ChanceRounds {
         if (!paid) {
             return; // someone else finished it first; it paid once, there
         }
+        if (r.money()) {
+            pay(r.id());
+        }
         log().info("Finished " + r.gameId() + " round " + r.id() + " for " + r.player() + " by its "
-                + (exit.returned() ? "fallback (tokens back)" : "exit rule") + ": " + r.stake() + " in, "
-                + exit.payout() + " back");
-        games.notice(r.player(), finishedLine(name, r.stake(), exit), queue);
+                + (exit.returned() ? "fallback (" + (r.money() ? "money" : "tokens") + " back)" : "exit rule") + ": "
+                + r.stake() + " in, " + exit.payout() + " back" + (r.money() ? " (dollars)" : ""));
+        games.notice(r.player(), r.money() ? finishedMoneyLine(name, r.stake(), exit)
+                : finishedLine(name, r.stake(), exit), queue);
+    }
+
+    /** {@link #finishedLine} for a round played for dollars. */
+    static String finishedMoneyLine(String name, int stake, Exit exit) {
+        if (exit.returned()) {
+            return "&7Your " + name + " game from before was stopped, so your &6" + Parlor.dollars(stake)
+                    + " &7came back.";
+        }
+        String result = exit.payout() == 0 ? "no win this time" : "&6" + Parlor.dollars(exit.payout()) + " &7back";
+        return "&7Your " + name + " game from before was finished for you: " + result + "&7.";
     }
 
     /** "Your Twenty-One game from before was finished for you: 9 tokens back." — never a "win" for less. */
@@ -438,8 +582,17 @@ public final class ChanceRounds {
      * The payout, held to the game's cap ({@code games.max_payout}, never below its largest
      * stake). The engine already caps; this only catches an engine that didn't (logged once).
      */
-    private int capped(Game game, int stake, int payout) {
+    private int capped(Game game, int stake, int payout, boolean money) {
         int pay = Math.max(0, payout);
+        if (money) {
+            int most = games.parlor().rules().capFor(stake);
+            if (pay > most) {
+                once(game.id() + ":moneycap", Level.WARNING, game.id() + " tried to pay " + Parlor.dollars(pay)
+                        + " - held to the Game Parlor's biggest payout (" + Parlor.dollars(most) + ")", null);
+                return most;
+            }
+            return pay;
+        }
         List<Integer> stakes = new ArrayList<>();
         GameSpec<?> spec = games.spec(game.id());
         Object v = spec == null ? null : PlayGate.component(games.config().settings(spec), "stakes");

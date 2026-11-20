@@ -232,6 +232,26 @@ public final class TwentyOne implements Game {
         return p.size() == 1 ? Integer.toString(p.get(0)) : p.get(0) + " to " + p.get(p.size() - 1);
     }
 
+    /** What a hand pays at each dollar stake asked for so far (0.46.0), by stake, biggest payout and the settings' own numbers. */
+    private final Map<String, java.util.Optional<TwentyOneSettings.Odds>> moneyOdds =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 0.46.0, the Game Parlor's money play: what a hand pays with {@code dollars} in, solved exactly as a token stake
+     * is (the same target, the same 85-95 band) under the Parlor's biggest payout; {@code null} when no whole-dollar
+     * payouts fit the band at that stake. Solved once per stake and kept.
+     */
+    public TwentyOneSettings.Odds moneyOdds(int dollars) {
+        if (dollars <= 0) {
+            return null;
+        }
+        TwentyOneSettings s = settings();
+        int cap = ctx.games().parlor().rules().capFor(dollars);
+        String key = dollars + ":" + cap + ":" + s.rtp() + ":" + s.naturalBonus();
+        return moneyOdds.computeIfAbsent(key, k -> TwentyOneSettings.solve(List.of(dollars), s.rtp(),
+                s.naturalBonus(), cap, null, null, null).stream().findFirst()).orElse(null);
+    }
+
     /** The live settings — the engine object (read on every use, never cached across a reload). */
     public TwentyOneSettings settings() {
         return ctx.games().settings(SPEC);

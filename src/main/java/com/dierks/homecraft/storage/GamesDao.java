@@ -132,7 +132,7 @@ public final class GamesDao {
     public static final String ACROSS_GAMES = "*";
 
     private static final Pattern COLOUR = Pattern.compile("(?i)[&§][0-9a-fk-or]");
-    private static final String ROUND_COLUMNS = "id, player, game, seed, stake, data, state";
+    private static final String ROUND_COLUMNS = "id, player, game, seed, stake, data, state, money";
     private static final String SECRET_KEY = "games_secret";
 
     /** Thrown inside a transaction to roll it back after a refusal that came too late to avoid. */
@@ -166,16 +166,30 @@ public final class GamesDao {
     public Round settleRound(UUID player, String game, TokenService.Source source, long day, int stake, int payout,
                              long seed, String data, String detailStake, String detailPayout, long now)
             throws SQLException {
+        return settleRound(player, game, source, day, stake, payout, seed, data, detailStake, detailPayout, now,
+                false);
+    }
+
+    /**
+     * {@link #settleRound}, or (0.46.0) the same play for money: {@code money} writes the SETTLED round with what it
+     * owes and moves no tokens. The caller has already taken the stake from the bank, and pays what the round owes
+     * with {@link #takeOwed} afterwards.
+     */
+    public Round settleRound(UUID player, String game, TokenService.Source source, long day, int stake, int payout,
+                             long seed, String data, String detailStake, String detailPayout, long now,
+                             boolean money) throws SQLException {
         requireNonNegative(stake, payout);
         return database.transaction(c -> {
-            if (stake > 0 && tokens.change(player, -stake, source.name(), plain(detailStake), now) == TokenDao.REFUSED) {
+            if (!money && stake > 0
+                    && tokens.change(player, -stake, source.name(), plain(detailStake), now) == TokenDao.REFUSED) {
                 return null;
             }
-            long id = insertRound(c, player, game, day, stake, payout, ChanceRounds.SETTLED, seed, data, null, now, now);
-            if (payout > 0) {
+            long id = insertRound(c, player, game, day, stake, payout, ChanceRounds.SETTLED, seed, data, null, now, now,
+                    money, money ? payout : 0);
+            if (!money && payout > 0) {
                 tokens.change(player, payout, source.name(), plain(detailPayout), now);
             }
-            return new Round(id, game, player, seed, stake, data, ChanceRounds.SETTLED);
+            return new Round(id, game, player, seed, stake, data, ChanceRounds.SETTLED, money);
         });
     }
 
@@ -187,16 +201,27 @@ public final class GamesDao {
      */
     public Round openRound(UUID player, String game, TokenService.Source source, long day, int stake, long seed,
                            String data, String detail, long now) throws SQLException {
+        return openRound(player, game, source, day, stake, seed, data, detail, now, false);
+    }
+
+    /**
+     * {@link #openRound}, or (0.46.0) the same round for money: {@code money} writes the OPEN round and moves no
+     * tokens (the caller has already taken the stake from the bank, and puts it back when this answers {@code null}).
+     */
+    public Round openRound(UUID player, String game, TokenService.Source source, long day, int stake, long seed,
+                           String data, String detail, long now, boolean money) throws SQLException {
         requireNonNegative(stake, 0);
         return database.transaction(c -> {
             if (openRoundFor(c, player, game) != null) {
                 return null;
             }
-            if (stake > 0 && tokens.change(player, -stake, source.name(), plain(detail), now) == TokenDao.REFUSED) {
+            if (!money && stake > 0
+                    && tokens.change(player, -stake, source.name(), plain(detail), now) == TokenDao.REFUSED) {
                 return null;
             }
-            long id = insertRound(c, player, game, day, stake, 0, ChanceRounds.OPEN, seed, data, null, now, null);
-            return new Round(id, game, player, seed, stake, data, ChanceRounds.OPEN);
+            long id = insertRound(c, player, game, day, stake, 0, ChanceRounds.OPEN, seed, data, null, now, null,
+                    money, 0);
+            return new Round(id, game, player, seed, stake, data, ChanceRounds.OPEN, money);
         });
     }
 
@@ -224,7 +249,9 @@ public final class GamesDao {
             if (gateCheck != null && !gateCheck.getAsBoolean()) {
                 return false;
             }
-            if (tokens.change(player, -extra, source.name(), plain(detail), now) == TokenDao.REFUSED) {
+            // a money round's extra was taken from the bank by the caller (who puts it back on a false)
+            if (!r.money()
+                    && tokens.change(player, -extra, source.name(), plain(detail), now) == TokenDao.REFUSED) {
                 return false;
             }
             try (PreparedStatement ps = c.prepareStatement(
@@ -274,18 +301,19 @@ public final class GamesDao {
                 return false;
             }
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE game_rounds SET state = 'SETTLED', payout = ?, data = COALESCE(?, data), "
+                    "UPDATE game_rounds SET state = 'SETTLED', payout = ?, owed = ?, data = COALESCE(?, data), "
                             + "settled_at = ?, touched_at = ? WHERE id = ? AND state = 'OPEN'")) {
                 ps.setInt(1, payout);
-                ps.setString(2, data);
-                ps.setLong(3, now);
+                ps.setInt(2, r.money() ? payout : 0); // a money round owes it; ChanceRounds pays it from the bank
+                ps.setString(3, data);
                 ps.setLong(4, now);
-                ps.setLong(5, roundId);
+                ps.setLong(5, now);
+                ps.setLong(6, roundId);
                 if (ps.executeUpdate() != 1) {
                     return false;
                 }
             }
-            if (payout > 0) {
+            if (!r.money() && payout > 0) {
                 tokens.change(r.player(), payout, source.name(), plain(detail), now);
             }
             return true;
@@ -324,8 +352,10 @@ public final class GamesDao {
                 }
                 int payA = winner.equals(a) ? payout : 0;
                 int payB = payout - payA;
-                long idA = insertRound(c, a, game, day, stake, payA, ChanceRounds.SETTLED, seed, data, b, now, now);
-                long idB = insertRound(c, b, game, day, stake, payB, ChanceRounds.SETTLED, seed, data, a, now, now);
+                long idA = insertRound(c, a, game, day, stake, payA, ChanceRounds.SETTLED, seed, data, b, now, now, false,
+                        0);
+                long idB = insertRound(c, b, game, day, stake, payB, ChanceRounds.SETTLED, seed, data, a, now, now, false,
+                        0);
                 if (payout > 0) {
                     tokens.change(winner, payout, source.name(), plain(detailPayout), now);
                 }
@@ -401,6 +431,90 @@ public final class GamesDao {
         Connection c = database.connection();
         synchronized (c) {
             return tokensIn(c, player, dayStart);
+        }
+    }
+
+    // ---- the Game Parlor's money (0.46.0) --------------------------------------------------------
+
+    /** A settled money round that still owes its player dollars. */
+    public record Owed(long roundId, UUID player, String game, int dollars) {
+    }
+
+    /** Dollars the player put into money rounds on this local day (OPEN or SETTLED): the day's money limit counts these. */
+    public int moneyInToday(UUID player, long day) throws SQLException {
+        return count("SELECT COALESCE(SUM(stake), 0) FROM game_rounds WHERE player = ? AND day = ? AND money = 1 "
+                + "AND state IN ('OPEN', 'SETTLED')", player.toString(), day);
+    }
+
+    /** Dollars put into money rounds on this local day by everyone, and dollars those rounds gave back: {in, back}. */
+    public int[] moneyTotals(long day) throws SQLException {
+        return new int[] {
+                count("SELECT COALESCE(SUM(stake), 0) FROM game_rounds WHERE day = ? AND money = 1 "
+                        + "AND state IN ('OPEN', 'SETTLED')", day),
+                count("SELECT COALESCE(SUM(payout), 0) FROM game_rounds WHERE day = ? AND money = 1 "
+                        + "AND state = 'SETTLED'", day)};
+    }
+
+    /** Every settled money round that still owes its player, oldest first. */
+    public List<Owed> owed() throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, player, game, owed FROM game_rounds WHERE owed > 0 AND state = 'SETTLED' ORDER BY id");
+                 ResultSet rs = ps.executeQuery()) {
+                List<Owed> out = new ArrayList<>();
+                while (rs.next()) {
+                    UUID p = uuid(rs.getString("player"));
+                    if (p != null) {
+                        out.add(new Owed(rs.getLong("id"), p, rs.getString("game"), rs.getInt("owed")));
+                    }
+                }
+                return out;
+            }
+        }
+    }
+
+    /**
+     * Take what a settled money round owes, to pay it: reads it and zeroes it in one transaction, so only one caller
+     * ever gets the dollars.
+     *
+     * @return the dollars to pay now, or 0 when it owes nothing (already paid, not settled, not a money round)
+     */
+    public int takeOwed(long roundId) throws SQLException {
+        return database.transaction(c -> {
+            int owed;
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT owed FROM game_rounds WHERE id = ? AND state = 'SETTLED' AND money = 1")) {
+                ps.setLong(1, roundId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    owed = rs.next() ? rs.getInt(1) : 0;
+                }
+            }
+            if (owed <= 0) {
+                return 0;
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE game_rounds SET owed = 0 WHERE id = ? AND owed = ?")) {
+                ps.setLong(1, roundId);
+                ps.setInt(2, owed);
+                return ps.executeUpdate() == 1 ? owed : 0;
+            }
+        });
+    }
+
+    /** The bank refused a payment {@link #takeOwed} took: the round owes it again, to be tried later. */
+    public void putBackOwed(long roundId, int dollars) throws SQLException {
+        if (dollars <= 0) {
+            return;
+        }
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE game_rounds SET owed = owed + ? WHERE id = ? AND money = 1")) {
+                ps.setInt(1, dollars);
+                ps.setLong(2, roundId);
+                ps.executeUpdate();
+            }
         }
     }
 
@@ -1426,11 +1540,11 @@ public final class GamesDao {
     // ---- internals (caller holds the connection lock) -----------------------------------------
 
     private static long insertRound(Connection c, UUID player, String game, long day, int stake, int payout,
-                                    String state, long seed, String data, UUID opponent, long now, Long settledAt)
-            throws SQLException {
+                                    String state, long seed, String data, UUID opponent, long now, Long settledAt,
+                                    boolean money, int owed) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
                 "INSERT INTO game_rounds(player, game, day, stake, payout, state, seed, data, opponent, "
-                        + "created_at, touched_at, settled_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        + "created_at, touched_at, settled_at, money, owed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 PreparedStatement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, player.toString());
             ps.setString(2, game);
@@ -1448,6 +1562,8 @@ public final class GamesDao {
             } else {
                 ps.setLong(12, settledAt);
             }
+            ps.setInt(13, money ? 1 : 0);
+            ps.setInt(14, owed);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 if (!keys.next()) {
@@ -1483,7 +1599,8 @@ public final class GamesDao {
     private static Round readRound(ResultSet rs) throws SQLException {
         UUID p = uuid(rs.getString("player"));
         return new Round(rs.getLong("id"), rs.getString("game"), p == null ? new UUID(0, 0) : p,
-                rs.getLong("seed"), rs.getInt("stake"), rs.getString("data"), rs.getString("state"));
+                rs.getLong("seed"), rs.getInt("stake"), rs.getString("data"), rs.getString("state"),
+                rs.getInt("money") != 0);
     }
 
     private List<Round> rounds(String sql, Object... args) throws SQLException {

@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.chance.OreSlotsMenu;
@@ -142,6 +143,38 @@ public final class OreSlots implements Game {
         }
         out.chance(id, name, engine.stakes(), engine.rtpByStake(), s.dailyLimit(), engine.feedRows(),
                 SlotsCopy.feedRules(), Map.of());
+    }
+
+    /** The reels solved for each dollar stake asked for so far (0.46.0): solved once and kept. */
+    private final Map<String, SlotsEngine> moneyEngines = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 0.46.0, the Game Parlor's money play: the engine for {@code dollars} in, its reels solved exactly as for a token
+     * stake (the same lines, target and 85-95 band) under the Parlor's biggest payout; {@code null} when that stake
+     * can't land in the band.
+     */
+    public SlotsEngine moneyEngine(OreSlotsSettings s, int dollars) {
+        if (dollars <= 0) {
+            return null;
+        }
+        int cap = ctx.games().parlor().rules().capFor(dollars);
+        String key = dollars + ":" + cap + ":" + s.rtp() + ":" + s.reels() + ":" + s.pays();
+        SlotsEngine engine = moneyEngines.computeIfAbsent(key,
+                k -> SlotsEngine.solve(s.reels(), s.pays(), List.of(dollars), cap, s.rtp()));
+        return engine.odds(dollars) == null ? null : engine;
+    }
+
+    /** Why a spin for {@code dollars} can't go now, for the Spin tile; {@code null} when nothing stops it. */
+    public String moneyBlocker(Player player, int dollars) {
+        Refusal r = ctx.games().parlor().check(player, dollars, true);
+        if (r == null) {
+            return null;
+        }
+        return switch (r.reason()) {
+            case PERSONAL_LIMIT -> "Over your limit today";
+            case BALANCE -> "Not enough money";
+            default -> "Closed right now";
+        };
     }
 
     /** The live settings (read on every use, never cached across a reload). */

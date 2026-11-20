@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.chance;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOne;
@@ -57,6 +58,9 @@ public final class TwentyOneMenu extends GameMenu {
     private static final int DEAL = 50;
     private static final int BALANCE = 51;
     private static final int HOW_IT_PAYS = 52;
+    /** 0.46.0, in the Game Parlor: tokens or money, the chips and the stake they add up to. */
+    private static final int SWITCH = 53;
+    private static final int CHIPS_BACK = 45;
 
     private final TwentyOne twentyOne;
     /** The stake the next Deal puts in. */
@@ -67,6 +71,10 @@ public final class TwentyOneMenu extends GameMenu {
     private TwentyOneHand hand;
     /** A hand that was finished somewhere else (the sweep) while this screen was open. */
     private boolean gone;
+    /** 0.46.0: tokens or money for the next hand. */
+    private final MoneyPlay money;
+    /** Whether the hand on the table is (or was) played for dollars. */
+    private boolean handMoney;
 
     /**
      * @param resume the player's OPEN round in this game, or {@code null} for a fresh table
@@ -77,11 +85,12 @@ public final class TwentyOneMenu extends GameMenu {
         this.twentyOne = game;
         List<Integer> playable = game.settings().playable();
         this.stake = playable.isEmpty() ? 0 : playable.get(0);
+        this.money = new MoneyPlay(plugin, game.games(), viewer);
         if (resume != null) {
             TwentyOneHand.Saved saved = TwentyOneHand.read(resume.data());
             this.round = resume;
             this.hand = TwentyOneHand.replay(resume.seed(), saved);
-            this.stake = saved.terms().in();
+            onTable(resume, saved);
         }
         init(54, Text.of("&2Twenty-One"));
     }
@@ -103,34 +112,77 @@ public final class TwentyOneMenu extends GameMenu {
         return hand != null && !hand.done() && round != null;
     }
 
+    /** The hand on the table sets the stake shown (and whether it is dollars), not the tile last picked. */
+    private void onTable(ChanceRounds.Round on, TwentyOneHand.Saved saved) {
+        handMoney = on.money();
+        money.follow(on.money(), saved.terms().in());
+        if (!on.money()) {
+            stake = saved.terms().in();
+        }
+    }
+
+    /** What the next hand pays: the token stake picked, or the dollars the chips add up to. */
+    private TwentyOneSettings.Odds odds() {
+        return money.on() ? twentyOne.moneyOdds(money.stake()) : twentyOne.settings().odds(stake);
+    }
+
     // ---- painting --------------------------------------------------------------------------------
 
     @Override
     protected void build() {
         fill();
         TwentyOneSettings s = twentyOne.settings();
-        TwentyOneSettings.Odds odds = s.odds(stake);
+        boolean dollars = money.on();
+        TwentyOneSettings.Odds odds = odds();
         paintArcade();
         paintYours();
         set(RULES, rulesTile(game.rules()), null);
         set(GIVE_BACK, giveBack(odds), null);
         set(STATUS, status(), null);
-        set(TODAY, CardGameTiles.today(games(), game, viewer, plugin.clock(), s.dailyLimit(), "hands"), null);
+        set(TODAY, dollars ? money.todayTile(game, s.dailyLimit(), "hands")
+                : CardGameTiles.today(games(), game, viewer, plugin.clock(), s.dailyLimit(), "hands"), null);
         paintButtons();
-        List<Integer> playable = s.playable();
-        for (int i = 0; i < playable.size() && i < CardGameTiles.STAKE_SLOTS.length; i++) {
-            int value = playable.get(i);
-            set(CardGameTiles.STAKE_SLOTS[i], CardGameTiles.stake(value, value == stake, pays(s.odds(value))), e -> {
+        if (dollars) {
+            for (int i = 0; i < money.chips(); i++) {
+                int chip = money.chip(i);
+                set(CardGameTiles.STAKE_SLOTS[i], money.chipTile(i), e -> {
+                    if (!playing()) {
+                        money.add(chip);
+                        refresh();
+                    }
+                });
+            }
+            set(CHIPS_BACK, money.stakeTile(), e -> {
                 if (!playing()) {
-                    stake = value;
+                    money.clear();
+                    refresh();
+                }
+            });
+        } else {
+            List<Integer> playable = s.playable();
+            for (int i = 0; i < playable.size() && i < CardGameTiles.STAKE_SLOTS.length; i++) {
+                int value = playable.get(i);
+                set(CardGameTiles.STAKE_SLOTS[i], CardGameTiles.stake(value, value == stake, pays(s.odds(value))),
+                        e -> {
+                            if (!playing()) {
+                                stake = value;
+                                refresh();
+                            }
+                        });
+            }
+        }
+        exitTile();
+        set(DEAL, dealButton(odds), e -> deal());
+        set(BALANCE, dollars ? money.balanceTile() : balanceTile(), null);
+        set(HOW_IT_PAYS, howItPays(odds), null);
+        if (money.offered() || dollars) {
+            set(SWITCH, money.switchTile(), e -> {
+                if (!playing()) {
+                    money.flip();
                     refresh();
                 }
             });
         }
-        exitTile();
-        set(DEAL, dealButton(odds), e -> deal());
-        set(BALANCE, balanceTile(), null);
-        set(HOW_IT_PAYS, howItPays(odds), null);
     }
 
     private void paintArcade() {
@@ -192,9 +244,11 @@ public final class TwentyOneMenu extends GameMenu {
             String why = doubleRefusal();
             if (why == null) {
                 int extra = hand.terms().in();
-                set(DOUBLE, Menus.icon(Material.ORANGE_CONCRETE, "&6Double &7- put in &6" + extra + " &7more",
+                set(DOUBLE, Menus.icon(Material.ORANGE_CONCRETE, "&6Double &7- put in &6"
+                                + (handMoney ? Parlor.dollars(extra) : Integer.toString(extra)) + " &7more",
                         "&7You get exactly 1 card, then you stand.",
-                        "&7A doubled win: " + (2 * extra) + " in → " + hand.pays().doubleWin() + " back"),
+                        MoneyPlay.say(handMoney, "&7A doubled win: " + (2 * extra) + " in → "
+                                + hand.pays().doubleWin() + " back")),
                         e -> doubleDown());
             } else {
                 set(DOUBLE, CardGameTiles.unlit("Double", why), null);
@@ -218,9 +272,15 @@ public final class TwentyOneMenu extends GameMenu {
             return "not at this stake";
         }
         int extra = hand.terms().in();
-        Refusal r = games().gate().extra(viewer, game, extra);
+        Refusal r = games().gate().extra(viewer, game, extra, handMoney);
         if (r == null) {
             return null;
+        }
+        if (handMoney && r.reason() == Refusal.Reason.BALANCE) {
+            return "not enough money";
+        }
+        if (handMoney && r.reason() == Refusal.Reason.OTHER) {
+            return r == Parlor.MONEY_NOT_HERE ? "only in the Game Parlor" : "closed right now";
         }
         return switch (r.reason()) {
             case DAILY_LIMIT, PERSONAL_LIMIT -> "over your limit today";
@@ -241,9 +301,10 @@ public final class TwentyOneMenu extends GameMenu {
             return CardGameTiles.unlit("Deal", "finish this hand first");
         }
         if (odds == null) {
-            return CardGameTiles.unlit("Deal", "closed right now");
+            return CardGameTiles.unlit("Deal", money.on() && money.stake() <= 0 ? "add a chip first"
+                    : money.on() ? "not at this stake" : "closed right now");
         }
-        return Menus.icon(Material.GREEN_CONCRETE, "&aDeal &7- &6" + odds.stake() + " tokens in",
+        return Menus.icon(Material.GREEN_CONCRETE, "&aDeal &7- &6" + MoneyPlay.amount(money.on(), odds.stake()) + " in",
                 "&7Two cards each; one of the Arcade's stays face down.");
     }
 
@@ -252,7 +313,7 @@ public final class TwentyOneMenu extends GameMenu {
             return Menus.icon(Material.OAK_SIGN, "&7That hand was already finished for you.");
         }
         if (hand == null) {
-            return Menus.icon(Material.OAK_SIGN, "&ePick your tokens, then Deal",
+            return Menus.icon(Material.OAK_SIGN, money.on() ? "&eAdd your chips, then Deal" : "&ePick your tokens, then Deal",
                     "&7Beat the Arcade's hand without going over 21.");
         }
         if (!hand.done()) {
@@ -273,22 +334,30 @@ public final class TwentyOneMenu extends GameMenu {
             case ARCADE_TWENTY_ONE -> "The Arcade has Twenty-One.";
         };
         if (back > in) {
-            return Menus.glint(Menus.icon(Material.EMERALD, "&a" + headline + " &6" + in + " in → " + back + " back"),
-                    true);
+            return Menus.glint(Menus.icon(Material.EMERALD, "&a" + headline + " &6" + cash(in) + " in → " + cash(back)
+                    + " back"), true);
         }
         if (back == in) {
-            return Menus.glint(Menus.icon(Material.GOLD_NUGGET, "&f" + headline + " &7Your " + back + " back"), false);
+            return Menus.glint(Menus.icon(Material.GOLD_NUGGET, "&f" + headline + " &7Your " + cash(back) + " back"),
+                    false);
         }
         return Menus.icon(Material.GRAY_DYE, "&7" + headline + " No win this time.");
     }
 
     private ItemStack giveBack(TwentyOneSettings.Odds odds) {
+        boolean dollars = money.on();
         if (odds == null) {
-            return Menus.icon(Material.KNOWLEDGE_BOOK, "&7Pick how many tokens to put in");
+            return Menus.icon(Material.KNOWLEDGE_BOOK, dollars ? "&7Add chips to see what it pays"
+                    : "&7Pick how many tokens to put in");
         }
         return Menus.icon(Material.KNOWLEDGE_BOOK, "&7With the best play it gives back about &f"
-                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 tokens",
-                "&7(at " + odds.stake() + " tokens in)");
+                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 " + MoneyPlay.unit(dollars),
+                "&7(at " + MoneyPlay.amount(dollars, odds.stake()) + " in)");
+    }
+
+    /** An amount of the hand on the table: "$9" for a money hand, "9" for tokens. */
+    private String cash(int amount) {
+        return handMoney ? Parlor.dollars(amount) : Integer.toString(amount);
     }
 
     private ItemStack howItPays(TwentyOneSettings.Odds odds) {
@@ -296,11 +365,12 @@ public final class TwentyOneMenu extends GameMenu {
             return Menus.icon(Material.WRITABLE_BOOK, "&eHow it pays");
         }
         List<String> lore = new ArrayList<>(pays(odds));
-        lore.add("&7Same total: your tokens back.");
+        lore.add(money.on() ? "&7Same total: your money back." : "&7Same total: your tokens back.");
         lore.add("&7Over 21, or lower than the Arcade: nothing back.");
         lore.add("&7The Arcade checks for Twenty-One when it shows an Ace or a 10.");
-        return Menus.icon(Material.WRITABLE_BOOK, "&eHow it pays &7- &6" + odds.stake() + " in",
-                lore.toArray(new String[0]));
+        return Menus.icon(Material.WRITABLE_BOOK, "&eHow it pays &7- &6"
+                        + (money.on() ? Parlor.dollars(odds.stake()) : Integer.toString(odds.stake())) + " in",
+                MoneyPlay.say(money.on(), lore));
     }
 
     /** "Win: 5 in → 9 back", "Twenty-One!: 5 in → 11 back", "Double win: 10 in → 18 back". */
@@ -330,21 +400,22 @@ public final class TwentyOneMenu extends GameMenu {
         if (playing()) {
             return;
         }
-        TwentyOneSettings.Odds odds = twentyOne.settings().odds(stake);
+        boolean dollars = money.on();
+        TwentyOneSettings.Odds odds = odds();
         if (odds == null) {
             refresh();
             return;
         }
         TwentyOneHand.Shoe shoe = twentyOne.shoeFor(viewer.getUniqueId()); // 0.45.0: the player's 4-deck shoe
         ChanceRounds.Round opened = games().rounds().open(viewer, game, odds.stake(),
-                TwentyOneHand.data(odds.terms(), "", shoe));
+                TwentyOneHand.data(odds.terms(), "", shoe), dollars);
         if (opened == null) {
             ChanceRounds.Round open = games().rounds().openRound(viewer.getUniqueId(), game.id());
             if (open != null) {
                 TwentyOneHand.Saved saved = TwentyOneHand.read(open.data());
                 round = open;
                 hand = TwentyOneHand.replay(open.seed(), saved);
-                stake = saved.terms().in(); // the hand on the table, not the tile last picked
+                onTable(open, saved); // the hand on the table, not the tile last picked
                 gone = false;
             }
             refresh();
@@ -352,6 +423,7 @@ public final class TwentyOneMenu extends GameMenu {
         }
         Sounds.paid(viewer);
         gone = false;
+        handMoney = dollars;
         round = opened;
         hand = TwentyOneHand.deal(opened.seed(), odds.terms(), shoe);
         if (hand.done()) {
@@ -405,15 +477,13 @@ public final class TwentyOneMenu extends GameMenu {
         TwentyOneHand next = copy();
         next.doubleDown();
         String data = next.data();
-        ChanceRounds.Round withDouble = new ChanceRounds.Round(round.id(), round.gameId(), round.player(),
-                round.seed(), round.stake(), data, round.state());
+        ChanceRounds.Round withDouble = round.with(data, round.stake());
         if (!games().rounds().raise(viewer, withDouble, extra)) {
             refresh();
             return;
         }
         Sounds.paid(viewer);
-        round = new ChanceRounds.Round(round.id(), round.gameId(), round.player(), round.seed(),
-                round.stake() + extra, data, round.state());
+        round = round.with(data, round.stake() + extra);
         hand = next;
         settle(data);
         refresh();

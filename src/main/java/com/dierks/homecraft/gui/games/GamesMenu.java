@@ -415,6 +415,9 @@ public final class GamesMenu extends GameMenu {
             if (g.kind() == GameKind.CHANCE && luck.state() != Luck.OPEN) {
                 continue;
             }
+            if (!games.parlor().listed(g, viewer)) {
+                continue; // 0.46.0: kept to the Clubhouse's Game Parlor
+            }
             if (!games.enabled(g)) {
                 continue;
             }

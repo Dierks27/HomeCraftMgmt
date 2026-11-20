@@ -80,6 +80,7 @@ public final class GamesService {
     private final GameContext context;
     private final PlayGate gate;
     private final ChanceRounds rounds;
+    private final Parlor parlor;
     private final SkillRewards rewards;
     private final Scores scores;
     private final WorldSessions sessions;
@@ -140,6 +141,7 @@ public final class GamesService {
         this.context = new GameContext(host.plugin(), this);
         this.gate = new PlayGate(this);
         this.rounds = new ChanceRounds(this);
+        this.parlor = new Parlor(this, host.parlorStore());
         this.rewards = new SkillRewards(this);
         this.scores = new Scores(this);
         this.sessions = new WorldSessions(this);
@@ -693,6 +695,11 @@ public final class GamesService {
         return rounds;
     }
 
+    /** The Game Parlor's rules (0.46.0): money play, and the games of chance kept to the Parlor. */
+    public Parlor parlor() {
+        return parlor;
+    }
+
     public SkillRewards rewards() {
         return rewards;
     }
@@ -771,6 +778,26 @@ public final class GamesService {
         if (player != null) {
             parlorGuests.add(player);
         }
+    }
+
+    /**
+     * Whether the Clubhouse has its Game Parlor now (0.46.0): the Clubhouse is on and its room has one. While it
+     * does, {@link Parlor#onlyHere} keeps the games of chance to it.
+     */
+    public boolean parlorOpen() {
+        for (Game g : games) {
+            if (g instanceof ParlorHost host && !failed.contains(g.id()) && enabled(g)) {
+                return guard(g, host::parlorOpen, false);
+            }
+        }
+        return false;
+    }
+
+    /** The game that has the Game Parlor (the Clubhouse). */
+    public interface ParlorHost {
+
+        /** Whether the Parlor is there to walk into. */
+        boolean parlorOpen();
     }
 
     /** The Clubhouse's word on who is in its Game Parlor (everyone else is out). */

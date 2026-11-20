@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.games.chance;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RtpLimits;
@@ -54,6 +55,9 @@ public final class HigherLowerMenu extends GameMenu {
     private static final int START = 50;
     private static final int BALANCE = 51;
     private static final int HOW_IT_PAYS = 52;
+    /** 0.46.0, in the Game Parlor: tokens or money, and the chips' stake (a click takes them back). */
+    private static final int SWITCH = 53;
+    private static final int CHIPS_BACK = 45;
 
     private final HigherLower higherLower;
     private int stake;
@@ -61,6 +65,10 @@ public final class HigherLowerMenu extends GameMenu {
     /** The run on the table (being played, or the last one finished), or {@code null}. */
     private HigherLowerRun run;
     private boolean gone;
+    /** 0.46.0: tokens or money for the next run. */
+    private final MoneyPlay money;
+    /** Whether the run on the table is (or was) played for dollars. */
+    private boolean runMoney;
 
     /**
      * @param resume the player's OPEN round in this game, or {@code null} for a fresh table
@@ -71,11 +79,12 @@ public final class HigherLowerMenu extends GameMenu {
         this.higherLower = game;
         List<Integer> playable = game.settings().playable();
         this.stake = playable.isEmpty() ? 0 : playable.get(0);
+        this.money = new MoneyPlay(plugin, game.games(), viewer);
         if (resume != null) {
             HigherLowerRun.Saved saved = HigherLowerRun.read(resume.data());
             this.round = resume;
             this.run = HigherLowerRun.replay(resume.seed(), saved.terms(), saved.actions());
-            this.stake = saved.terms().in();
+            onTable(resume, saved);
         }
         init(54, Text.of("&3Higher or Lower"));
     }
@@ -97,39 +106,91 @@ public final class HigherLowerMenu extends GameMenu {
         return run != null && !run.done() && round != null;
     }
 
+    /** The run on the table sets the stake shown (and whether it is dollars), not the tile last picked. */
+    private void onTable(ChanceRounds.Round on, HigherLowerRun.Saved saved) {
+        runMoney = on.money();
+        money.follow(on.money(), saved.terms().in());
+        if (!on.money()) {
+            stake = saved.terms().in();
+        }
+    }
+
+    /** What the next run pays: the token stake picked, or the dollars the chips add up to. */
+    private HigherLowerSettings.Odds odds() {
+        return money.on() ? higherLower.moneyOdds(money.stake()) : higherLower.settings().odds(stake);
+    }
+
+    /** A line about the run on the table, in its own currency. */
+    private String ofRun(String line) {
+        return MoneyPlay.say(runMoney, line);
+    }
+
+    /** A line about the next run, in the currency picked. */
+    private String ofNext(String line) {
+        return MoneyPlay.say(money.on(), line);
+    }
+
     // ---- painting --------------------------------------------------------------------------------
 
     @Override
     protected void build() {
         fill();
         HigherLowerSettings s = higherLower.settings();
-        HigherLowerSettings.Odds odds = s.odds(stake);
+        boolean dollars = money.on();
+        HigherLowerSettings.Odds odds = odds();
         paintRun();
         set(RULES, rulesTile(game.rules()), null);
         set(GIVE_BACK, giveBack(odds), null);
         set(STATUS, status(), null);
-        set(TODAY, CardGameTiles.today(games(), game, viewer, plugin.clock(), s.dailyLimit(), "runs"), null);
+        set(TODAY, dollars ? money.todayTile(game, s.dailyLimit(), "runs")
+                : CardGameTiles.today(games(), game, viewer, plugin.clock(), s.dailyLimit(), "runs"), null);
         set(SHOWN, shownCard(), null);
         paintSide(LOWER, Side.LOWER);
         paintSide(HIGHER, Side.HIGHER);
         paintCashOut();
-        List<Integer> playable = s.playable();
-        for (int i = 0; i < playable.size() && i < CardGameTiles.STAKE_SLOTS.length; i++) {
-            int value = playable.get(i);
-            HigherLowerSettings.Odds o = s.odds(value);
-            set(CardGameTiles.STAKE_SLOTS[i], CardGameTiles.stake(value, value == stake,
-                    List.of("&7Cashes out by itself at &f" + o.terms().cap() + " tokens",
-                            "&7The best play " + RtpLimits.playerLine(o.rtp()) + ".")), e -> {
+        if (dollars) {
+            for (int i = 0; i < money.chips(); i++) {
+                int chip = money.chip(i);
+                set(CardGameTiles.STAKE_SLOTS[i], money.chipTile(i), e -> {
+                    if (!playing()) {
+                        money.add(chip);
+                        refresh();
+                    }
+                });
+            }
+            set(CHIPS_BACK, money.stakeTile(), e -> {
                 if (!playing()) {
-                    stake = value;
+                    money.clear();
+                    refresh();
+                }
+            });
+        } else {
+            List<Integer> playable = s.playable();
+            for (int i = 0; i < playable.size() && i < CardGameTiles.STAKE_SLOTS.length; i++) {
+                int value = playable.get(i);
+                HigherLowerSettings.Odds o = s.odds(value);
+                set(CardGameTiles.STAKE_SLOTS[i], CardGameTiles.stake(value, value == stake,
+                        List.of("&7Cashes out by itself at &f" + o.terms().cap() + " tokens",
+                                "&7The best play " + RtpLimits.playerLine(o.rtp()) + ".")), e -> {
+                    if (!playing()) {
+                        stake = value;
+                        refresh();
+                    }
+                });
+            }
+        }
+        exitTile();
+        set(START, startButton(odds), e -> start());
+        set(BALANCE, dollars ? money.balanceTile() : balanceTile(), null);
+        set(HOW_IT_PAYS, howItPays(odds), null);
+        if (money.offered() || dollars) {
+            set(SWITCH, money.switchTile(), e -> {
+                if (!playing()) {
+                    money.flip();
                     refresh();
                 }
             });
         }
-        exitTile();
-        set(START, startButton(odds), e -> start());
-        set(BALANCE, balanceTile(), null);
-        set(HOW_IT_PAYS, howItPays(odds), null);
     }
 
     /** The run's cards along the top: at most 8, or "N cards" and the last 7. */
@@ -175,7 +236,7 @@ public final class HigherLowerMenu extends GameMenu {
             return;
         }
         long ifRight = run.potIfRight(side);
-        set(slot, Menus.icon(Material.LIME_CONCRETE, "&a" + arrow + " &7- right: &6" + ifRight + " tokens",
+        set(slot, Menus.icon(Material.LIME_CONCRETE, ofRun("&a" + arrow + " &7- right: &6" + ifRight + " tokens"),
                 "&7" + k + " of 13 cards are " + (side == Side.HIGHER ? "higher" : "lower") + ".",
                 "&7The same card, or the other way, and the run ends with nothing."), e -> guess(side));
     }
@@ -186,8 +247,9 @@ public final class HigherLowerMenu extends GameMenu {
         } else if (!run.canCashOut()) {
             set(CASH_OUT, CardGameTiles.unlit("Cash out", "after a right guess"), null);
         } else {
-            set(CASH_OUT, Menus.glint(Menus.icon(Material.EMERALD, "&aCash out &7- &6" + run.pot() + " tokens",
-                    "&7You put in " + run.terms().in() + ".", "&7Stop here and take your pot."), true), e -> cashOut());
+            set(CASH_OUT, Menus.glint(Menus.icon(Material.EMERALD, ofRun("&aCash out &7- &6" + run.pot() + " tokens"),
+                    ofRun("&7You put in " + run.terms().in() + "."), "&7Stop here and take your pot."), true),
+                    e -> cashOut());
         }
     }
 
@@ -196,9 +258,10 @@ public final class HigherLowerMenu extends GameMenu {
             return CardGameTiles.unlit("Start", "finish this run first");
         }
         if (odds == null) {
-            return CardGameTiles.unlit("Start", "closed right now");
+            return CardGameTiles.unlit("Start", money.on() && money.stake() <= 0 ? "add a chip first"
+                    : money.on() ? "not at this stake" : "closed right now");
         }
-        return Menus.icon(Material.GREEN_CONCRETE, "&aStart &7- &6" + odds.stake() + " tokens in",
+        return Menus.icon(Material.GREEN_CONCRETE, ofNext("&aStart &7- &6" + odds.stake() + " tokens in"),
                 "&7A card is shown; guess if the next is higher or lower.");
     }
 
@@ -207,16 +270,16 @@ public final class HigherLowerMenu extends GameMenu {
             return Menus.icon(Material.OAK_SIGN, "&7That run was already finished for you.");
         }
         if (run == null) {
-            return Menus.icon(Material.OAK_SIGN, "&ePick your tokens, then Start",
+            return Menus.icon(Material.OAK_SIGN, money.on() ? "&eAdd your chips, then Start" : "&ePick your tokens, then Start",
                     "&7Guess if the next card is higher or lower.");
         }
         if (!run.done()) {
             if (run.guesses() == 0) {
                 return Menus.icon(Material.OAK_SIGN, "&eHigher or lower than " + run.shown().withArticle() + "?",
-                        "&7Your pot: " + run.pot() + " tokens.",
+                        ofRun("&7Your pot: " + run.pot() + " tokens."),
                         "&7Every extra guess risks what you have.");
             }
-            return Menus.icon(Material.OAK_SIGN, "&eYour pot: &6" + run.pot() + " tokens &7- guess or cash out",
+            return Menus.icon(Material.OAK_SIGN, ofRun("&eYour pot: &6" + run.pot() + " tokens &7- guess or cash out"),
                     "&7Right guesses: " + run.guesses() + " of " + run.terms().maxGuesses() + ".",
                     "&7Every extra guess risks what you have.");
         }
@@ -230,30 +293,37 @@ public final class HigherLowerMenu extends GameMenu {
             case NO_SIDE -> noSideLine(run.shown(), back);
         };
         if (back > in) {
-            return Menus.glint(Menus.icon(Material.EMERALD, "&a" + headline + " &6" + in + " in → " + back + " back"),
-                    true);
+            return Menus.glint(Menus.icon(Material.EMERALD, "&a" + headline + " &6" + cash(in) + " in → " + cash(back)
+                    + " back"), true);
         }
         if (back == in) {
-            return Menus.glint(Menus.icon(Material.GOLD_NUGGET, "&f" + headline + " &7Your " + back + " back"), false);
+            return Menus.glint(Menus.icon(Material.GOLD_NUGGET, "&f" + headline + " &7Your " + cash(back) + " back"),
+                    false);
         }
         return Menus.icon(Material.GRAY_DYE, "&7" + headline + " No win this time.");
     }
 
+    /** An amount of the run on the table: "$9" for a money run, "9" for tokens. */
+    private String cash(int amount) {
+        return runMoney ? Parlor.dollars(amount) : Integer.toString(amount);
+    }
+
     /** "A 2 can only go up, so we cashed you out: +15" (spec R1.6). */
-    private static String noSideLine(Card c, int back) {
+    private String noSideLine(Card c, int back) {
         String why = c.rank() == HigherLowerRun.LOWEST ? "A 2 can only go up"
                 : c.rank() == HigherLowerRun.HIGHEST ? "An Ace can only go down"
                 : "No guess on " + c.withArticle() + " can grow your pot";
-        return why + ", so we cashed you out: +" + back + ".";
+        return why + ", so we cashed you out: +" + cash(back) + ".";
     }
 
     private ItemStack giveBack(HigherLowerSettings.Odds odds) {
         if (odds == null) {
-            return Menus.icon(Material.KNOWLEDGE_BOOK, "&7Pick how many tokens to put in");
+            return Menus.icon(Material.KNOWLEDGE_BOOK, money.on() ? "&7Add chips to see what it pays"
+                    : "&7Pick how many tokens to put in");
         }
         return Menus.icon(Material.KNOWLEDGE_BOOK, "&7The best play gives back about &f"
-                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 tokens",
-                "&7(at " + odds.stake() + " tokens in)",
+                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 " + MoneyPlay.unit(money.on()),
+                "&7(at " + MoneyPlay.amount(money.on(), odds.stake()) + " in)",
                 "&7Every extra guess risks what you have.");
     }
 
@@ -263,13 +333,16 @@ public final class HigherLowerMenu extends GameMenu {
         }
         HigherLowerRun.Terms t = odds.terms();
         long example = HigherLowerRun.potIfRight(t.in(), 7, t.r(), t.cap());
-        return Menus.icon(Material.WRITABLE_BOOK, "&eHow it pays &7- &6" + t.in() + " in",
-                "&7Your pot starts at the " + t.in() + " tokens you put in.",
+        boolean dollars = money.on();
+        String in = MoneyPlay.amount(dollars, t.in());
+        return Menus.icon(Material.WRITABLE_BOOK, "&eHow it pays &7- &6" + (dollars ? in : t.in()) + " in",
+                "&7Your pot starts at the " + in + " you put in.",
                 "&7A right guess grows it; the less likely the guess, the more it grows.",
-                example > 0 ? "&7On a 7, Higher (7 of 13 cards) turns " + t.in() + " into " + example + "."
+                example > 0 ? "&7On a 7, Higher (7 of 13 cards) turns " + (dollars ? in : t.in()) + " into "
+                        + (dollars ? Parlor.dollars((int) example) : example) + "."
                         : "&7Each button says what you'd have if you're right.",
                 "&7Cash out any time after a right guess.",
-                "&7It cashes out by itself at " + t.cap() + " tokens or after " + t.maxGuesses()
+                "&7It cashes out by itself at " + MoneyPlay.amount(dollars, t.cap()) + " or after " + t.maxGuesses()
                         + " right guesses.",
                 "&7A wrong guess, or the same card, ends the run with nothing.");
     }
@@ -281,25 +354,29 @@ public final class HigherLowerMenu extends GameMenu {
         if (playing()) {
             return;
         }
-        HigherLowerSettings.Odds odds = higherLower.settings().odds(stake);
+        boolean dollars = money.on();
+        HigherLowerSettings.Odds odds = odds();
         if (odds == null) {
             refresh();
             return;
         }
         ChanceRounds.Round opened = games().rounds().open(viewer, game, odds.stake(),
-                HigherLowerRun.data(odds.terms(), ""));
+                HigherLowerRun.data(odds.terms(), ""), dollars);
         if (opened == null) {
             ChanceRounds.Round open = games().rounds().openRound(viewer.getUniqueId(), game.id());
             if (open != null) {
                 HigherLowerRun.Saved saved = HigherLowerRun.read(open.data());
                 round = open;
                 run = HigherLowerRun.replay(open.seed(), saved.terms(), saved.actions());
+                onTable(open, saved); // the run on the table, not the tile last picked
+                gone = false;
             }
             refresh();
             return;
         }
         Sounds.paid(viewer);
         gone = false;
+        runMoney = dollars;
         round = opened;
         run = HigherLowerRun.start(opened.seed(), odds.terms());
         refresh();

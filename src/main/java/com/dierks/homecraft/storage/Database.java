@@ -1066,6 +1066,16 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_graves_owner ON graves (owner, state);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_graves_open_spot ON graves (world, x, y, z) WHERE state = 'OPEN'
+            """,
+            // v41 — the Game Parlor's money play (0.46.0): a round played for dollars. money = 1 marks it (its stake
+            //   and payout are then whole dollars, and no tokens move for it); owed is the dollars still to be put in
+            //   the player's balance (the bank is not this database, so a settled round says what it owes and the
+            //   payer zeroes it before paying: it is never paid twice, and a payment the bank refused is kept here
+            //   and tried again).
+            """
+            ALTER TABLE game_rounds ADD COLUMN money INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE game_rounds ADD COLUMN owed INTEGER NOT NULL DEFAULT 0;
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_owed ON game_rounds (owed) WHERE owed > 0
             """
     };
 

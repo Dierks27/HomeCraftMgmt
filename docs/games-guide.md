@@ -86,7 +86,7 @@
 
 ## Tokens and the games
 
-- The new games only use tokens. No game takes or pays dollars. No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
+- The new games use tokens. No game takes or pays dollars, with one exception: in the Clubhouse's Game Parlor, a player the server owner has let in can choose to play a game of chance for dollars instead (see Games of chance). No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
 - Tokens never turn into dollars. Nothing you get with tokens can be sold for money.
 - Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (39 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
 - Skill games (cabinets, time trials and mini golf) are free to play, and they pay about a token for every minute you spend on something new. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
@@ -225,7 +225,9 @@
 
 These games use tokens. You choose how many tokens to put in, the result is decided the moment you click, and the screen shows what every result pays and how often, before you play. Over time they give back less than you put in (about 90 of every 100 tokens by default), so they are for fun, not for getting more tokens.
 
-- The five games of chance are Ore Slots (ore_slots), Twenty-One (twenty_one, also blackjack), The Wheel (wheel), Higher or Lower (higher_lower) and Coin Flip (coin_flip). You pay tokens to play and get tokens back. It is only ever tokens: never money, items, Cards or Minis.
+- The five games of chance are Ore Slots (ore_slots), Twenty-One (twenty_one, also blackjack), The Wheel (wheel), Higher or Lower (higher_lower) and Coin Flip (coin_flip). You pay tokens to play and get tokens back. It is never items, Cards or Minis.
+- Where to play them: if the server has the Clubhouse's Game Parlor, the games of chance are played only there (the Games screen and /hcm play don't offer them anywhere else). The way in is a little gold star on the wall of the Clubhouse's golf-club room. With no Parlor they are opened as described below.
+- Playing for dollars: only in the Game Parlor, and only for players the server owner has given the permission to. Those players see a "Playing for tokens" tile on Ore Slots, The Wheel, Twenty-One and Higher or Lower; a click changes it to "Playing for money", and the stake is then built from chips ($5, $10 and $25 as shipped). The game is the same: it pays by the same rules and gives back the same share. There is a limit on how much a player can put in each day ($250 as shipped), and Take a break still applies.
 - The games ship switched off (games.enabled: false). They show up once the server owner turns them on. Coin Flip has its own switch, and it is also off until the owner turns it on.
 - How to open them: type /hcm play <id> (for example /hcm play wheel). Or type /hcm play for the Games screen and click the Luck tab. Or use /hcm arcade and click Games of luck in the Luck row. /hcm arcade odds prints one line for each open game of chance.
 - Games of chance give back less than you put in. Each one shows "gives back about N of every 100 tokens" before you play. Over lots of plays you get back about that many (87 to 90 of every 100 by default), so the game keeps the rest. Some days you get more, some days less. Play for fun, not to get more tokens.

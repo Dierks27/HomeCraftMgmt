@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.47.0-group-table`
+- **Version:** `0.48.0-slot-machines`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,17 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.48.0: three more slot machines, two with a building pot.** The owner: "it would be fun to have several
+different 'Types' of slot machine", "a slot machine ... where you can have a building pot", and of Farm Slots "Lets
+make it the small-pot machine". See [The slot machines](#the-slot-machines-0480). **Nether Slots** pays rarely and
+big; **The Motherlode** is $5 a spin with a big pot that three Wilds takes; **Farm Slots** is $1 a spin with a small
+pot that is taken often. Ore Slots is unchanged. Each is its own game with its own machine on the Parlor's back
+wall (displays: nothing is rebuilt), its own section in config.yml (added to yours at the first start, no config
+revision) and its own model name. No schema change.
+
+**Back to 0.47.0 from 0.48.0:** the jar alone. The three machines and their config sections are ignored; a pot's
+added money stays in the database for the upgrade, and `/hcm games parlor pot` is gone.
 
 **0.47.0: Twenty-One at a table of up to four.** The owner: "It would be pretty great if we could play as a group
 around the table!! ... its much more a social event", and of the pace "the player has unlimited time unless the
@@ -4712,6 +4723,42 @@ Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same ga
   north wall takes you back to the 19th Hole.
 - `parlor.enabled: false` (under `games.clubhouse`) doesn't build it.
 
+##### The slot machines (0.48.0)
+
+Four machines, each a game of its own, each with its own symbols and its own feel. They all give back about the same
+share (each screen says exactly what, worked out from its own paytable); what differs is how often a machine pays
+and how much.
+
+| Machine | Played for | How it feels | Shipped numbers |
+|---|---|---|---|
+| **Ore Slots** (`ore_slots`) | tokens, or dollars with money play | The classic: something comes back about 1 spin in 3 | stakes 1, 2, 5; top line 50x |
+| **Nether Slots** (`nether_slots`) | tokens, or dollars with money play | Rare and big: a spin pays about 1 in 12, two the same pays nothing | stakes 1, 2; lines 6x to 100x, three Wilds 125x |
+| **The Motherlode** (`motherlode`) | **$5 a spin**, money only | The big pot: three Wilds (about 1 spin in 594) takes it all | pot starts at $50; every spin adds 25 cents |
+| **Farm Slots** (`farm_slots`) | **$1 a spin**, money only | The small pot, taken often: three Wilds about 1 spin in 146 | pot starts at $10; every spin adds 5 cents |
+
+- **The pot machines.** One set price, no chips. A share of every spin (`feed_percent`, shipped 5) goes into that
+  machine's pot, which everyone can read on the machine in the Parlor ("The Motherlode · $212") and on its screen.
+  Three Wilds takes the whole pot: the starting amount is the three-Wilds line's own pay, and what the spins added
+  is paid on top, once. The whole server is told a moment later (after the reels have stopped), and the console
+  logs it. The pot then starts again. The lines pay a little less than on Ore Slots because of the share that goes
+  to the pot; lines and pot together give back what the screen says.
+- **Money only means money only.** A pot machine never takes tokens. It needs `hcm.games.money` and the Parlor like
+  all money play, counts against the day's money limit (50 spins of The Motherlode is the $250 day), and Take a
+  break's pause stops it. Its price needn't be one the chips can make.
+- **The pot is safe.** It is kept in the database, so a restart keeps it. It is set back to its start before it is
+  paid, so it can never be paid twice; if the economy won't take the payment it is kept for the player and paid
+  within a minute of it working again. A pot that can't be read is neither fed nor paid until it can be.
+- **A cap.** No pot grows past `/hcm games parlor pot cap <dollars|off>` (shipped $1000); at the cap, spins simply
+  stop adding to it. `/hcm games parlor` shows each pot, the cap, and what was taken from pots today.
+- **Where they stand.** Along the Parlor's back wall beside the ticket booth: Nether Slots, Farm Slots, the booth,
+  The Motherlode. They are displays, so nothing is rebuilt and a saved room gets them too; in an owner-built room,
+  stand where one goes and type `/hcm games clubhouse parlor <game>`. A machine whose game is switched off isn't
+  drawn. Models: `machine_nether`, `machine_farm`, `machine_motherlode` (placeholders until you drop your own in).
+- **Their numbers are in config.yml**, like every machine's: `games.nether_slots`, `games.motherlode` and
+  `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
+  and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
+  100 is left out with a WARN, as on Ore Slots.
+
 ##### The Twenty-One table (0.47.0)
 
 Tap the Twenty-One card table in the Parlor and you sit down at it. **Up to four** can sit; a fifth is told the
@@ -4781,6 +4828,7 @@ until you give it (ops have it through `hcm.admin`):
 | `/hcm games parlor payout <dollars>` | The most one play gives back | 500 |
 | `/hcm games parlor chips <a> [b] [c]` | The chips (one to three) | 5 10 25 |
 | `/hcm games parlor ticket <dollars\|tokens>` | What a Scratch Ticket costs at the Parlor's booth (0.46.1) | 5 |
+| `/hcm games parlor pot cap <dollars\|off>` | The most a slot machine's pot may hold (0.48.0) | 1000 |
 
 **Only in the Parlor.** With `only on` (shipped) and a Parlor in the Clubhouse, a game of chance opened anywhere
 else answers "That game is played in the Clubhouse's Game Parlor."; the Games screen, the Arcade's "Games of

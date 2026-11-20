@@ -267,9 +267,11 @@ public final class CandyService implements Listener {
             return;
         }
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, PERIOD_TICKS, PERIOD_TICKS);
-        plugin.getLogger().info(profile.text().name() + " on through " + DAY_MONTH.format(c.to()) + ": every "
-                + c.everyMinutes() + " minutes from :" + String.format("%02d", c.offsetMinutes())
-                + (c.lastDayEveryMinutes() > 0 ? ", every " + c.lastDayEveryMinutes() + " on the last day" : "") + ".");
+        plugin.getLogger().info(profile.text().name() + " on through " + DAY_MONTH.format(c.to()) + ": "
+                + (c.randomADay() > 0 ? c.randomADay() + " a day, at random times."
+                : "every " + c.everyMinutes() + " minutes from :" + String.format("%02d", c.offsetMinutes())
+                + (c.lastDayEveryMinutes() > 0 ? ", every " + c.lastDayEveryMinutes() + " on the last day" : "")
+                + "."));
     }
 
     /** Cancel the task, remove every tracked candy, clear the queue and hide the bars (reload, disable). */
@@ -324,7 +326,7 @@ public final class CandyService implements Listener {
         retryOwed();
         welcomes(now, today);
         long slot = CandyRules.dueSlot(local, c.everyMinutes(), c.offsetMinutes(), c.lastDayEveryMinutes(),
-                c.lastDay(today));
+                c.lastDay(today), c.randomADay());
         if (slot == CandyRules.NO_SLOT || slot == lastSlot) {
             return;
         }
@@ -1258,7 +1260,8 @@ public final class CandyService implements Listener {
             return;
         }
         long n = found(id);
-        int every = CandyRules.everyOn(c.everyMinutes(), c.lastDayEveryMinutes(), c.lastDay(plugin.clock().today()));
+        int every = c.randomADay() > 0 ? 0 // 0.48.1: at random times, so the line names no interval
+                : CandyRules.everyOn(c.everyMinutes(), c.lastDayEveryMinutes(), c.lastDay(plugin.clock().today()));
         p.sendMessage(Text.of(profile.text().joinLine(every, DAY_MONTH.format(c.to()), n, c.goal())));
     }
 
@@ -1389,7 +1392,7 @@ public final class CandyService implements Listener {
             return null;
         }
         return CandyRules.nextSlot(localNow(), c.from(), c.to(), c.everyMinutes(), c.offsetMinutes(),
-                c.lastDayEveryMinutes());
+                c.lastDayEveryMinutes(), c.randomADay());
     }
 
     /** Whether the restart hold skips a shower starting at {@code start} (local). */

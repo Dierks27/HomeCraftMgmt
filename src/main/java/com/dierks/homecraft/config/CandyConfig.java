@@ -44,12 +44,18 @@ public final class CandyConfig {
     static final int MAX_EVERY = 120;
 
     /**
+     * The Harvest Basket's showers a day since 0.48.1 (the owner: "Cut the Harvest showers to only happen simply
+     * randomly from here on out"; they were one an hour, on the clock): three, at random times.
+     */
+    public static final int HARVEST_RANDOM_A_DAY = 3;
+
+    /**
      * The Harvest Basket's shipped settings: on from 1 Nov to 29 Nov 2026, a shower an hour at :40 (so it never
      * lands on the candy's :10), every half hour on the last day, 3 treats, a 4 in 100 Golden Pie paying 3 tokens
      * under a cap of 6 a day, and 26 treats for the Pilgrim Hat.
      */
     public static final Candy HARVEST_DEFAULTS = new Candy(true, LocalDate.of(2026, 11, 1),
-            LocalDate.of(2026, 11, 29), 60, 40, 30, 3, 4, 3, 6, 26, false);
+            LocalDate.of(2026, 11, 29), 60, 40, 30, 3, 4, 3, 6, 26, false, HARVEST_RANDOM_A_DAY);
 
     private CandyConfig() {
     }
@@ -69,10 +75,21 @@ public final class CandyConfig {
      * @param dailyTokenCap        the most tokens a player gets from candy in a local day
      * @param goal                 candy apples to collect for the Trick-or-Treat Bag
      * @param adminsSeeAll         admins also see everyone's candy (only its owner can pick it up)
+     * @param randomADay           0.48.1: above 0, this many showers a day at random times (new each day, none from
+     *                             2 to 8 in the morning) in place of the clock's schedule, the last day's too; 0 = the
+     *                             clock's schedule
      */
     public record Candy(boolean enabled, LocalDate from, LocalDate to, int everyMinutes, int offsetMinutes,
                         int lastDayEveryMinutes, int applesPerShower, int goldenPercent, int goldenTokens,
-                        int dailyTokenCap, int goal, boolean adminsSeeAll) {
+                        int dailyTokenCap, int goal, boolean adminsSeeAll, int randomADay) {
+
+        /** Settings whose showers follow the clock (as every shower did before 0.48.1). */
+        public Candy(boolean enabled, LocalDate from, LocalDate to, int everyMinutes, int offsetMinutes,
+                     int lastDayEveryMinutes, int applesPerShower, int goldenPercent, int goldenTokens,
+                     int dailyTokenCap, int goal, boolean adminsSeeAll) {
+            this(enabled, from, to, everyMinutes, offsetMinutes, lastDayEveryMinutes, applesPerShower, goldenPercent,
+                    goldenTokens, dailyTokenCap, goal, adminsSeeAll, 0);
+        }
 
         /**
          * The shipped settings. 0.38.1 (config revision 23) made the shower gentler: a shower an hour, every half hour
@@ -86,7 +103,7 @@ public final class CandyConfig {
         /** The same settings, switched on or off. */
         public Candy withEnabled(boolean on) {
             return new Candy(on, from, to, everyMinutes, offsetMinutes, lastDayEveryMinutes, applesPerShower,
-                    goldenPercent, goldenTokens, dailyTokenCap, goal, adminsSeeAll);
+                    goldenPercent, goldenTokens, dailyTokenCap, goal, adminsSeeAll, randomADay);
         }
 
         /** The event's year, from {@code from}: the counter's key, the items' names and the bag. */
@@ -154,8 +171,9 @@ public final class CandyConfig {
         int cap = number(root, path, "daily_token_cap", d.dailyTokenCap(), 0, 50, w);
         int goal = number(root, path, "goal", d.goal(), 1, 200, w);
         boolean adminsSeeAll = root.getBoolean(path + ".admins_see_all", d.adminsSeeAll());
+        int randomADay = number(root, path, "random_a_day", d.randomADay(), 0, CandyRules.MAX_RANDOM_A_DAY, w);
         return new Candy(enabled, from, to, every, offset, lastDayEvery, apples, goldenPercent, goldenTokens, cap,
-                goal, adminsSeeAll);
+                goal, adminsSeeAll, randomADay);
     }
 
     /**

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.48.0-slot-machines`
+- **Version:** `0.48.1-harvest-random`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,14 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.48.1: the Harvest showers come at random times.** The owner: "Cut the Harvest showers to only happen simply
+randomly from here on out" (they came once an hour, on the clock, and the food piled up). Now **three showers a
+day at random times**, new times every day, never from 2 to 8 in the morning, the last day too. The welcome shower
+30 seconds after your first join of a day is unchanged, so a player who is on for an hour a day still gets three
+treats a day toward the Pilgrim Hat. The new key `arcade.events.harvest.random_a_day` (shipped `3`; `0` puts the
+showers back on the clock; up to 24) is added to your config.yml at the first start: no config revision, no schema
+change. The Candy Apple shower is as it was. **Back to 0.48.0:** the jar alone; the showers are hourly again.
 
 **0.48.0: three more slot machines, two with a building pot.** The owner: "it would be fun to have several
 different 'Types' of slot machine", "a slot machine ... where you can have a building pot", and of Farm Slots "Lets
@@ -2059,7 +2067,8 @@ wrote it, with one INFO line if it differs from ours; nothing of yours is ever r
 
 ### The Harvest Basket
 
-The Candy Apple shower's twin for November. About once an hour (at :40; every half hour on 29 Nov) each
+The Candy Apple shower's twin for November. **Three times a day at random times** (0.48.1; new times every day,
+never from 2 to 8 in the morning; before that, once an hour at :40 and every half hour on 29 Nov) each
 player hears a chime and a bell and sees "Harvest time!" / "Treats are falling!". Three treats fall in front
 of them with orange dust: **Cornbread 2026**, **Pumpkin Pie 2026** and **Baked Potato 2026**. Only you see
 and pick up your own. A bar, `Harvest Basket 17 / 26`, fills as you collect.
@@ -2233,7 +2242,8 @@ head Value and its event exists in the plugin.
 |---|---|---|
 | `arcade.events.harvest.enabled` | `true` | The Harvest Basket's switch (after `/hcm reload`). Counts and hats stay |
 | `arcade.events.harvest.from`, `to` | `"2026-11-01"`, `"2026-11-29"` | Its window, both days included. A missing `from` reads 1 Nov |
-| `arcade.events.harvest.every_minutes`, `offset_minutes`, `last_day_every_minutes` | `60`, `40`, `30` | How often it falls, as candy's |
+| `arcade.events.harvest.random_a_day` | `3` | 0.48.1: this many showers a day at random times (0-24), in place of the clock below. `0`: by the clock |
+| `arcade.events.harvest.every_minutes`, `offset_minutes`, `last_day_every_minutes` | `60`, `40`, `30` | How often it falls by the clock, as candy's (only while `random_a_day` is 0) |
 | `arcade.events.harvest.apples_per_shower`, `golden_percent` | `3`, `4` | Treats per shower, and the chance in 100 of a Golden Pie |
 | `arcade.events.harvest.golden_tokens`, `daily_token_cap` | `3`, `6` | Tokens per Golden Pie, and the most a day |
 | `arcade.events.harvest.goal` | `26` | Treats for the Pilgrim Hat |

@@ -56,7 +56,9 @@ public record ShowerText(String name, String title, String subtitle, String gold
      * player's count ({@code until} is "31 Oct").
      */
     public String joinLine(int every, String until, long found, int goal) {
-        return joinHead + " fall every " + every + " minutes until " + until + "! &7You've found &f" + found
+        // 0.48.1: every 0 = the showers come at random times
+        String when = every <= 0 ? " fall at random times until " : " fall every " + every + " minutes until ";
+        return joinHead + when + until + "! &7You've found &f" + found
                 + (found < goal ? " &7of " + goal : "") + "&7.";
     }
 }

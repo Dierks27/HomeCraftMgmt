@@ -1871,6 +1871,9 @@ arcade:
       goal: 26
       # true = admins also see everyone's treats (to help a child find hers). Only its owner can pick it up.
       admins_see_all: false
+      # 0.48.1: this many showers a day at random times (new times every day, none from 2 to 8 in the
+      # morning), in place of the clock above, the last day too. 0 = by the clock, as before (0-24).
+      random_a_day: 3
     # ---- Thanksgiving: Catch the Turkey (0.38.6). Each player gets their own big turkey nearby in the
     # Overworld of an economy world a few times a day, and once after their first join of the day. Tap it
     # (hit or use, Java or Bedrock) to catch it: everyone who catches a turkey during a run gets the same

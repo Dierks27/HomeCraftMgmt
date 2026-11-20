@@ -1265,7 +1265,7 @@ public final class ClubhouseRoom {
 
     /**
      * The parlor's machines: the generated room's (two Ore Slots, the Wheel, Coin Flip, the two tables, and the
-     * three slot machines along the back row), or the owner's.
+     * five slot machines along the back row), or the owner's.
      */
     public List<Cabinet> parlorMachines() {
         List<Cabinet> out = new ArrayList<>();
@@ -1357,8 +1357,8 @@ public final class ClubhouseRoom {
                     }
                     if (at != null && !chanceGame && !ClubhousePlanner.TICKET.equals(sub)) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
-                                + " twenty_one, higher_lower, nether_slots, motherlode, farm_slots) and the Scratch"
-                                + " Ticket's booth (ticket).";
+                                + " twenty_one, higher_lower, nether_slots, motherlode, farm_slots, deep_mine,"
+                                + " mob_slots) and the Scratch Ticket's booth (ticket).";
                     }
                     Map<String, Place> next = new java.util.LinkedHashMap<>(handParlor);
                     if (at == null) {

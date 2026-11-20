@@ -1261,14 +1261,17 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The slot machines along the Parlor's back row (x, z, yaw): Nether Slots, Farm Slots and The Motherlode,
-     * standing against the back wall and facing the room, the Scratch Ticket's booth (x 7) between them. Like the
-     * booth, each is a display with NO block of its own, so adding them changes no block and {@link #ALGO} stays as
-     * it is. x 11 and x 13 on the same row are kept free for two machines still to come.
+     * The slot machines along the Parlor's back row (x, z, yaw): Nether Slots, Farm Slots and The Motherlode, then
+     * Deep Mine (x 11) and Mob Slots (x 13), standing against the back wall and facing the room, the Scratch Ticket's
+     * booth (x 7) between them. Like the booth, each is a display with NO block of its own, so adding them changes no
+     * block and {@link #ALGO} stays as it is. New machines go at the END of this list: a machine's place in it is how
+     * its display is kept.
      */
-    static final int[][] PARLOR_ROW = {{3, SIDE_Z1, 180}, {5, SIDE_Z1, 180}, {9, SIDE_Z1, 180}};
+    static final int[][] PARLOR_ROW = {{3, SIDE_Z1, 180}, {5, SIDE_Z1, 180}, {9, SIDE_Z1, 180},
+            {11, SIDE_Z1, 180}, {13, SIDE_Z1, 180}};
     /** The games those stand for, in order. Each is drawn only while its game is there and open. */
-    public static final List<String> PARLOR_ROW_GAMES = List.of("nether_slots", "farm_slots", "motherlode");
+    public static final List<String> PARLOR_ROW_GAMES = List.of("nether_slots", "farm_slots", "motherlode",
+            "deep_mine", "mob_slots");
 
     /** Where the back row's slot machines stand in the Game Parlor: {@link #PARLOR_ROW_GAMES}' places. */
     public static List<Place3> parlorRow(Box box) {

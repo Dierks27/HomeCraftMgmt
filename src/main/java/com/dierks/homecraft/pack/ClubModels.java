@@ -114,6 +114,10 @@ public final class ClubModels {
         machine("farm_slots", "machine_farm", Material.HAY_BLOCK, "minecraft:block/hay_block_side", Kind.CABINET);
         machine("motherlode", "machine_motherlode", Material.RAW_GOLD_BLOCK, "minecraft:block/raw_gold_block",
                 Kind.CABINET);
+        // The Parlor's last two slot machines: Deep Mine (three rows) and Mob Slots (free spins)
+        machine("deep_mine", "machine_deepmine", Material.DEEPSLATE_DIAMOND_ORE,
+                "minecraft:block/deepslate_diamond_ore", Kind.CABINET);
+        machine("mob_slots", "machine_mobs", Material.SPAWNER, "minecraft:block/spawner", Kind.CABINET);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {

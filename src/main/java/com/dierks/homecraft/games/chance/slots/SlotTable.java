@@ -36,6 +36,28 @@ public interface SlotTable {
     /** The odds and the draw, solved from exactly these values. */
     SlotsEngine engine();
 
+    /**
+     * The stakes a player is offered, smallest first: the ones the solve could fit inside the band. (Deep Mine: what
+     * goes on each row.)
+     */
+    default List<Integer> offered() {
+        return engine().stakes();
+    }
+
+    /**
+     * The engine a spin of {@code stake} tokens is decided by. One engine holds every stake of most machines; Deep
+     * Mine and Mob Slots solve each stake on its own ({@link SlotBank}), and theirs is {@code null} for a stake they
+     * do not offer.
+     */
+    default SlotsEngine engine(int stake) {
+        return engine();
+    }
+
+    /** Free spins three of the Wild's symbol on the line give (Mob Slots); 0 on every other machine. */
+    default int freeSpins() {
+        return 0;
+    }
+
     /** A pot machine: money only, one set price, a pot every spin feeds and three Wilds takes. */
     default boolean pot() {
         return false;

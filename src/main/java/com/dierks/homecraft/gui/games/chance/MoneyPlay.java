@@ -35,13 +35,24 @@ final class MoneyPlay {
     private final Player viewer;
     /** Playing for dollars. */
     private boolean money;
-    /** The dollars the next play puts in. */
+    /** The dollars the next play puts in (Deep Mine: on each of its rows). */
     private int stake;
+    /** How many times the chips' amount a play costs: 1, or 3 for Deep Mine's three rows. */
+    private final int times;
 
     MoneyPlay(HomeCraftManagement plugin, GamesService games, Player viewer) {
+        this(plugin, games, viewer, 1);
+    }
+
+    /**
+     * The chips build an amount a play costs {@code times} over (Deep Mine: what goes on each of three rows), so a
+     * chip goes on only while the whole play still fits the biggest stake, the day's limit and the balance.
+     */
+    MoneyPlay(HomeCraftManagement plugin, GamesService games, Player viewer, int times) {
         this.plugin = plugin;
         this.games = games;
         this.viewer = viewer;
+        this.times = Math.max(1, times);
     }
 
     /** Whether the switch is shown now. */
@@ -88,7 +99,8 @@ final class MoneyPlay {
 
     /** One more chip on the stake, if the biggest stake, the day's limit and the balance allow it. */
     void add(int chip) {
-        stake = Parlor.add(stake, chip, rules(), games.parlor().leftToday(viewer.getUniqueId()), balance());
+        stake = Parlor.add(stake * times, chip * times, rules(), games.parlor().leftToday(viewer.getUniqueId()),
+                balance()) / times;
     }
 
     /** Take the chips back. */
@@ -164,7 +176,8 @@ final class MoneyPlay {
     ItemStack chipTile(int i) {
         Parlor.Rules r = rules();
         int chip = r.chips().get(i);
-        String why = Parlor.chipRefusal(stake, chip, r, games.parlor().leftToday(viewer.getUniqueId()), balance());
+        String why = Parlor.chipRefusal(stake * times, chip * times, r,
+                games.parlor().leftToday(viewer.getUniqueId()), balance());
         if (why != null) {
             return CardGameTiles.unlit("+" + Parlor.dollars(chip), why);
         }

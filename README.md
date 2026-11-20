@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.46.0-parlor-money`
+- **Version:** `0.46.1-parlor-ticket`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,18 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.46.1: the Scratch Ticket moves to the Game Parlor.** The owner: "Scratch ticket is lottery... I would put that
+in the parlor as well." While the games of chance are kept to the Parlor (`/hcm games parlor only on`, shipped, and
+a Parlor in the Clubhouse), the Scratch Ticket is too: its tile is gone from the Arcade's Luck row and from the
+Games screen's Luck tab, and buying one anywhere else answers "The Scratch Ticket is in the Clubhouse's Game
+Parlor." In the Parlor a **ticket booth** stands against the back wall: tap it for a screen that says what a ticket
+costs, the top prize right now and what it gives back, with one **Buy one** button. It is the same ticket: the same
+price, prizes, pot, Take a break and day's token limit. Tokens only. Crates and Card Packs stay in the Arcade. With
+no Parlor, or with `only off`, the ticket is in the Arcade as before (and at the booth, if there is one). The booth
+is a display, not a block: nothing is rebuilt, and a saved room gets it too. Its model is `machine_ticket`; in an
+owner-built room, stand where it goes and type `/hcm games clubhouse parlor ticket`. No schema change, no config
+revision. **Back to 0.46.0 from 0.46.1:** the jar alone; the ticket is in the Arcade again and the booth is gone.
 
 **0.46.0: money in the Game Parlor, and the games of chance kept to it.** The owner: "For the Casino I think we
 should be able to play with our money instead of tokens ... Being able to choose between if you want to play for
@@ -4721,7 +4733,8 @@ until you give it (ops have it through `hcm.admin`):
 
 **Only in the Parlor.** With `only on` (shipped) and a Parlor in the Clubhouse, a game of chance opened anywhere
 else answers "That game is played in the Clubhouse's Game Parlor."; the Games screen, the Arcade's "Games of
-luck" button (then: the crates and the Scratch Ticket) and `/hcm play`'s Tab don't offer them. With no Parlor
+luck" button (then: the crates) and `/hcm play`'s Tab don't offer them. Since 0.46.1 the Scratch Ticket goes
+with them: off the Arcade, and bought at the Parlor's ticket booth. With no Parlor
 (the Clubhouse off, `parlor.enabled: false`, or the room not built yet) they are where they always were, so
 nobody loses the games by switching the Clubhouse off. A hand already open can still be finished from anywhere.
 
@@ -4732,6 +4745,7 @@ nobody loses the games by switching the Clubhouse off. A hand already open can s
 - `parlor star` (or `parlor door`, as before): the Parlor's gold star.
 - `parlor room`: where its visitors arrive.
 - `parlor <game>`: a machine (one of the games of chance).
+- `parlor ticket`: the Scratch Ticket's booth (0.46.1).
 
 Add `clear` to any of them to give it back. These work in the generated room, an owner-built room, and an
 edited or saved room alike.
@@ -4742,7 +4756,8 @@ comes from HCM's plan. Nothing you built changes. You'll also read the "The Club
 update" notice once, because the generated room's plan changed.
 
 **Models.** The Parlor's machines are on `/hcm games clubhouse models`: `machine_slots`, `machine_wheel`,
-`machine_coin` and `machine_cards` (Twenty-One and Higher or Lower share it). Until you drop your own in,
+`machine_coin`, `machine_cards` (Twenty-One and Higher or Lower share it) and, since 0.46.1, `machine_ticket`
+(the Scratch Ticket's booth, a cabinet's size). Until you drop your own in,
 each one is a block-textured stand-in.
 
 #### Edit the Clubhouse yourself (0.42.0)

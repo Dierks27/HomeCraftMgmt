@@ -479,7 +479,9 @@ public final class GamesMenu extends GameMenu {
         }
         PluginConfig.Arcade arc = plugin.config().arcade();
         PluginConfig.Lotto lotto = arc.lotto();
-        if (!lotto.payouts().isEmpty()) {
+        GamesService parlorGames = plugin.games();
+        boolean ticketHere = parlorGames == null || parlorGames.parlor().ticketListed(viewer); // 0.46.1
+        if (!lotto.payouts().isEmpty() && ticketHere) {
             double rtp = ArcadeService.rtp(lotto);
             ItemStack icon = ArcadeService.ticketClosed(lotto)
                     ? ArcadeIcons.of(plugin, viewer, "scratch", Material.FILLED_MAP,

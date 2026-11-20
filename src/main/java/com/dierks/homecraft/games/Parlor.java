@@ -224,6 +224,18 @@ public final class Parlor {
         return games.inParlor(player.getUniqueId()) || !onlyHere();
     }
 
+    /** What buying a Scratch Ticket anywhere else answers while it is kept to the Parlor (0.46.1). */
+    public static final String TICKET_ONLY_HERE = "The Scratch Ticket is in the Clubhouse's Game Parlor.";
+
+    /**
+     * 0.46.1 (the owner: "Scratch ticket is lottery... I would put that in the parlor as well"): whether the Scratch
+     * Ticket is offered to {@code player} where they are. It goes where the games of chance go: kept to the Parlor
+     * with them, it is offered only to someone standing there. Crates and Card Packs are not: they stay in the Arcade.
+     */
+    public boolean ticketListed(Player player) {
+        return player == null || games.inParlor(player.getUniqueId()) || !onlyHere();
+    }
+
     /**
      * Whether the money switch is shown to {@code player} now: money play is on, the server has its bank, they have
      * the permission, and they stand in the Parlor.

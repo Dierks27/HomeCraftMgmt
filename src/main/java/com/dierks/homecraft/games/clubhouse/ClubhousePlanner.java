@@ -1249,6 +1249,17 @@ public final class ClubhousePlanner {
         return new Place3(box.minX() + ARCADE_X0 + 7.5, box.minY() + UP_FLOOR + 1, box.minZ() + SIDE_Z0 + 1.15, 0f);
     }
 
+    /** The Scratch Ticket's booth (0.46.1): what a Parlor machine is called when it is the ticket's, not a game's. */
+    public static final String TICKET = "ticket";
+    /** The booth's place (x, z, yaw): the middle of the Parlor's back wall, facing the room. No block is its own. */
+    static final int[] PARLOR_TICKET = {7, SIDE_Z1, 180};
+
+    /** Where the Scratch Ticket's booth stands in the Game Parlor (0.46.1): a display on the floor, like a machine. */
+    public static Place3 parlorTicket(Box box) {
+        return new Place3(box.minX() + PARLOR_TICKET[0] + 0.5, box.minY() + UP_FLOOR + 1,
+                box.minZ() + PARLOR_TICKET[1] + 0.5, PARLOR_TICKET[2]);
+    }
+
     /** The Game Parlor's machines: {@link #PARLOR_GAMES}' places, the walls' four then the two tables' tops. */
     public static List<Place3> parlorMachines(Box box) {
         List<Place3> out = new ArrayList<>();

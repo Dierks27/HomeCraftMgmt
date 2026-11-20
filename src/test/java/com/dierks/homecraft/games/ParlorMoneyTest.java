@@ -358,6 +358,19 @@ class ParlorMoneyTest {
         assertTrue(games.parlor().listed(slots, sam.player));
     }
 
+    /** 0.46.1, the owner: "Scratch ticket is lottery... I would put that in the parlor as well". */
+    @Test
+    void theScratchTicketGoesWhereTheGamesOfChanceGo() {
+        Fake sam = new Fake("Sam");
+        assertTrue(games.parlor().ticketListed(sam.player), "no Parlor: the ticket is in the Arcade as ever");
+        slots.parlor = true;
+        assertFalse(games.parlor().ticketListed(sam.player), "kept to the Parlor with the games of chance");
+        assertTrue(games.parlor().ticketListed(alex.player), "and offered to someone standing in it");
+        assertTrue(games.parlor().ticketListed(null), "the console is never refused a listing");
+        games.parlor().onlyHere(false);
+        assertTrue(games.parlor().ticketListed(sam.player), "the rule off: everywhere again");
+    }
+
     @Test
     void aSkillGameIsNeverKeptToTheParlor() {
         slots.parlor = true;

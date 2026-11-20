@@ -988,6 +988,25 @@ class ClubhousePlannerTest {
             assertNull(b.get(key((int) Math.floor(m.x()), (int) Math.floor(m.y()), (int) Math.floor(m.z()))),
                     "and in air: " + m);
         }
+        // 0.46.1: the Scratch Ticket's booth, a display like a machine, against the Parlor's back wall
+        ClubhousePlanner.Place3 booth = ClubhousePlanner.parlorTicket(BOX);
+        int bx = (int) Math.floor(booth.x());
+        int by = (int) Math.floor(booth.y());
+        int bz = (int) Math.floor(booth.z());
+        assertTrue(ClubhousePlanner.parlorInside(BOX).contains(bx, by, bz), "the ticket booth stands in the Parlor");
+        for (int j = 0; j < 2; j++) {
+            assertNull(b.get(key(bx, by + j, bz)), "in two blocks of air (it is a cabinet's size)");
+        }
+        assertNotNull(b.get(key(bx, by - 1, bz)), "on the floor");
+        assertNotNull(b.get(key(bx, by, bz + 1)), "its back to the Parlor's back wall");
+        String front = b.get(key(bx, by, bz - 1));
+        assertTrue(front == null || id(front).endsWith("_carpet"), "and room to stand in front of it (on the felt): "
+                + front);
+        assertNull(b.get(key(bx, by + 1, bz - 1)), "head room there");
+        assertEquals(180f, booth.yaw(), "facing the room");
+        for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {
+            assertTrue(Math.abs(m.x() - booth.x()) + Math.abs(m.z() - booth.z()) >= 2, "clear of every machine: " + m);
+        }
         List<ClubhousePlanner.Place3> shelf = ClubhousePlanner.secretShelf(BOX);
         assertTrue(shelf.size() >= 30, "room for many trophies: " + shelf.size());
         for (ClubhousePlanner.Place3 t : shelf) {

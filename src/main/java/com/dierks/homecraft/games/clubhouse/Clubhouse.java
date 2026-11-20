@@ -495,6 +495,23 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         room.start();
     }
 
+    /** 0.46.1: whether there is a Scratch Ticket to sell (the Arcade is there and the ticket is set up and open). */
+    boolean ticketOpen() {
+        if (plugin() == null || plugin().arcade() == null) {
+            return false;
+        }
+        var lotto = plugin().config().arcade().lotto();
+        return !lotto.payouts().isEmpty() && !com.dierks.homecraft.arcade.ArcadeService.ticketClosed(lotto);
+    }
+
+    /** 0.46.1: a tap on the Parlor's ticket booth: its screen (what a ticket costs, the top prize, Buy one). */
+    void ticketBooth(Player p) {
+        if (!ticketOpen()) {
+            return;
+        }
+        new com.dierks.homecraft.gui.games.clubhouse.TicketBoothMenu(plugin(), this, p).open(p);
+    }
+
     /** When each player last opened the Feast Pot (an attack and its damage event are one tap). */
     private final java.util.Map<UUID, Long> potTaps = new java.util.HashMap<>();
 

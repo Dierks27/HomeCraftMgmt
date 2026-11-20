@@ -403,7 +403,14 @@ public final class ArcadeService {
      * follows is only a reveal, so closing it early can neither lose nor repeat anything.
      */
     public Outcome scratch(Player player) {
-        if (!plugin.sandbox().check(player, "scratch ticket")) {
+        // 0.46.1: the ticket goes where the games of chance go. Kept to the Clubhouse's Game Parlor with them, it is
+        // bought only there; and the Parlor is in the Games world, so standing in it stands in for the economy world.
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        boolean inParlor = games != null && games.inParlor(player.getUniqueId());
+        if (games != null && !games.parlor().ticketListed(player)) {
+            return Outcome.fail(com.dierks.homecraft.games.Parlor.TICKET_ONLY_HERE);
+        }
+        if (!inParlor && !plugin.sandbox().check(player, "scratch ticket")) {
             return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
         PluginConfig.Lotto l = plugin.config().arcade().lotto();

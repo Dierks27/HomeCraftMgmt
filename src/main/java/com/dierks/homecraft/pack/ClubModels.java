@@ -105,6 +105,8 @@ public final class ClubModels {
         machine("coin_flip", "machine_coin", Material.GOLD_NUGGET, "minecraft:block/gold_block", Kind.CABINET);
         machine("twenty_one", "machine_cards", Material.PAPER, "minecraft:block/white_wool", Kind.TROPHY);
         MACHINES.put("higher_lower", named("machine_cards"));
+        // 0.46.1: the Scratch Ticket's booth in the Parlor (a cabinet's size)
+        machine("ticket", "machine_ticket", Material.FILLED_MAP, "minecraft:block/lime_concrete", Kind.CABINET);
         ALL.add(new Model("door_trophy", Kind.DOOR, Material.TOTEM_OF_UNDYING, "minecraft:block/gold_block", DOOR_SIZE));
     }
 

@@ -67,6 +67,31 @@ public final class SlotTheme {
             .symbol(Symbol.WILD, "wild", "Wild", "Three wilds", Material.GOLDEN_PICKAXE)
             .symbol(Symbol.STONE, "deepslate", "Deepslate", null, Material.COBBLED_DEEPSLATE);
 
+    /** Deep Mine: three rows that all count, down among the deepslate ores. */
+    public static final SlotTheme DEEP = new SlotTheme("deep", "ore", "deepslate ores",
+            Material.DEEPSLATE_EMERALD_ORE, Material.RAW_COPPER)
+            .symbol(Symbol.COAL, "coal", "Coal", "Three coal", Material.DEEPSLATE_COAL_ORE)
+            .symbol(Symbol.COPPER, "copper", "Copper", "Three copper", Material.DEEPSLATE_COPPER_ORE)
+            .symbol(Symbol.IRON, "iron", "Iron", "Three iron", Material.DEEPSLATE_IRON_ORE)
+            .symbol(Symbol.GOLD, "gold", "Gold", "Three gold", Material.DEEPSLATE_GOLD_ORE)
+            .symbol(Symbol.DIAMOND, "diamond", "Diamond", "Three diamonds", Material.DEEPSLATE_DIAMOND_ORE)
+            .symbol(Symbol.WILD, "wild", "Wild", "Three wilds", Material.LANTERN)
+            .symbol(Symbol.STONE, "tuff", "Tuff", null, Material.TUFF);
+
+    /**
+     * Mob Slots: the machine with free spins. Its reels hold what the mobs drop, and the Creeper is its Wild: it
+     * stands in for any drop, and three of them on the line also give the free spins. So the engine's Wild role is
+     * called the Creeper here, in the config ({@code reels.creeper}, {@code pays.creeper}) and on the screen.
+     */
+    public static final SlotTheme MOB = new SlotTheme("mob", "drop", "mob drops", Material.SPAWNER, Material.FEATHER)
+            .symbol(Symbol.COAL, "rotten_flesh", "Rotten Flesh", "Three rotten flesh", Material.ROTTEN_FLESH)
+            .symbol(Symbol.COPPER, "bone", "Bone", "Three bones", Material.BONE)
+            .symbol(Symbol.IRON, "string", "String", "Three strings", Material.STRING)
+            .symbol(Symbol.GOLD, "ender_pearl", "Ender Pearl", "Three ender pearls", Material.ENDER_PEARL)
+            .symbol(Symbol.DIAMOND, "blaze_rod", "Blaze Rod", "Three blaze rods", Material.BLAZE_ROD)
+            .symbol(Symbol.WILD, "creeper", "Creeper", "Three creepers", Material.CREEPER_HEAD)
+            .symbol(Symbol.STONE, "cobweb", "Cobweb", null, Material.COBWEB);
+
     private final String id;
     private final String noun;
     private final String reelsOf;
@@ -97,7 +122,7 @@ public final class SlotTheme {
 
     /** Every theme, Ore Slots' first. */
     public static List<SlotTheme> all() {
-        return List.of(ORE, NETHER, FARM, MOTHERLODE);
+        return List.of(ORE, NETHER, FARM, MOTHERLODE, DEEP, MOB);
     }
 
     /** Its short name ("nether"), for logs and tests. */
@@ -138,6 +163,14 @@ public final class SlotTheme {
     /** The machine's tile on the Games screen. */
     public Material tileIcon() {
         return tile;
+    }
+
+    /**
+     * What the symbol that stands in for any other is called: "Wild" on every machine but Mob Slots, where it is
+     * the Creeper.
+     */
+    public String wild() {
+        return label(Symbol.WILD);
     }
 
     /** The blank symbol's name ("Netherrack"): it never pays. */

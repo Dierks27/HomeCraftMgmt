@@ -60,6 +60,32 @@ class MoneyPlayTest {
         assertEquals("&7Money put into the Parlor's games today.", say("&7Tokens put into games of chance today."));
     }
 
+    /** Deep Mine's rows and Mob Slots' free spins are written for tokens too, and read right for dollars. */
+    @Test
+    void theLastTwoSlotMachinesLinesReadInDollars() {
+        assertEquals("&7Top row: Three coal → &6$15", say("&7Top row: Three coal → &615"));
+        assertEquals("&8Top row: nothing", say("&8Top row: nothing"));
+        assertEquals("&a3 rows paid! &6+$28", say("&a3 rows paid! &6+28 tokens"), "3 rows is not an amount");
+        assertEquals("&7$5 on a row → &6$50 &7back", say("&75 tokens on a row → &650 &7back"));
+        assertEquals("&7$5 on a row → that row's $5 back", say("&75 tokens on a row → that row's 5 back"));
+        assertEquals("&7Comes up on a row about 1 in 149 spins.", say("&7Comes up on a row about 1 in 149 spins."));
+        assertEquals("&7At least one row pays about 92 spins in 100.",
+                say("&7At least one row pays about 92 spins in 100."));
+        assertEquals("&eFree spin 2 of 5 &7· $44 back so far", say("&eFree spin 2 of 5 &7· 44 tokens back so far"));
+        assertEquals("&aThree creepers! &e5 free spins!", say("&aThree creepers! &e5 free spins!"));
+        assertEquals("&aThree creepers and 5 free spins! &6+$166",
+                say("&aThree creepers and 5 free spins! &6+166 tokens"));
+        assertEquals("&7Three creepers and 2 free spins. Your $2 back.",
+                say("&7Three creepers and 2 free spins. Your 2 back."));
+        assertEquals("&7Three creepers and 1 free spin. $1 back.", say("&7Three creepers and 1 free spin. 1 back."));
+        assertEquals("&fThree creepers &6$83 &7+ &a5 free spins &7· 1 in 176",
+                say("&fThree creepers &683 tokens &7+ &a5 free spins &7· 1 in 176"));
+        assertEquals("&7And 5 free spins at the same stake, played at once.",
+                say("&7And 5 free spins at the same stake, played at once."));
+        assertEquals("&7Three Creepers give 5 free spins about 1 spin in 182.",
+                say("&7Three Creepers give 5 free spins about 1 spin in 182."));
+    }
+
     @Test
     void amountsReadTheSameEverywhere() {
         assertEquals("$5", MoneyPlay.amount(true, 5));

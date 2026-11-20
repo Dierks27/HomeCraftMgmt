@@ -4,10 +4,14 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.chance.slots.FreeSpinsEngine;
 import com.dierks.homecraft.games.chance.slots.Line;
+import com.dierks.homecraft.games.chance.slots.MobSlots;
+import com.dierks.homecraft.games.chance.slots.MobSlotsSettings;
 import com.dierks.homecraft.games.chance.slots.PotSlots;
 import com.dierks.homecraft.games.chance.slots.ReelShow;
 import com.dierks.homecraft.games.chance.slots.SlotMachine;
+import com.dierks.homecraft.games.chance.slots.SlotOdds;
 import com.dierks.homecraft.games.chance.slots.SlotSettings;
 import com.dierks.homecraft.games.chance.slots.SlotTable;
 import com.dierks.homecraft.games.chance.slots.SlotTheme;
@@ -62,6 +66,12 @@ import java.util.concurrent.ThreadLocalRandom;
  * for money only: no tokens-or-money switch, no chips and no stake buttons. The pot is where the stakes would be;
  * the three-Wilds line on the paytable reads "takes the pot"; and Spin is lit only for a player who may play for
  * money where they stand, with one plain reason when it is not ("Only in the Game Parlor").
+ *
+ * <p><b>Mob Slots</b> ({@link MobSlots}) is this screen too. Its Creeper line on the paytable says the free spins it
+ * gives, and what it "gives back" is the whole round's exact return, the free spins counted. When the Creepers land,
+ * the result tile reads "N free spins!" and each free spin's reels then land in turn with what the round has given
+ * back so far, and last the round's one total. All of them were decided and paid with the first spin: closing the
+ * screen early just prints the total.
  */
 public final class SlotsMenu extends GameMenu {
 
@@ -83,12 +93,16 @@ public final class SlotsMenu extends GameMenu {
     private static final int[] CHIPS = {39, 40, 41};
     private static final int CHIPS_BACK = 42;
 
+    /** Ticks between two spins of a round with free spins: long enough to read what the last one gave. */
+    private static final int REST_TICKS = 16;
+
     private final SlotMachine slots;
     /** The machine as a pot machine, or {@code null} for one with stakes and no pot. */
     private final PotSlots pot;
+    /** The machine as Mob Slots (free spins), or {@code null}. */
+    private final MobSlots mob;
     private final SlotTable settings;
     private final SlotTheme theme;
-    private final SlotsEngine engine;
     private final boolean bedrock;
     private int stake;
     /** What the line shows now ({@code null} = a blank reel). */
@@ -108,18 +122,27 @@ public final class SlotsMenu extends GameMenu {
     /** Whether the spin on screen is (or was) for dollars, and the engine it was decided by. */
     private boolean spinMoney;
     private SlotsEngine spinEngine;
+    /**
+     * Mob Slots: the whole round on screen (its first spin and any free spins), already decided and paid; {@code spin}
+     * is the one of its spins the reels show now.
+     */
+    private FreeSpinsEngine.Round round;
+    /** How many of the round's spins have landed on screen (1: the first spin; more: free spins). */
+    private int landed;
+    /** Ticks left before the round's next free spin starts (0: reels are moving, or nothing is). */
+    private int rest;
 
     public SlotsMenu(HomeCraftManagement plugin, SlotMachine game, Player viewer, Runnable back,
                      SlotTable settings) {
         super(plugin, game, viewer, back);
         this.slots = game;
         this.pot = game instanceof PotSlots p && settings instanceof SlotSettings ? p : null;
+        this.mob = game instanceof MobSlots m && settings instanceof MobSlotsSettings ? m : null;
         this.settings = settings;
         this.theme = settings.theme();
-        this.engine = settings.engine();
         this.bedrock = Bedrock.is(viewer);
-        this.stake = engine.stakes().isEmpty() ? 0 : engine.stakes().get(0);
-        this.spinEngine = engine;
+        this.stake = settings.offered().isEmpty() ? 0 : settings.offered().get(0);
+        this.spinEngine = settings.engine();
         this.money = new MoneyPlay(plugin, plugin.games(), viewer);
         init(54, Text.of("&6" + game.name()));
     }
@@ -134,7 +157,7 @@ public final class SlotsMenu extends GameMenu {
         if (pot != null) {
             return slots.moneyEngine(settings, price());
         }
-        return money.on() ? slots.moneyEngine(settings, money.stake()) : engine;
+        return money.on() ? slots.moneyEngine(settings, money.stake()) : settings.engine(stake);
     }
 
     /** What the next spin puts in: tokens picked, the chips' dollars, or a pot machine's price. */
@@ -174,7 +197,13 @@ public final class SlotsMenu extends GameMenu {
             if (pot != null && settings.feedPercent() > 0) {
                 lore.add("&7The pot's share is counted in.");
             }
+            if (settings.freeSpins() > 0) {
+                lore.add("&7The free spins are counted in.");
+            }
             lore.add(SlotsCopy.hitLine(odds));
+            if (settings.freeSpins() > 0) {
+                lore.add(SlotsCopy.bonusHitLine(theme, settings.freeSpins(), SlotOdds.threeWilds(live, stake)));
+            }
             set(GIVE_BACK, Menus.glint(Menus.icon(Material.KNOWLEDGE_BOOK, say(SlotsCopy.giveBack(settings, odds)),
                     lore.toArray(new String[0])), false), null);
         }
@@ -216,7 +245,7 @@ public final class SlotsMenu extends GameMenu {
             set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
             set(BALANCE, money.balanceTile(), null);
         } else {
-            List<Integer> stakes = engine.stakes();
+            List<Integer> stakes = settings.offered();
             int first = STAKES_CENTRE - (stakes.size() - 1) / 2;
             for (int i = 0; i < stakes.size(); i++) {
                 int s = stakes.get(i);
@@ -244,8 +273,19 @@ public final class SlotsMenu extends GameMenu {
             return Menus.glint(Menus.icon(theme.icon(l.line()), SlotsCopy.potLineName(theme, l),
                     SlotsCopy.potLineLore(theme, l, potNow).toArray(new String[0])), true);
         }
-        ItemStack icon = Menus.icon(theme.icon(l.line()), say(SlotsCopy.lineName(theme, l)),
-                MoneyPlay.say(dollars(), SlotsCopy.lineLore(theme, l)));
+        if (settings.freeSpins() > 0 && l.line() == Line.THREE_WILDS) {
+            // Mob Slots: the Creeper line also gives the free spins
+            return Menus.glint(Menus.icon(theme.icon(l.line()),
+                    say(SlotsCopy.bonusLineName(theme, l, settings.freeSpins())),
+                    MoneyPlay.say(dollars(), SlotsCopy.bonusLineLore(theme, l, settings.freeSpins()))), true);
+        }
+        return lineTile(theme, l, dollars(), SlotsCopy.lineLore(theme, l));
+    }
+
+    /** A line's tile on any machine's paytable: its picture, "×N · 1 in N", and {@code lore} under it. */
+    static ItemStack lineTile(SlotTheme theme, LineOdds l, boolean dollars, List<String> lore) {
+        ItemStack icon = Menus.icon(theme.icon(l.line()), MoneyPlay.say(dollars, SlotsCopy.lineName(theme, l)),
+                MoneyPlay.say(dollars, lore));
         if (l.line() == Line.TWO_THE_SAME) {
             Menus.count(icon, 2);
         }
@@ -253,6 +293,11 @@ public final class SlotsMenu extends GameMenu {
     }
 
     private ItemStack reelTile(Symbol s) {
+        return reelTile(theme, s);
+    }
+
+    /** One reel's picture on any machine ({@code null}: a blank reel). */
+    static ItemStack reelTile(SlotTheme theme, Symbol s) {
         if (s == null) {
             return Menus.icon(Material.LIGHT_GRAY_STAINED_GLASS_PANE, "&7…");
         }
@@ -260,8 +305,20 @@ public final class SlotsMenu extends GameMenu {
     }
 
     private ItemStack resultTile() {
+        if (spinning && round != null && round.bonus() && landed >= 1) {
+            // Mob Slots, the free spins landing: what they are, then what the round has given back so far
+            String name = landed == 1 ? SlotsCopy.bonusStart(theme, round.free().size())
+                    : MoneyPlay.say(spinMoney, SlotsCopy.freeSpinLine(landed - 1, round.free().size(),
+                    round.backAfter(landed - 1)));
+            return Menus.glint(Menus.icon(Material.PAPER, name, "&7They are already played.",
+                    "&7Closing the screen just shows the result."), true);
+        }
         if (spinning) {
             return Menus.icon(Material.PAPER, "&7Spinning…");
+        }
+        if (round != null && round.bonus()) {
+            return Menus.glint(Menus.icon(Material.PAPER,
+                    MoneyPlay.say(spinMoney, SlotsCopy.bonusResult(theme, round))), round.win());
         }
         if (spin == null) {
             return Menus.icon(Material.PAPER, pot != null ? "&7Spin for " + Parlor.dollars(price()) + "."
@@ -318,7 +375,8 @@ public final class SlotsMenu extends GameMenu {
 
     private ItemStack stakeTile(int s) {
         boolean chosen = s == stake;
-        StakeOdds odds = engine.odds(s);
+        SlotsEngine at = settings.engine(s);
+        StakeOdds odds = at == null ? null : at.odds(s);
         String line = odds == null ? "" : SlotsCopy.giveBack(settings, odds).replace("&e", "&7");
         ItemStack icon = Menus.icon(Material.GOLD_NUGGET,
                 (chosen ? "&a&l" : "&e") + SlotsCopy.tokens(s) + " in",
@@ -363,6 +421,17 @@ public final class SlotsMenu extends GameMenu {
             refresh();
             return;
         }
+        if (mob != null) {
+            // the spin and, if the Creepers land, its free spins: one round, decided and paid here
+            MobSlots.Played played = mob.spin(viewer, (MobSlotsSettings) settings, stake, dollars);
+            if (played == null) {
+                refresh(); // refused, and already told why
+                return;
+            }
+            round = played.round();
+            show(round.base(), played.spin(), dollars, 0);
+            return;
+        }
         Spin result = games.rounds().play(viewer, game, stake, live, dollars);
         if (result == null) {
             refresh(); // refused, and already told why
@@ -379,6 +448,8 @@ public final class SlotsMenu extends GameMenu {
         potWon = pot;
         spinning = true;
         told = false;
+        landed = 0;
+        rest = 0;
         tick = 0;
         stopped = 0;
         cosmetic = new SplittableRandom(ThreadLocalRandom.current().nextLong());
@@ -394,6 +465,13 @@ public final class SlotsMenu extends GameMenu {
         if (!spinning) {
             return;
         }
+        if (rest > 0) {
+            rest -= ReelShow.period(bedrock);
+            if (rest <= 0) {
+                nextFreeSpin();
+            }
+            return;
+        }
         tick += ReelShow.period(bedrock);
         int now = ReelShow.stopped(bedrock, tick);
         shown = ReelShow.frame(spinEngine, spin.stake(), spin.reels(), now, cosmetic);
@@ -407,7 +485,27 @@ public final class SlotsMenu extends GameMenu {
         }
     }
 
+    /** Mob Slots: start the reels for the round's next free spin (it was decided and paid with the round). */
+    private void nextFreeSpin() {
+        rest = 0;
+        spin = round.free().get(landed - 1);
+        tick = 0;
+        stopped = 0;
+        shown = ReelShow.frame(spinEngine, spin.stake(), spin.reels(), 0, cosmetic);
+        paintReels();
+    }
+
     private void land() {
+        landed++;
+        if (round != null && landed <= round.free().size()) {
+            // Mob Slots: a free spin is still to land. A breath to read this one, then the next
+            rest = REST_TICKS;
+            getInventory().setItem(RESULT, resultTile());
+            if (landed == 1) {
+                viewer.playSound(viewer.getLocation(), Sound.ENTITY_CREEPER_PRIMED, 0.6f, 1.0f);
+            }
+            return;
+        }
         spinning = false;
         if (task != null) {
             task.cancel();
@@ -434,6 +532,18 @@ public final class SlotsMenu extends GameMenu {
             Sounds.won(viewer);
             String[] t = SlotsCopy.potTitle(potWon);
             title(t[0], t[1]);
+            return;
+        }
+        if (round != null && round.bonus()) {
+            // Mob Slots, a round with free spins: its one total, once
+            viewer.sendMessage(Text.of(MoneyPlay.say(spinMoney, SlotsCopy.bonusResult(theme, round))));
+            if (!round.win()) {
+                Sounds.miss(viewer);
+                return;
+            }
+            Sounds.won(viewer);
+            String[] t = SlotsCopy.bonusTitle(round);
+            title(t[0], MoneyPlay.say(spinMoney, t[1]));
             return;
         }
         viewer.sendMessage(Text.of(MoneyPlay.say(spinMoney, SlotsCopy.result(theme, spin))));

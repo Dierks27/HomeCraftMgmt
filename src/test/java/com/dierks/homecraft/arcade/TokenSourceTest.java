@@ -31,7 +31,8 @@ class TokenSourceTest {
                         "GAMES_DROPPER", "GAMES_RACE_NIGHT", "GAMES_FLOORS",
                         "GAMES_CUP_ENTRY", "GAMES_CUP_PRIZE", "GAMES_CUP_REFUND", "EVENT_CANDY",
                         "EVENT_HARVEST", "EVENT_TURKEY", "EVENT_FEAST",
-                        "ARCADE_NETHER_SLOTS", "ARCADE_MOTHERLODE", "ARCADE_FARM_SLOTS"),
+                        "ARCADE_NETHER_SLOTS", "ARCADE_MOTHERLODE", "ARCADE_FARM_SLOTS",
+                        "ARCADE_DEEP_MINE", "ARCADE_MOB_SLOTS"),
                 Arrays.stream(TokenService.Source.values()).map(Enum::name).toList(),
                 "a new source goes at the end; an old one is never renamed or moved");
     }

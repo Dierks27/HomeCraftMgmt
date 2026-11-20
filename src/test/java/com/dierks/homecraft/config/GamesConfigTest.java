@@ -174,12 +174,13 @@ class GamesConfigTest {
     @Test
     void theCatalogListsEveryGameOnceInDisplayOrder() {
         List<String> ids = GameCatalog.SPECS.stream().map(GameSpec::id).toList();
-        assertEquals(List.of("ore_slots", "twenty_one", "wheel", "higher_lower", "coin_flip", "creeper_sweeper",
+        assertEquals(List.of("ore_slots", "twenty_one", "wheel", "higher_lower", "coin_flip", "nether_slots",
+                "motherlode", "farm_slots", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
                 "trials", "golf", "cup", "fresh_courses", "race_night", "falling_floors", "clubhouse",
                 "hub"), ids);
-        assertEquals(5, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
-                "five games of chance");
+        assertEquals(8, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
+                "eight games of chance: the first five, and the three more slot machines after them");
         for (String reserved : GameCatalog.RESERVED) {
             assertTrue(GameCatalog.taken(reserved), reserved + " is reserved for /hcm play");
         }

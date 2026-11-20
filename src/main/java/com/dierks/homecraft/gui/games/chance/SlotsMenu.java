@@ -5,9 +5,12 @@ import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.chance.slots.Line;
-import com.dierks.homecraft.games.chance.slots.OreSlots;
-import com.dierks.homecraft.games.chance.slots.OreSlotsSettings;
+import com.dierks.homecraft.games.chance.slots.PotSlots;
 import com.dierks.homecraft.games.chance.slots.ReelShow;
+import com.dierks.homecraft.games.chance.slots.SlotMachine;
+import com.dierks.homecraft.games.chance.slots.SlotSettings;
+import com.dierks.homecraft.games.chance.slots.SlotTable;
+import com.dierks.homecraft.games.chance.slots.SlotTheme;
 import com.dierks.homecraft.games.chance.slots.SlotsCopy;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.LineOdds;
@@ -33,15 +36,17 @@ import java.util.SplittableRandom;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * The Ore Slots screen (spec §5.3): the paytable, the line, the stakes and Spin on one screen, so
- * the rules and the odds are in front of the player before the first spin.
+ * A slot machine's screen (spec §5.3): the paytable, the line, the stakes and Spin on one screen, so
+ * the rules and the odds are in front of the player before the first spin. One screen for every machine:
+ * Ore Slots, Nether Slots and the pot machines differ only in their {@link SlotTheme} (the pictures and names) and
+ * in what the stakes' row holds.
  *
  * <pre>
  *  row 0   How to play | the paytable, top line first (7 lines, "×N · 1 in N")
  *  row 1               result (13)
  *  row 2            ▶  reel  reel  reel  ◀        (21 22 23: the one line, nothing above or below)
  *  row 3                  Spin (31)
- *  row 4          stake buttons, centred on 40 (a glint on the one picked)
+ *  row 4          stake buttons, centred on 40 (a glint on the one picked); a pot machine: the pot (40)
  *  row 5   46 gives back about N · 47 plays left · 48 today's tokens · 49 Back · 50 balance
  * </pre>
  *
@@ -52,8 +57,13 @@ import java.util.concurrent.ThreadLocalRandom;
  * "Your N back" or "No win this time." with {@code Sounds.miss}. The buttons stay where they are
  * after any result; nothing asks the player to spin again. Every number shown comes from the
  * engine snapshot this screen was opened with.
+ *
+ * <p><b>A pot machine</b> ({@link PotSlots}: The Motherlode, Farm Slots) has one set price in dollars and is played
+ * for money only: no tokens-or-money switch, no chips and no stake buttons. The pot is where the stakes would be;
+ * the three-Wilds line on the paytable reads "takes the pot"; and Spin is lit only for a player who may play for
+ * money where they stand, with one plain reason when it is not ("Only in the Game Parlor").
  */
-public final class OreSlotsMenu extends GameMenu {
+public final class SlotsMenu extends GameMenu {
 
     private static final int RULES = 0;
     /** The paytable: one slot per {@link Line}, in its order. */
@@ -73,8 +83,11 @@ public final class OreSlotsMenu extends GameMenu {
     private static final int[] CHIPS = {39, 40, 41};
     private static final int CHIPS_BACK = 42;
 
-    private final OreSlots slots;
-    private final OreSlotsSettings settings;
+    private final SlotMachine slots;
+    /** The machine as a pot machine, or {@code null} for one with stakes and no pot. */
+    private final PotSlots pot;
+    private final SlotTable settings;
+    private final SlotTheme theme;
     private final SlotsEngine engine;
     private final boolean bedrock;
     private int stake;
@@ -82,6 +95,8 @@ public final class OreSlotsMenu extends GameMenu {
     private List<Symbol> shown = blank();
     /** The spin on screen: the one spinning, or the last one. */
     private Spin spin;
+    /** A pot machine: the whole pot the spin on screen took, in cents (0 for any other spin). */
+    private long potWon;
     private boolean spinning;
     private boolean told = true;
     private int tick;
@@ -94,52 +109,74 @@ public final class OreSlotsMenu extends GameMenu {
     private boolean spinMoney;
     private SlotsEngine spinEngine;
 
-    public OreSlotsMenu(HomeCraftManagement plugin, OreSlots game, Player viewer, Runnable back,
-                        OreSlotsSettings settings) {
+    public SlotsMenu(HomeCraftManagement plugin, SlotMachine game, Player viewer, Runnable back,
+                     SlotTable settings) {
         super(plugin, game, viewer, back);
         this.slots = game;
+        this.pot = game instanceof PotSlots p && settings instanceof SlotSettings ? p : null;
         this.settings = settings;
+        this.theme = settings.theme();
         this.engine = settings.engine();
         this.bedrock = Bedrock.is(viewer);
         this.stake = engine.stakes().isEmpty() ? 0 : engine.stakes().get(0);
         this.spinEngine = engine;
         this.money = new MoneyPlay(plugin, plugin.games(), viewer);
-        init(54, Text.of("&6Ore Slots"));
+        init(54, Text.of("&6" + game.name()));
     }
 
-    /** The engine the next spin is decided by: the screen's own, or the reels solved for the chips' dollars. */
+    /** Whether the next spin is for dollars: always on a pot machine, else as the switch says. */
+    private boolean dollars() {
+        return pot != null || money.on();
+    }
+
+    /** The engine the next spin is decided by: the screen's own, or the reels solved for the dollars put in. */
     private SlotsEngine live() {
+        if (pot != null) {
+            return slots.moneyEngine(settings, price());
+        }
         return money.on() ? slots.moneyEngine(settings, money.stake()) : engine;
     }
 
-    /** What the next spin puts in: tokens picked, or the chips' dollars. */
+    /** What the next spin puts in: tokens picked, the chips' dollars, or a pot machine's price. */
     private int in() {
-        return money.on() ? money.stake() : stake;
+        return pot != null ? price() : money.on() ? money.stake() : stake;
+    }
+
+    /** A pot machine's one price, in dollars. */
+    private int price() {
+        return settings.stakes().isEmpty() ? 0 : settings.stakes().get(0);
     }
 
     /** A line written for tokens, as this screen says it now. */
     private String say(String line) {
-        return MoneyPlay.say(money.on(), line);
+        return MoneyPlay.say(dollars(), line);
     }
 
     @Override
     protected void build() {
         fill();
-        boolean dollars = money.on();
+        boolean dollars = dollars();
         SlotsEngine live = live();
         int stake = in();
+        long potNow = pot == null ? 0 : pot.potCents();
         set(RULES, rulesTile(game.rules()), null);
         StakeOdds odds = live == null ? null : live.odds(stake);
         if (odds != null) {
             for (Line line : Line.values()) {
                 LineOdds l = odds.line(line);
                 if (l != null) {
-                    set(PAYTABLE + line.ordinal(), payTile(l), null);
+                    set(PAYTABLE + line.ordinal(), payTile(l, potNow), null);
                 }
             }
-            set(GIVE_BACK, Menus.glint(Menus.icon(Material.KNOWLEDGE_BOOK, say(SlotsCopy.giveBack(odds)),
-                    say("&7For " + SlotsCopy.tokens(stake) + " in, worked out"), "&7exactly from the paytable.",
-                    SlotsCopy.hitLine(odds)), false), null);
+            List<String> lore = new ArrayList<>();
+            lore.add(say("&7For " + SlotsCopy.tokens(stake) + " in, worked out"));
+            lore.add("&7exactly from the paytable.");
+            if (pot != null && settings.feedPercent() > 0) {
+                lore.add("&7The pot's share is counted in.");
+            }
+            lore.add(SlotsCopy.hitLine(odds));
+            set(GIVE_BACK, Menus.glint(Menus.icon(Material.KNOWLEDGE_BOOK, say(SlotsCopy.giveBack(settings, odds)),
+                    lore.toArray(new String[0])), false), null);
         }
         set(RESULT, resultTile(), null);
         set(POINT_RIGHT, Menus.icon(Material.YELLOW_STAINED_GLASS_PANE, "&e▶"), null);
@@ -151,6 +188,15 @@ public final class OreSlotsMenu extends GameMenu {
         set(SPIN, spinTile(left), e -> spin());
         set(PLAYS, Menus.icon(Material.CLOCK, "&ePlays left today: &f" + (left < 0 ? "?" : left),
                 "&7" + settings.dailyLimit() + " spins a day.", "&7They come back at midnight."), null);
+        if (pot != null) {
+            set(STAKES_CENTRE, Menus.glint(Menus.icon(Material.GOLD_BLOCK, SlotsCopy.potName(potNow),
+                    SlotsCopy.potLore(theme, pot.feedCents((SlotSettings) settings),
+                            pot.seedCents((SlotSettings) settings)).toArray(new String[0])), true), null);
+            set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
+            set(BALANCE, money.balanceTile(), null);
+            exitTile();
+            return;
+        }
         if (dollars) {
             for (int i = 0; i < money.chips() && i < CHIPS.length; i++) {
                 int chip = money.chip(i);
@@ -193,9 +239,13 @@ public final class OreSlotsMenu extends GameMenu {
 
     // ---- tiles ---------------------------------------------------------------------------------
 
-    private ItemStack payTile(LineOdds l) {
-        ItemStack icon = Menus.icon(lineMaterial(l.line()), say(SlotsCopy.lineName(l)),
-                MoneyPlay.say(money.on(), SlotsCopy.lineLore(l)));
+    private ItemStack payTile(LineOdds l, long potNow) {
+        if (pot != null && l.line() == Line.THREE_WILDS) {
+            return Menus.glint(Menus.icon(theme.icon(l.line()), SlotsCopy.potLineName(theme, l),
+                    SlotsCopy.potLineLore(theme, l, potNow).toArray(new String[0])), true);
+        }
+        ItemStack icon = Menus.icon(theme.icon(l.line()), say(SlotsCopy.lineName(theme, l)),
+                MoneyPlay.say(dollars(), SlotsCopy.lineLore(theme, l)));
         if (l.line() == Line.TWO_THE_SAME) {
             Menus.count(icon, 2);
         }
@@ -206,7 +256,7 @@ public final class OreSlotsMenu extends GameMenu {
         if (s == null) {
             return Menus.icon(Material.LIGHT_GRAY_STAINED_GLASS_PANE, "&7…");
         }
-        return Menus.glint(Menus.icon(material(s), "&f" + s.label()), false);
+        return Menus.glint(Menus.icon(theme.icon(s), "&f" + theme.label(s)), false);
     }
 
     private ItemStack resultTile() {
@@ -214,10 +264,15 @@ public final class OreSlotsMenu extends GameMenu {
             return Menus.icon(Material.PAPER, "&7Spinning…");
         }
         if (spin == null) {
-            return Menus.icon(Material.PAPER, money.on() ? "&7Add your chips, then Spin." : "&7Pick your tokens, then Spin.",
+            return Menus.icon(Material.PAPER, pot != null ? "&7Spin for " + Parlor.dollars(price()) + "."
+                    : money.on() ? "&7Add your chips, then Spin." : "&7Pick your tokens, then Spin.",
                     "&7Only the line between the arrows counts.");
         }
-        return Menus.glint(Menus.icon(Material.PAPER, MoneyPlay.say(spinMoney, SlotsCopy.result(spin))), spin.win());
+        if (potWon > 0) {
+            return Menus.glint(Menus.icon(Material.PAPER, SlotsCopy.potResult(theme, potWon)), true);
+        }
+        return Menus.glint(Menus.icon(Material.PAPER, MoneyPlay.say(spinMoney, SlotsCopy.result(theme, spin))),
+                spin.win());
     }
 
     private ItemStack spinTile(int left) {
@@ -226,7 +281,17 @@ public final class OreSlotsMenu extends GameMenu {
         }
         if (left == 0) {
             return Menus.icon(Material.GRAY_CONCRETE, "&7No plays left today",
-                    "&7Ore Slots gives " + settings.dailyLimit() + " spins a day.", "&7They come back at midnight.");
+                    "&7" + game.name() + " gives " + settings.dailyLimit() + " spins a day.",
+                    "&7They come back at midnight.");
+        }
+        if (pot != null) {
+            String why = pot.blocker(viewer);
+            if (why != null) {
+                return Menus.icon(Material.GRAY_CONCRETE, "&c" + why,
+                        "&7" + game.name() + " is played for money,", "&7in the Clubhouse's Game Parlor.");
+            }
+            return Menus.icon(Material.LIME_CONCRETE, "&a&lSpin &7- &6" + Parlor.dollars(price()) + " in",
+                    "&7The spin is decided the moment you click.", "&7Closing the screen just shows the result.");
         }
         if (money.on()) {
             int dollars = money.stake();
@@ -234,7 +299,7 @@ public final class OreSlotsMenu extends GameMenu {
                 return Menus.icon(Material.GRAY_CONCRETE, "&7Add a chip first");
             }
             SlotsEngine live = live();
-            String why = live == null ? "Ore Slots can't be played for " + Parlor.dollars(dollars)
+            String why = live == null ? game.name() + " can't be played for " + Parlor.dollars(dollars)
                     : slots.moneyBlocker(viewer, dollars);
             if (why != null) {
                 return Menus.icon(Material.GRAY_CONCRETE, "&c" + why);
@@ -254,27 +319,11 @@ public final class OreSlotsMenu extends GameMenu {
     private ItemStack stakeTile(int s) {
         boolean chosen = s == stake;
         StakeOdds odds = engine.odds(s);
-        String line = odds == null ? "" : SlotsCopy.giveBack(odds).replace("&e", "&7");
+        String line = odds == null ? "" : SlotsCopy.giveBack(settings, odds).replace("&e", "&7");
         ItemStack icon = Menus.icon(Material.GOLD_NUGGET,
                 (chosen ? "&a&l" : "&e") + SlotsCopy.tokens(s) + " in",
                 chosen ? "&7Picked." : "&eClick to pick", line);
         return Menus.glint(Menus.count(icon, s), chosen);
-    }
-
-    private static Material material(Symbol s) {
-        return switch (s) {
-            case COAL -> Material.COAL;
-            case COPPER -> Material.COPPER_INGOT;
-            case IRON -> Material.IRON_INGOT;
-            case GOLD -> Material.GOLD_INGOT;
-            case DIAMOND -> Material.DIAMOND;
-            case WILD -> Material.NETHER_STAR;
-            case STONE -> Material.COBBLESTONE;
-        };
-    }
-
-    private static Material lineMaterial(Line line) {
-        return line.symbol() == null ? Material.IRON_NUGGET : material(line.symbol());
     }
 
     // ---- clicks --------------------------------------------------------------------------------
@@ -287,7 +336,7 @@ public final class OreSlotsMenu extends GameMenu {
         refresh();
     }
 
-    /** Play one spin (gate, seed, outcome, tokens in and back: all done here), then show it. */
+    /** Play one spin (gate, seed, outcome, what goes in and comes back: all done here), then show it. */
     private void spin() {
         if (spinning) {
             return;
@@ -296,6 +345,15 @@ public final class OreSlotsMenu extends GameMenu {
         if (games == null) {
             viewer.sendMessage(Text.of("&c" + Refusal.CLOSED.message()));
             Sounds.refused(viewer);
+            return;
+        }
+        if (pot != null) {
+            PotSlots.PotSpin played = pot.spin(viewer); // the round, then the pot: fed, or taken
+            if (played == null) {
+                refresh(); // refused, and already told why
+                return;
+            }
+            show(played.spin(), played.engine(), true, played.potCents());
             return;
         }
         boolean dollars = money.on();
@@ -310,15 +368,21 @@ public final class OreSlotsMenu extends GameMenu {
             refresh(); // refused, and already told why
             return;
         }
+        show(result, live, dollars, 0);
+    }
+
+    /** Start the reels for a spin that is already decided and paid. */
+    private void show(Spin result, SlotsEngine live, boolean dollars, long pot) {
         spinMoney = dollars;
         spinEngine = live;
         spin = result;
+        potWon = pot;
         spinning = true;
         told = false;
         tick = 0;
         stopped = 0;
         cosmetic = new SplittableRandom(ThreadLocalRandom.current().nextLong());
-        shown = ReelShow.frame(live, stake, result.reels(), 0, cosmetic);
+        shown = ReelShow.frame(live, result.stake(), result.reels(), 0, cosmetic);
         getInventory().setItem(RESULT, resultTile());
         getInventory().setItem(SPIN, spinTile(1));
         paintReels();
@@ -365,20 +429,31 @@ public final class OreSlotsMenu extends GameMenu {
             return;
         }
         told = true;
-        viewer.sendMessage(Text.of(MoneyPlay.say(spinMoney, SlotsCopy.result(spin))));
+        if (potWon > 0) {
+            viewer.sendMessage(Text.of(SlotsCopy.potResult(theme, potWon)));
+            Sounds.won(viewer);
+            String[] t = SlotsCopy.potTitle(potWon);
+            title(t[0], t[1]);
+            return;
+        }
+        viewer.sendMessage(Text.of(MoneyPlay.say(spinMoney, SlotsCopy.result(theme, spin))));
         if (!spin.win()) {
             Sounds.miss(viewer);
             return;
         }
         Sounds.won(viewer);
         if (spin.big()) {
-            String[] t = SlotsCopy.title(spin);
-            try {
-                viewer.showTitle(Title.title(Text.of(t[0]), Text.of(MoneyPlay.say(spinMoney, t[1])),
-                        Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2000), Duration.ofMillis(500))));
-            } catch (RuntimeException ignored) {
-                // cosmetic: the tokens are already paid and the chat line said so
-            }
+            String[] t = SlotsCopy.title(theme, spin);
+            title(t[0], MoneyPlay.say(spinMoney, t[1]));
+        }
+    }
+
+    private void title(String top, String under) {
+        try {
+            viewer.showTitle(Title.title(Text.of(top), Text.of(under),
+                    Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2000), Duration.ofMillis(500))));
+        } catch (RuntimeException ignored) {
+            // cosmetic: the round is already paid and the chat line said so
         }
     }
 

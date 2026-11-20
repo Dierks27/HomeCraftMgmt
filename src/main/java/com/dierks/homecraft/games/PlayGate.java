@@ -40,6 +40,10 @@ import java.util.logging.Level;
  *
  * <p>If Take a break or today's plays can't be read, a game of chance is refused ("Games of
  * chance are closed right now") rather than let through: it fails closed.
+ *
+ * <p>A game with one set price in dollars ({@link Game#setPrice()}: The Motherlode, Farm Slots) is played for
+ * money only. Tokens are refused outright, and its price is checked as the Parlor checks any amount that is not built
+ * from the chips (may play for money here, the day's money limit, the balance), never against the chips' shape.
  */
 public final class PlayGate {
 
@@ -98,7 +102,18 @@ public final class PlayGate {
             if (r == null) {
                 r = dailyLimit(player, game);
             }
-            return r != null ? r : games.parlor().check(player, stake, true);
+            if (r != null) {
+                return r;
+            }
+            // A machine's own set price is not the chips' to make; every other money check still runs
+            int price = game.setPrice();
+            if (price > 0 && stake != price) {
+                return Parlor.MONEY_CLOSED;
+            }
+            return games.parlor().check(player, stake, price <= 0);
+        }
+        if (game.setPrice() > 0) {
+            return Parlor.MONEY_ONLY; // A set-price machine never takes tokens
         }
         if (chance(game)) {
             Breaks.Today today = today(player);

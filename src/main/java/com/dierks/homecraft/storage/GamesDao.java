@@ -119,14 +119,15 @@ public final class GamesDao {
 
     /**
      * The ledger sources that count as "tokens put into games of chance" for the day's limit
-     * (R1.10): the Scratch Ticket, Crates, Card Packs bought with tokens, and the five games of
-     * chance. Only their NEGATIVE ledger lines count.
+     * (R1.10): the Scratch Ticket, Crates, Card Packs bought with tokens, and the games of chance
+     * (the first five, and the three more slot machines). Only their NEGATIVE ledger lines count.
      */
     public static final List<String> CHANCE_SOURCES = List.of(
             TokenService.Source.LOTTO.name(), TokenService.Source.CRATE.name(), TokenService.Source.PACK.name(),
             TokenService.Source.ARCADE_SLOTS.name(), TokenService.Source.ARCADE_TWENTY_ONE.name(),
             TokenService.Source.ARCADE_WHEEL.name(), TokenService.Source.ARCADE_HILO.name(),
-            TokenService.Source.ARCADE_COIN_FLIP.name());
+            TokenService.Source.ARCADE_COIN_FLIP.name(), TokenService.Source.ARCADE_NETHER_SLOTS.name(),
+            TokenService.Source.ARCADE_MOTHERLODE.name(), TokenService.Source.ARCADE_FARM_SLOTS.name());
 
     /** The game a reward that is once a day across games is stored under. */
     public static final String ACROSS_GAMES = "*";

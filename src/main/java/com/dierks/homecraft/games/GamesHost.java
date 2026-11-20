@@ -103,6 +103,13 @@ interface GamesHost {
         return null;
     }
 
+    /**
+     * Tell the whole server one line (a pot machine's pot was taken), in {@code &} colour codes. Nothing in
+     * a test that doesn't listen.
+     */
+    default void broadcast(String legacy) {
+    }
+
     /** The online player with this id, or {@code null}. */
     Player online(UUID player);
 
@@ -163,6 +170,11 @@ interface GamesHost {
             @Override
             public int balance(UUID player) {
                 return plugin.tokens() == null ? 0 : plugin.tokens().balance(player);
+            }
+
+            @Override
+            public void broadcast(String legacy) {
+                Bukkit.broadcast(com.dierks.homecraft.util.Text.of(legacy));
             }
 
             @Override

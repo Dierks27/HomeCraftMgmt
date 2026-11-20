@@ -41,8 +41,8 @@ public final class GuideMenu extends Menu {
     private static final Material[] TAB_ICONS = {Material.SUNFLOWER, Material.PAPER, Material.SPYGLASS,
             Material.CHEST, Material.TARGET};
     private static final int[] TAB_SLOTS = {0, 2, 4, 6, 8};
-    /** Where the games of chance line up on the Games page. */
-    private static final int[] CHANCE_SLOTS = {14, 15, 16, 23, 24, 25};
+    /** Where the games of chance line up on the Games page (eight places, for the three more slot machines). */
+    private static final int[] CHANCE_SLOTS = {14, 15, 16, 17, 23, 24, 25, 26};
 
     private final Player player;
     private final int page;
@@ -266,9 +266,12 @@ public final class GuideMenu extends Menu {
             if (Double.isNaN(back)) {
                 continue;
             }
+            // A machine with one set price is played for money, so its line counts dollars
+            String line = g.setPrice() > 0 ? RtpLimits.playerLine(back).replace("tokens", "dollars")
+                    : RtpLimits.playerLine(back);
             step(CHANCE_SLOTS[i++], Material.GOLD_NUGGET, "&6" + g.name() + " &7- about "
                             + RtpLimits.wholePercent(back) + " of every 100 back",
-                    "&7It " + RtpLimits.playerLine(back) + ",", "&7over lots of plays.");
+                    "&7It " + line + ",", "&7over lots of plays.");
         }
         var lotto = plugin.config().arcade().lotto();
         if (i < CHANCE_SLOTS.length && plugin.arcade() != null && !lotto.payouts().isEmpty()

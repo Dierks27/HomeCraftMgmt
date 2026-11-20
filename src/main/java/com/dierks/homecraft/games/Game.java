@@ -71,6 +71,24 @@ public interface Game {
      */
     void open(Player player, Runnable back);
 
+    /**
+     * A machine with one set price: what a play costs, in whole dollars, when the game is played for money
+     * only and at that one price (The Motherlode, Farm Slots); 0, the default, for every other game. Such a game
+     * never takes tokens ({@link PlayGate} refuses them), and its price needn't be one the Parlor's chips can make:
+     * every other money check (the permission, in the Parlor, the day's limit, the balance) still runs.
+     */
+    default int setPrice() {
+        return 0;
+    }
+
+    /**
+     * What its machine in the Clubhouse's Game Parlor is labelled: its name, or more (a pot machine adds what its
+     * pot holds, and the label is drawn again when this changes).
+     */
+    default String machineLabel() {
+        return name();
+    }
+
     /** Other names {@code /hcm play} accepts ({@code blackjack} for Twenty-One). */
     default List<String> aliases() {
         return List.of();

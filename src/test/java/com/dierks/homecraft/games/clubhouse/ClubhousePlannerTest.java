@@ -1018,6 +1018,78 @@ class ClubhousePlannerTest {
         }
     }
 
+    /**
+     * The Parlor's three more slot machines (Nether Slots, Farm Slots, The Motherlode): displays along the
+     * back row with the Scratch Ticket's booth between them, each on the floor with its back to the wall, in two
+     * blocks of air with room to stand in front, clear of every other machine and of the booth. They are displays
+     * only: not one block is theirs, so the room's plan (its hash, and {@link ClubhousePlanner#ALGO}) is as it was.
+     */
+    @Test
+    void theParlorsBackRowHasAPlaceForEachNewSlotMachine() {
+        Map<Long, String> b = blocks(SITE.plan());
+        List<ClubhousePlanner.Place3> row = ClubhousePlanner.parlorRow(BOX);
+        assertEquals(List.of("nether_slots", "farm_slots", "motherlode"), ClubhousePlanner.PARLOR_ROW_GAMES);
+        assertEquals(ClubhousePlanner.PARLOR_ROW_GAMES.size(), row.size(), "a place for each");
+        int[] xs = {3, 5, 9};
+        ClubhousePlanner.Place3 booth = ClubhousePlanner.parlorTicket(BOX);
+        List<ClubhousePlanner.Place3> others = new java.util.ArrayList<>(ClubhousePlanner.parlorMachines(BOX));
+        others.add(booth);
+        Set<Long> taken = new HashSet<>();
+        for (int n = 0; n < row.size(); n++) {
+            ClubhousePlanner.Place3 m = row.get(n);
+            String game = ClubhousePlanner.PARLOR_ROW_GAMES.get(n);
+            int x = (int) Math.floor(m.x());
+            int y = (int) Math.floor(m.y());
+            int z = (int) Math.floor(m.z());
+            assertEquals(BOX.minX() + xs[n], x, game + " stands at x " + xs[n]);
+            assertEquals(BOX.minZ() + ClubhousePlanner.SIDE_Z1, z, game + " is on the back row");
+            assertEquals(booth.y(), m.y(), game + " stands on the booth's floor");
+            assertEquals(booth.z(), m.z(), game + " is in line with the booth");
+            assertEquals(180f, m.yaw(), game + " faces the room");
+            assertEquals(0.5, m.x() - x, 1e-9, game + " is in the middle of its block");
+            assertTrue(ClubhousePlanner.parlorInside(BOX).contains(x, y, z), game + " stands in the Parlor");
+            for (int j = 0; j < 2; j++) {
+                assertNull(b.get(key(x, y + j, z)), game + " stands in two blocks of air (a cabinet's size)");
+            }
+            assertNotNull(b.get(key(x, y - 1, z)), game + " is on the floor");
+            assertNotNull(b.get(key(x, y, z + 1)), game + " has its back to the Parlor's back wall");
+            assertNotNull(b.get(key(x, y + 1, z + 1)), game + ": the wall is behind all of it");
+            String front = b.get(key(x, y, z - 1));
+            assertTrue(front == null || id(front).endsWith("_carpet"), game + ": room to stand in front (on the felt): "
+                    + front);
+            assertNull(b.get(key(x, y + 1, z - 1)), game + ": head room there");
+            for (ClubhousePlanner.Place3 o : others) {
+                assertTrue(Math.abs(o.x() - m.x()) + Math.abs(o.z() - m.z()) >= 2, game + " is clear of " + o);
+            }
+            assertTrue(taken.add(key(x, y, z)), game + " has a place of its own");
+        }
+        // x 11 and x 13 on the same row are kept free for two machines still to come
+        for (int x : new int[]{11, 13}) {
+            for (ClubhousePlanner.Place3 m : row) {
+                assertTrue(Math.abs(m.x() - (BOX.minX() + x + 0.5)) >= 2, "x " + x + " is left free: " + m);
+            }
+            for (int j = 0; j < 2; j++) {
+                assertNull(b.get(key(BOX.minX() + x, BOX.minY() + ClubhousePlanner.UP_FLOOR + 1 + j,
+                        BOX.minZ() + ClubhousePlanner.SIDE_Z1)), "and is air: x " + x);
+            }
+        }
+        // displays only: the room's blocks are the ones they were
+        assertEquals("cf8b71ca3994", SITE.plan().hash(), "no block changed");
+        assertEquals(9, ClubhousePlanner.ALGO, "so no server rebuilds its Clubhouse for them");
+        assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
+        for (String game : ClubhousePlanner.PARLOR_ROW_GAMES) {
+            assertNotNull(com.dierks.homecraft.pack.ClubModels.machineFor(game), game + " has a model name");
+            assertEquals(com.dierks.homecraft.pack.ClubModels.Kind.CABINET,
+                    com.dierks.homecraft.pack.ClubModels.machineFor(game).kind(), game + " is a cabinet's size");
+            assertEquals(com.dierks.homecraft.games.GameKind.CHANCE,
+                    com.dierks.homecraft.games.GameCatalog.spec(game).kind(), game + " is a game of chance, so an"
+                            + " owner-built room places it with /hcm games clubhouse parlor " + game);
+        }
+        assertEquals("machine_nether", com.dierks.homecraft.pack.ClubModels.machineFor("nether_slots").name());
+        assertEquals("machine_farm", com.dierks.homecraft.pack.ClubModels.machineFor("farm_slots").name());
+        assertEquals("machine_motherlode", com.dierks.homecraft.pack.ClubModels.machineFor("motherlode").name());
+    }
+
     /** Upstairs is shut in: walls round both rooms, a floor under them, the glass roof over them. */
     @Test
     void theUpstairsRoomsAreShutIn() {

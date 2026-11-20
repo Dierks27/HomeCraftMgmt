@@ -141,6 +141,8 @@ final class GamesKit {
         final Map<UUID, Double> money = new LinkedHashMap<>();
         /** The Parlor's rules as kept ({@code hcm_meta}'s stand-in); null = memory only. */
         Map<String, String> parlorKept;
+        /** Every line told to the whole server (a pot taken), colour codes and all. */
+        final List<String> shouted = new ArrayList<>();
 
         Host(long now) {
             this(now, c -> c);
@@ -286,6 +288,11 @@ final class GamesKit {
                     return true;
                 }
             };
+        }
+
+        @Override
+        public void broadcast(String legacy) {
+            shouted.add(legacy);
         }
 
         @Override

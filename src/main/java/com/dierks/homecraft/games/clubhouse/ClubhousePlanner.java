@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.arcade.feast.FeastRules;
+import com.dierks.homecraft.games.chance.mobraces.RaceTrack;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Plan;
@@ -55,9 +56,10 @@ public final class ClubhousePlanner {
      * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club. 5 (0.41.0): the side rooms, the
      * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
-     * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over.
+     * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over. 10:
+     * Mob Races' table in the middle of the Game Parlor.
      */
-    public static final int ALGO = 9;
+    public static final int ALGO = 10;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -300,12 +302,14 @@ public final class ClubhousePlanner {
 
     /**
      * Whether light passes through a block (for the flood: air, glass, panes, chains, lanterns, fences, carpets,
-     * banners, candles, pots and plants). Everything else stops it: slabs, stairs and trapdoors too, though light
-     * can slip past some of them in the game, so the flood never counts more light than there is.
+     * banners, candles, pots and plants, and the invisible barrier over Mob Races' table, which light passes as it
+     * does air). Everything else stops it: slabs, stairs and trapdoors too, though light can slip past some of them in
+     * the game, so the flood never counts more light than there is.
      */
     public static boolean letsLight(String blockData) {
         String id = id(blockData);
-        return id.equals(AIR) || id.equals("minecraft:glass") || id.endsWith("_pane") || id.endsWith("chain")
+        return id.equals(AIR) || id.equals(BARRIER) || id.equals("minecraft:glass") || id.endsWith("_pane")
+                || id.endsWith("chain")
                 || id.equals("minecraft:lantern") || id.endsWith("_fence") || id.endsWith("_carpet")
                 || id.endsWith("_banner") || id.endsWith("candle") || id.startsWith("minecraft:potted_")
                 || id.equals(SHRUB) || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod")
@@ -314,11 +318,13 @@ public final class ClubhousePlanner {
 
     /**
      * The blocks a mob can never stand on: glass and panes, lanterns, chains, candles, carpets, banners, plants and
-     * pots, fences (too narrow). A mob could stand on anything else if it were dark there.
+     * pots, fences (too narrow), and a barrier (the game spawns nothing on one). A mob could stand on anything else if
+     * it were dark there.
      */
     public static boolean noFooting(String blockData) {
         String id = id(blockData);
-        return id.equals("minecraft:glass") || id.endsWith("_pane") || id.equals("minecraft:lantern")
+        return id.equals(BARRIER) || id.equals("minecraft:glass") || id.endsWith("_pane")
+                || id.equals("minecraft:lantern")
                 || id.endsWith("chain") || id.endsWith("candle") || id.endsWith("_carpet") || id.endsWith("_banner")
                 || id.startsWith("minecraft:potted_") || id.equals(SHRUB) || id.endsWith("_fence")
                 || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod") || id.equals(TINTED)
@@ -1175,6 +1181,48 @@ public final class ClubhousePlanner {
                 b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
             }
         }
+        raceTable(b);
+    }
+
+    /**
+     * Mob Races' table (plan 10; the owner: "I hope you make a mini track and you literally see the tiny mobs running
+     * on the track!", "make the track as small as you can", "it would be fun to be able to walk around it"): in the
+     * open middle of the Game Parlor, {@value RaceTrack#LENGTH} blocks long (x {@value #TRACK_X0} to 11) and
+     * {@value RaceTrack#DEPTH} deep (z 36 to 38), one block high, centred on the room's middle line. A clear row of
+     * felt lies between it and the arrival row to its north, two between it and the card tables to its south, and two
+     * columns between each end and the machines' mats on the side walls: it can be walked all the way round.
+     *
+     * <p>Its blocks are a plain dark-wood table and nothing else; the racetrack on it is drawn ({@link RaceTable}),
+     * as the racers are. One block of air over the table is where they run, and an invisible barrier lies over
+     * that: nobody can step or jump onto the track, and nothing is in the way of seeing it or of walking round it.
+     * Two lanterns already hang from the beam over its north corners; two more hang on chains over its south ones.
+     */
+    private static void raceTable(Builder b) {
+        for (int i = TRACK_X0; i < TRACK_X0 + RaceTrack.LENGTH; i++) {
+            for (int k = TRACK_Z0; k < TRACK_Z0 + RaceTrack.DEPTH; k++) {
+                b.set(i, UP_FLOOR + 1, k, TRACK_TABLE); // in place of the felt there
+                b.set(i, UP_FLOOR + 3, k, BARRIER);
+            }
+        }
+        for (int i : new int[]{TRACK_X0, TRACK_X0 + RaceTrack.LENGTH - 1}) {
+            b.set(i, UP_TOP, TRACK_Z0 + RaceTrack.DEPTH - 1, CHAIN);
+            b.set(i, UP_TOP - 1, TRACK_Z0 + RaceTrack.DEPTH - 1, HANGING);
+        }
+    }
+
+    /** Mob Races' table: its north-west corner (x, z offsets), the block it is made of, and the barrier over it. */
+    static final int TRACK_X0 = 4;
+    static final int TRACK_Z0 = MAIN_Z + 4;
+    public static final String TRACK_TABLE = "minecraft:stripped_dark_oak_wood";
+    public static final String BARRIER = "minecraft:barrier";
+
+    /**
+     * Where Mob Races' table stands in {@code box}: its north-west corner at the height of its top, running east
+     * along its length and south across it (as if someone stood on that corner block facing east).
+     */
+    static RaceTable.Frame raceTable(Box box) {
+        return new RaceTable.Frame(box.minX() + ARCADE_X0 + TRACK_X0, box.minY() + UP_FLOOR + 2,
+                box.minZ() + TRACK_Z0, 1, 0, 0, 1);
     }
 
     /** Where the secret room's visitor arrives (its north end, facing in), and the door back out (on its north wall). */

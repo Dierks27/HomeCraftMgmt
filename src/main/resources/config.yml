@@ -2337,6 +2337,26 @@ games:
       # Three Creepers, which also give the free spins (2 in → 40). Never under
       # another line here.
       creeper: 20
+  # ---- mob_races ----
+  # Mob Races: six tiny mobs race round the model track in the Clubhouse's Game Parlor.
+  # A player picks one and puts tokens on it; everyone in the room is in the same race.
+  # Every racer is as likely to win as any other. A pick that wins gets one whole amount
+  # back, worked out per stake so the game gives back `rtp`; any other pick gets nothing.
+  mob_races:
+    # false = Mob Races is closed.
+    enabled: true
+    # The tokens a player can put on a racer.
+    stakes: [5, 10, 20]
+    # Races a player can enter per day (resets at local midnight).
+    daily_limit: 30
+    # Target tokens given back per 100 put in (85-95); the screen shows what it
+    # really reaches (27 back for 5 in is exactly 90).
+    rtp: 90
+    # Seconds the track waits for more entries after the first one (5-120). The race
+    # starts sooner if everyone in it asks.
+    gather_seconds: 20
+    # Seconds the winner takes to reach the finish (10-60).
+    race_seconds: 25
   # ---- creeper_sweeper ----
   # Creeper Sweeper: dig every safe square without digging a creeper.
   creeper_sweeper:

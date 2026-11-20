@@ -110,17 +110,18 @@ public final class ChanceRounds {
      * The ledger source and name of each game of chance, for settling a round whose game could
      * not even be built this run — its tokens still have to go back under the right source.
      */
-    private static final Map<String, TokenService.Source> SOURCES = Map.of(
-            "ore_slots", TokenService.Source.ARCADE_SLOTS,
-            "twenty_one", TokenService.Source.ARCADE_TWENTY_ONE,
-            "wheel", TokenService.Source.ARCADE_WHEEL,
-            "higher_lower", TokenService.Source.ARCADE_HILO,
-            "coin_flip", TokenService.Source.ARCADE_COIN_FLIP,
-            "nether_slots", TokenService.Source.ARCADE_NETHER_SLOTS,
-            "motherlode", TokenService.Source.ARCADE_MOTHERLODE,
-            "farm_slots", TokenService.Source.ARCADE_FARM_SLOTS,
-            "deep_mine", TokenService.Source.ARCADE_DEEP_MINE,
-            "mob_slots", TokenService.Source.ARCADE_MOB_SLOTS);
+    private static final Map<String, TokenService.Source> SOURCES = Map.ofEntries(
+            Map.entry("ore_slots", TokenService.Source.ARCADE_SLOTS),
+            Map.entry("twenty_one", TokenService.Source.ARCADE_TWENTY_ONE),
+            Map.entry("wheel", TokenService.Source.ARCADE_WHEEL),
+            Map.entry("higher_lower", TokenService.Source.ARCADE_HILO),
+            Map.entry("coin_flip", TokenService.Source.ARCADE_COIN_FLIP),
+            Map.entry("nether_slots", TokenService.Source.ARCADE_NETHER_SLOTS),
+            Map.entry("motherlode", TokenService.Source.ARCADE_MOTHERLODE),
+            Map.entry("farm_slots", TokenService.Source.ARCADE_FARM_SLOTS),
+            Map.entry("deep_mine", TokenService.Source.ARCADE_DEEP_MINE),
+            Map.entry("mob_slots", TokenService.Source.ARCADE_MOB_SLOTS),
+            Map.entry("mob_races", TokenService.Source.ARCADE_MOB_RACES));
 
     /** An open screen whose settings changed under it (a reload): reopen to play. */
     static final Refusal CHANGED = Refusal.of("That game's settings just changed. Open it again to play.");

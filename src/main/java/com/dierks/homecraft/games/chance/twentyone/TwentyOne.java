@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Twenty-One (spec §5.4, R1.5, R1.10), shown to players as "Twenty-One" and reachable as
@@ -48,8 +49,53 @@ public final class TwentyOne implements Game {
 
     private final GameContext ctx;
 
+    /** A new session's shoe: a player away from Twenty-One this long gets a freshly shuffled one (0.45.0). */
+    static final long SESSION_GAP_MS = 30L * 60_000L;
+
+    /**
+     * Each player's shoe this session: its seed, where its next card is, when it was last dealt from, and whether a hand
+     * dealt from it is still out ({@link #dealt} hasn't said where it stopped).
+     */
+    private record ShoeState(long seed, int next, long at, boolean inPlay) {
+    }
+
+    private final Map<UUID, ShoeState> shoes = new java.util.concurrent.ConcurrentHashMap<>();
+
     public TwentyOne(GameContext ctx) {
         this.ctx = ctx;
+    }
+
+    /**
+     * The shoe {@code player}'s next hand is dealt from (0.45.0, the owner: "4 Deck Shoe - But reshuffle for a new
+     * session"): the one they are playing through, carrying on where their last hand stopped; a freshly shuffled one at
+     * the first hand of a session (none yet, a restart, or {@link #SESSION_GAP_MS} since their last) or at the cut card.
+     *
+     * <p><b>Never the same cards twice.</b> A hand that ends anywhere but on its own screen (the player left and the
+     * exit rule stood for them, the ten-minute sweep, a hand finished elsewhere) never tells the shoe where it
+     * stopped. Dealing the next hand from the same place would show the same cards again, to a player who has seen
+     * them: so a shoe with a hand still out is thrown away and a fresh one shuffled.
+     */
+    public TwentyOneHand.Shoe shoeFor(UUID player) {
+        return shoeFor(player, System.currentTimeMillis(), java.util.concurrent.ThreadLocalRandom.current().nextLong());
+    }
+
+    /** {@link #shoeFor(UUID)} at {@code now}, with {@code fresh} as the seed of a new shoe (a test's own). */
+    TwentyOneHand.Shoe shoeFor(UUID player, long now, long fresh) {
+        ShoeState s = shoes.get(player);
+        if (s == null || s.inPlay() || now - s.at() > SESSION_GAP_MS || s.next() >= TwentyOneHand.CUT_CARD) {
+            s = new ShoeState(fresh, 0, now, false);
+        }
+        shoes.put(player, new ShoeState(s.seed(), s.next(), now, true));
+        return new TwentyOneHand.Shoe(s.seed(), s.next());
+    }
+
+    /** A hand from {@code player}'s shoe ended on its own screen: the shoe's next card is where it stopped. */
+    public void dealt(UUID player, TwentyOneHand hand) {
+        if (hand == null || hand.shoe() == null) {
+            return;
+        }
+        shoes.put(player, new ShoeState(hand.shoe().seed(), Math.min(hand.nextAt(), TwentyOneHand.SHOE_CARDS),
+                System.currentTimeMillis(), false));
     }
 
     @Override

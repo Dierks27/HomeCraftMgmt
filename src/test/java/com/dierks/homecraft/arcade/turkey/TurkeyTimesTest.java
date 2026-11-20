@@ -128,4 +128,15 @@ class TurkeyTimesTest {
         assertEquals(10, d.stampedeMinutes(), "for ten minutes");
         assertEquals(80, d.stampedeRadius(), "within 80 blocks of the Hub's arrival spot");
     }
+
+    /** 0.45.0: a stampede turkey stands on a floor at about the arrival spot's height, never the roof over it. */
+    @Test
+    void aStampedeTurkeyStandsNearTheArrivalsHeight() {
+        // floors at 64 (the hall) and 70 (its roof): from 64 the hall, from 69 the roof is nearer
+        java.util.function.IntPredicate floors = y -> y == 64 || y == 70;
+        assertEquals(64, TurkeyRules.nearestStand(64, 10, floors));
+        assertEquals(64, TurkeyRules.nearestStand(66, 10, floors), "below wins a tie of two up, two down... (66: 64)");
+        assertEquals(70, TurkeyRules.nearestStand(69, 10, floors));
+        assertEquals(Integer.MIN_VALUE, TurkeyRules.nearestStand(40, 10, floors), "nothing in reach: no turkey there");
+    }
 }

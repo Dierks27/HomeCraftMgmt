@@ -587,8 +587,23 @@ public final class ClubhouseRoom {
             site = chosenSite();
         }
         Box where = kind == JobKind.SCAN_ANNEX ? annex : kind == JobKind.SCAN_MAIN ? box : site.box();
-        job = new BuildJob(port, where, jobScan ? null : site.plan(), jobScan ? BuildJob.Mode.SCAN
-                : BuildJob.Mode.CONVERGE);
+        try {
+            job = new BuildJob(port, where, jobScan ? null : site.plan(), jobScan ? BuildJob.Mode.SCAN
+                    : BuildJob.Mode.CONVERGE);
+        } catch (IllegalArgumentException e) {
+            // 0.45.0: a save this server can't build (a block a Minecraft update renamed, a hand-edited file). It threw
+            // out of here, the Clubhouse was switched off and stayed off at every reload, with no command left to
+            // fix it. Now the room closes with the reason and the saves' commands still answer; nothing is built over
+            // the owner's blocks.
+            job = null;
+            if (savedSite != null && site == savedSite) {
+                savedProblem = "your save " + savedId + " can't be built here: " + e.getMessage();
+                close(savedProblem + " - /hcm games clubhouse restore <n> for another save, or generated confirm for"
+                        + " HCM's room");
+                return;
+            }
+            throw e;
+        }
         jobStarted = ticks;
         phase = jobScan ? Phase.SCANNING : Phase.BUILDING;
     }
@@ -925,7 +940,7 @@ public final class ClubhouseRoom {
         if (games == null || games.isEmpty()) {
             return out;
         }
-        if (!hand && !(overrides() && !handCabinets.isEmpty())) {
+        if (!hand) {
             if (!arcadeBuilt()) {
                 return out;
             }
@@ -933,6 +948,15 @@ public final class ClubhouseRoom {
             List<ClubhousePlanner.Place3> at = ClubhousePlanner.cabinets(site.box());
             for (int n = 0; n < at.size(); n++) {
                 out.add(new Cabinet(games.get(n % games.size()), at.get(n)));
+            }
+            // 0.45.0: in an edited or saved room a cabinet the owner moved takes its game's first place; the others
+            // stay (moving one used to take all the generated ones away)
+            for (String g : games) {
+                Place moved = handCabinets.get(g);
+                if (overrides() && mine(moved)) {
+                    moveFirst(out, g, new ClubhousePlanner.Place3(Math.floor(moved.x()) + 0.5, Math.floor(moved.y()),
+                            Math.floor(moved.z()) + 0.5, WallBoards.snap(moved.yaw())));
+                }
             }
             return out;
         }
@@ -944,6 +968,17 @@ public final class ClubhouseRoom {
             }
         }
         return out;
+    }
+
+    /** The first of {@code list} that plays {@code game} stands at {@code at} now (none: one more, there). */
+    static void moveFirst(List<Cabinet> list, String game, ClubhousePlanner.Place3 at) {
+        for (int n = 0; n < list.size(); n++) {
+            if (list.get(n).game().equals(game)) {
+                list.set(n, new Cabinet(game, at));
+                return;
+            }
+        }
+        list.add(new Cabinet(game, at));
     }
 
     /** A cabinet in the Arcade Room: the game it plays and where it stands (0.42.0: a game may have two). */
@@ -1115,11 +1150,11 @@ public final class ClubhouseRoom {
     }
 
     /** The secret room's way in: the little gold star (0.43.0), or {@code null}. */
-    public ClubhousePlanner.Place3 secretStar() {
+    public ClubhousePlanner.Place3 secretDoor() {
         if (!mine(handSecret)) {
-            return secretBuilt() ? ClubhousePlanner.secretStar(site.box()) : null;
+            return secretBuilt() ? ClubhousePlanner.secretDoor(site.box()) : null;
         }
-        return place3(handSecret, 1.5);
+        return place3(handSecret, 0); // 0.45.0: a door, standing where the admin stood, facing the way they faced
     }
 
     /** Where a visitor stands after coming out of the secret room: in front of the star. */
@@ -1181,6 +1216,11 @@ public final class ClubhouseRoom {
     /** An owner-built secret room's row of trophy places. */
     static final int SHELF_ROW = 16;
 
+    /** Whether the secret room's trophies stand on the generated room's ledges (a plaque on each ledge's front). */
+    public boolean secretOnLedges() {
+        return !mine(handSecretRoom) && secretBuilt();
+    }
+
     /** Whether feet are in the secret room (its air; owner-built: near its arrival spot). */
     public boolean inSecretRoom(String worldName, double x, double y, double z) {
         if (worldName == null || !worldName.equalsIgnoreCase(world())) {
@@ -1193,11 +1233,11 @@ public final class ClubhouseRoom {
     }
 
     /** The Game Parlor's door (in the 19th Hole), and where its visitor comes back out. */
-    public ClubhousePlanner.Place3 parlorDoor() {
+    public ClubhousePlanner.Place3 parlorStar() {
         if (!mine(handParlorDoor)) {
-            return parlorBuilt() ? ClubhousePlanner.parlorDoor(site.box()) : null;
+            return parlorBuilt() ? ClubhousePlanner.parlorStar(site.box()) : null;
         }
-        return place3(handParlorDoor, 0);
+        return place3(handParlorDoor, 1.5); // 0.45.0: a star, at eye height where the admin stood
     }
 
     public ClubhouseSite.Spot parlorReturn() {
@@ -1226,13 +1266,18 @@ public final class ClubhouseRoom {
     /** The parlor's machines: the generated room's (two Ore Slots, the Wheel, Coin Flip, the two tables), or the owner's. */
     public List<Cabinet> parlorMachines() {
         List<Cabinet> out = new ArrayList<>();
-        if (!hand && !(overrides() && !handParlor.isEmpty())) {
+        if (!hand) {
             if (!parlorBuilt()) {
                 return out;
             }
             List<ClubhousePlanner.Place3> at = ClubhousePlanner.parlorMachines(site.box());
             for (int n = 0; n < at.size(); n++) {
                 out.add(new Cabinet(ClubhousePlanner.PARLOR_GAMES.get(n), at.get(n)));
+            }
+            for (Map.Entry<String, Place> e : handParlor.entrySet()) { // 0.45.0: a moved machine, the rest stay
+                if (overrides() && mine(e.getValue())) {
+                    moveFirst(out, e.getKey(), place3(e.getValue(), 0));
+                }
             }
             return out;
         }
@@ -1273,17 +1318,18 @@ public final class ClubhouseRoom {
                 boolean room = "room".equals(sub);
                 key = room ? SECRET_ROOM_KEY : SECRET_KEY;
                 said = room ? "The secret room's visitors arrive where you stand; its door out is behind you and its"
-                        + " trophies along a row three ahead." : "The secret room's gold star is where you stand.";
+                        + " trophies along a row three ahead." : "The secret room's door is where you stand, facing"
+                        + " the way you face.";
             }
             case "parlor" -> {
-                if ("door".equals(sub) || "room".equals(sub)) {
+                if ("door".equals(sub) || "star".equals(sub) || "room".equals(sub)) {
                     boolean room = "room".equals(sub);
                     key = room ? PARLOR_ROOM_KEY : PARLOR_DOOR_KEY;
                     said = room ? "The Game Parlor's visitors arrive where you stand; its door out is behind you."
-                            : "The Game Parlor's door is where you stand, facing the way you face.";
+                            : "The Game Parlor's gold star is where you stand.";
                 } else {
                     if (sub == null || sub.isBlank()) {
-                        return "&cWhich? &e/hcm games clubhouse parlor door|room|<game> [clear]";
+                        return "&cWhich? &e/hcm games clubhouse parlor star|room|<game> [clear]";
                     }
                     if (at != null && !chanceGame) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
@@ -1427,7 +1473,10 @@ public final class ClubhouseRoom {
         com.dierks.homecraft.games.gen.api.Plan plan = ClubSave.snapshot(b, at -> {
             long k = ((long) (at[0] >> 4) << 32) ^ (at[2] >> 4);
             WorldPort.ChunkView v = views.computeIfAbsent(k, kk -> port.snapshot(at[0] >> 4, at[2] >> 4));
-            return v == null ? null : v.block(at[0], at[1], at[2]);
+            String block = v == null ? null : v.block(at[0], at[1], at[2]);
+            // 0.45.0: a jukebox mid-song is saved empty (the disc is the Clubhouse's own, never part of the room)
+            return block != null && block.startsWith("minecraft:jukebox[")
+                    ? block.replace("has_record=true", "has_record=false") : block;
         });
         ClubhouseSite check = new ClubhouseSite(plan, site.spawns(), site.podium(), site.board(), site.inside(),
                 site.more());
@@ -1458,6 +1507,16 @@ public final class ClubhouseRoom {
         try {
             host.writeSave(id, ClubSave.text(plan, genHash, ClubhousePlanner.regions(b,
                     annexIn ? rooms : ClubhousePlanner.Rooms.NONE).keySet()));
+        } catch (Exception e) {
+            host.logger().log(Level.WARNING, "Clubhouse: could not write the save", e);
+            out.add("&cThe save couldn't be written: " + e.getMessage());
+            return out;
+        }
+        if (!setMeta(SAVED_KEY, id) || !setMeta(EDIT_KEY, null)) {
+            out.add("&cThe save is written but couldn't be made the room's - see the console.");
+            return out;
+        }
+        try { // 0.45.0: the oldest go only once the new one is the room's (never the save still in use)
             List<String> all = new ArrayList<>(host.saves());
             all.sort(null);
             while (all.size() > SAVES_KEPT) {
@@ -1467,13 +1526,7 @@ public final class ClubhouseRoom {
                 }
             }
         } catch (Exception e) {
-            host.logger().log(Level.WARNING, "Clubhouse: could not write the save", e);
-            out.add("&cThe save couldn't be written: " + e.getMessage());
-            return out;
-        }
-        if (!setMeta(SAVED_KEY, id) || !setMeta(EDIT_KEY, null)) {
-            out.add("&cThe save is written but couldn't be made the room's - see the console.");
-            return out;
+            host.logger().log(Level.WARNING, "Clubhouse: could not tidy the old saves", e);
         }
         savedId = id;
         editing = false;
@@ -1526,6 +1579,10 @@ public final class ClubhouseRoom {
         if (hand) {
             return "&cThe owner-built room is on. &e/hcm games clubhouse generated &7first.";
         }
+        if (editing) { // 0.45.0: never over unsaved edits without a word
+            return "&cYou're in edit mode. &e/hcm games clubhouse save confirm &7keeps your edits, &e/hcm games"
+                    + " clubhouse discard &7drops them; then restore.";
+        }
         String id = ids.get(n - 1);
         if (!setMeta(SAVED_KEY, id) || !setMeta(EDIT_KEY, null) || !setMeta(OFF_KEY, null)) {
             return "&cThat can't be saved to the database right now.";
@@ -1534,6 +1591,9 @@ public final class ClubhouseRoom {
         editing = false;
         off = false;
         settle();
+        if (savedProblem != null) {
+            return "&c" + savedProblem + ".";
+        }
         return "&aThe Clubhouse is your save &f" + id + " &aagain. &7It is built and checked before anyone comes in.";
     }
 
@@ -1797,7 +1857,18 @@ public final class ClubhouseRoom {
      * generated room once the owner edits or saved it (moving a spot their blocks covered, {@code spot}).
      */
     private boolean mine(Place p) {
-        return hand || (overrides() && p != null && p.world().equalsIgnoreCase(world));
+        return hand || (overrides() && p != null && p.world().equalsIgnoreCase(world) && inBox(p));
+    }
+
+    /**
+     * Whether a recorded spot is inside the Clubhouse's box (0.45.0): in an edited or saved room only those count. A
+     * spot left from an earlier owner-built room somewhere else (its keys are kept when HCM's room comes back) sent
+     * visitors, the podium, the boards and the cabinets out to it as soon as edit mode went on.
+     */
+    private boolean inBox(Place p) {
+        Box b = site != null ? site.box() : box;
+        return p != null && b != null && b.contains((int) Math.floor(p.x()), (int) Math.floor(p.y()),
+                (int) Math.floor(p.z()));
     }
 
     /** Whether the generated room takes the owner's spots: in edit mode, or with a save in use. */

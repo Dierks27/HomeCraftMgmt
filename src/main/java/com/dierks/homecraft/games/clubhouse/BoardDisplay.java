@@ -97,8 +97,9 @@ final class BoardDisplay {
     private void screen(World w, WallBoards.Wall at) {
         Entity e = screen == null ? null : Bukkit.getEntity(screen);
         boolean want = at.back() == WallBoards.Back.SCREEN;
-        if (e != null && e.isValid() && want && e.getLocation().distanceSquared(new Location(w, at.x(), at.y(), at.z()))
-                < 0.01 && WallBoards.sameWay(e.getLocation().getYaw(), at.yaw())) {
+        if (e != null && e.isValid() && want && w.equals(e.getWorld())
+                && e.getLocation().distanceSquared(new Location(w, at.x(), at.y(), at.z())) < 0.01
+                && WallBoards.sameWay(e.getLocation().getYaw(), at.yaw())) {
             return; // as it is
         }
         if (e != null) {

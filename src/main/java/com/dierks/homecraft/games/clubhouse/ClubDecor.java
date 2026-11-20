@@ -80,13 +80,14 @@ final class ClubDecor {
                 }
             }
         }
-        if (beat % SHELF_EVERY == 0) {
+        beat++; // every second (0.45.0: it only moved with someone in, so the shelves were stocked each second)
+        if (beat % SHELF_EVERY == 0 && !room.editing()) {
             stockBar(room, w);
         }
         // a little steam off the Feast Pot while anyone is in, every other second
         Shown pot = shown.get("feast.pot");
         potTap(w, pot == null ? null : pot.prop());
-        if (anyoneIn && pot != null && (beat++ & 1) == 0) {
+        if (anyoneIn && pot != null && (beat & 1) == 0) {
             w.spawnParticle(Particle.WHITE_SMOKE, pot.prop().x(), pot.prop().y() + 0.4, pot.prop().z(), 2, 0.08, 0.05,
                     0.08, 0.005);
         }
@@ -144,6 +145,11 @@ final class ClubDecor {
         if (e != null) {
             e.remove();
         }
+        if (!w.isChunkLoaded(at.getBlockX() >> 4, at.getBlockZ() >> 4)) {
+            potTap = null; // 0.45.0: made when its chunk is back (it was spawned again every second while unloaded)
+            potAt = null;
+            return;
+        }
         potAt = at;
         potTap = w.spawn(at, org.bukkit.entity.Interaction.class, i -> {
             WorldEntities.tag(i, club, null);
@@ -167,8 +173,8 @@ final class ClubDecor {
     /**
      * The back bar's shelves (0.44.2, the owner: "We should place those into the shelves not have them just
      * floating"): each shelf block holds three bottles of its own (honey, potions of a few colours, a bottle o'
-     * enchanting, an empty glass), put back whenever they differ (a rebuild empties a shelf). A shelf block that isn't
-     * there (an edited room) is left alone. Nobody can take them: {@link Clubhouse} refuses a use of any shelf in the
+     * enchanting, an empty glass), put on every empty place (a rebuild empties a shelf). A shelf block that isn't
+     * there is left alone, and nothing is stocked in edit mode. Nobody can take them: {@link Clubhouse} refuses a use of any shelf in the
      * room.
      */
     void stockBar(ClubhouseRoom room, World w) {
@@ -182,12 +188,12 @@ final class ClubDecor {
             if (!(b.getState() instanceof org.bukkit.block.Shelf shelf)) {
                 continue;
             }
-            org.bukkit.inventory.Inventory inv = shelf.getInventory();
-            for (int slot = 0; slot < Math.min(3, inv.getSize()); slot++) {
-                ItemStack want = bottle(n * 3 + slot);
-                ItemStack have = inv.getItem(slot);
-                if (have == null || !have.isSimilar(want)) {
-                    inv.setItem(slot, want);
+            org.bukkit.inventory.Inventory onShelf = shelf.getInventory();
+            for (int slot = 0; slot < Math.min(3, onShelf.getSize()); slot++) {
+                ItemStack have = onShelf.getItem(slot);
+                if (have == null || have.getType().isAir()) {
+                    // only an empty place: never over the owner's own item (a shelf block's, nobody's inventory)
+                    onShelf.setItem(slot, bottle(n * 3 + slot));
                 }
             }
         }

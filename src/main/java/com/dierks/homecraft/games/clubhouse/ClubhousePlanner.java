@@ -1213,18 +1213,25 @@ public final class ClubhousePlanner {
         return out;
     }
 
-    /** The way into the secret room: a little gold star on the Trophy Room's back wall, and where its visitor returns. */
-    public static Place3 secretStar(Box box) {
-        return new Place3(box.minX() + TROPHY_X0 + 13.5, box.minY() + 3.5, box.minZ() + SIDE_Z1 + 0.85, 180f);
+    /**
+     * The way into the secret room (0.45.0, the owner: "Make the dark door the secret room and the star the casino"):
+     * a dark-oak door standing against the Trophy Room's back wall, east of the podium, facing into the room; and
+     * where its visitor returns. (0.43.0-0.44.2: a gold star on that wall.)
+     */
+    public static Place3 secretDoor(Box box) {
+        return new Place3(box.minX() + TROPHY_X0 + 13, box.minY() + 1, box.minZ() + SIDE_Z1, 180f);
     }
 
     public static ClubhouseSite.Spot secretReturn(Box box) {
         return new ClubhouseSite.Spot(box.minX() + TROPHY_X0 + 13.5, box.minY() + 1, box.minZ() + SIDE_Z1 - 1.5, 0f);
     }
 
-    /** The Game Parlor's door in the 19th Hole (against its west wall, between the nook and the fireplace). */
-    public static Place3 parlorDoor(Box box) {
-        return new Place3(box.minX() + 1.0, box.minY() + 1, box.minZ() + PARLOR_DOOR_Z, -90f);
+    /**
+     * The Game Parlor's way in (0.45.0): a little gold star on the 19th Hole's west wall, between the nook and the
+     * fireplace, at eye height, so you have to know it is there. (0.43.0-0.44.2: a door there.)
+     */
+    public static Place3 parlorStar(Box box) {
+        return new Place3(box.minX() + 1.15, box.minY() + 2.6, box.minZ() + PARLOR_DOOR_Z + 0.5, -90f);
     }
 
     static final int PARLOR_DOOR_Z = 21;

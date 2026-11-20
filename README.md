@@ -252,13 +252,47 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
-**0.44.2 fixes** from the owner's walk of the Clubhouse: the holders' heads on the Trophy Room's pedestals and
-the secret room's middle pedestal face you (you saw the backs of their heads); the secret room's trophy labels are
-plaques on the front of each ledge, under their trophy (they were inside the ledge, unreadable); the Game Parlor's
-card tables are one block high, so Twenty-One and Higher or Lower are tapped from the floor, no jumping; the bar's
-bottles stand on its shelves (the shelves' own items; nobody can take them) instead of floating in front; and the
-secret room is open to everyone (`hcm.clubhouse.secretroom` defaults to true: it only shows each player their own
-trophies). The room is rebuilt once (ALGO 8 -> 9). **Back to 0.44.1 from 0.44.2:** the jar alone.
+**0.45.0** carries 0.44.2 (which was never released on its own): the holders' heads on the Trophy Room's
+pedestals and the secret room's middle pedestal face you; the secret room's trophy labels are plaques on the
+front of each ledge; the Game Parlor's card tables are one block high (no jumping); the bar's bottles stand on
+its shelves; the secret room is everyone's. And:
+
+- **Twenty-One deals from a 4-deck shoe** (the owner: "4 Deck Shoe - But reshuffle for a new session"): each
+  player's own 208 cards, shuffled once and dealt straight through, hand after hand. A fresh shoe at the first
+  hand of a session (30 minutes away, or a restart), at the cut card three quarters in, and whenever a hand
+  ended anywhere but on its own screen (so nobody is ever dealt cards they have already seen). A hand still
+  replays exactly from its saved data; hands saved before the update finish as they would have. The shown
+  "gives back about N of 100" is the exact value for the old endless deck; a shoe moves it by about a tenth
+  of a token, and a player who counts cards can do a little better than it.
+- **The door and the star swapped**, and the Game Parlor has its own permission (see
+  [Upstairs](#upstairs-the-secret-trophy-room-and-the-game-parlor-0430)).
+- **The secret room shows real bests only.** The Clubhouse's own points tallies (family week, daily points)
+  sit in the same table and each became a silver cup with a cake on it, a new one every day, until they
+  filled the ledges. They are left out now, and no longer count as games played. Each game's icon stands
+  beside its trophy (over it, it was inside the ledge above), a grand cup fits under the roof, a trophy with
+  no place yet keeps its burst, and an owner-built room's labels sit over the trophies.
+- **The Hub:** falling out of the world puts a visitor back at the arrival spot once (it froze them there);
+  the Turkey Stampede's turkeys are let loose while someone is in the Hub, 20 a second, on floors at about
+  the arrival spot's height (a stampede that started with the Hub empty let none loose, and under a roof
+  they stood on it); `/hcm turkey clear` clears the stampede too; the shout doesn't go to players already in
+  the Hub's world.
+- **The catch-up turkey** is owed to everyone online on a catch-up day (not only whoever joined that day, and
+  a `/hcm reload` no longer forgets it), and it follows its owner to the Hub or home like a run's turkey.
+- **Edit mode and saves:** a save of the main room alone still fits the room with its side rooms, and the
+  other way round (it was refused, and HCM's room built over yours); a save this server can't build closes
+  the room with the reason and leaves the save commands working (it switched the Clubhouse off for good);
+  spots left from an earlier owner-built room somewhere else no longer take over when edit mode goes on;
+  moving one cabinet or machine keeps the others; `restore` asks you to save or discard first in edit mode; a
+  jukebox mid-song is saved empty; the shelves are stocked only where empty, never in edit mode, and only
+  HCM's own room's shelves are locked.
+- **Kid cabinet screens** keep a door out ("All done") under the big Play again, and pause for a moment when
+  a round ends so a tap meant for a zombie doesn't start the next round. A Clubhouse visitor mid-hand in the
+  Parlor is no longer sent home by the idle clock.
+- The pack's model check reads a drop-in only when it changed.
+
+The room is rebuilt once (ALGO 8 -> 9). **Back to 0.44.1 from 0.45.0:** the jar alone; a Twenty-One hand left
+open from the shoe is given its tokens back by 0.44.1 (it can't read the new hand), and
+`hcm.clubhouse.parlor` does nothing.
 
 **0.44.1 fixes** `/hcm games hub here`: 0.44.0 kept the spot under a name the settings store refuses, so the
 command switched the Hub off ("That game is taking a break") and saved nothing. Set the spot again after
@@ -4592,10 +4626,11 @@ corner). Each has its own walls, a glass roof and lights; you reach them by tapp
 **The secret trophy room** (over the Trophy Room). The owner: "her own little trophy room (make it a secret
 room) that shows all her high scores."
 
-- **The way in** is a little gold star on the Trophy Room's back wall (east end). One tap, either click: a
-  whoosh, a sparkle, and you're in. **Everyone can** (0.44.2: `hcm.clubhouse.secretroom` is everyone's by
-  default, since the room only ever shows each player their own trophies). Take it from someone with
-  `/lp user <player> permission set hcm.clubhouse.secretroom false`: they see no star and get no message.
+- **The way in** is a dark-oak door standing against the Trophy Room's back wall, east of the podium
+  (0.45.0; it was a gold star on that wall). One tap, either click: a whoosh, a sparkle, and you're in.
+  **Everyone can** (0.44.2: `hcm.clubhouse.secretroom` is everyone's by default, since the room only ever
+  shows each player their own trophies). Take it from someone with `/lp user <player> permission set
+  hcm.clubhouse.secretroom false`: they see no door and get no message.
 - **Every visitor sees only their own trophies.** They're drawn for that player alone, so two visitors stand
   in the same room and each sees their own shelves. Your head and name stand on the pedestal in the middle.
 - **Trophies come from what the games already keep**, with no new scoring: **firsts** (first arcade game,
@@ -4611,9 +4646,13 @@ room) that shows all her high scores."
 Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same gate as anywhere else**:
 `hcm.games.chance`, the day's `chance_daily_tokens`, Take a break and the cooldowns.
 
-- **The way in** is a dark-oak door on the 19th Hole's west wall, between the reading nook and the fireplace.
-  **Only players with `hcm.games.chance` see it.** Lilah's path (foyer, hall, Arcade Room, Trophy Room)
-  never passes it. Without the permission there is no door, and a machine does nothing.
+- **The way in** is a little gold star on the 19th Hole's west wall, between the reading nook and the
+  fireplace (0.45.0, the owner: "the star the casino so you must know how to get into it"; it was a door).
+  Nothing marks it. It needs **`hcm.clubhouse.parlor`** (new in 0.45.0, everyone's by default) **and**
+  `hcm.games.chance`: without both there is no star, and a machine does nothing. Lilah's path (foyer, hall,
+  Arcade Room, Trophy Room) never passes it. **To lock the Parlor down:** `/lp group default permission set
+  hcm.clubhouse.parlor false`, then give it to the adults with `/lp user <player> permission set
+  hcm.clubhouse.parlor true`.
 - Inside, a Clubhouse visitor may open a game of chance (anywhere else in the Clubhouse they still can't).
   The rest of the gate is unchanged.
 - Green felt floor, two card tables with chairs, a brass rail, lanterns from the beams. The door on its
@@ -4622,9 +4661,9 @@ Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same ga
 
 **Owner-built spots** (stand there first):
 
-- `/hcm games clubhouse secret`: the gold star.
+- `/hcm games clubhouse secret`: the secret room's door (it faces the way you face).
 - `secret room`: where visitors arrive (the door out goes behind you, the trophies along a row three ahead).
-- `parlor door`: the Parlor's door.
+- `parlor star` (or `parlor door`, as before): the Parlor's gold star.
 - `parlor room`: where its visitors arrive.
 - `parlor <game>`: a machine (one of the games of chance).
 

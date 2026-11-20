@@ -429,8 +429,9 @@ public final class Clubhouse implements Game, ClubDoor {
                     || !b.getType().name().endsWith("_SHELF")) {
                 return;
             }
-            if (!r.contains(b.getWorld().getName(), b.getX() + 0.5, b.getY() + 0.5, b.getZ() + 0.5)) {
-                return;
+            if (r.hand() || !r.open()
+                    || !r.contains(b.getWorld().getName(), b.getX() + 0.5, b.getY() + 0.5, b.getZ() + 0.5)) {
+                return; // 0.45.0: HCM's own room only (an owner-built room's shelves are the owner's)
             }
             if (r.editing() && e.getPlayer().hasPermission("hcm.games.admin")) {
                 return;
@@ -1120,8 +1121,8 @@ public final class Clubhouse implements Game, ClubDoor {
             return true; // a pending Go
         }
         Game on = com.dierks.homecraft.gui.games.GameMenu.gameOnScreen(online(id));
-        if (on != null && on.kind() == GameKind.CABINET) {
-            return true;
+        if (on != null && (on.kind() == GameKind.CABINET || on.kind().chance())) {
+            return true; // 0.45.0: a hand in the Game Parlor too (it sent a visitor home mid-hand)
         }
         if (games().parties().of(id) != null || (watch != null && watch.watching(id))) {
             return true;

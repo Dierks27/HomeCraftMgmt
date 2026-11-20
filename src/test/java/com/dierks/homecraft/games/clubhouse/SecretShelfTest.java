@@ -85,4 +85,38 @@ class SecretShelfTest {
                 SecretShelf.fresh(more, SecretShelf.seen(seen)).stream().map(SecretShelf.Trophy::key).toList(),
                 "only what was earned since bursts");
     }
+
+    /**
+     * The review's find, and the owner's screenshot (a ledge of cake-topped silver cups): the Clubhouse's own points
+     * tallies sit in the same table as the bests and each became a "best" trophy, a new one every day.
+     */
+    @Test
+    void pointsTalliesAreNoTrophies() {
+        assertTrue(SecretShelf.scoreBoard(GameKind.CABINET, "classic"));
+        assertTrue(SecretShelf.scoreBoard(GameKind.CABINET, "daily:20789"), "a play (never a best: see trophies)");
+        assertTrue(SecretShelf.scoreBoard(GameKind.TRIAL, "course:sky"));
+        assertTrue(SecretShelf.scoreBoard(GameKind.GOLF, "golf:windmill"));
+        for (String tally : List.of("club:2970", "clubday:20789", "clubwins:2970", "ffsolo:2970", "gstars:x",
+                "rnseason:2026", "week:course:sky")) {
+            assertFalse(SecretShelf.scoreBoard(GameKind.TRIAL, tally), tally);
+        }
+        assertFalse(SecretShelf.scoreBoard(GameKind.CHANCE, "classic"));
+        List<SecretShelf.Trophy> t = SecretShelf.trophies(List.of(
+                new GamesDao.Mine("clubhouse", "club:2970", 7, 40), new GamesDao.Mine("clubhouse", "clubday:20789", 3, 90),
+                new GamesDao.Mine("snake", "classic", 12, 2)), SecretShelf.games(g -> g.equals("snake")
+                ? GameKind.CABINET : GameKind.TRIAL, g -> g));
+        assertEquals(List.of("first:cabinet", "best:snake:classic"), t.stream().map(SecretShelf.Trophy::key).toList(),
+                "the Snake best alone: no Clubhouse cup, and its 130 tally rows aren't 100 games played");
+    }
+
+    /** Only what was drawn is marked seen (a trophy with no place on the shelf keeps its burst), added to the old list. */
+    @Test
+    void onlyDrawnTrophiesAreMarkedSeen() {
+        SecretShelf.Trophy a = new SecretShelf.Trophy("a", 1, null, "", false);
+        SecretShelf.Trophy b = new SecretShelf.Trophy("b", 1, null, "", false);
+        assertEquals("old,a", SecretShelf.seenText(java.util.Set.of("old"), List.of(a)));
+        assertEquals(java.util.Set.of("old", "a"), SecretShelf.seen(SecretShelf.seenText(java.util.Set.of("old"),
+                List.of(a))));
+        assertEquals(List.of(b), SecretShelf.fresh(List.of(a, b), SecretShelf.seen("old,a")), "b still bursts");
+    }
 }

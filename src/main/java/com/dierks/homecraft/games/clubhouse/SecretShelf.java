@@ -79,6 +79,9 @@ final class SecretShelf {
             if (kind == null || kind.chance()) {
                 continue; // a game no longer there; never a game of chance (not even toward games played)
             }
+            if (!scoreBoard(kind, r.board())) {
+                continue; // 0.45.0: a points tally (the Clubhouse's family week, a season's wins...), no board of bests
+            }
             played += Math.max(0, r.runs());
             cabinet |= kind == GameKind.CABINET;
             race |= kind == GameKind.TRIAL && r.board().startsWith("course:");
@@ -112,6 +115,25 @@ final class SecretShelf {
         return out;
     }
 
+    /**
+     * Whether {@code board} is a board of plays and bests (0.45.0): a cabinet's Classic or today's, a course, a golf
+     * course. {@code game_scores} also keeps points tallies in the same shape (the Clubhouse's {@code club:<week>},
+     * {@code clubday:<day>} and {@code clubwins:<week>}, Falling Floors' and Race Night's weekly and season rows, Fresh
+     * Courses' stars): before, each of those became a silver "best" cup, a new one every day, until they filled the
+     * ledges and no real best was shown, and their rows counted as games played.
+     */
+    static boolean scoreBoard(GameKind kind, String board) {
+        if (board == null) {
+            return false;
+        }
+        return switch (kind) {
+            case CABINET -> !board.contains(":") || board.startsWith("daily:");
+            case TRIAL -> board.startsWith("course:");
+            case GOLF -> board.startsWith("golf:");
+            default -> false;
+        };
+    }
+
     /** A best as players read it: a course's time, golf's strokes, else the number. */
     static String score(GamesDao.Mine r) {
         if (r.board().startsWith("course:")) {
@@ -136,8 +158,16 @@ final class SecretShelf {
 
     /** The seen keys as stored ("a,b,c"), and back. */
     static String seenText(List<Trophy> trophies) {
-        Set<String> keys = new LinkedHashSet<>();
-        for (Trophy t : trophies) {
+        return seenText(Set.of(), trophies);
+    }
+
+    /**
+     * What was seen before and the trophies shown now (0.45.0: only the ones that were drawn: a trophy with no place
+     * on the shelf yet keeps its burst for the day it gets one).
+     */
+    static String seenText(Set<String> before, List<Trophy> shown) {
+        Set<String> keys = new LinkedHashSet<>(before == null ? Set.of() : before);
+        for (Trophy t : shown) {
             keys.add(t.key());
         }
         return String.join(",", keys);

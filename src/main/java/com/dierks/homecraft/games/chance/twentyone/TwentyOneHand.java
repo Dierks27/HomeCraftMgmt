@@ -30,8 +30,17 @@ import java.util.SplittableRandom;
  */
 public final class TwentyOneHand {
 
-    /** The data format (and dealing rule) version written into every round. */
+    /** The data format (and dealing rule) of a hand from an infinite deck (before 0.45.0); still read back. */
     public static final int VERSION = 1;
+    /**
+     * 0.45.0: a hand dealt from a player's 4-deck shoe ({@link Shoe}): the round's data names the shoe's seed and where
+     * in it the hand starts, so the hand is still a pure function of its data.
+     */
+    public static final int VERSION_SHOE = 2;
+    /** A shoe's cards: four 52-card decks. */
+    public static final int SHOE_CARDS = 4 * 52;
+    /** The cut card: a new hand that would start past this many cards dealt starts a fresh shoe. */
+    public static final int CUT_CARD = SHOE_CARDS * 3 / 4;
 
     public static final char HIT = 'H';
     public static final char STAND = 'S';
@@ -140,9 +149,47 @@ public final class TwentyOneHand {
         }
     }
 
+    /**
+     * Where a hand is dealt from (0.45.0): a shoe of {@link #SHOE_CARDS} cards shuffled once from {@code seed}, the hand's
+     * first card at position {@code at}. Every card is a pure function of the two, so a hand is replayed exactly.
+     */
+    public record Shoe(long seed, int at) {
+
+        public Shoe {
+            if (at < 0 || at >= SHOE_CARDS) {
+                throw new IllegalArgumentException("a shoe position is 0-" + (SHOE_CARDS - 1) + ": " + at);
+            }
+        }
+
+        /** The shoe's order: card {@code i} dealt is {@code order()[i] % 52} (Fisher-Yates over a SplittableRandom). */
+        int[] order() {
+            return shuffled(seed);
+        }
+
+        static int[] shuffled(long seed) {
+            int[] cards = new int[SHOE_CARDS];
+            for (int i = 0; i < cards.length; i++) {
+                cards[i] = i % 52;
+            }
+            SplittableRandom r = new SplittableRandom(seed);
+            for (int i = cards.length - 1; i > 0; i--) {
+                int j = r.nextInt(i + 1);
+                int t = cards[i];
+                cards[i] = cards[j];
+                cards[j] = t;
+            }
+            return cards;
+        }
+    }
+
     private final Terms terms;
     private final TwentyOneMath.Payouts pays;
+    /** The infinite deck (a version 1 hand), or {@code null}. */
     private final SplittableRandom deck;
+    /** The shoe (a version 2 hand), or {@code null}; its order, and the next card's place in it. */
+    private final Shoe shoe;
+    private int[] order;
+    private int next;
     private final List<Card> player = new ArrayList<>();
     private final List<Card> dealer = new ArrayList<>();
     private final StringBuilder actions = new StringBuilder();
@@ -150,9 +197,18 @@ public final class TwentyOneHand {
     private Result result;
 
     private TwentyOneHand(long seed, Terms terms) {
+        this(seed, terms, null);
+    }
+
+    private TwentyOneHand(long seed, Terms terms, Shoe shoe) {
         this.terms = terms;
         this.pays = terms.payouts();
-        this.deck = new SplittableRandom(seed);
+        this.shoe = shoe;
+        this.deck = shoe == null ? new SplittableRandom(seed) : null;
+        if (shoe != null) {
+            this.order = shoe.order();
+            this.next = shoe.at();
+        }
         player.add(draw());
         dealer.add(draw());
         player.add(draw());
@@ -171,6 +227,18 @@ public final class TwentyOneHand {
         return new TwentyOneHand(seed, terms);
     }
 
+    /** 0.45.0: a fresh deal from a shoe ({@code null}: the infinite deck, as before). */
+    public static TwentyOneHand deal(long seed, Terms terms, Shoe shoe) {
+        return new TwentyOneHand(seed, terms, shoe);
+    }
+
+    /** A saved hand, exactly as it was played (from its own deck or shoe). */
+    public static TwentyOneHand replay(long seed, Saved saved) {
+        TwentyOneHand h = new TwentyOneHand(seed, saved.terms(), saved.shoe());
+        h.play(saved.actions());
+        return h;
+    }
+
     /**
      * The hand after {@code actions} ({@link #HIT}, {@link #STAND}, {@link #DOUBLE}), exactly as it
      * was played.
@@ -179,6 +247,12 @@ public final class TwentyOneHand {
      */
     public static TwentyOneHand replay(long seed, Terms terms, String actions) {
         TwentyOneHand h = new TwentyOneHand(seed, terms);
+        h.play(actions);
+        return h;
+    }
+
+    private void play(String actions) {
+        TwentyOneHand h = this;
         for (int i = 0; i < actions.length(); i++) {
             char a = actions.charAt(i);
             switch (a) {
@@ -188,7 +262,6 @@ public final class TwentyOneHand {
                 default -> throw new IllegalArgumentException("unknown Twenty-One action " + a);
             }
         }
-        return h;
     }
 
     // ---- actions -------------------------------------------------------------------------------
@@ -249,7 +322,15 @@ public final class TwentyOneHand {
     }
 
     private Card draw() {
-        return Card.of(deck.nextInt(52));
+        if (shoe == null) {
+            return Card.of(deck.nextInt(52));
+        }
+        if (next >= SHOE_CARDS) {
+            // never in play (a hand starts before the cut card and uses far fewer than the rest), but never a crash
+            order = Shoe.shuffled(shoe.seed() * 31 + 7);
+            next = 0;
+        }
+        return Card.of(order[next++]);
     }
 
     private static void require(boolean ok, String what) {
@@ -358,12 +439,37 @@ public final class TwentyOneHand {
      * parameter and every action so far.
      */
     public static String data(Terms t, String actions) {
-        return "v=" + VERSION + ";in=" + t.in() + ";m=" + t.m().num() + "/" + t.m().den()
+        return data(t, actions, null);
+    }
+
+    /** 0.45.0: with the shoe the hand is dealt from ({@code v=2;shoe=<seed>;at=<n>;...}), or version 1 without one. */
+    public static String data(Terms t, String actions, Shoe shoe) {
+        String head = shoe == null ? "v=" + VERSION : "v=" + VERSION_SHOE + ";shoe=" + shoe.seed() + ";at=" + shoe.at();
+        return head + ";in=" + t.in() + ";m=" + t.m().num() + "/" + t.m().den()
                 + ";nb=" + t.bonus().num() + "/" + t.bonus().den() + ";cap=" + t.cap() + ";a=" + actions;
     }
 
-    /** A round's data read back. */
-    public record Saved(Terms terms, String actions) {
+    /** This hand's data as it stands: its terms, its shoe and every action so far. */
+    public String data() {
+        return data(terms, actions(), shoe);
+    }
+
+    /** The shoe it is dealt from, or {@code null} (the infinite deck). */
+    public Shoe shoe() {
+        return shoe;
+    }
+
+    /** Where the shoe's next card is once this hand is done (the next hand's {@code at}), or -1 with no shoe. */
+    public int nextAt() {
+        return shoe == null ? -1 : next;
+    }
+
+    /** A round's data read back ({@code shoe}: {@code null} for a version 1 hand). */
+    public record Saved(Terms terms, String actions, Shoe shoe) {
+
+        public Saved(Terms terms, String actions) {
+            this(terms, actions, null);
+        }
     }
 
     /** @throws IllegalArgumentException for data this version can't read */
@@ -375,14 +481,18 @@ public final class TwentyOneHand {
                 kv.put(part.substring(0, eq), part.substring(eq + 1));
             }
         }
-        if (!Integer.toString(VERSION).equals(kv.get("v"))) {
-            throw new IllegalArgumentException("Twenty-One data version " + kv.get("v") + " is not " + VERSION);
+        String v = kv.get("v");
+        if (!Integer.toString(VERSION).equals(v) && !Integer.toString(VERSION_SHOE).equals(v)) {
+            throw new IllegalArgumentException("Twenty-One data version " + v + " is not " + VERSION + " or "
+                    + VERSION_SHOE);
         }
         try {
             Terms t = new Terms(Integer.parseInt(kv.get("in")), ratio(kv.get("m")), ratio(kv.get("nb")),
                     Integer.parseInt(kv.get("cap")));
-            return new Saved(t, kv.getOrDefault("a", ""));
-        } catch (NullPointerException | NumberFormatException e) {
+            Shoe shoe = Integer.toString(VERSION_SHOE).equals(v)
+                    ? new Shoe(Long.parseLong(kv.get("shoe")), Integer.parseInt(kv.get("at"))) : null;
+            return new Saved(t, kv.getOrDefault("a", ""), shoe);
+        } catch (NullPointerException | IllegalArgumentException e) {
             throw new IllegalArgumentException("unreadable Twenty-One data: " + data, e);
         }
     }
@@ -399,7 +509,7 @@ public final class TwentyOneHand {
      */
     public static int settleOnExit(long seed, int stake, String data) {
         Saved s = read(data);
-        TwentyOneHand h = replay(seed, s.terms(), s.actions());
+        TwentyOneHand h = replay(seed, s);
         if (!h.done() && !h.doubled() && stake >= 2 * s.terms().in() && h.canDouble()) {
             h.doubleDown();
         }

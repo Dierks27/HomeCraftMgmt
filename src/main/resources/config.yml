@@ -2626,13 +2626,13 @@ games:
       enabled: true
     secret_room:
       # A secret room over the Trophy Room with each player's own trophies (their bests, medals and
-      # firsts). Its way in is a little gold star in the Trophy Room, for every player (the
+      # firsts). Its way in is a dark door at the back of the Trophy Room, for every player (the
       # permission hcm.clubhouse.secretroom, everyone's unless you take it away). false = not built.
       enabled: true
     parlor:
-      # The Game Parlor over the Arcade Room, through a door in the 19th Hole: the games of chance as
-      # machines you tap, with their usual rules (hcm.games.chance, the day's token limit, Take a
-      # break). false = not built.
+      # The Game Parlor over the Arcade Room, through a little gold star on the 19th Hole's wall (for
+      # players with hcm.clubhouse.parlor and hcm.games.chance): the games of chance as machines you
+      # tap, with their usual rules (the day's token limit, Take a break). false = not built.
       enabled: true
   # The Hub (0.44.0): the big first-join spawn world, visited like the Clubhouse (/hcm play hub, the
   # Hub button in /hcm arcade). Your things stay safe at home; you arrive in Adventure mode with Your

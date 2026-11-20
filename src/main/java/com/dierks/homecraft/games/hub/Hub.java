@@ -330,8 +330,10 @@ public final class Hub implements Game {
     @Override
     public void onVoid(Player player) {
         Location at = arrival();
-        if (at != null) {
-            player.teleport(at);
+        if (at != null && games().sessions().teleport(player, at)) {
+            // the session's own teleport (0.45.0): a plain one read as someone else's, which asked for this again
+            // every tick and froze the visitor on the spot
+            player.setFallDistance(0f);
         }
     }
 

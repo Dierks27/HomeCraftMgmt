@@ -153,6 +153,7 @@ permissions:
       hcm.games.chance: true
       hcm.games.admin: true
       hcm.clubhouse.secretroom: true
+      hcm.clubhouse.parlor: true
       hcm.graves.admin: true
       hcm.market.order: true
       hcm.market.buy: true
@@ -241,10 +242,17 @@ permissions:
     default: true
   hcm.clubhouse.secretroom:
     description: >-
-      The Clubhouse's secret trophy room (0.43.0): a tap on the little gold star in the Trophy Room takes
-      you in, to your own trophies. Everyone has it (0.44.2: it only ever shows each player their own);
-      without it the star isn't shown at all. Take it away with
+      The Clubhouse's secret trophy room (0.43.0): a tap on the dark door at the back of the Trophy Room
+      takes you in, to your own trophies. Everyone has it (0.44.2: it only ever shows each player their
+      own); without it the door isn't shown at all. Take it away with
       /lp user <player> permission set hcm.clubhouse.secretroom false
+    default: true
+  hcm.clubhouse.parlor:
+    description: >-
+      The Clubhouse's Game Parlor (0.45.0): a tap on the little gold star on the 19th Hole's wall takes you
+      up to the games of chance (which still need hcm.games.chance). Everyone has it; lock the room down
+      with /lp group default permission set hcm.clubhouse.parlor false and give it back to the adults:
+      /lp user <player> permission set hcm.clubhouse.parlor true
     default: true
   hcm.games.admin:
     description: >-

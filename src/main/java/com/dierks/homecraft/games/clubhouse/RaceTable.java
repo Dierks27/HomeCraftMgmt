@@ -92,7 +92,7 @@ final class RaceTable {
             double rad = Math.toRadians(heading);
             double dx = Math.cos(rad) * ux + Math.sin(rad) * wx;
             double dz = Math.cos(rad) * uz + Math.sin(rad) * wz;
-            return (float) Math.toDegrees(Math.atan2(-dx, dz));
+            return (float) Math.toDegrees(Math.atan2(-dx + 0.0, dz)); // (+ 0.0: north is 180, never -180)
         }
 
         /** The block (x, z) of the table's cell {@code i} along and {@code k} across. */

@@ -29,8 +29,13 @@ public final class RaceScript {
     static final int LEAD_CHANGES = 3;
     /** How many tries a seed gets at a race worth watching. */
     static final int TRIES = 60;
-    /** The stretches a racer's speed is drawn over, and how far from even it may be. */
-    private static final int STRETCHES = 7;
+    /**
+     * A racer's speed is drawn afresh about every this many ticks (three seconds), for a race of any length between
+     * {@link #STRETCHES_MIN} and {@link #STRETCHES_MAX} times, and may be this far from even.
+     */
+    private static final int STRETCH_TICKS = 60;
+    private static final int STRETCHES_MIN = 6;
+    private static final int STRETCHES_MAX = 14;
     private static final double SWING = 0.3;
     /** Lead changes are counted from here on (ticks): all six are level at the line. */
     static final int COUNT_FROM = 10;
@@ -125,8 +130,9 @@ public final class RaceScript {
     /** Each racer's place at every tick up to {@code last}: its own speeds, added up, scaled to finish on its tick. */
     private static double[][] run(SplittableRandom r, int[] finish, int last) {
         double[][] at = new double[Racer.COUNT][last + 1];
+        int stretches = Math.max(STRETCHES_MIN, Math.min(STRETCHES_MAX, last / STRETCH_TICKS));
         for (int racer = 0; racer < Racer.COUNT; racer++) {
-            double[] pace = new double[STRETCHES + 1];
+            double[] pace = new double[stretches + 1];
             for (int k = 0; k < pace.length; k++) {
                 pace[k] = 1 - SWING + 2 * SWING * r.nextDouble();
             }
@@ -134,8 +140,8 @@ public final class RaceScript {
             double[] run = at[racer];
             double sum = 0;
             for (int t = 1; t <= end; t++) {
-                double x = (t - 0.5) / end * STRETCHES;
-                int k = Math.min(STRETCHES - 1, (int) x);
+                double x = (t - 0.5) / end * stretches;
+                int k = Math.min(stretches - 1, (int) x);
                 double blend = (1 - Math.cos((x - k) * Math.PI)) / 2;
                 sum += pace[k] + (pace[k + 1] - pace[k]) * blend;
                 run[t] = sum;

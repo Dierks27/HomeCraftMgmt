@@ -73,7 +73,7 @@ public record RaceTicket(int pick, int in, int pays, boolean drawn, long race) {
         Integer in = null;
         Integer pays = null;
         Long race = null;
-        for (String part : data.split(";")) {
+        for (String part : data.split(";", -1)) {
             int eq = part.indexOf('=');
             if (eq <= 0) {
                 throw new IllegalArgumentException("not Mob Races data: " + data);

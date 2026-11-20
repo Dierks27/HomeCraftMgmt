@@ -115,7 +115,10 @@ public final class ChanceRounds {
             "twenty_one", TokenService.Source.ARCADE_TWENTY_ONE,
             "wheel", TokenService.Source.ARCADE_WHEEL,
             "higher_lower", TokenService.Source.ARCADE_HILO,
-            "coin_flip", TokenService.Source.ARCADE_COIN_FLIP);
+            "coin_flip", TokenService.Source.ARCADE_COIN_FLIP,
+            "nether_slots", TokenService.Source.ARCADE_NETHER_SLOTS,
+            "motherlode", TokenService.Source.ARCADE_MOTHERLODE,
+            "farm_slots", TokenService.Source.ARCADE_FARM_SLOTS);
 
     /** An open screen whose settings changed under it (a reload): reopen to play. */
     static final Refusal CHANGED = Refusal.of("That game's settings just changed. Open it again to play.");

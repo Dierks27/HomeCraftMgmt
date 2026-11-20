@@ -1263,7 +1263,10 @@ public final class ClubhouseRoom {
         return s == null ? null : new ClubhousePlanner.Place3(s.x(), s.y(), s.z(), s.yaw());
     }
 
-    /** The parlor's machines: the generated room's (two Ore Slots, the Wheel, Coin Flip, the two tables), or the owner's. */
+    /**
+     * The parlor's machines: the generated room's (two Ore Slots, the Wheel, Coin Flip, the two tables, and the
+     * three slot machines along the back row), or the owner's.
+     */
     public List<Cabinet> parlorMachines() {
         List<Cabinet> out = new ArrayList<>();
         if (!hand) {
@@ -1273,6 +1276,10 @@ public final class ClubhouseRoom {
             List<ClubhousePlanner.Place3> at = ClubhousePlanner.parlorMachines(site.box());
             for (int n = 0; n < at.size(); n++) {
                 out.add(new Cabinet(ClubhousePlanner.PARLOR_GAMES.get(n), at.get(n)));
+            }
+            List<ClubhousePlanner.Place3> row = ClubhousePlanner.parlorRow(site.box()); // After the first six
+            for (int n = 0; n < row.size(); n++) {
+                out.add(new Cabinet(ClubhousePlanner.PARLOR_ROW_GAMES.get(n), row.get(n)));
             }
             for (Map.Entry<String, Place> e : handParlor.entrySet()) { // 0.45.0: a moved machine, the rest stay
                 if (overrides() && mine(e.getValue()) && !ClubhousePlanner.TICKET.equals(e.getKey())) {
@@ -1350,7 +1357,8 @@ public final class ClubhouseRoom {
                     }
                     if (at != null && !chanceGame && !ClubhousePlanner.TICKET.equals(sub)) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
-                                + " twenty_one, higher_lower) and the Scratch Ticket's booth (ticket).";
+                                + " twenty_one, higher_lower, nether_slots, motherlode, farm_slots) and the Scratch"
+                                + " Ticket's booth (ticket).";
                     }
                     Map<String, Place> next = new java.util.LinkedHashMap<>(handParlor);
                     if (at == null) {

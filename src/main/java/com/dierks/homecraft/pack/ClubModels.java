@@ -108,6 +108,12 @@ public final class ClubModels {
         // 0.46.1: the Scratch Ticket's booth in the Parlor (a cabinet's size)
         machine("ticket", "machine_ticket", Material.FILLED_MAP, "minecraft:block/lime_concrete", Kind.CABINET);
         ALL.add(new Model("door_trophy", Kind.DOOR, Material.TOTEM_OF_UNDYING, "minecraft:block/gold_block", DOOR_SIZE));
+        // The Parlor's three more slot machines (a cabinet's size each), after every model there was
+        machine("nether_slots", "machine_nether", Material.NETHER_GOLD_ORE, "minecraft:block/nether_gold_ore",
+                Kind.CABINET);
+        machine("farm_slots", "machine_farm", Material.HAY_BLOCK, "minecraft:block/hay_block_side", Kind.CABINET);
+        machine("motherlode", "machine_motherlode", Material.RAW_GOLD_BLOCK, "minecraft:block/raw_gold_block",
+                Kind.CABINET);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {

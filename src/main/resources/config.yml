@@ -2098,6 +2098,144 @@ games:
     max_distance: 32
     # How long an invite stays open, in seconds.
     invite_seconds: 60
+  # ---- nether_slots ----
+  # Nether Slots: the same kind of machine as Ore Slots (three reels, one line), but it
+  # pays rarely and big. Two the same pays nothing; three the same pays that symbol's
+  # multiple (a Wild stands in for any of them); Netherrack never pays. The game works
+  # out Netherrack's weight so it gives back `rtp`. Turn a symbol off with weight 0.
+  nether_slots:
+    # false = Nether Slots is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [1, 2]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
+    rtp: 90
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Netherrack is worked out).
+    reels:
+      # Quartz, the most common.
+      quartz: 12
+      # Magma Cream.
+      magma_cream: 9
+      # Blaze Rod.
+      blaze_rod: 6
+      # Ghast Tear.
+      ghast_tear: 3
+      # Nether Star, the rarest.
+      nether_star: 2
+      # Wild (a wither skull): stands in for any of them.
+      wild: 2
+    # What a line pays, as a multiple of the tokens put in.
+    pays:
+      # Any two the same (a Wild counts). 0 = nothing, as shipped.
+      two: 0
+      # Three quartz.
+      quartz: 6
+      # Three magma creams.
+      magma_cream: 10
+      # Three blaze rods.
+      blaze_rod: 20
+      # Three ghast tears.
+      ghast_tear: 50
+      # Three nether stars.
+      nether_star: 100
+      # Three wilds (2 in → 250, the max_payout).
+      wild: 125
+  # ---- motherlode ----
+  # The Motherlode: the slot machine with the big building pot. It is played for money
+  # only, in the Clubhouse's Game Parlor, at one set price. Part of every spin goes into
+  # a pot everyone can see; three Wilds takes the whole pot, the server is told, and the
+  # pot starts again. Its biggest size is set with /hcm games parlor pot cap.
+  motherlode:
+    # false = The Motherlode is closed.
+    enabled: true
+    # What a spin costs, in dollars: one price (not a list of choices).
+    stakes: [5]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target dollars given back per 100 put in (85-95), the pot's share counted.
+    rtp: 90
+    # How much of every spin's price goes into the pot, out of 100 (0-9). The lines
+    # give back the rest of `rtp`, and never less than 85 on their own.
+    feed_percent: 5
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Deepslate is worked out).
+    reels:
+      # Redstone, the most common.
+      redstone: 10
+      # Lapis.
+      lapis: 8
+      # Amethyst.
+      amethyst: 6
+      # Emerald.
+      emerald: 4
+      # Netherite, the rarest.
+      netherite: 2
+      # Wild (a golden pickaxe): stands in for any of them. More Wilds = the pot goes more often.
+      wild: 5
+    # What a line pays, as a multiple of the price.
+    pays:
+      # Any two the same (a Wild counts). 1 = your money back.
+      two: 1
+      # Three redstone.
+      redstone: 2
+      # Three lapis.
+      lapis: 3
+      # Three amethysts.
+      amethyst: 5
+      # Three emeralds.
+      emerald: 8
+      # Three netherite.
+      netherite: 10
+      # Three wilds take the pot. This times the price is what the pot starts at
+      # (10 x $5 = $50). Never under another line here.
+      wild: 10
+  # ---- farm_slots ----
+  # Farm Slots: the small-pot slot machine. Money only, in the Game Parlor, at one
+  # small price, with its own little pot that goes fairly often. It works like
+  # The Motherlode above.
+  farm_slots:
+    # false = Farm Slots is closed.
+    enabled: true
+    # What a spin costs, in dollars: one price (not a list of choices).
+    stakes: [1]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 100
+    # Target dollars given back per 100 put in (85-95), the pot's share counted.
+    rtp: 90
+    # How much of every spin's price goes into the pot, out of 100 (0-9).
+    feed_percent: 5
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Dirt is worked out).
+    reels:
+      # Wheat, the most common crop.
+      wheat: 10
+      # Carrot.
+      carrot: 8
+      # Potato.
+      potato: 6
+      # Beetroot.
+      beetroot: 4
+      # Golden Carrot, the rarest crop.
+      golden_carrot: 2
+      # Wild (an egg): stands in for any crop. More Wilds = the pot goes more often.
+      wild: 11
+    # What a line pays, as a multiple of the price.
+    pays:
+      # Any two the same crop (a Wild counts). 1 = your money back.
+      two: 1
+      # Three wheat.
+      wheat: 2
+      # Three carrots.
+      carrot: 3
+      # Three potatoes.
+      potato: 4
+      # Three beetroots.
+      beetroot: 5
+      # Three golden carrots.
+      golden_carrot: 8
+      # Three wilds take the pot. This times the price is what the pot starts at
+      # (10 x $1 = $10). Never under another line here.
+      wild: 10
   # ---- creeper_sweeper ----
   # Creeper Sweeper: dig every safe square without digging a creeper.
   creeper_sweeper:

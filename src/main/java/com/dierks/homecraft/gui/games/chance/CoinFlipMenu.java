@@ -115,6 +115,13 @@ public final class CoinFlipMenu extends GameMenu {
         }
     }
 
+    /** Paint {@code player}'s Coin Flip screen again, if it is the one they have open (an invite of theirs ended). */
+    public static void repaint(Player player) {
+        if (player != null && player.getOpenInventory().getTopInventory().getHolder(false) instanceof CoinFlipMenu m) {
+            m.refresh();
+        }
+    }
+
     /** "Invite a player", unlit with the reason when something on screen stops it. */
     private ItemStack inviteTile(CoinFlipOdds odds) {
         CoinFlip.Offer out = coinFlip.outgoing(viewer.getUniqueId());

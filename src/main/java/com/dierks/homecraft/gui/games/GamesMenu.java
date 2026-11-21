@@ -482,9 +482,14 @@ public final class GamesMenu extends GameMenu {
         if (plugin.arcade() == null) {
             return;
         }
+        GamesService parlorGames = plugin.games();
+        // 0.50.2 (the casino play-test): in a world game (the Clubhouse, its Parlor) these links only said "isn't
+        // played in the Clubhouse"; a tile that can't be used there isn't drawn there (the Parlor's booth sells tickets)
+        if (parlorGames != null && linkRefusal(parlorGames.sessions().session(viewer)) != null) {
+            return;
+        }
         PluginConfig.Arcade arc = plugin.config().arcade();
         PluginConfig.Lotto lotto = arc.lotto();
-        GamesService parlorGames = plugin.games();
         boolean ticketHere = parlorGames == null || parlorGames.parlor().ticketListed(viewer); // 0.46.1
         if (!lotto.payouts().isEmpty() && ticketHere) {
             double rtp = ArcadeService.rtp(lotto);

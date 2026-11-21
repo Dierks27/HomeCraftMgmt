@@ -110,6 +110,10 @@ public abstract class SlotMachine implements Game {
             String line = giveBackWords(s, engine);
             lore.add("&7" + Character.toUpperCase(line.charAt(0)) + line.substring(1) + ".");
         }
+        String potOdds = potOdds(s, engine);
+        if (potOdds != null) {
+            lore.add(potOdds); // 0.50.2: a pot is never shown without its odds (the voice rule)
+        }
         int left = playsLeft(viewer.getUniqueId(), s);
         if (left >= 0) {
             lore.add("&7Plays left today: &f" + left);
@@ -117,6 +121,11 @@ public abstract class SlotMachine implements Game {
         lore.add("&eClick to play");
         return Menus.icon(s.theme().tileIcon(), "&a" + name() + " &7- " + keyFact(s, engine),
                 lore.toArray(new String[0]));
+    }
+
+    /** A pot machine's odds of taking its pot, for its tile, or {@code null} (no pot). */
+    protected String potOdds(SlotTable s, SlotsEngine engine) {
+        return null;
     }
 
     /** The tile's key fact: "1-5 tokens". */
@@ -192,6 +201,35 @@ public abstract class SlotMachine implements Game {
             case BALANCE -> "Not enough money";
             default -> "Closed right now";
         };
+    }
+
+    /**
+     * Why a spin for {@code stake} tokens can't go now, for the Spin tile ("Over your limit today"); {@code null} when
+     * nothing on the screen stops it. 0.50.2 (the casino play-test): the token Spin checked only the balance and stayed
+     * lit past the day's limit, where the click was then refused. The gate still decides on the click.
+     */
+    public String tokenBlocker(Player player, SlotTable s, int stake) {
+        UUID id = player.getUniqueId();
+        GamesService games = ctx.games();
+        Breaks b = games.breaks();
+        int in = b == null ? 0 : b.tokensInToday(id);
+        int limit = b == null ? Breaks.NO_LIMIT : b.limit(id);
+        int balance = ctx.plugin() == null || ctx.plugin().tokens() == null ? 0 : ctx.plugin().tokens().balance(id);
+        return tokenBlocker(stake, balance, playsLeft(id, s), in, limit);
+    }
+
+    /** The first thing that stops a token spin: no spins left, the day's limit, the balance. */
+    static String tokenBlocker(int stake, int balance, int playsLeft, int tokensIn, int limit) {
+        if (playsLeft == 0) {
+            return "No spins left today";
+        }
+        if (limit >= 0 && tokensIn + stake > limit) {
+            return "Over your limit today";
+        }
+        if (balance < stake) {
+            return "Need " + (stake - balance) + " more tokens";
+        }
+        return null;
     }
 
     /** Spins the player has left today, or -1 if that can't be read right now. */

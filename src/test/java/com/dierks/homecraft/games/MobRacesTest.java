@@ -390,7 +390,7 @@ class MobRacesTest {
         games.parlorGuests(List.of(alex.id)); // the Clubhouse's word: only Alex is in the Parlor now
         pass(1_000);
         assertEquals(300.0, host.money.get(sam.id), "Sam's dollars came back");
-        assertTrue(sam.heard().contains("You left the Game Parlor before the race, so your $10 came back."),
+        assertTrue(sam.heard().contains("You left the Game Parlor before the race. Your $10 back."),
                 sam.heard());
         assertEquals(1, races.entries().size());
         assertEquals(Phase.GATHERING, races.phase(), "the race goes on with Alex");
@@ -398,7 +398,7 @@ class MobRacesTest {
         games.parlorGuests(List.of());
         pass(1_000);
         assertEquals(200, host.balanceOf(alex.id));
-        assertTrue(alex.heard().contains("so your 5 tokens came back."), alex.heard());
+        assertTrue(alex.heard().contains("Your 5 tokens back."), alex.heard());
         assertEquals(Phase.IDLE, races.phase(), "nobody is left in the room: no race");
         assertEquals(0, open());
         assertEquals(2, settled());

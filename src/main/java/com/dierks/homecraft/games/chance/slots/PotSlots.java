@@ -173,6 +173,12 @@ public abstract class PotSlots extends SlotMachine {
     }
 
     @Override
+    protected String potOdds(SlotTable s, SlotsEngine engine) {
+        LineOdds line = potLine(engine, settings().price());
+        return line == null ? null : "&7Takes the pot about 1 in " + SlotsCopy.grouped(line.oneIn()) + " spins.";
+    }
+
+    @Override
     protected String keyFact(SlotTable s, SlotsEngine engine) {
         return SlotsCopy.potFact(settings().price(), potCents());
     }

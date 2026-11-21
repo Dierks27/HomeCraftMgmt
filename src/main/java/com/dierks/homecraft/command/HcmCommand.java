@@ -2124,9 +2124,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter
                 .ofPattern("MMM d HH:mm", Locale.ROOT).withZone(plugin.clock().zone());
         for (com.dierks.homecraft.storage.TokenDao.LedgerRow r : rows) {
+            String label = sourceLabel(r.source());
             String detail = r.detail() == null || r.detail().isBlank() ? "" : ": " + r.detail();
+            String what = r.detail() != null && r.detail().startsWith(label + ":") ? r.detail() : label + detail;
             sender.sendMessage(Text.of("&8" + fmt.format(java.time.Instant.ofEpochMilli(r.at())) + " "
-                    + (r.delta() >= 0 ? "&a+" : "&c") + r.delta() + " &7" + sourceLabel(r.source()) + detail
+                    + (r.delta() >= 0 ? "&a+" : "&c") + r.delta() + " &7" + what
                     + " &8→ " + r.balanceAfter()));
         }
     }

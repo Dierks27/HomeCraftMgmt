@@ -4929,8 +4929,8 @@ glass roof. Nothing she needs is words.
 ##### Mob Races (0.50.0)
 
 A model racetrack on a table in the middle of the Game Parlor: an oval of red-brown track round a mossy infield,
-white rails, a checkered finish line, a little grandstand, flags and flowers. Six racers stand at the line between
-races: **1 Chicken** (red flag), **2 Pig** (pink), **3 Rabbit** (light blue), **4 Cow** (lime), **5 Fox** (orange)
+white rails, a checkered finish line, a little grandstand, flags and flowers. Six racers come out onto the track as
+soon as someone enters a race (the track is empty between races): **1 Chicken** (red flag), **2 Pig** (pink), **3 Rabbit** (light blue), **4 Cow** (lime), **5 Fox** (orange)
 and **6 Sheep** (yellow). They are real mobs made small, and they can't be hurt or pushed.
 
 - **Playing.** Tap the table (any side of it) and a screen opens: the six racers as pictures, and what to put in

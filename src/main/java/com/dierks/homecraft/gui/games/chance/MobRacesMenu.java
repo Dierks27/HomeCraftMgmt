@@ -201,7 +201,7 @@ public final class MobRacesMenu extends GameMenu {
                 "&7If another racer wins, nothing comes back.",
                 "&7Every racer wins 1 race in " + Racer.COUNT + ".",
                 "&7Over lots of races it gives back about",
-                "&7" + RtpLimits.wholePercent(odds.rtp()) + " of every 100 " + MoneyPlay.unit(dollars) + "."), null);
+                "&7" + RtpLimits.wholePercent(odds.rtp()) + " of every " + (dollars ? "$100" : "100 tokens") + "."), null);
     }
 
     // ---- before entering ----------------------------------------------------------------------------------
@@ -241,6 +241,33 @@ public final class MobRacesMenu extends GameMenu {
         }
     }
 
+    /** Why a token entry of {@code stake} can't go now (the day's limit, the balance), or {@code null}. */
+    private String tokenBlocker(int stake) {
+        java.util.UUID id = viewer.getUniqueId();
+        com.dierks.homecraft.games.Breaks b = plugin.games() == null ? null : plugin.games().breaks();
+        int in = b == null ? 0 : b.tokensInToday(id);
+        int limit = b == null ? com.dierks.homecraft.games.Breaks.NO_LIMIT : b.limit(id);
+        int balance = plugin.tokens() == null ? 0 : plugin.tokens().balance(id);
+        if (limit >= 0 && in + stake > limit) {
+            return "over your limit today";
+        }
+        return balance < stake ? "need " + (stake - balance) + " more tokens" : null;
+    }
+
+    /** Why a money entry of {@code dollars} can't go now, or {@code null}. */
+    private String moneyBlocker(int dollars) {
+        com.dierks.homecraft.games.Refusal r = plugin.games() == null ? null
+                : plugin.games().parlor().check(viewer, dollars, true);
+        if (r == null) {
+            return null;
+        }
+        return switch (r.reason()) {
+            case PERSONAL_LIMIT -> "over your limit today";
+            case BALANCE -> "not enough money";
+            default -> "closed right now";
+        };
+    }
+
     private void paintEnter(Odds odds, boolean dollars) {
         if (pick == null) {
             set(ENTER, CardGameTiles.unlit("Enter", "pick a racer first"), null);
@@ -254,6 +281,12 @@ public final class MobRacesMenu extends GameMenu {
         int left = races.racesLeft(viewer);
         if (left == 0) {
             set(ENTER, CardGameTiles.unlit("Enter", "no races left today"), null);
+            return;
+        }
+        // 0.50.2 (the casino play-test): Enter stayed lit past the day's limit and the balance; the click was refused
+        String why = dollars ? moneyBlocker(odds.stake()) : tokenBlocker(odds.stake());
+        if (why != null) {
+            set(ENTER, CardGameTiles.unlit("Enter", why), null);
             return;
         }
         Racer on = pick;

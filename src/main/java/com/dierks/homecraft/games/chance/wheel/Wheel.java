@@ -87,7 +87,7 @@ public final class Wheel implements Game {
 
     @Override
     public List<String> rules() {
-        return List.of("Pick how many tokens to put in, then spin.",
+        return List.of("Pick how much to put in, then spin.",
                 "All 24 spaces are just as likely.",
                 "Each space shows what it gives you.");
     }

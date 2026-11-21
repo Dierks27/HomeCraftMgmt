@@ -348,10 +348,10 @@ public final class TwentyOneMenu extends GameMenu {
         boolean dollars = money.on();
         if (odds == null) {
             return Menus.icon(Material.KNOWLEDGE_BOOK, dollars ? "&7Add chips to see what it pays"
-                    : "&7Pick how many tokens to put in");
+                    : "&7Pick how much to put in");
         }
         return Menus.icon(Material.KNOWLEDGE_BOOK, "&7With the best play it gives back about &f"
-                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 " + MoneyPlay.unit(dollars),
+                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every " + (dollars ? "$100" : "100 tokens"),
                 "&7(at " + MoneyPlay.amount(dollars, odds.stake()) + " in)");
     }
 

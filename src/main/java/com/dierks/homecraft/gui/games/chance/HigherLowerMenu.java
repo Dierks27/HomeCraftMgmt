@@ -319,10 +319,10 @@ public final class HigherLowerMenu extends GameMenu {
     private ItemStack giveBack(HigherLowerSettings.Odds odds) {
         if (odds == null) {
             return Menus.icon(Material.KNOWLEDGE_BOOK, money.on() ? "&7Add chips to see what it pays"
-                    : "&7Pick how many tokens to put in");
+                    : "&7Pick how much to put in");
         }
         return Menus.icon(Material.KNOWLEDGE_BOOK, "&7The best play gives back about &f"
-                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every 100 " + MoneyPlay.unit(money.on()),
+                        + RtpLimits.wholePercent(odds.rtp()) + " &7of every " + (money.on() ? "$100" : "100 tokens"),
                 "&7(at " + MoneyPlay.amount(money.on(), odds.stake()) + " in)",
                 "&7Every extra guess risks what you have.");
     }

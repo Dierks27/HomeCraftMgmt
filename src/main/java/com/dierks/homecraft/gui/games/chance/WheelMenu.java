@@ -126,6 +126,7 @@ public final class WheelMenu extends GameMenu {
             set(SWITCH, money.switchTile(), spinning ? null : e -> {
                 money.flip();
                 spin = null;
+                glowing = -1; // 0.50.2: a glow is a prize of the old ring (the play-test saw "» $44" on the $ wheel)
                 refresh();
             });
         }
@@ -157,6 +158,9 @@ public final class WheelMenu extends GameMenu {
         int left = wheel.playsLeft(viewer, settings);
         set(PLAYS, Menus.icon(Material.CLOCK, left < 0 ? "&ePlays left today" : "&ePlays left today: &f" + left,
                 "&7" + settings.dailyLimit() + " spins a day. More at midnight."), null);
+        if (glowing >= 0 && odds.spaces(glowing) == 0) {
+            glowing = -1; // not a prize of this ring (a reload, a new rule): nothing glows
+        }
         set(RESULT, glowing >= 0 && !spinning && spin == null ? glowTile(odds) : resultTile(odds), null);
         if (dollars) {
             set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
@@ -179,12 +183,14 @@ public final class WheelMenu extends GameMenu {
             set(STAKES[i], money.chipTile(i), spinning ? null : e -> {
                 money.add(chip);
                 spin = null;
+                glowing = -1;
                 refresh();
             });
         }
         set(CHIPS_BACK, money.stakeTile(), spinning ? null : e -> {
             money.clear();
             spin = null;
+            glowing = -1;
             refresh();
         });
     }
@@ -206,6 +212,7 @@ public final class WheelMenu extends GameMenu {
             }
             set(STAKES[j], icon, chosen || spinning ? null : e -> {
                 stake = s;
+                glowing = -1;
                 viewer.playSound(viewer.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.6f, 1.0f);
                 refresh();
             });

@@ -583,7 +583,7 @@ class PotMachinesTest {
     void itsOddsAndItsFeedEntryCountThePotsShareAndShowThePot() {
         pots().feed(LODE, 16_225, 5000);
         List<String> odds = lode.oddsLines();
-        assertEquals("&6The Motherlode &7— gives back about 90 of every 100 dollars, the pot's share counted · $5 a"
+        assertEquals("&6The Motherlode &7— gives back about 90 of every $100, the pot's share counted · $5 a"
                 + " spin · 50 plays a day", odds.get(0));
         assertTrue(odds.get(2).contains("the pot now: &f$212.25 &7(it starts at $50)"), odds.toString());
         assertEquals("The Motherlode · $212", lode.machineLabel());

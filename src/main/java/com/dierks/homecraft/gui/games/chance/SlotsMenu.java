@@ -364,10 +364,9 @@ public final class SlotsMenu extends GameMenu {
             return Menus.icon(Material.LIME_CONCRETE, "&a&lSpin &7- &6" + Parlor.dollars(dollars) + " in",
                     "&7The spin is decided the moment you click.", "&7Closing the screen just shows the result.");
         }
-        int balance = plugin.tokens() == null ? 0 : plugin.tokens().balance(viewer.getUniqueId());
-        if (balance < stake) {
-            return Menus.icon(Material.GRAY_CONCRETE, "&cNeed " + (stake - balance) + " more tokens",
-                    "&7A spin is " + SlotsCopy.tokens(stake) + " in.");
+        String why = slots.tokenBlocker(viewer, settings, stake);
+        if (why != null) {
+            return Menus.icon(Material.GRAY_CONCRETE, "&c" + why, "&7A spin is " + SlotsCopy.tokens(stake) + " in.");
         }
         return Menus.icon(Material.LIME_CONCRETE, "&a&lSpin &7- &6" + SlotsCopy.tokens(stake) + " in",
                 "&7The spin is decided the moment you click.", "&7Closing the screen just shows the result.");

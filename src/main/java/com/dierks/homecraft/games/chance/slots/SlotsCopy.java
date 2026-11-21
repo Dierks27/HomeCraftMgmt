@@ -213,7 +213,7 @@ public final class SlotsCopy {
         }
         int limit = table.dailyLimit();
         return "&6" + name + " &7— gives back about " + RtpLimits.wholePercent(table.givesBack(odds))
-                + " of every 100 dollars, the pot's share counted · " + Parlor.dollars(odds.stake()) + " a spin · "
+                + " of every $100, the pot's share counted · " + Parlor.dollars(odds.stake()) + " a spin · "
                 + limit + " play" + (limit == 1 ? "" : "s") + " a day";
     }
 

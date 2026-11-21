@@ -2727,7 +2727,7 @@ public final class TimeTrials implements Game, com.dierks.homecraft.games.cpu.Wo
     }
 
     /** Stage 2: the run Time Trials recorded on {@code course} as laid out now, for an NPC's ghost, or null. */
-    RunTrails.Trail trail(Course course) {
+    public RunTrails.Trail trail(Course course) {
         return course == null ? null : trails.best(course.id(), course.layoutHash());
     }
 

@@ -53,6 +53,8 @@ public final class NpcBodies {
         Pose pose = Pose.STANDING;
         boolean hidden;
         boolean wings;
+        /** This server would not seat it: it is shown standing (and isn't asked to sit again). */
+        boolean standsOnly;
     }
 
     private final CpuPlayers npcs;
@@ -121,7 +123,12 @@ public final class NpcBodies {
             e = m;
         }
         Mannequin m = (Mannequin) e;
-        if (seated) {
+        Location was = m.getLocation();
+        boolean still = was.getWorld() != null && was.getWorld().equals(w) && was.distanceSquared(at) < 1e-6
+                && Math.abs(was.getYaw() - at.getYaw()) < 0.01f && (!seated || b.seat != null || b.standsOnly);
+        if (still) {
+            // where it was: nothing to move (a body waiting on its spot is never sent a teleport every tick)
+        } else if (seated && !b.standsOnly) {
             Entity st = b.seat == null ? null : Bukkit.getEntity(b.seat);
             if (st == null || !st.isValid()) {
                 ArmorStand seat = w.spawn(at, ArmorStand.class, s -> {
@@ -138,6 +145,7 @@ public final class NpcBodies {
                 if (!seat.addPassenger(m)) {
                     seat.remove(); // it is shown standing instead: never anything with a box
                     b.seat = null;
+                    b.standsOnly = true;
                     m.teleport(at);
                 }
             } else {

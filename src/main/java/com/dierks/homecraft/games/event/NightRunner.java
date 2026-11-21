@@ -249,6 +249,11 @@ public final class NightRunner implements RaceLink {
     }
 
     /** How many laps each race is. */
+    /** Stage 2: the grid spots real racers have now (an NPC racer only ever gets one nobody has). */
+    public java.util.Set<Course.Spot> takenSpots() {
+        return java.util.Set.copyOf(spots.values());
+    }
+
     public int laps() {
         return laps;
     }

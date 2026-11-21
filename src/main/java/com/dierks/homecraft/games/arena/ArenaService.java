@@ -1077,6 +1077,16 @@ public final class ArenaService {
         return site;
     }
 
+    /** Stage 2: the floors of the round being played (read only), or {@code null} between rounds. */
+    public FloorRules floors() {
+        return arena == null ? null : arena.floors();
+    }
+
+    /** Stage 2: the floors the round being played, or the next one, starts on; {@code null} before the first site. */
+    public FloorLayout layout() {
+        return arena == null ? null : roundFloors();
+    }
+
     /** The arena's box. */
     public Box box() {
         return box;

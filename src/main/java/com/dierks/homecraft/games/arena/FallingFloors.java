@@ -71,7 +71,7 @@ import java.util.logging.Logger;
  * of the day, three solo milestones once ever, and today's pick. A win pays nothing extra; it is a
  * point on this week's wins board ({@link FloorsRewards}).
  */
-public final class FallingFloors implements Game {
+public final class FallingFloors implements Game, com.dierks.homecraft.games.cpu.WorldNpcs.Host {
 
     /** Built: the game follows its config switch (shipped off). */
     static final boolean IMPLEMENTED = true;
@@ -470,6 +470,14 @@ public final class FallingFloors implements Game {
     /** The running arena, or {@code null} while the game is off. */
     ArenaService service() {
         return service;
+    }
+
+    /** Stage 2: NPC players in the gallery and on the floors, never in the round ({@link FloorsNpcs}). */
+    private final FloorsNpcs npcs = new FloorsNpcs(this);
+
+    @Override
+    public com.dierks.homecraft.games.cpu.WorldNpcs npcs() {
+        return npcs;
     }
 
     /** The week the arena's shape belongs to now: Fresh Courses' week, turning at its rollover. */

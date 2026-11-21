@@ -78,7 +78,7 @@ import java.util.logging.Level;
  * paid once per set ({@link GolfFinish}). A course recalled into Classic Golf plays on its original
  * set's board.
  */
-public final class MiniGolf implements Game {
+public final class MiniGolf implements Game, com.dierks.homecraft.games.cpu.WorldNpcs.Host {
 
     /** Built: the game follows its config switch. */
     static final boolean IMPLEMENTED = true;
@@ -370,6 +370,19 @@ public final class MiniGolf implements Game {
     /** Golf together: "Play with friends", its party and invites (D4). */
     public GolfTogether together() {
         return together;
+    }
+
+    /** Stage 2: NPC golfers beside golf together's groups ({@link GolfNpcs}). */
+    private final GolfNpcs npcs = new GolfNpcs(this);
+
+    /** Stage 2: NPC golfers in golf together. */
+    GolfNpcs golfNpcs() {
+        return npcs;
+    }
+
+    @Override
+    public com.dierks.homecraft.games.cpu.WorldNpcs npcs() {
+        return npcs;
     }
 
     /** Start {@code courseId} for the player (the course screen's Start, "Play again"). */

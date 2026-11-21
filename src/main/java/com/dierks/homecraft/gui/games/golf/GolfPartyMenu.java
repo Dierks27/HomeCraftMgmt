@@ -103,6 +103,14 @@ public final class GolfPartyMenu extends GameMenu {
         for (UUID id : l.members()) {
             members.add(new Member(GolfTogether.name(id), l.isHost(id), l.isReady(id), id.equals(me)));
         }
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.any(plugin.games());
+        for (UUID id : l.npcs()) { // stage 2: the party's NPC players, after its members
+            com.dierks.homecraft.games.cpu.CpuPlayer npc = com.dierks.homecraft.games.cpu.CpuRoster.byId(id);
+            if (npc != null) {
+                members.add(new Member(com.dierks.homecraft.games.cpu.CpuRoster.tagged(npcs == null ? npc.name()
+                        : npcs.name(npc)) + " &e" + npc.level().starText(), false, true, false));
+            }
+        }
         PartyLobby.Why why = l.canStart(me);
         return new View(c == null ? l.course() : c.name(), c == null ? 0 : c.holes().size(), c == null ? 0 : c.par(),
                 members, l.max(), l.isHost(me), l.isReady(me), l.state() == PartyLobby.State.OPEN,
@@ -160,7 +168,11 @@ public final class GolfPartyMenu extends GameMenu {
                         List.of("&7Invite a friend to fill it."));
             }
         }
-        boolean full = v.members().size() >= v.max();
+        int reals = 0; // stage 2: an NPC gives its place to a friend, so only real players fill the party
+        for (Member m : v.members()) {
+            reals += m.name().contains(com.dierks.homecraft.games.cpu.CpuRoster.MARKER) ? 0 : 1;
+        }
+        boolean full = reals >= v.max();
         out[INVITE] = !v.open() ? new Tile(INVITE, Material.GRAY_DYE, "&7Playing now", List.of("&7Invite after the round."))
                 : full ? new Tile(INVITE, Material.GRAY_DYE, "&7The party is full &8(" + v.max() + ")", List.of())
                 : new Tile(INVITE, Material.WRITABLE_BOOK, "&bInvite a friend", List.of("&7Pick someone to ask.",

@@ -97,6 +97,11 @@ public final class GolfRounds {
     private final GolfGroups groups;
     private long tick;
 
+    /** Stage 2: the group {@code player} plays in, or {@code null}. */
+    GolfGroup groupOf(UUID player) {
+        return groups.of(player);
+    }
+
     GolfRounds(MiniGolf golf) {
         this.golf = golf;
         this.groups = new GolfGroups(new Server());

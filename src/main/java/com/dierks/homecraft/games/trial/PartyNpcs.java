@@ -61,9 +61,9 @@ public final class PartyNpcs implements WorldNpcs {
     static final long LINGER_TICKS = 60;
 
     /** What {@link #company} changed in a lobby. */
-    record Change(List<UUID> left, UUID joined) {
+    public record Change(List<UUID> left, UUID joined) {
 
-        static final Change NONE = new Change(List.of(), null);
+        public static final Change NONE = new Change(List.of(), null);
     }
 
     /** One NPC racer in a race. */
@@ -117,7 +117,7 @@ public final class PartyNpcs implements WorldNpcs {
      *
      * @param pick the next free NPC, or {@code null} for none
      */
-    static Change company(PartyLobby lobby, Predicate<UUID> wants, NpcCrowd.Alone clock, long nowMs,
+    public static Change company(PartyLobby lobby, Predicate<UUID> wants, NpcCrowd.Alone clock, long nowMs,
                           long joinAfterMs, Supplier<CpuPlayer> pick) {
         if (lobby.state() != PartyLobby.State.OPEN) {
             return Change.NONE;

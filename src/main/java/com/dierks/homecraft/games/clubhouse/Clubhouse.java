@@ -170,6 +170,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private RaceShow raceShow;
     /** 0.50.0: the back bar's bottles, to drink. */
     private BarDrinks drinks;
+    /** The NPC regulars (NPC players as mannequins while someone is visiting). */
+    private ClubRegulars regulars;
 
     /** Whether {@code b} is one of the back bar's shelves (the drinks), not any other shelf in the room. */
     private static boolean barShelf(ClubhouseRoom r, org.bukkit.block.Block b) {
@@ -390,6 +392,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (raceShow != null) {
             out.add(raceShow.statusLine());
         }
+        if (regulars != null) {
+            out.add(regulars.statusLine());
+        }
         return out;
     }
 
@@ -417,6 +422,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         decor = new ClubDecor(this);
         drinks = new BarDrinks(this);
         raceShow = new RaceShow(this);
+        regulars = new ClubRegulars(this);
         g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
@@ -595,6 +601,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (raceShow != null) {
             raceShow.remove();
         }
+        if (regulars != null) {
+            regulars.remove();
+        }
         if (ctx.plugin() != null) {
             games().noCheers(cheerListener);
         }
@@ -637,6 +646,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         gone(player.getUniqueId(), player);
         if (sideRooms != null) {
             sideRooms.forget(player.getUniqueId());
+        }
+        if (regulars != null) {
+            regulars.forget(player.getUniqueId());
         }
         cheers.forget(player.getUniqueId());
         cheersOn.remove(player.getUniqueId());
@@ -982,6 +994,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             if (raceShow != null) {
                 raceShow.remove();
             }
+            if (regulars != null) {
+                regulars.remove();
+            }
             wasOpen = false;
             return;
         }
@@ -1046,6 +1061,16 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (raceShow != null) {
             raceShow.second(r);
+        }
+        if (regulars != null) {
+            List<Player> here = new ArrayList<>();
+            for (ClubVisits.Visit v : visits.all()) {
+                Player p = online(v.id());
+                if (p != null) {
+                    here.add(p);
+                }
+            }
+            regulars.second(r, now, here); // only while someone is visiting
         }
         feast(now);
     }

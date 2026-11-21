@@ -4,13 +4,19 @@ import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneHand.Shoe;
+import com.dierks.homecraft.games.cpu.CpuLevel;
+import com.dierks.homecraft.games.cpu.CpuPlayer;
+import com.dierks.homecraft.games.cpu.CpuTwentyOne;
+import com.dierks.homecraft.games.cpu.TableNpcs;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -32,6 +38,15 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p><b>Every seat's hand is its own round</b> in {@link ChanceRounds}, so everything a hand alone has, a seat has:
  * the play gate when the stake goes in, the day's limits, a Double's own check, one payment, and the exit rule for a
  * player who leaves (they stand; see {@link TableRound#settleOnExit}). The table itself is only memory.
+ *
+ * <p><b>NPC players</b> (stage 1 of the owner's "CPU players in the games"). An NPC sits in a seat nobody real is in:
+ * now and then on its own while the table is empty and someone is in the Parlor to see it (a show), and when a real
+ * player has sat alone for {@code games.cpu.join_after_seconds}. Its hand is dealt from the same shoe and played by the
+ * book at its level ({@link CpuTwentyOne}), a second or two per move, but it is pretend: it has no round in
+ * {@link ChanceRounds}, puts nothing in and is paid nothing, so every real seat's round, payout, limits and exit rule
+ * are exactly what they were. An NPC is always ready, is never waited on (nobody can Hurry Up an NPC, and an NPC never
+ * taps it), gives its seat to a real player who wants one between rounds, and leaves a table where someone has NPCs
+ * switched off. A show round is dropped the moment a real player sits down: nobody ever waits on a show.
  */
 public final class TwentyOneTable {
 
@@ -63,6 +78,12 @@ public final class TwentyOneTable {
         private int hand = -1;
         /** Its round was finished somewhere else mid-hand (they left the server; the sweep): the hand stands. */
         private boolean gone;
+        /** The NPC sitting here, or {@code null} for a real player. */
+        private CpuPlayer npc;
+        /** The level an NPC plays this round at. */
+        private CpuLevel plays = CpuLevel.MEDIUM;
+        /** When an NPC whose move it is makes it (0: not thinking yet). */
+        private long actAt;
 
         private Seat(UUID id, String name) {
             this.id = id;
@@ -97,7 +118,20 @@ public final class TwentyOneTable {
         public int hand() {
             return hand;
         }
+
+        /** The NPC sitting here, or {@code null} for a real player. */
+        public CpuPlayer npc() {
+            return npc;
+        }
+
+        /** The level an NPC plays at this round. */
+        public CpuLevel plays() {
+            return plays;
+        }
     }
+
+    /** How long a show's cards stay on the table before the next show round. */
+    static final long SHOW_GAP_MS = 6_000;
 
     private final TwentyOne game;
     private final List<Seat> seats = new ArrayList<>();
@@ -113,6 +147,16 @@ public final class TwentyOneTable {
     private long tickedAt;
     /** A test's own seed for the next fresh shoe, or {@code null} (a random one, as in play). */
     private Long nextShoe;
+    /** When the one real player at the table started sitting there alone (0: not alone). */
+    private long aloneSince;
+    /** Real players who sent an NPC away: no NPC joins them again until they get up. */
+    private final Set<UUID> sentAway = new HashSet<>();
+    /** A show: when it ends, when the next may start, when its next round is dealt. */
+    private long showUntil;
+    private long showRest;
+    private long showDealAt = Long.MAX_VALUE;
+    /** The NPCs' last word on levels and names (each NPC tick), for a deal. */
+    private TableNpcs npcs;
 
     /** For tests: the next fresh shoe is shuffled from {@code seed} (nothing in play calls this). */
     public void seedNextShoe(long seed) {
@@ -171,8 +215,8 @@ public final class TwentyOneTable {
 
     /** Whether the table is waiting on this seat: not ready while stakes are being taken, or its turn to play. */
     public boolean waitingOn(Seat s) {
-        if (s == null) {
-            return false;
+        if (s == null || s.npc != null) {
+            return false; // nobody waits on an NPC: it is always ready, and moves by itself
         }
         return phase == Phase.OPEN ? !s.ready && anyReady() : s == turn();
     }
@@ -205,7 +249,7 @@ public final class TwentyOneTable {
 
     private boolean anyReady() {
         for (Seat s : seats) {
-            if (s.ready) {
+            if (s.ready && s.npc == null) {
                 return true;
             }
         }
@@ -222,14 +266,17 @@ public final class TwentyOneTable {
     public Seat sit(Player player, Runnable refresh) {
         UUID id = player.getUniqueId();
         Seat s = seat(id);
-        if (s == null && screens.isEmpty() && !seats.isEmpty()) {
+        if (s == null && screens.isEmpty() && hasReal()) {
             abandon(); // nobody is at the table: whatever was left on it is over
         }
+        if (s == null && !hasReal()) {
+            dropShow(); // a show round in play is over at once: nobody waits on a show
+        }
         if (s == null) {
-            if (seats.size() >= TableRound.MAX_SEATS) {
+            if (seats.size() >= TableRound.MAX_SEATS && !giveWay()) {
                 return null;
             }
-            if (seats.isEmpty()) {
+            if (!hasReal()) {
                 shoeAt = -1; // a new session at the table: a fresh shoe at its first deal
                 round = null;
                 phase = Phase.OPEN;
@@ -260,8 +307,9 @@ public final class TwentyOneTable {
      */
     public void leave(UUID id) {
         screens.remove(id);
+        sentAway.remove(id);
         Seat s = seat(id);
-        if (s == null) {
+        if (s == null || s.npc != null) {
             return;
         }
         if (phase == Phase.PLAYING && s.hand >= 0 && round != null && round.hand(s.hand).result() == null) {
@@ -343,8 +391,8 @@ public final class TwentyOneTable {
     }
 
     private void dealIfAllReady() {
-        if (phase != Phase.OPEN || seats.isEmpty()) {
-            return;
+        if (phase != Phase.OPEN || !hasReal()) {
+            return; // a table of NPCs alone deals on the show's own clock
         }
         for (Seat s : seats) {
             if (!s.ready) {
@@ -359,11 +407,27 @@ public final class TwentyOneTable {
         clearHurry();
         List<Seat> in = new ArrayList<>();
         List<TwentyOneHand.Terms> terms = new ArrayList<>();
+        boolean real = hasReal();
+        int realIn = 0;
         for (Seat s : seats) {
             s.hand = -1;
             s.round = null;
             s.gone = false;
             if (!s.ready) {
+                continue;
+            }
+            if (s.npc != null) {
+                // pretend: dealt from the same shoe, but no round, nothing put in and nothing paid
+                TwentyOneSettings.Odds odds = game.settings().odds(s.stake);
+                if (odds != null) {
+                    if (npcs != null) {
+                        s.plays = npcs.level(s.npc, realIds(), game.id());
+                    }
+                    s.ready = false;
+                    s.actAt = 0;
+                    in.add(s);
+                    terms.add(odds.terms());
+                }
                 continue;
             }
             s.ready = false;
@@ -381,6 +445,14 @@ public final class TwentyOneTable {
             s.round = opened;
             in.add(s);
             terms.add(odds.terms());
+            realIn++;
+        }
+        if (real && realIn == 0) {
+            // every real seat sat this one out: no round of NPCs alone while a real player waits at the table
+            for (Seat s : in) {
+                s.ready = true;
+            }
+            return;
         }
         if (in.isEmpty()) {
             return;
@@ -471,7 +543,7 @@ public final class TwentyOneTable {
         boolean moved = false;
         // a seat whose player is no longer on the server: free it between rounds; mid-hand it stands at its turn
         for (Seat s : new ArrayList<>(seats)) {
-            if (games().online(s.id) == null) {
+            if (s.npc == null && games().online(s.id) == null) {
                 if (phase == Phase.OPEN || s.hand < 0 || round == null || round.hand(s.hand).result() != null) {
                     seats.remove(s);
                     screens.remove(s.id);
@@ -544,9 +616,229 @@ public final class TwentyOneTable {
         if (round.over()) {
             shoeAt = round.nextAt();
             phase = Phase.OPEN;
-            seats.removeIf(s -> s.away || games().online(s.id) == null); // nobody keeps a seat they walked away from
+            // nobody keeps a seat they walked away from
+            seats.removeIf(s -> s.npc == null && (s.away || games().online(s.id) == null));
+            for (Seat s : seats) {
+                if (s.npc != null) {
+                    s.ready = true; // an NPC is ready for the next one at once
+                }
+            }
+            if (!hasReal()) {
+                showDealAt = now() + SHOW_GAP_MS;
+            }
         }
         changed();
+    }
+
+    // ---- NPC players --------------------------------------------------------------------------------------
+
+    /** Whether a real player sits at the table. */
+    public boolean hasReal() {
+        for (Seat s : seats) {
+            if (s.npc == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The real players sitting at the table. */
+    public List<UUID> realIds() {
+        List<UUID> out = new ArrayList<>();
+        for (Seat s : seats) {
+            if (s.npc == null) {
+                out.add(s.id);
+            }
+        }
+        return out;
+    }
+
+    /** How many NPCs sit at the table. */
+    public int npcCount() {
+        int n = 0;
+        for (Seat s : seats) {
+            if (s.npc != null) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** A real player sits down at a full table: an NPC gets up for them between rounds. */
+    private boolean giveWay() {
+        if (phase != Phase.OPEN) {
+            return false;
+        }
+        for (int i = seats.size() - 1; i >= 0; i--) {
+            if (seats.get(i).npc != null) {
+                seats.remove(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A show round (NPCs alone) in play is over at once; the NPCs keep their seats. */
+    private void dropShow() {
+        if (phase == Phase.PLAYING) {
+            phase = Phase.OPEN;
+            round = null;
+            for (Seat s : seats) {
+                s.hand = -1;
+                s.ready = s.npc != null;
+                s.actAt = 0;
+            }
+        }
+        showDealAt = Long.MAX_VALUE;
+    }
+
+    /**
+     * {@code npc} sits down (between rounds, in a free seat), ready at once with its pretend stake.
+     *
+     * @return its seat, or {@code null} when it can't sit now
+     */
+    public Seat sitNpc(CpuPlayer npc, TableNpcs npcs) {
+        if (npc == null || phase != Phase.OPEN || seats.size() >= TableRound.MAX_SEATS || seat(npc.id()) != null) {
+            return null;
+        }
+        int stake = CpuTwentyOne.stake(game.settings().playable(), npc.personality());
+        if (game.settings().odds(stake) == null) {
+            return null;
+        }
+        this.npcs = npcs;
+        if (seats.isEmpty()) {
+            shoeAt = -1; // a new session at the table: a fresh shoe at its first deal
+            round = null;
+            clearHurry();
+        }
+        Seat s = new Seat(npc.id(), npcs.label(npc));
+        s.npc = npc;
+        s.stake = stake;
+        s.ready = true;
+        s.plays = npcs.level(npc, realIds(), game.id());
+        seats.add(s);
+        return s;
+    }
+
+    /**
+     * {@code by}, sitting here, sends the NPC in {@code seat} away (between rounds): it gets up, and no NPC joins them
+     * again until they get up themselves.
+     *
+     * @return whether it got up
+     */
+    public boolean sendAway(Player by, Seat seat) {
+        if (by == null || seat == null || seat.npc == null || phase != Phase.OPEN || seat(by.getUniqueId()) == null) {
+            return false;
+        }
+        seats.remove(seat);
+        sentAway.add(by.getUniqueId());
+        aloneSince = 0;
+        changed();
+        return true;
+    }
+
+    /**
+     * Once a second, from the NPC players, whether or not anyone has the screen open: NPCs leave a table where someone
+     * has them off, join a player who has sat alone long enough, put on a show at an empty table while someone is in
+     * the Parlor to see it, and play their moves.
+     */
+    public void cpuTick(TableNpcs npcs) {
+        this.npcs = npcs;
+        long now = now();
+        boolean moved = false;
+        List<UUID> reals = realIds();
+        if (phase == Phase.OPEN) {
+            for (UUID r : reals) {
+                if (!npcs.wants(r)) {
+                    moved |= seats.removeIf(s -> s.npc != null);
+                    break;
+                }
+            }
+        }
+        if (reals.isEmpty()) {
+            aloneSince = 0;
+            moved |= show(npcs, now);
+        } else if (reals.size() == 1 && npcCount() == 0) {
+            UUID only = reals.get(0);
+            if (aloneSince == 0) {
+                aloneSince = now;
+            } else if (now - aloneSince >= npcs.joinAfterMs() && phase == Phase.OPEN && npcs.wants(only)
+                    && !sentAway.contains(only)) {
+                aloneSince = 0;
+                moved |= sitNpc(pick(npcs), npcs) != null;
+            }
+        } else {
+            aloneSince = 0;
+        }
+        Seat t = turn();
+        if (phase == Phase.PLAYING && t != null && t.npc != null) {
+            if (t.actAt == 0) {
+                t.actAt = now + Math.max(700, Math.min(2000, t.npc.personality().thinkMs + npcs.rng().nextInt(600)));
+            } else if (now >= t.actAt) {
+                t.actAt = 0;
+                npcMove(t, npcs);
+                return; // advance() told the screens
+            }
+        }
+        if (moved) {
+            changed();
+        }
+    }
+
+    /** An NPC not at the table, picked at random, or {@code null}. */
+    private CpuPlayer pick(TableNpcs npcs) {
+        List<CpuPlayer> free = new ArrayList<>();
+        for (CpuPlayer c : npcs.roster()) {
+            if (seat(c.id()) == null) {
+                free.add(c);
+            }
+        }
+        return free.isEmpty() ? null : free.get(npcs.rng().nextInt(free.size()));
+    }
+
+    /** The empty table's show: NPCs sit down now and then while someone is in the Parlor, play a while, get up. */
+    private boolean show(TableNpcs npcs, long now) {
+        if (npcCount() == 0) {
+            if (!npcs.audience() || now < showRest || npcs.rng().nextInt(30) != 0) {
+                return false;
+            }
+            int want = 1 + npcs.rng().nextInt(2);
+            for (int i = 0; i < want; i++) {
+                sitNpc(pick(npcs), npcs);
+            }
+            showUntil = now + 90_000 + npcs.rng().nextInt(90_000);
+            showDealAt = now + 3_000;
+            return npcCount() > 0;
+        }
+        if (phase != Phase.OPEN) {
+            return false;
+        }
+        if (!npcs.audience() || now >= showUntil) {
+            seats.removeIf(s -> s.npc != null);
+            showRest = now + 60_000 + npcs.rng().nextInt(120_000);
+            showDealAt = Long.MAX_VALUE;
+            return true;
+        }
+        if (now >= showDealAt) {
+            showDealAt = Long.MAX_VALUE;
+            deal();
+            return true;
+        }
+        return false;
+    }
+
+    /** The NPC whose turn it is plays its move. */
+    private void npcMove(Seat t, TableNpcs npcs) {
+        TableRound.Hand h = round.hand(t.hand);
+        CpuTwentyOne.Move m = CpuTwentyOne.decide(h.cards(), round.dealerCards().get(0), h.canDouble(), t.plays,
+                t.npc.personality(), npcs.rng());
+        switch (m) {
+            case HIT -> round.hit(t.hand);
+            case STAND -> round.stand(t.hand);
+            case DOUBLE -> round.doubleDown(t.hand);
+        }
+        record();
+        advance();
     }
 
     private void clearHurry() {

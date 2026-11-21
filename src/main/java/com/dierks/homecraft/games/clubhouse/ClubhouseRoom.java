@@ -1126,6 +1126,11 @@ public final class ClubhouseRoom {
         return site != null && annexIn && rooms.trophy() && open();
     }
 
+    /** The generated room's side rooms built in now (the NPC regulars' places: {@link RegularSpots}). */
+    ClubhousePlanner.Rooms builtRooms() {
+        return new ClubhousePlanner.Rooms(arcadeBuilt(), trophyBuilt(), secretBuilt(), parlorBuilt());
+    }
+
     // ---- 0.43.0: upstairs: the secret trophy room and the Game Parlor -----------------------------------
 
     /** How near an owner-built upstairs room's arrival spot still counts as in it. */

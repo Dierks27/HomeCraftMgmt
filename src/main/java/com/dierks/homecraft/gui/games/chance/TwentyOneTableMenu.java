@@ -155,7 +155,8 @@ public final class TwentyOneTableMenu extends GameMenu {
             return;
         }
         boolean mine = seat == me;
-        String who = mine ? "&aYou" : "&f" + seat.name();
+        boolean npc = seat.npc() != null;
+        String who = mine ? "&aYou" : npc ? seat.name() : "&f" + seat.name();
         TableRound.Hand hand = round != null && seat.hand() >= 0 && seat.hand() < round.seats()
                 ? round.hand(seat.hand()) : null;
         String total = "";
@@ -166,17 +167,33 @@ public final class TwentyOneTableMenu extends GameMenu {
                     : "&f" + b);
             paintCards(row + 1, 7, hand.cards(), -1);
         }
-        set(row, Menus.glint(Menus.icon(mine ? Material.LIME_DYE : Material.NAME_TAG,
-                who + total + (seat.away() ? " &8(away)" : "")), table.waitingOn(seat)), null);
+        if (npc) {
+            // an NPC player: a picture of one (its stars as the count), pretend chips, and between rounds a tap sends
+            // it away
+            boolean canSend = me != null && table.phase() == Phase.OPEN;
+            set(row, Menus.count(Menus.icon(Material.ARMOR_STAND, who + total,
+                            "&7An NPC player: it plays pretend chips.",
+                            canSend ? "&eClick to ask it to get up" : "&7It plays its own hand."),
+                    seat.plays().stars), canSend ? e -> {
+                if (table.sendAway(viewer, seat)) {
+                    viewer.playSound(viewer.getLocation(), org.bukkit.Sound.BLOCK_WOODEN_DOOR_CLOSE, 0.5f, 1.4f);
+                }
+            } : null);
+        } else {
+            set(row, Menus.glint(Menus.icon(mine ? Material.LIME_DYE : Material.NAME_TAG,
+                    who + total + (seat.away() ? " &8(away)" : "")), table.waitingOn(seat)), null);
+        }
         set(row + 8, seatNote(seat, hand), null);
     }
 
     /** The end of a seat's row: what it is putting in, whose move it is, or how its hand came out. */
     private ItemStack seatNote(Seat seat, TableRound.Hand hand) {
         if (table.phase() == Phase.PLAYING && hand != null && hand.result() == null) {
-            String in = cash(seat.money(), hand.putIn()) + " in";
+            boolean npc = seat.npc() != null;
+            String in = npc ? hand.putIn() + " pretend chips in" : cash(seat.money(), hand.putIn()) + " in";
             if (seat == table.turn()) {
-                return Menus.glint(Menus.icon(Material.CLOCK, "&eTheir move &7- " + in), true);
+                return Menus.glint(Menus.icon(Material.CLOCK, (npc ? "&eThinking... &7- " : "&eTheir move &7- ") + in),
+                        true);
             }
             return Menus.icon(Material.PAPER, hand.stood() ? "&7Stands &8- " + in : "&7Waiting &8- " + in);
         }
@@ -185,7 +202,8 @@ public final class TwentyOneTableMenu extends GameMenu {
             lore.add(outcome(seat, hand));
         }
         if (table.phase() == Phase.OPEN) {
-            String next = seat.stake() <= 0 ? "choosing" : cash(seat.money(), seat.stake()) + " in";
+            String next = seat.stake() <= 0 ? "choosing" : seat.npc() != null ? seat.stake() + " pretend chips in"
+                    : cash(seat.money(), seat.stake()) + " in";
             ItemStack icon = seat.ready()
                     ? Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&aReady &7- &6" + next,
                     lore.toArray(new String[0])), true)
@@ -198,6 +216,9 @@ public final class TwentyOneTableMenu extends GameMenu {
 
     /** "Won: $5 in → $9 back", "Twenty-One!: ...", "Same total: your 5 back", "No win this time." */
     private static String outcome(Seat seat, TableRound.Hand hand) {
+        if (seat.npc() != null) {
+            return npcOutcome(hand);
+        }
         int in = hand.putIn();
         int back = hand.payout();
         String head = switch (hand.result()) {
@@ -214,6 +235,18 @@ public final class TwentyOneTableMenu extends GameMenu {
             return "&f" + head + ": &7" + cash(seat.money(), back) + " back";
         }
         return "&7" + head + ". No win this time.";
+    }
+
+    /** An NPC's hand: how it came out, in pretend chips (nothing real ever moves for it). */
+    static String npcOutcome(TableRound.Hand hand) {
+        String head = switch (hand.result()) {
+            case TWENTY_ONE -> "Twenty-One!";
+            case WIN -> "Won";
+            case PUSH, BOTH_TWENTY_ONE -> "Same total";
+            case BUST -> "Over 21";
+            case LOSE, ARCADE_TWENTY_ONE -> "The Arcade's hand";
+        };
+        return "&7" + head + " &8(pretend chips)";
     }
 
     private static String cash(boolean dollars, int amount) {

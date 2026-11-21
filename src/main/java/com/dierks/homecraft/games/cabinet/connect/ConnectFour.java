@@ -217,6 +217,45 @@ public final class ConnectFour extends CabinetGame {
         }
     }
 
+    // ---- against an NPC player ----------------------------------------------------------------
+
+    /**
+     * A new game against {@code npc}, at the level it plays at against this player ({@code CpuLevels}: easy for a
+     * player who wants easy), with its own tie-break seed.
+     */
+    public ConnectFourMatch vsNpc(Player player, com.dierks.homecraft.games.cpu.CpuPlayer npc) {
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.of(games());
+        com.dierks.homecraft.games.cpu.CpuLevel level = npcs == null ? npc.level()
+                : npcs.levelAgainst(npc, player.getUniqueId(), id());
+        return ConnectFourMatch.vsNpc(player.getUniqueId(), npc, level, ThreadLocalRandom.current().nextLong());
+    }
+
+    /**
+     * A game against an NPC is over: it is for fun, like a friend game, so it pays no token and counts on no board
+     * (the Arcade's own levels already pay today's token for a win against the computer). The player's matched level
+     * here moves with how it went.
+     */
+    public void finishNpc(Player player, ConnectFourMatch match) {
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.any(games());
+        String them = npcs == null ? match.npc().name() : npcs.label(match.npc());
+        ConnectFourMatch.Outcome o = match.outcome(player.getUniqueId());
+        switch (o) {
+            case WON -> {
+                player.sendMessage(Text.of("&aFour in a row! You beat " + them + "&a."));
+                Sounds.won(player);
+            }
+            case LOST -> player.sendMessage(Text.of("&7" + them + " &7got four in a row this time."));
+            case DRAW -> player.sendMessage(Text.of("&7A draw: the board is full."));
+            default -> {
+                return;
+            }
+        }
+        if (npcs != null) {
+            npcs.recordGame(player.getUniqueId(), id(), match.npcLevel(), o == ConnectFourMatch.Outcome.WON,
+                    o == ConnectFourMatch.Outcome.LOST);
+        }
+    }
+
     // ---- against a friend ---------------------------------------------------------------------
 
     /** Whether {@code other} may be offered to {@code player} in the picker. */

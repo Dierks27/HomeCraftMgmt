@@ -51,6 +51,12 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>This class is the race's clock and its rounds. The track itself (the table, the mobs, the board) is drawn by
  * the Clubhouse, which reads this through {@link #phase()}, {@link #script()} and {@link #raceTick()}, and says once
  * a second that the track is there ({@link #trackSeen()}): with no track, nobody can enter.
+ *
+ * <p><b>NPC players</b> ({@link #enterNpc}): while a race gathers with a real entrant in it, an NPC or two may enter
+ * too, with a pretend stake on a racer of their own. An NPC's entry has no round: nothing is put in, nothing is paid,
+ * and it touches neither the race's seed nor any real entry's ticket, so every real entry's odds and pay are what they
+ * were (a race pays a fixed amount per stake whoever else is in). A race with only NPCs in it never runs: when the last
+ * real entrant is gone, the race is off and the NPCs with it.
  */
 public final class MobRaces implements Game {
 
@@ -89,9 +95,11 @@ public final class MobRaces implements Game {
         private final Racer pick;
         private final boolean money;
         private RaceTicket ticket;
-        /** Its open round until the race is drawn, then {@code null} (settled). */
+        /** Its open round until the race is drawn, then {@code null} (settled). Always {@code null} for an NPC. */
         private ChanceRounds.Round round;
         private boolean startNow;
+        /** An NPC's pretend entry: no round, nothing in, nothing paid. */
+        private boolean npc;
 
         private Entry(UUID id, String name, Racer pick, boolean money, RaceTicket ticket, ChanceRounds.Round round) {
             this.id = id;
@@ -133,7 +141,15 @@ public final class MobRaces implements Game {
         public boolean startNow() {
             return startNow;
         }
+
+        /** Whether this is an NPC's pretend entry. */
+        public boolean npc() {
+            return npc;
+        }
     }
+
+    /** The most NPC entries in one race. */
+    public static final int MAX_NPCS = 2;
 
     private final GameContext ctx;
     private final Map<UUID, Entry> entries = new LinkedHashMap<>();
@@ -285,6 +301,9 @@ public final class MobRaces implements Game {
     public void onQuit(Player player) {
         screens.remove(player.getUniqueId());
         if (phase == Phase.GATHERING && entries.remove(player.getUniqueId()) != null) {
+            if (!anyReal()) {
+                reset(); // a race of NPCs alone never runs
+            }
             changed();
         }
     }
@@ -491,6 +510,52 @@ public final class MobRaces implements Game {
         return true;
     }
 
+    /**
+     * An NPC enters the race gathering now: a pretend {@code stake} on {@code pick}. Only while a real player is in it,
+     * once per NPC, at most {@link #MAX_NPCS}. No round is opened and nothing is put in: its entry only shows on the
+     * board, and is told nothing.
+     *
+     * @param id    the NPC's UUID (never a real player's)
+     * @param label its name with its gear and stars
+     * @return whether it entered
+     */
+    public boolean enterNpc(UUID id, String label, Racer pick, int stake) {
+        if (phase != Phase.GATHERING || !anyReal() || pick == null || entries.containsKey(id) || npcCount() >= MAX_NPCS) {
+            return false;
+        }
+        Odds odds = settings().odds(stake);
+        if (odds == null) {
+            return false;
+        }
+        Entry e = new Entry(id, label, pick, false, RaceTicket.entry(pick.lane(), odds.stake(), odds.pays()), null);
+        e.npc = true;
+        e.startNow = true; // an NPC never holds the start up
+        entries.put(id, e);
+        changed();
+        return true;
+    }
+
+    /** Whether a real player is in the race. */
+    public boolean anyReal() {
+        for (Entry e : entries.values()) {
+            if (!e.npc) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How many NPCs are in the race. */
+    public int npcCount() {
+        int n = 0;
+        for (Entry e : entries.values()) {
+            if (e.npc) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     /** {@code player}, an entrant, asks to start now: when every entrant has, the wait is skipped. */
     public void startNow(Player player) {
         Entry e = entries.get(player.getUniqueId());
@@ -525,8 +590,8 @@ public final class MobRaces implements Game {
         switch (phase) {
             case GATHERING -> {
                 dropLeavers();
-                if (entries.isEmpty()) {
-                    reset(); // a race nobody is left in does not run
+                if (!anyReal()) {
+                    reset(); // a race nobody real is left in does not run (NPCs alone never race)
                     changed();
                 } else if (now >= gatherUntil || everyoneAsked()) {
                     startRace();
@@ -562,6 +627,9 @@ public final class MobRaces implements Game {
     private void dropLeavers() {
         GamesService games = games();
         for (Entry e : new ArrayList<>(entries.values())) {
+            if (e.npc) {
+                continue;
+            }
             Player p = games.online(e.id);
             if (p == null) {
                 games.rounds().finishNow(e.round); // if their quit hasn't already: paid once, there or here
@@ -591,6 +659,10 @@ public final class MobRaces implements Game {
         nextSeed = null;
         for (Entry e : new ArrayList<>(entries.values())) {
             RaceTicket drawn = e.ticket.in(seed);
+            if (e.npc) {
+                e.ticket = drawn; // pretend: only so the board can say whether its pick won
+                continue;
+            }
             ChanceRounds.Round stepped = games.rounds().step(e.round, drawn.data());
             if (stepped == null) {
                 entries.remove(e.id);
@@ -601,8 +673,8 @@ public final class MobRaces implements Game {
             e.ticket = drawn;
             e.round = null;
         }
-        if (entries.isEmpty()) {
-            reset();
+        if (!anyReal()) {
+            reset(); // nobody real is left: no race (the NPCs' entries go with it)
             changed();
             return;
         }
@@ -620,6 +692,9 @@ public final class MobRaces implements Game {
         }
         Racer won = Racer.of(script.winner());
         for (Entry e : entries.values()) {
+            if (e.npc) {
+                continue;
+            }
             String line;
             if (e.ticket.won()) {
                 line = "&6" + NAME + ": " + won.label() + " &6won, and you picked it! &f" + amount(e.money, e.stake())

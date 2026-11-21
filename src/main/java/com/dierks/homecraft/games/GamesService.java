@@ -773,6 +773,24 @@ public final class GamesService {
         return player != null && parlorGuests.contains(player);
     }
 
+    /** Whether anyone stands in the Game Parlor now (NPC players put on a show at the empty table only then). */
+    public boolean anyInParlor() {
+        return !parlorGuests.isEmpty();
+    }
+
+    /**
+     * Where admin-set runtime settings are kept ({@code hcm_meta}, keys under {@code gen.}): the Parlor's rules, the
+     * NPC players' names and skins. {@code null} in a test that keeps them in memory only.
+     */
+    public Parlor.Store metaStore() {
+        return host.parlorStore();
+    }
+
+    /** The plugin's logger (the console). */
+    public java.util.logging.Logger logger() {
+        return host.logger();
+    }
+
     /** One more visitor in the Game Parlor now (a tap there, before the once-a-second word). */
     public void parlorGuest(UUID player) {
         if (player != null) {

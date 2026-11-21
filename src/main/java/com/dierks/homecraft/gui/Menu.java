@@ -60,7 +60,16 @@ public abstract class Menu implements InventoryHolder {
 
     public void open(Player player) {
         build();
+        // 0.50.1: when something refuses this open (a games session takes only games screens), the server has already
+        // left the screen the player was on, but the client still shows it, with whatever it last picked up on its
+        // cursor: an item that can be "taken" until the next resync (the owner, at the Scratch Ticket's booth). So the
+        // screen they were on is opened again, and client and server agree.
+        org.bukkit.inventory.Inventory was = player.getOpenInventory().getTopInventory();
+        Menu before = was.getHolder(false) instanceof Menu m && m != this ? m : null;
         player.openInventory(inventory);
+        if (before != null && !isOpenFor(player) && player.isOnline()) {
+            player.openInventory(before.getInventory());
+        }
     }
 
     /**

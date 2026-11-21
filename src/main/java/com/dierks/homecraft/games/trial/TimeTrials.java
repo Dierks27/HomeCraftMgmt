@@ -1375,12 +1375,12 @@ public final class TimeTrials implements Game, com.dierks.homecraft.games.cpu.Wo
             Session s = p == null ? null : sessions().session(p);
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
-                trails.drop(run.player); // stage 2
                 flightsEnd(run, false); // D17
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
                 drops.end(run, p);
                 ringChunks.release(run.player);
+                trails.drop(run.player); // stage 2
                 continue;
             }
             if (stall != null && run.running()) {
@@ -2598,13 +2598,13 @@ public final class TimeTrials implements Game, com.dierks.homecraft.games.cpu.Wo
     /** Forget the player's run (their session ended, or they left). */
     void end(Player player) {
         TrialRun run = runs.remove(player.getUniqueId());
-        trails.drop(player.getUniqueId()); // stage 2: a run that ended unfinished is never a ghost
         if (run != null) {
             flightsEnd(run, false); // D17: a no-op after the finish wrote its line
             removeBoat(run, player);
             drops.end(run, player);
         }
         ringChunks.release(player.getUniqueId());
+        trails.drop(player.getUniqueId()); // stage 2: a run that ended unfinished is never a ghost
     }
 
     /** Race mode's server side (WP-R1). */

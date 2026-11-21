@@ -78,6 +78,8 @@ public final class GamesMenu extends GameMenu {
     private static final int SCORES = 47;
     private static final int BREAK = 48;
     private static final int GUIDE = 50;
+    /** The NPC players setting. */
+    private static final int NPCS = 51;
     /** Where the Scratch Ticket and crate links sort among the Luck tiles: after the games. */
     static final int LINK_RANK = Integer.MAX_VALUE;
 
@@ -323,6 +325,9 @@ public final class GamesMenu extends GameMenu {
             todaysPick(games);
             set(SCORES, Menus.icon(Material.OAK_SIGN, "&bHigh scores", "&7The best on every board.",
                     "&eClick to see them"), e -> new ScoresMenu.Boards(plugin, viewer, 0, this::reopen).open(viewer));
+            if (com.dierks.homecraft.games.cpu.CpuPlayers.of(games) != null) {
+                set(NPCS, NpcMenu.stateTile(plugin, viewer), e -> new NpcMenu(plugin, viewer, this::reopen).open(viewer));
+            }
         }
         set(BREAK, BreakMenu.stateTile(plugin, viewer), e -> new BreakMenu(plugin, viewer, this::reopen).open(viewer));
         exitTile();

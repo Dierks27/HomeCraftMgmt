@@ -128,11 +128,76 @@ public final class GolfGroup {
         final List<GolfRun.HoleScore> scores = new ArrayList<>();
         Seat seat = Seat.PLAYING;
         int strokes;
+        /** Stage 2: an NPC player (its row is on the card; the group never waits for it). */
+        boolean npc;
+        /** Stage 2: an NPC's strokes on the hole being played, decided when the hole starts. */
+        int plan;
 
         Member(UUID id, String name) {
             this.id = id;
             this.name = name;
         }
+    }
+
+    // ---- stage 2: NPC players on the shared card --------------------------------------------------
+
+    /**
+     * An NPC player joins the group (stage 2) while there is a place left of {@value #MAX}: its row is on the shared
+     * card and in the ranking, marked by its name ("Pip ⚙ NPC"). It is never one of {@link #active()},
+     * {@link #out()} or {@link #waitingFor()}, never starts the hole clock, and the group never waits for it: when the
+     * last real ball of a hole is in, an NPC still putting finishes on its planned strokes ({@link #advance}).
+     * Returns whether it joined.
+     */
+    public boolean addNpc(UUID npc, String name) {
+        if (npc == null || members.containsKey(npc) || members.size() >= MAX || over() || hole > 0) {
+            return false; // from the first tee only, so its card is a whole round
+        }
+        Member m = new Member(npc, name);
+        m.npc = true;
+        members.put(npc, m);
+        return true;
+    }
+
+    /** Stage 2: the NPC players, in the order they joined. */
+    public List<UUID> npcs() {
+        List<UUID> out = new ArrayList<>();
+        for (Member m : members.values()) {
+            if (m.npc) {
+                out.add(m.id);
+            }
+        }
+        return out;
+    }
+
+    /** Stage 2: NPC {@code npc} will take {@code strokes} on the hole being played (shown as it plays them). */
+    public void npcPlan(UUID npc, int strokes) {
+        Member m = members.get(npc);
+        if (m != null && m.npc) {
+            m.plan = Math.max(1, strokes);
+        }
+    }
+
+    /** Stage 2: NPC {@code npc} has played {@code strokes} so far on this hole (its live count on the card). */
+    public void npcStrokes(UUID npc, int strokes) {
+        Member m = members.get(npc);
+        if (m != null && m.npc && m.scores.size() <= hole) {
+            m.strokes = Math.max(0, strokes);
+        }
+    }
+
+    /** Stage 2: NPC {@code npc}'s ball is in: its planned strokes on this hole. Never moves the group on. */
+    public void npcHoleDone(UUID npc) {
+        Member m = members.get(npc);
+        if (m != null && m.npc && hole < pars.size() && m.scores.size() <= hole && m.plan > 0) {
+            m.scores.add(new GolfRun.HoleScore(pars.get(hole), m.plan, false));
+            m.strokes = 0;
+        }
+    }
+
+    /** Stage 2: whether NPC {@code npc} has finished the hole being played. */
+    public boolean npcDone(UUID npc) {
+        Member m = members.get(npc);
+        return m == null || !m.npc || m.scores.size() > hole;
     }
 
     private final long id;
@@ -222,7 +287,7 @@ public final class GolfGroup {
     public List<UUID> active() {
         List<UUID> out = new ArrayList<>();
         for (Member m : members.values()) {
-            if (m.seat != Seat.LEFT) {
+            if (!m.npc && m.seat != Seat.LEFT) {
                 out.add(m.id);
             }
         }
@@ -233,7 +298,7 @@ public final class GolfGroup {
     public List<String> waitingFor() {
         List<String> out = new ArrayList<>();
         for (Member m : members.values()) {
-            if (m.seat == Seat.PLAYING) {
+            if (!m.npc && m.seat == Seat.PLAYING) {
                 out.add(m.name);
             }
         }
@@ -244,7 +309,7 @@ public final class GolfGroup {
     public List<UUID> out() {
         List<UUID> out = new ArrayList<>();
         for (Member m : members.values()) {
-            if (m.seat == Seat.PLAYING) {
+            if (!m.npc && m.seat == Seat.PLAYING) {
                 out.add(m.id);
             }
         }
@@ -362,6 +427,9 @@ public final class GolfGroup {
     public boolean allDone() {
         boolean anyone = false;
         for (Member m : members.values()) {
+            if (m.npc) {
+                continue; // stage 2: the group never waits for an NPC
+            }
             if (m.seat == Seat.PLAYING) {
                 return false;
             }
@@ -380,6 +448,12 @@ public final class GolfGroup {
     public boolean advance() {
         if (!allDone() || over()) {
             return false;
+        }
+        for (Member m : members.values()) {
+            if (m.npc && m.scores.size() <= hole) {
+                m.plan = Math.max(1, m.plan == 0 ? pars.get(hole) : m.plan);
+                npcHoleDone(m.id); // stage 2: an NPC still putting finishes on its planned strokes
+            }
         }
         hole++;
         clock = -1;
@@ -403,7 +477,8 @@ public final class GolfGroup {
     public Card card() {
         List<Row> rows = new ArrayList<>();
         for (Member m : members.values()) {
-            rows.add(new Row(m.id, m.name, m.scores, m.seat == Seat.PLAYING ? m.strokes : 0, m.seat));
+            Seat seat = m.npc ? (m.scores.size() > hole || hole >= pars.size() ? Seat.WAITING : Seat.PLAYING) : m.seat;
+            rows.add(new Row(m.id, m.name, m.scores, seat == Seat.PLAYING ? m.strokes : 0, seat));
         }
         boolean over = over();
         return new Card(courseId, courseName, pars, Math.min(hole, pars.size() - 1), rows, over, over ? -1 : clock,

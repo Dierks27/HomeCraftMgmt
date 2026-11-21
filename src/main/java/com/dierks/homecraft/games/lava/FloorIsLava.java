@@ -86,7 +86,7 @@ import java.util.logging.Logger;
  * (no flow, no fire, no burning, no edits, admins too); the room is built of blocks that can't burn; and the lava
  * is source blocks placed and taken away by {@link LavaWriter}, never flowing.
  */
-public final class FloorIsLava implements Game {
+public final class FloorIsLava implements Game, com.dierks.homecraft.games.cpu.WorldNpcs.Host {
 
     public static final GameSpec<LavaSettings> SPEC = new GameSpec<>("floor_is_lava", GameKind.TRIAL,
             LavaSettings.KEYS, LavaSettings.defaults(), LavaSettings::parse, FloorIsLava::new, null);
@@ -555,6 +555,14 @@ public final class FloorIsLava implements Game {
     /** The running room, or {@code null} while the game is off. */
     LavaService service() {
         return service;
+    }
+
+    /** Stage 2: NPC players in the playroom, never in the round ({@link LavaNpcs}). */
+    private final LavaNpcs npcs = new LavaNpcs(this);
+
+    @Override
+    public com.dierks.homecraft.games.cpu.WorldNpcs npcs() {
+        return npcs;
     }
 
     /** The live settings (read on every use, never cached across a reload). */

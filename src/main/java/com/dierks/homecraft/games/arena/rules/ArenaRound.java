@@ -620,6 +620,11 @@ public final class ArenaRound {
     }
 
     /** Play ticks since Go: the tick being played now. */
+    /** Stage 2: the spawn a round player starts on, or {@code null} (an NPC only ever takes one nobody has). */
+    public Integer spawnOf(UUID player) {
+        return spawnOf.get(player);
+    }
+
     public long playTicks() {
         return playTicks;
     }

@@ -158,9 +158,10 @@ final class ClubRegulars {
         }
         int roamers = Math.max(0, npcs.settings().regulars() - placed.size());
         int start = (int) Math.floorMod(now / (20 * 60_000L), (long) CpuRoster.ALL.size());
+        java.util.Set<UUID> away = npcs.busy(); // stage 2: one racing, golfing or playing elsewhere isn't here too
         for (int n = 0; n < CpuRoster.ALL.size() && roamers > 0; n++) {
             CpuPlayer c = CpuRoster.ALL.get((start + n) % CpuRoster.ALL.size());
-            if (!placed.containsKey(c.key())) {
+            if (!placed.containsKey(c.key()) && !away.contains(c.id())) {
                 placed.put(c.key(), null); // a roamer: its place is its own to pick
                 roamers--;
             }

@@ -68,7 +68,7 @@ import java.util.logging.Logger;
  *
  * <p>Everything runs on the main thread inside the game's guard.
  */
-public final class RaceNight implements Game {
+public final class RaceNight implements Game, com.dierks.homecraft.games.cpu.WorldNpcs.Host {
 
     /** Built: the game follows its config switch (and Time Trials'). */
     static final boolean IMPLEMENTED = true;
@@ -90,6 +90,8 @@ public final class RaceNight implements Game {
     private final Watchers watchers = new Watchers();
     private final RaceBars bars = new RaceBars();
     private final Tracks tracks = new Tracks(this);
+    /** Stage 2: NPC boats beside a small night's racers, never in its standings ({@link NightNpcs}). */
+    private final NightNpcs npcs = new NightNpcs(this);
     private final EventAdmin admin = new EventAdmin(this);
     private EventDao dao;
     /** The night being run (scheduled, open, at the track), or {@code null}. */
@@ -1523,6 +1525,12 @@ public final class RaceNight implements Game {
     /** The live settings (read on every use, never cached across a reload). */
     RaceNightSettings settings() {
         return ctx.games().settings(SPEC);
+    }
+
+    /** Stage 2: the NPC boats ({@link NightNpcs}). */
+    @Override
+    public com.dierks.homecraft.games.cpu.WorldNpcs npcs() {
+        return npcs;
     }
 
     public GamesService games() {

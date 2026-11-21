@@ -19,6 +19,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Ageable;
 import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.Breedable;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
@@ -521,8 +522,10 @@ final class RaceShow {
         }
         if (e instanceof Ageable grown) {
             grown.setAdult();
-            grown.setAgeLock(true);
-            grown.setBreed(false);
+        }
+        if (e instanceof Breedable breeder) {
+            breeder.setAgeLock(true);
+            breeder.setBreed(false);
         }
         if (e instanceof Chicken chicken) {
             chicken.setEggLayTime(Integer.MAX_VALUE); // it lays nothing

@@ -118,6 +118,8 @@ public final class ClubModels {
         machine("deep_mine", "machine_deepmine", Material.DEEPSLATE_DIAMOND_ORE,
                 "minecraft:block/deepslate_diamond_ore", Kind.CABINET);
         machine("mob_slots", "machine_mobs", Material.SPAWNER, "minecraft:block/spawner", Kind.CABINET);
+        // The Floor Is Lava's cabinet in the Arcade Room (a cabinet's size; its stand-in's icon is a lava bucket)
+        cabinet("floor_is_lava", "cabinet_lava", Material.LAVA_BUCKET, "minecraft:block/magma");
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {

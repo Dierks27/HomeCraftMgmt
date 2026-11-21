@@ -1598,6 +1598,11 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             }
 
             @Override
+            public void toArcade(Player p) {
+                g.guard(self, () -> self.toArcade(p));
+            }
+
+            @Override
             public boolean closingForRestart() {
                 return call(self::closingForRestart, true); // unsure: home, as with no Clubhouse
             }
@@ -1744,6 +1749,16 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         welcome(p, kind, false, line);
         visits.recheck(p.getUniqueId(), now());
         return true;
+    }
+
+    /** Back from The Floor Is Lava: in front of its cabinet in the Arcade Room, facing it (nothing without one). */
+    @Override
+    public void toArcade(Player p) {
+        SideRooms rooms = sideRooms;
+        ClubhouseSite.Spot at = rooms == null ? null : rooms.lavaSpot();
+        if (at != null && p != null && inOurSession(p)) {
+            moveTo(p, at);
+        }
     }
 
     @Override

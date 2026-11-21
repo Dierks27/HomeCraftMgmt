@@ -271,7 +271,9 @@ final class ClubhouseAdmin implements GameAdmin {
                 if (clear) {
                     yield room.clearCabinet(a1);
                 }
-                String why = KidSet.refusal(a1, kindOf);
+                // The Floor Is Lava has a cabinet too (its tap starts Little), though it isn't a cabinet game
+                String why = a1.equals(SideRooms.LAVA_GAME) && kindOf.apply(a1) != null ? null
+                        : KidSet.refusal(a1, kindOf);
                 yield why != null ? "&c" + Character.toUpperCase(why.charAt(0)) + why.substring(1) + "."
                         : room.cabinet(a1, at);
             }
@@ -406,7 +408,8 @@ final class ClubhouseAdmin implements GameAdmin {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("cabinet")) {
             for (com.dierks.homecraft.games.Game g : game.games().games()) {
-                if (g.kind() == com.dierks.homecraft.games.GameKind.CABINET && g.id().startsWith(last)) {
+                if ((g.kind() == com.dierks.homecraft.games.GameKind.CABINET || g.id().equals(SideRooms.LAVA_GAME))
+                        && g.id().startsWith(last)) {
                     out.add(g.id());
                 }
             }

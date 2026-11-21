@@ -49,6 +49,8 @@ public final class SightCheck {
         KEPT,
         CLUBHOUSE,
         ARENA,
+        /** The Floor Is Lava's playroom. */
+        LAVA,
         /** The Games world's spawn: a point. */
         SPAWN,
         /** {@code games.fresh.safe_spot}: a point. */
@@ -304,6 +306,8 @@ public final class SightCheck {
                     + " are)" + apart;
             case ARENA -> "move Falling Floors with games.falling_floors.origin (the old arena's blocks stay where they"
                     + " are)" + apart;
+            case LAVA -> "move The Floor Is Lava with games.floor_is_lava.origin (the old playroom's blocks stay"
+                    + " where they are)" + apart;
             case SPAWN -> "move the world's spawn away from " + other.name() + " (/setworldspawn)";
             case SAFE_SPOT -> "move games.fresh.safe_spot away from " + other.name();
             case KEPT -> "a kept course stays where it was kept; set games.fresh.keep.plot_gap: " + Sight.GAP
@@ -319,7 +323,7 @@ public final class SightCheck {
         return switch (p.kind()) {
             case STAND -> -1;
             case SLOT, CLASSIC -> 0;
-            case CLUBHOUSE, ARENA -> 1;
+            case CLUBHOUSE, ARENA, LAVA -> 1;
             case SPAWN, SAFE_SPOT -> 2;
             case KEPT -> 3;
         };

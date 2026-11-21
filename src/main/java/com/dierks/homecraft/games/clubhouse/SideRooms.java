@@ -136,12 +136,23 @@ final class SideRooms {
         if (s.arcadeRoom()) {
             List<String> games = kidSet(room.hand() ? room.handCabinetGames() : s.arcadeGames());
             List<ClubhouseRoom.Cabinet> cabs = room.cabinetPlaces(games);
+            ClubhousePlanner.Place3 lava = lavaPlace(room, games.size()); // The Floor Is Lava's cabinet
             for (int n = 0; n < cabs.size(); n++) {
                 ClubhouseRoom.Cabinet c = cabs.get(n);
+                if (c.at().equals(lava)) {
+                    continue; // the repeated cabinet whose place it takes
+                }
                 String key = "cab:" + n;
                 keep.add(key);
-                put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at()));
+                put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at(), null));
             }
+            if (lava != null) {
+                keep.add(LAVA_KEY);
+                put(w, LAVA_KEY, LAVA_GAME + "@" + lava, lava, () -> cabinet(w, LAVA_GAME, lava, LAVA_TAP));
+            }
+            lavaAt = lava;
+        } else {
+            lavaAt = null;
         }
         for (String which : ClubhouseRoom.DOORS) {
             boolean arcade = which.equals("arcade");
@@ -197,6 +208,62 @@ final class SideRooms {
         secretVisitors(room, w);
         parlorGuests(room, w);
         gates(w);
+    }
+
+    // ---- The Floor Is Lava's cabinet ------------------------------------------------------------------
+
+    /** The game the Arcade Room's lava cabinet starts, its slot's key and what its tap target carries. */
+    static final String LAVA_GAME = "floor_is_lava";
+    static final String LAVA_KEY = "lava";
+    static final String LAVA_TAP = "lava";
+    /** How far in front of its cabinet a player back from the playroom stands. */
+    static final double LAVA_BACK = 1.5;
+    /** Where the lava cabinet stands now, or {@code null} for none. */
+    private ClubhousePlanner.Place3 lavaAt;
+
+    /**
+     * Which of the generated Arcade Room's cabinet places The Floor Is Lava's cabinet takes: the first one that
+     * only repeats a game (the kid set is taken round again to fill the room), so no game loses its cabinet and no
+     * block changes. -1 when every place has a game of its own.
+     *
+     * @param games  how many games the kid set has
+     * @param places the room's cabinet places
+     */
+    static int lavaIndex(int games, int places) {
+        return places > 0 && games >= 0 && games < places ? games : -1;
+    }
+
+    /**
+     * Where the lava cabinet stands: in the generated room, a repeated place ({@link #lavaIndex}); in an owner-built
+     * room, where the owner put it ({@code /hcm games clubhouse cabinet floor_is_lava}). {@code null} while The Floor
+     * Is Lava is off, or there is no place for it.
+     */
+    private ClubhousePlanner.Place3 lavaPlace(ClubhouseRoom room, int kidGames) {
+        Game g = club.games().game(LAVA_GAME);
+        if (g == null || !club.games().enabled(g)) {
+            return null;
+        }
+        List<ClubhouseRoom.Cabinet> places = room.cabinetPlaces(List.of(LAVA_GAME));
+        if (room.hand()) {
+            return places.isEmpty() ? null : places.get(0).at();
+        }
+        List<ClubhousePlanner.Place3> generated = room.generatedCabinetPlaces();
+        int n = lavaIndex(kidGames, generated.size());
+        return n < 0 ? null : generated.get(n);
+    }
+
+    /**
+     * Where a player back from the playroom stands: {@value #LAVA_BACK} blocks in front of the lava cabinet, facing
+     * it; {@code null} while there is none.
+     */
+    ClubhouseSite.Spot lavaSpot() {
+        ClubhousePlanner.Place3 at = lavaAt;
+        if (at == null) {
+            return null;
+        }
+        double rad = Math.toRadians(at.yaw());
+        return new ClubhouseSite.Spot(at.x() - Math.sin(rad) * LAVA_BACK, at.y(), at.z() + Math.cos(rad) * LAVA_BACK,
+                WallBoards.snap(at.yaw() + 180f));
     }
 
     // ---- 0.43.0: ways in only their own players see ------------------------------------------------------
@@ -443,6 +510,14 @@ final class SideRooms {
             case "parlor:out" -> {
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_CLOSE, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorReturn());
+            }
+            case LAVA_TAP -> {
+                // one tap, nothing to choose or read: a chime and sparkles, then straight into Little
+                Location at = e.getLocation().add(0, 1.2, 0);
+                p.playSound(at, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.9f, 1.4f);
+                p.spawnParticle(Particle.SMALL_FLAME, at.clone().add(0, 1.0, 0), 8, 0.3, 0.25, 0.3, 0.01);
+                p.spawnParticle(Particle.HAPPY_VILLAGER, at, 10, 0.4, 0.6, 0.4, 0.0);
+                com.dierks.homecraft.games.lava.FloorIsLava.kidTap(club.games(), p);
             }
             default -> {
                 if (tap.startsWith("machine:")) {
@@ -758,19 +833,24 @@ final class SideRooms {
 
     // ---- the entities --------------------------------------------------------------------------------
 
-    /** A cabinet: the tap target, the model, the stand-in (two blocks and the floating icon), the adults' label. */
-    private Shown cabinet(World w, String gameId, ClubhousePlanner.Place3 at) {
+    /**
+     * A cabinet: the tap target, the model, the stand-in (two blocks and the floating icon), the adults' label. Its tap
+     * plays {@code gameId} as a kid's cabinet game, or, with {@code clubTap} (The Floor Is Lava's cabinet), does what
+     * {@link #tappedUp} says for it.
+     */
+    private Shown cabinet(World w, String gameId, ClubhousePlanner.Place3 at, String clubTap) {
         ClubModels.Model m = ClubModels.cabinetFor(gameId);
         List<UUID> models = new ArrayList<>();
         List<UUID> plain = new ArrayList<>();
         List<UUID> all = new ArrayList<>();
-        Interaction tap = w.spawn(loc(w, at, 0), Interaction.class, e -> {
-            WorldEntities.tag(e, club, null);
-            e.setInteractionWidth(1.0f);
-            e.setInteractionHeight(2.0f);
-            e.setResponsive(true);
-            e.getPersistentDataContainer().set(Keys.KID_CABINET, PersistentDataType.STRING, gameId);
-        });
+        Interaction tap = clubTap != null ? tapTarget(w, loc(w, at, 0), 1.0f, 2.0f, clubTap)
+                : w.spawn(loc(w, at, 0), Interaction.class, e -> {
+                    WorldEntities.tag(e, club, null);
+                    e.setInteractionWidth(1.0f);
+                    e.setInteractionHeight(2.0f);
+                    e.setResponsive(true);
+                    e.getPersistentDataContainer().set(Keys.KID_CABINET, PersistentDataType.STRING, gameId);
+                });
         all.add(tap.getUniqueId());
         models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
         double bx = Math.floor(at.x());
@@ -987,6 +1067,7 @@ final class SideRooms {
             club.games().parlorGuests(List.of());
         }
         applied.clear();
+        lavaAt = null;
         cups = List.of();
         pedestals = List.of();
         inTrophy.clear();
@@ -1166,7 +1247,7 @@ final class SideRooms {
             int colon = k.indexOf(':');
             String kind = (colon < 0 ? k : k.substring(0, colon)).toLowerCase(Locale.ROOT);
             switch (kind) {
-                case "cab", "mach" -> cab++;
+                case "cab", "mach", LAVA_KEY -> cab++;
                 case "door", "star", "sexit", "pdoor", "pexit" -> doors++;
                 default -> cupsUp++;
             }

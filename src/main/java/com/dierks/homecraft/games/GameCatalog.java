@@ -48,13 +48,14 @@ public final class GameCatalog {
      * last: a place, not a game to play, with no tile of its own either; the Hub (0.44.0) after it, another place.
      * The Game Parlor's three more slot machines (Nether Slots, The Motherlode, Farm Slots) follow the first
      * five games of chance, so those keep their order; its last two (Deep Mine, Mob Slots) follow those.
+     * The Floor Is Lava comes last of all: a room of its own in the Games world.
      */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, NetherSlots.SPEC, Motherlode.SPEC, FarmSlots.SPEC,
             DeepMine.SPEC, MobSlots.SPEC, CreeperSweeper.SPEC, OreMerge.SPEC, Snake.SPEC, MiniMatch.SPEC,
             SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC,
             WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC, Clubhouse.SPEC,
-            com.dierks.homecraft.games.hub.Hub.SPEC);
+            com.dierks.homecraft.games.hub.Hub.SPEC, com.dierks.homecraft.games.lava.FloorIsLava.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id

@@ -307,6 +307,11 @@ public final class GamesCheck {
         }
         // ---- end the Clubhouse ----
 
+        /** The Floor Is Lava's box, claim and playroom ({@link LavaCheck}); {@code null} reads as switched off. */
+        default LavaCheck.Facts lava() {
+            return null;
+        }
+
         /**
          * What players can see (LAYOUT-SPEC §5.1, {@link SightCheck}): the Games worlds' ground, the view
          * distance and every place; {@code null} skips the section.
@@ -340,6 +345,7 @@ public final class GamesCheck {
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
         section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
         section(out, "the Clubhouse", () -> ClubhouseCheck.rows(f.clubhouse(), out)); // WP-CH
+        section(out, "The Floor Is Lava", () -> LavaCheck.rows(f.lava(), out));
         section(out, "what players can see", () -> SightCheck.rows(f.sight(), out)); // WARN only, never FAIL
         section(out, "the hand-built courses", () -> courses(f.courses(), out));
         section(out, "Race Night", () -> raceNight(f.raceNight(), out));

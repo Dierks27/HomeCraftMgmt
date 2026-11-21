@@ -238,9 +238,11 @@ public final class PlayGate {
     /**
      * The course games a Clubhouse visitor may open from its Games item (0.38.3): Time Trials, Fresh Courses
      * and the Weekly Cup (pinned to their specs by PlayGateTest). Their starts hand the visitor out from the
-     * Clubhouse; any start with no Clubhouse way still stops at the session's own entry (IN_SESSION).
+     * Clubhouse; any start with no Clubhouse way still stops at the session's own entry (IN_SESSION). The Floor
+     * Is Lava is here too: its cabinet in the Arcade Room, and its tile from the Games item, hand the visitor out
+     * to its playroom and bring them back.
      */
-    static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup");
+    static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup", "floor_is_lava");
 
     /**
      * Step 0: a player in a world session may only use that session's game; in the Clubhouse, also the

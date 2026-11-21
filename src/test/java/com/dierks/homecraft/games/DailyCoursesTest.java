@@ -74,9 +74,10 @@ class DailyCoursesTest {
                 "Fresh Courses is listed after Time Trials and Mini Golf");
         assertEquals(List.of(DailyCourses.SPEC, com.dierks.homecraft.games.event.RaceNight.SPEC,
                         com.dierks.homecraft.games.arena.FallingFloors.SPEC,
-                        com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC, com.dierks.homecraft.games.hub.Hub.SPEC),
-                specs.subList(specs.size() - 5, specs.size()),
-                "then only Race Night, Falling Floors, the Clubhouse (WP-CH) and the Hub (0.44.0)");
+                        com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC, com.dierks.homecraft.games.hub.Hub.SPEC,
+                        com.dierks.homecraft.games.lava.FloorIsLava.SPEC),
+                specs.subList(specs.size() - 6, specs.size()),
+                "then only Race Night, Falling Floors, the Clubhouse (WP-CH), the Hub (0.44.0) and The Floor Is Lava");
         assertEquals("fresh_courses", DailyCourses.SPEC.id(), "its id is fresh_courses");
         assertEquals(GameKind.TRIAL, DailyCourses.SPEC.kind(), "a course game");
         assertEquals(DailySettings.KEYS, DailyCourses.SPEC.keys(), "it ships its own keys");

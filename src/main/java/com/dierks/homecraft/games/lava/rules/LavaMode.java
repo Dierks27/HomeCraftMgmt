@@ -33,7 +33,7 @@ public enum LavaMode {
         return label;
     }
 
-    /** Its id: {@code /hcm play floor_is_lava_<id>}'s last word, and its score board's ({@link #board}). */
+    /** Its id: the last word of its score board ({@link #board}). */
     public String id() {
         return id;
     }

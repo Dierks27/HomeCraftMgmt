@@ -606,11 +606,17 @@ class LavaServiceTest {
         assertEquals(2, rig.service.writer().level());
         assertEquals(List.of(a.id, b.id), round.alive(), "and at two");
 
-        // round 3: three deep. The seat goes under and Blake is out: to the gallery, to watch
-        rig.until(LavaRound.Phase.LAVA);
+        // round 3: three deep. The seat goes under and Blake is out: to the gallery, to watch. The first layer comes
+        // the tick the lava does, so the round can be over in that same tick
+        for (int i = 0; i < 2000 && !round.over() && round.phase() != LavaRound.Phase.LAVA; i++) {
+            rig.tick();
+        }
         rig.ticks(LavaWriter.LAYER_TICKS + 2);
         assertTrue(round.over(), "one left standing: it is over");
-        assertEquals(1, b.teleportedTo.size());
+        assertEquals(2, b.teleportedTo.size(), "up to the gallery, then down again for the party");
+        LavaSite.Spot watched = b.teleportedTo.get(0);
+        assertTrue(rig.site().inGallery(watched.x(), watched.y(), watched.z()), "out: to the gallery");
+        assertFalse(rig.site().inGallery(b.x, b.y, b.z), "and down for the end");
         assertTrue(b.heard().contains("The lava got you!"), b.heard());
         assertTrue(b.sounds.contains(LavaHost.Cue.OUT));
         assertEquals(0, b.sessionsEnded, "out, but still in the room");

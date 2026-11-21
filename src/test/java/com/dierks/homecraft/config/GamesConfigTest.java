@@ -178,7 +178,7 @@ class GamesConfigTest {
                 "motherlode", "farm_slots", "deep_mine", "mob_slots", "mob_races", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
                 "trials", "golf", "cup", "fresh_courses", "race_night", "falling_floors", "clubhouse",
-                "hub"), ids);
+                "hub", "floor_is_lava"), ids);
         assertEquals(11, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
                 "eleven games of chance: the first five, the three more slot machines after them, Deep Mine and"
                         + " Mob Slots, then Mob Races");

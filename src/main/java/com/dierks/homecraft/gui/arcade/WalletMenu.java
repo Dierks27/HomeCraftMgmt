@@ -149,6 +149,9 @@ public final class WalletMenu extends Menu {
             return amount + " " + what;
         }
         String label = source == null ? "Tokens" : source.label();
+        if (what.startsWith(label + ":")) {
+            return amount + " " + what; // 0.50.2: the detail names the game already ("The Wheel: 5 back"), once
+        }
         return amount + " " + label + (what.isEmpty() ? "" : ": " + what);
     }
 

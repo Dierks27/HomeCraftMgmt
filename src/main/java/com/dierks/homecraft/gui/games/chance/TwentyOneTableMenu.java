@@ -192,14 +192,15 @@ public final class TwentyOneTableMenu extends GameMenu {
             boolean npc = seat.npc() != null;
             String in = npc ? hand.putIn() + " pretend chips in" : cash(seat.money(), hand.putIn()) + " in";
             if (seat == table.turn()) {
-                return Menus.glint(Menus.icon(Material.CLOCK, (npc ? "&eThinking... &7- " : "&eTheir move &7- ") + in),
-                        true);
+                // 0.50.2 (the play-test): the viewer's own row said "Their move" on their own turn
+                String whose = npc ? "&eThinking... &7- " : seat == me() ? "&aYour move &7- " : "&eTheir move &7- ";
+                return Menus.glint(Menus.icon(Material.CLOCK, whose + in), true);
             }
             return Menus.icon(Material.PAPER, hand.stood() ? "&7Stands &8- " + in : "&7Waiting &8- " + in);
         }
         List<String> lore = new ArrayList<>();
         if (hand != null && hand.result() != null) {
-            lore.add(outcome(seat, hand));
+            lore.add(outcome(seat, hand, seat == me()));
         }
         if (table.phase() == Phase.OPEN) {
             String next = seat.stake() <= 0 ? "choosing" : seat.npc() != null ? seat.stake() + " pretend chips in"
@@ -215,7 +216,7 @@ public final class TwentyOneTableMenu extends GameMenu {
     }
 
     /** "Won: $5 in → $9 back", "Twenty-One!: ...", "Same total: your 5 back", "No win this time." */
-    private static String outcome(Seat seat, TableRound.Hand hand) {
+    private static String outcome(Seat seat, TableRound.Hand hand, boolean mine) {
         if (seat.npc() != null) {
             return npcOutcome(hand);
         }
@@ -231,8 +232,8 @@ public final class TwentyOneTableMenu extends GameMenu {
         if (back > in) {
             return "&a" + head + ": &6" + cash(seat.money(), in) + " in → " + cash(seat.money(), back) + " back";
         }
-        if (back == in) {
-            return "&f" + head + ": &7" + cash(seat.money(), back) + " back";
+        if (back == in) { // never a win: "Your 5 back" (0.50.2; it read "Same total: 5 back")
+            return "&f" + head + ": &7" + (mine ? "your " : "their ") + cash(seat.money(), back) + " back";
         }
         return "&7" + head + ". No win this time.";
     }

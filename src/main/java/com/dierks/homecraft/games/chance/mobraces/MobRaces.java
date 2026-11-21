@@ -222,7 +222,7 @@ public final class MobRaces implements Game {
     @Override
     public List<String> rules() {
         return List.of("Six tiny mobs race round the track in the Game Parlor.",
-                "Pick one and put your tokens on it before they start.",
+                "Pick one and put something on it before they start.",
                 "Every racer is just as likely to win.",
                 "If your pick wins, you get what its tile says. If not, nothing.");
     }
@@ -637,8 +637,8 @@ public final class MobRaces implements Game {
                 changed();
             } else if (!games.inParlor(e.id)) {
                 if (games.rounds().close(e.round, e.stake(), e.ticket.data())) {
-                    p.sendMessage(Text.of("&7You left the Game Parlor before the race, so your &6"
-                            + amount(e.money, e.stake()) + " &7came back."));
+                    p.sendMessage(Text.of("&7You left the Game Parlor before the race. &fYour "
+                            + amount(e.money, e.stake()) + " back."));
                 }
                 entries.remove(e.id);
                 screens.remove(e.id);

@@ -60,11 +60,13 @@ final class MoneyPlay {
         return games.parlor().offered(viewer);
     }
 
-    /** Whether the next play is for dollars (never once the player may no longer play for money here). */
+    /**
+     * Whether the next play is for dollars: what the screen shows. 0.50.2 (the casino play-test): when money play closed
+     * while a money screen was open, this quietly turned to tokens, so the next Spin played tokens the player never
+     * chose. Now it stays as shown: the play is refused by the Parlor's gate ("Playing for money is closed right now"),
+     * nothing is taken, and the switch (still shown while on) takes the screen back to tokens.
+     */
     boolean on() {
-        if (money && !offered()) {
-            money = false;
-        }
         return money;
     }
 

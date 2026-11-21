@@ -66,7 +66,11 @@ public final class CrateMenu extends Menu {
                 break;
             }
             double pct = (isDroppable(r) && dropTotal > 0) ? r.weight() / dropTotal * 100.0 : 0;
-            set(slot++, rewardIcon(r, pct), null);
+            ItemStack icon = rewardIcon(r, pct);
+            if (icon == null) {
+                continue; // a reward with nothing in it right now
+            }
+            set(slot++, icon, null);
         }
 
         int tokens = plugin.tokens().balance(player.getUniqueId());
@@ -124,6 +128,9 @@ public final class CrateMenu extends Menu {
                     return Menus.icon(p.icon().material(), p.display()
                             + (r.type() == PluginConfig.RewardType.TRAIL ? " &7(" + r.days() + (r.days() == 1 ? " day)" : " days)") : ""),
                             odds);
+                }
+                if (ps.isEmpty()) {
+                    return null; // 0.51.1 (the arcade play-test): no prize can come from it here: no "One of:" tile
                 }
                 List<String> lore = new ArrayList<>();
                 lore.add("&7One of:");

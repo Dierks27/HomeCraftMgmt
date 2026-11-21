@@ -152,10 +152,17 @@ public final class RaceNight implements Game {
         return false;
     }
 
+    /** "Three short races", "One short race" (0.51.1: always three, whatever {@code races} said). */
+    public static String raceCount(int n) {
+        String[] words = {"One", "Two", "Three", "Four", "Five"};
+        String w = n >= 1 && n <= words.length ? words[n - 1] : Integer.toString(n);
+        return w + " short race" + (n == 1 ? "" : "s");
+    }
+
     @Override
     public List<String> rules() {
         return List.of("Boat races for everyone at once.",
-                "Three short races: every race gives points.",
+                raceCount(settings().races()) + ": every race gives points.",
                 "Free to enter. The top racers win a few tokens.");
     }
 

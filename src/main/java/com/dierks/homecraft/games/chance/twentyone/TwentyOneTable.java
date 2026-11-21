@@ -616,6 +616,16 @@ public final class TwentyOneTable {
         if (round.over()) {
             shoeAt = round.nextAt();
             phase = Phase.OPEN;
+            // 0.50.2 (the casino play-test): a player still online who closed the screen and was hurried had their
+            // hand stood and paid, and was never told: they are told now, as they lose the seat
+            for (Seat s : seats) {
+                Player p = s.npc == null && s.away && s.hand >= 0 && s.hand < round.seats() ? games().online(s.id)
+                        : null;
+                if (p != null && round.hand(s.hand).result() != null) {
+                    p.sendMessage(com.dierks.homecraft.util.Text.of(awayLine(s.money,
+                            round.hand(s.hand).putIn(), round.hand(s.hand).payout())));
+                }
+            }
             // nobody keeps a seat they walked away from
             seats.removeIf(s -> s.npc == null && (s.away || games().online(s.id) == null));
             for (Seat s : seats) {
@@ -628,6 +638,22 @@ public final class TwentyOneTable {
             }
         }
         changed();
+    }
+
+    /** What a player who was away is told about their hand: a win, "Your 5 back", or no win. */
+    static String awayLine(boolean money, int in, int back) {
+        String head = "&7Twenty-One: while you were away from the table your hand stood. ";
+        if (back > in) {
+            return head + "&aIt won: &6" + amount(money, in) + " in → " + amount(money, back) + " back.";
+        }
+        if (back == in) {
+            return head + "&fYour " + amount(money, back) + " back.";
+        }
+        return head + "No win this time.";
+    }
+
+    private static String amount(boolean money, int n) {
+        return money ? com.dierks.homecraft.games.Parlor.dollars(n) : n + " token" + (n == 1 ? "" : "s");
     }
 
     // ---- NPC players --------------------------------------------------------------------------------------

@@ -170,6 +170,20 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private RaceShow raceShow;
     /** 0.50.0: the back bar's bottles, to drink. */
     private BarDrinks drinks;
+
+    /** 0.51.1: the blocks a click is a tap on (the jukebox, the bar's bottles), so no held kit item acts on it. */
+    private final java.util.function.Predicate<org.bukkit.block.Block> tapBlock = b -> {
+        ClubhouseRoom r = room;
+        if (r == null || r.hand() || !r.open()) {
+            return false;
+        }
+        int[] jb = r.jukeboxBlock();
+        if (jb != null && b.getX() == jb[0] && b.getY() == jb[1] && b.getZ() == jb[2]
+                && b.getWorld().getName().equalsIgnoreCase(r.world())) {
+            return true;
+        }
+        return b.getWorld().getName().equalsIgnoreCase(r.world()) && barShelf(r, b);
+    };
     /** The NPC regulars (NPC players as mannequins while someone is visiting). */
     private ClubRegulars regulars;
 
@@ -421,6 +435,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         sideRooms = new SideRooms(this);
         decor = new ClubDecor(this);
         drinks = new BarDrinks(this);
+        com.dierks.homecraft.games.world.KitGuardListener.tapBlocks(tapBlock); // 0.51.1
         raceShow = new RaceShow(this);
         regulars = new ClubRegulars(this);
         g.onCheer(cheerListener); // 0.41.0
@@ -472,6 +487,10 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             }
             if (right) {
                 e.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            }
+            if (barShelf(r, b)) { // 0.51.1: a tap on a bottle is only that (the kit item in hand does nothing)
+                e.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+                com.dierks.homecraft.games.world.KitGuardListener.tapOnly(e);
             }
             // 0.50.0: a bottle on the back bar is a drink (either click: a controller's tap too), once per tap
             if (drinks != null && (left || e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND)
@@ -589,6 +608,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     }
 
     private void stopRoom() {
+        com.dierks.homecraft.games.world.KitGuardListener.noTapBlocks(tapBlock);
         if (drinks != null) {
             drinks.stop();
         }

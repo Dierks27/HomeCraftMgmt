@@ -15,7 +15,7 @@ import java.util.List;
  * confirm/cancel lore can carry the price and the buyer's balance so the decision
  * is fully informed.
  */
-public final class ConfirmMenu extends Menu {
+public class ConfirmMenu extends Menu {
 
     private final String title;
     private final ItemStack display;
@@ -47,6 +47,23 @@ public final class ConfirmMenu extends Menu {
         init(27, Text.of(title));
     }
 
+    /** The Cancel tile's line: a purchase says nothing is charged; anything else just goes back. */
+    protected String cancelLine() {
+        return confirmHeadline.toLowerCase(java.util.Locale.ROOT).contains("purchase") ? "&7No charge — go back."
+                : "&7Go back.";
+    }
+
+    /**
+     * A confirm screen inside the Games (0.50.2): one a games session may open. Take a break's pause is confirmed here;
+     * as a plain {@link ConfirmMenu} the session's kit guard refused it, so a pause chosen in the Clubhouse did nothing.
+     */
+    public static final class InGames extends ConfirmMenu implements com.dierks.homecraft.gui.games.GameScreen {
+        public InGames(HomeCraftManagement plugin, String title, ItemStack display, List<String> confirmLore,
+                       String confirmHeadline, Runnable onConfirm, Runnable onCancel) {
+            super(plugin, title, display, confirmLore, confirmHeadline, onConfirm, onCancel);
+        }
+    }
+
     @Override
     protected void build() {
         for (int i = 0; i < 27; i++) {
@@ -56,7 +73,7 @@ public final class ConfirmMenu extends Menu {
         // Button order is fixed across every confirm screen: Cancel (✗) on the
         // LEFT, Confirm (✓) on the RIGHT.
         set(11, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c&l✗ Cancel",
-                "&7No charge — go back."), e -> {
+                cancelLine()), e -> {
             if (onCancel != null) {
                 onCancel.run();
             } else {

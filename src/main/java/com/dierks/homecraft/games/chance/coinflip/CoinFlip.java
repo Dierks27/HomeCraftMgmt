@@ -396,6 +396,8 @@ public final class CoinFlip implements Game {
         Player a = Bukkit.getPlayer(o.from());
         if (a != null) {
             a.sendMessage(Text.of("&7" + o.toName() + " didn't take your Coin Flip invite."));
+            // 0.50.2 (the casino play-test): their screen kept "Waiting for ..." after the invite ended
+            com.dierks.homecraft.gui.games.chance.CoinFlipMenu.repaint(a);
         }
     }
 

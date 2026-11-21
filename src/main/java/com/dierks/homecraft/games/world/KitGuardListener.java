@@ -159,9 +159,81 @@ public final class KitGuardListener implements Listener {
 
     // ---- kit clicks (R3.10) ---------------------------------------------------------------------
 
+    /**
+     * Clicks a game already answered as a tap on something in its room (the Clubhouse's jukebox, the bar's bottles):
+     * the kit item in hand is not also used. 0.51.1 (the arcade play-test): a tap on a bottle while holding "Leave game"
+     * armed the leave, and a second tap sent the player home; holding "Games" opened the Games screen over Songs.
+     */
+    private static final java.util.Set<PlayerInteractEvent> TAPS =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    /**
+     * When each player last tapped such a thing (ms): the client follows a right-click on a block with a "use item"
+     * click of its own (a second event, on the air), which must not reach the kit item either.
+     */
+    private static final java.util.Map<java.util.UUID, Long> TAPPED_AT = new java.util.concurrent.ConcurrentHashMap<>();
+    static final long TAP_ECHO_MS = 600; // a client may send its "use item" a few ticks after the tap (and after a screen opens)
+
+    /** {@code e} was a tap on something in a game's room: no kit item acts on it, nor on the client's echo of it. */
+    public static void tapOnly(PlayerInteractEvent e) {
+        TAPS.add(e);
+        TAPPED_AT.put(e.getPlayer().getUniqueId(), System.currentTimeMillis());
+    }
+
+    /**
+     * Blocks a game answers taps on (the Clubhouse's jukebox and bar shelves): while a player aims at one, a click is
+     * the tap, never the held kit item, whatever extra click (an arm swing, a "use item") the client sends with it.
+     */
+    private static final java.util.List<java.util.function.Predicate<org.bukkit.block.Block>> TAP_BLOCKS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** A game's tap blocks (registered once while it runs; {@link #noTapBlocks} takes it away). */
+    public static void tapBlocks(java.util.function.Predicate<org.bukkit.block.Block> isTap) {
+        TAP_BLOCKS.add(isTap);
+    }
+
+    public static void noTapBlocks(java.util.function.Predicate<org.bukkit.block.Block> isTap) {
+        TAP_BLOCKS.remove(isTap);
+    }
+
+    private static boolean tapBlock(org.bukkit.block.Block b) {
+        if (b == null) {
+            return false;
+        }
+        for (java.util.function.Predicate<org.bukkit.block.Block> t : TAP_BLOCKS) {
+            try {
+                if (t.test(b)) {
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+                // a game's check failing never stops a kit click
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code e} is a tap a game already answered, the client's echo of one, or a click aimed at one. */
+    static boolean answeredTap(PlayerInteractEvent e) {
+        if (TAPS.remove(e)) {
+            return true;
+        }
+        if (!TAP_BLOCKS.isEmpty()) {
+            org.bukkit.block.Block at = e.getClickedBlock() != null ? e.getClickedBlock()
+                    : e.getPlayer().getTargetBlockExact(5);
+            if (tapBlock(at)) {
+                return true;
+            }
+        }
+        Long at = TAPPED_AT.get(e.getPlayer().getUniqueId());
+        return at != null && System.currentTimeMillis() - at <= TAP_ECHO_MS && e.getClickedBlock() == null;
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onKitClick(PlayerInteractEvent e) {
         if (e.getAction() == Action.PHYSICAL || !on() || !KitItems.isKit(e.getItem())) {
+            return;
+        }
+        if (answeredTap(e)) {
+            deny(e); // nothing else uses it either
             return;
         }
         safely("a game item click", () -> kitClick(e));

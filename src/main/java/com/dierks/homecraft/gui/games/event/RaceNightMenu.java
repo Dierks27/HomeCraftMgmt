@@ -228,7 +228,8 @@ public final class RaceNightMenu extends GameMenu {
                 ? null : prizeList(v.prizes());
         out[HEADER] = new Tile(HEADER, Material.CLOCK, "&6Race Night &7- " + (v.when() == null ? "no race set" : v.when()),
                 List.of("&7" + (v.state() == null ? "Boat races for everyone at once." : v.state()),
-                        "&7Three short races: every race gives points."));
+                        "&7" + com.dierks.homecraft.games.event.RaceNight.raceCount(v.races())
+                                + ": every race gives points."));
         out[TRACK] = new Tile(TRACK, Material.OAK_BOAT, v.track() == null ? "&bThe track &7- picked on the night"
                 : "&b" + v.track() + " &7- " + EventCopy.format(v.races(), Math.max(1, v.laps()), v.downhill())
                 + v.where(),

@@ -192,7 +192,7 @@ final class ParlorCommand {
                 continue;
             }
             SlotSettings s = pot.settings();
-            out.add("&7" + g.name() + "'s pot: &f" + Parlor.money(pot.potCents()) + " &7· starts at &f"
+            out.add("&7" + g.name() + (g.name().endsWith("s") ? "' pot: &f" : "'s pot: &f") + Parlor.money(pot.potCents()) + " &7· starts at &f"
                     + Parlor.money(pot.seedCents(s)) + " &7· " + Parlor.dollars(s.price()) + " a spin, "
                     + Parlor.money(pot.feedCents(s)) + " of it into the pot"
                     + (games.enabled(g) ? "" : " &8(closed)"));

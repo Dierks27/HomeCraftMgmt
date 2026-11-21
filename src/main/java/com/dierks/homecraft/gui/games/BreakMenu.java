@@ -360,7 +360,7 @@ public final class BreakMenu extends GameMenu {
     private void confirmPause(int days, String until) {
         ItemStack display = Menus.icon(Material.BLUE_BED, confirmName(until),
                 "&7Games of chance stay closed", "&7until then. Skill games stay open.");
-        new ConfirmMenu(plugin, "&bPause for " + days(days) + "?", display,
+        new ConfirmMenu.InGames(plugin, "&bPause for " + days(days) + "?", display,
                 List.of("&7Until " + until + ".", "&cIt can't be made shorter", "&cor cancelled."),
                 "&7Click to start the pause.", () -> {
                     Breaks breaks = plugin.breaks();

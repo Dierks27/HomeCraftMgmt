@@ -365,7 +365,7 @@ class SlotMachinesTest {
         assertTrue(rows.stream().anyMatch(r -> r.combo().equals("3 netherite")), rows.toString());
         assertTrue(SlotsCopy.feedRules(s).endsWith("Every spin adds to the pot, and three Wilds takes it all."),
                 SlotsCopy.feedRules(s));
-        assertEquals("&6The Motherlode &7— gives back about 90 of every 100 dollars, the pot's share counted · $5 a"
+        assertEquals("&6The Motherlode &7— gives back about 90 of every $100, the pot's share counted · $5 a"
                 + " spin · 50 plays a day", SlotsCopy.potOddsLine("The Motherlode", s, s.engine()));
         List<String> detail = SlotsCopy.potOddsDetail(s, s.engine(), 21225, 5000);
         assertTrue(detail.get(0).contains("lines &f85.0% &7+ pot &f5%"), detail.toString());

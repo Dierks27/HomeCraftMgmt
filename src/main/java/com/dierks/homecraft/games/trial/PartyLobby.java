@@ -215,7 +215,43 @@ public final class PartyLobby {
             return Why.FULL;
         }
         members.add(player);
+        while (!npcs.isEmpty() && members.size() + npcs.size() > max) {
+            npcs.remove(npcs.size() - 1); // stage 2: an NPC gives its place to a real player
+        }
         return null;
+    }
+
+    // ---- stage 2: NPC players keeping a lone player company ------------------------------------
+
+    /** The NPC players in the party, in the order they joined: never members, never counted in {@link #size}. */
+    private final List<UUID> npcs = new ArrayList<>();
+
+    /** The NPC players in the party now. */
+    public List<UUID> npcs() {
+        return List.copyOf(npcs);
+    }
+
+    /**
+     * An NPC player joins (while the party is open, and only into a place no real player has: the party's places
+     * go to real players first). Returns whether it joined.
+     */
+    public boolean addNpc(UUID npc) {
+        if (npc == null || state != State.OPEN || npcs.contains(npc) || members.contains(npc)
+                || members.size() + npcs.size() >= max) {
+            return false;
+        }
+        npcs.add(npc);
+        return true;
+    }
+
+    /** An NPC player leaves. Returns whether it was in. */
+    public boolean removeNpc(UUID npc) {
+        return npcs.remove(npc);
+    }
+
+    /** Every NPC player leaves (someone with NPCs off joined, or the party ended). */
+    public void clearNpcs() {
+        npcs.clear();
     }
 
     /**
@@ -268,7 +304,7 @@ public final class PartyLobby {
         if (!isHost(by)) {
             return Why.NOT_HOST;
         }
-        if (members.size() < MIN_PLAYERS) {
+        if (members.size() + npcs.size() < MIN_PLAYERS) { // stage 2: a lone player may race the NPCs with them
             return Why.TOO_FEW;
         }
         return null;
@@ -305,6 +341,7 @@ public final class PartyLobby {
         state = State.CLOSED;
         members.clear();
         ready.clear();
+        npcs.clear();
         host = null;
     }
 }

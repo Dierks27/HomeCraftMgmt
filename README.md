@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.51.1-play-test-fixes`
+- **Version:** `0.52.0-npc-world-games`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,15 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.52.0: NPC players in the world games.** The owner wanted NPCs not only at the tables but "any of the
+multiplayer games like Rings or racing parkour". Now, when you've waited alone a while (everyone in the game with NPCs
+on), NPCs join: **racing with friends** (parkour, elytra rings, boat), **Race Night** (filling a race up to 4),
+**Falling Floors**, **The Floor Is Lava** (Group and Challenge; in Little, at most one friendly easy NPC, and only
+when NPCs are set to easy) and **golf together**. They race, hop and putt at their own level (easy when anyone in the
+game wants easy), show up in that game's own results with the gear, and never touch a board, reward, standing or
+place that pays. See [NPCs in the world games](#npcs-in-the-world-games-0520). No config, schema or revision change.
+**Back to 0.51.1:** the jar alone.
 
 **0.51.1: fixes from playing every game on a live test server.** Two bot play-testers played every arcade and casino
 game on a real server: every payout was right, nothing leaked, no error. They did find these, all fixed:
@@ -4860,6 +4869,37 @@ and how much.
   `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
   and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
   100 is left out with a WARN, as on Ore Slots.
+
+##### NPCs in the world games (0.52.0)
+
+The NPC players (0.51.0) join the multiplayer world games too. The same rules hold: their names carry the gear and
+stars, nothing they do is real, and each player's NPC setting (and a parent's lock) decides.
+
+- **When they join.** A real player waits alone in a game's lobby for `games.cpu.join_after_seconds` (20); then an
+  NPC joins, then another every 8 seconds, up to 3, only into places no real player has, and only while every real
+  player there has NPCs on. A real player who arrives takes an NPC's place. An NPC plays one world game at a time.
+  NPC-only "show" rounds never run in the world games.
+- **Racing with friends (parkour, elytra rings, boat).** NPCs sit in the party lobby (the host may then start alone)
+  and race from grid spots behind the real racers (the real grid is unchanged). Each follows the fastest real run of
+  that course since the server started (recorded in memory), or else the checkpoints at the record holder's pace, or
+  else the checkpoints at a set pace; hard NPCs are close to it, easy ones much slower and sometimes stop or go back
+  a checkpoint. They show in the race's places, bossbar, chat ("Ozzie ⚙ NPC came 1st!") and results; the race never
+  waits for them, and every real racer's board, reward, Weekly Cup time and party win are worked out as if they
+  weren't there. Boat NPCs are shown seated (a real boat would bump yours); elytra NPCs glide where the game allows.
+- **Race Night.** While everyone on the night's list has NPCs on, NPC boats fill a race up to 4 racers, on grid spots
+  no one has. They appear only in the night's chat ("no points"): never in its standings, points or prizes.
+- **Falling Floors.** NPCs play your round with you, stepping between tiles by the real floor (they never change a
+  block; their own steps show as red dust); an easy one sometimes waits too long and drops. "Ozzie ⚙ NPC lasted 42 s"
+  is told to the round; results, rewards and the wins board never see them.
+- **The Floor Is Lava.** In Group they join at once, in Challenge from the next round; they walk the room and climb
+  when the warning comes (easy ones later and slower). A touch of the lava puts them back on dry ground (Group,
+  Little) or out (Challenge, "lasted N rounds"). They never collect stars or change a count. **Little** (Lilah's):
+  at most one NPC, always easy, and only when everyone in the room has NPCs on and set to easy.
+- **Golf together.** NPCs join the group's card from the first tee and play strokes drawn by level (easy about par+2
+  a hole, medium par+1, hard par): a swing, the ball's arc to the cup, a walk. The group never waits for them and
+  every real row, round and reward is unchanged.
+- **Not yet seen on a server:** The Floor Is Lava's Group was watched on the test server (three NPCs came to play,
+  bodies in the room, no errors); the races, Race Night, Falling Floors and golf have been tested only in code.
 
 ##### NPC players (0.51.0)
 

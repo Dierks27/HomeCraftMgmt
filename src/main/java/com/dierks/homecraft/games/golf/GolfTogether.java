@@ -221,7 +221,8 @@ public final class GolfTogether {
             }
             players.add(m);
         }
-        if (players.size() < PartyLobby.MIN_PLAYERS) {
+        List<UUID> npcIds = golf.golfNpcs().coming(l, players); // stage 2: the NPCs keeping them company
+        if (players.isEmpty() || players.size() + npcIds.size() < PartyLobby.MIN_PLAYERS) {
             games().tell(host, Refusal.of(PartyLobby.Why.TOO_FEW.message()));
             return;
         }
@@ -235,6 +236,8 @@ public final class GolfTogether {
         tellParty(l, "&dGolf together &7- everyone to hole 1 of " + c.name() + "!");
         if (!golf.rounds().startGroup(l.id(), c, players)) {
             l.finish(); // nobody could go: open again
+        } else {
+            golf.golfNpcs().started(l.id(), players, npcIds); // stage 2: on the shared card, never in a round
         }
     }
 

@@ -18,10 +18,6 @@ import com.dierks.homecraft.games.cpu.NpcSkin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
@@ -156,31 +152,36 @@ class CpuPlayersTest {
         assertEquals(pip.skin(), npcs.skin(pip), "its own skin back");
     }
 
-    /** Every value in every table of the database that names {@code id}. */
+    /**
+     * Every value in every table of the database that names {@code id} ({@link NpcTrace}, which the world games'
+     * tests share: {@code NpcPartyRaceEndToEndTest} runs it after a party race with an NPC racer).
+     */
     private List<String> rowsNaming(UUID id) throws Exception {
-        List<String> out = new ArrayList<>();
-        List<String> tables = new ArrayList<>();
-        try (Statement st = host.connection.createStatement();
-             ResultSet rs = st.executeQuery("SELECT name FROM sqlite_master WHERE type = 'table'")) {
-            while (rs.next()) {
-                tables.add(rs.getString(1));
-            }
+        return NpcTrace.rowsNaming(host.connection, id);
+    }
+
+    @Test
+    void inAWorldGameEveryNpcPlaysEasyWhenAnyRealPlayerWantsEasy() throws Exception {
+        open(CpuSettings.defaults(), true);
+        Fake jeff = player("Jeff");
+        Fake lilah = player("Lilah");
+        CpuPlayer ozzie = CpuRoster.byKey("ozzie");
+        for (String game : List.of("time_trials", "race_night", "falling_floors", "floor_is_lava", "mini_golf")) {
+            assertEquals(CpuLevel.HARD, npcs.level(ozzie, List.of(jeff.id), game), game + ": its own level");
         }
-        for (String t : tables) {
-            try (Statement st = host.connection.createStatement(); ResultSet rs = st.executeQuery("SELECT * FROM \"" + t
-                    + "\"")) {
-                ResultSetMetaData md = rs.getMetaData();
-                while (rs.next()) {
-                    for (int c = 1; c <= md.getColumnCount(); c++) {
-                        Object v = rs.getObject(c);
-                        if (v != null && v.toString().contains(id.toString())) {
-                            out.add(t + "." + md.getColumnName(c));
-                        }
-                    }
-                }
-            }
+        npcs.setLock(lilah.id, new CpuChoice(true, CpuChoice.Pref.EASY));
+        for (String game : List.of("time_trials", "race_night", "falling_floors", "floor_is_lava", "mini_golf")) {
+            assertEquals(CpuLevel.EASY, npcs.level(ozzie, List.of(jeff.id, lilah.id), game),
+                    game + ": with Lilah set to easy, every NPC plays easy");
         }
-        return out;
+        npcs.setOwn(jeff.id, new CpuChoice(true, CpuChoice.Pref.MATCHED));
+        assertEquals(CpuLevel.MEDIUM, npcs.level(ozzie, List.of(jeff.id), "time_trials"),
+                "matched in a world game: no record against NPCs there to match, so medium");
+        assertTrue(npcs.claim(ozzie, "party:1"), "an NPC goes into one world game");
+        assertFalse(npcs.claim(ozzie, "floors"), "never into two at once");
+        assertTrue(npcs.claim(ozzie, "party:1"), "(the same one again is fine)");
+        npcs.release(ozzie, "party:1");
+        assertTrue(npcs.claim(ozzie, "floors"), "free again once out");
     }
 
     @Test

@@ -31,6 +31,13 @@ import java.util.function.LongSupplier;
  * course ({@link #normalRun()}): the course's boards, its normal rewards and a Weekly Cup time,
  * exactly once, under every fair-play rule. There are no party prizes and no fees: nothing here
  * touches tokens. Anyone can leave (or drop out) at any time; that is a DNF, and the others carry on.
+ *
+ * <p><b>NPC racers</b> (stage 2, {@link #addNpc}): an NPC player who kept a lone racer company races too, as a
+ * mannequin on the track ({@link PartyNpcs}), and is in this race's own places, bars and results, marked with the
+ * gear and the word NPC. It is never one of {@link #racers()} (never seated, never a run, never a Player), and it
+ * changes nothing real: the race waits only for its real racers ({@link #in()}), only a real racer's finish starts
+ * the finish window, and anything that rewards a place reads {@link #realOnly} (the results as if no NPC had raced).
+ * Each real racer's own run counts by its own time, exactly as without NPCs.
  */
 public final class PartyRace implements RaceLink {
 
@@ -87,6 +94,8 @@ public final class PartyRace implements RaceLink {
         final UUID id;
         final String name;
         final int order;
+        /** Stage 2: an NPC racer (never seated through race mode, never a Player). */
+        boolean npc;
         Course.Spot grid;
         boolean seated;
         boolean ready;
@@ -179,9 +188,55 @@ public final class PartyRace implements RaceLink {
         return warmupSeconds > 0;
     }
 
-    /** Every racer, in grid order. */
+    /** Every real racer, in grid order (never an NPC: these are the players race mode seats). */
     List<UUID> racers() {
-        return new ArrayList<>(entries.keySet());
+        List<UUID> out = new ArrayList<>();
+        for (Entry e : entries.values()) {
+            if (!e.npc) {
+                out.add(e.id);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Stage 2: an NPC racer joins, behind every real racer on the grid. Only before the seating is done; refused
+     * for an id already in.
+     *
+     * @param name its name as the race shows it ({@code "Pip ⚙ NPC"})
+     */
+    boolean addNpc(UUID id, String name) {
+        if (id == null || entries.containsKey(id) || state != State.SEATING) {
+            return false;
+        }
+        Entry e = new Entry(id, name, entries.size());
+        e.npc = true;
+        e.ready = true;
+        entries.put(id, e);
+        return true;
+    }
+
+    /** Stage 2: the NPC racers, in grid order. */
+    List<UUID> npcs() {
+        List<UUID> out = new ArrayList<>();
+        for (Entry e : entries.values()) {
+            if (e.npc) {
+                out.add(e.id);
+            }
+        }
+        return out;
+    }
+
+    /** Stage 2: whether {@code id} is one of this race's NPC racers. */
+    boolean isNpc(UUID id) {
+        Entry e = entries.get(id);
+        return e != null && e.npc;
+    }
+
+    /** Stage 2: whether NPC racer {@code id} is still racing (seated, not finished or out). */
+    boolean npcRacing(UUID id) {
+        Entry e = entries.get(id);
+        return e != null && e.npc && e.seated && e.state == RaceStandings.State.RACING && e.result == null;
     }
 
     /** Whether {@code id} is in this race and still racing (not finished, left or out). */
@@ -224,7 +279,7 @@ public final class PartyRace implements RaceLink {
         if (state != State.SEATING) {
             return state != State.DONE;
         }
-        if (in() < PartyLobby.MIN_PLAYERS) {
+        if (in() < 1 || inAll() < PartyLobby.MIN_PLAYERS) { // stage 2: one real racer may race NPCs
             end();
             return false;
         }
@@ -296,8 +351,22 @@ public final class PartyRace implements RaceLink {
         }
     }
 
-    /** How many racers are still in the race (seated or being seated, not finished, left or out). */
+    /**
+     * How many real racers are still in the race (seated or being seated, not finished, left or out): the race
+     * waits for these only, never for an NPC.
+     */
     int in() {
+        int n = 0;
+        for (Entry e : entries.values()) {
+            if (!e.npc && e.state == RaceStandings.State.RACING && e.result == null) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Stage 2: everyone still in, NPC racers too (a race needs two racers to start). */
+    int inAll() {
         int n = 0;
         for (Entry e : entries.values()) {
             if (e.state == RaceStandings.State.RACING && e.result == null) {
@@ -310,7 +379,7 @@ public final class PartyRace implements RaceLink {
     private boolean allReady() {
         boolean any = false;
         for (Entry e : entries.values()) {
-            if (e.state == RaceStandings.State.RACING && e.result == null && e.seated) {
+            if (!e.npc && e.state == RaceStandings.State.RACING && e.result == null && e.seated) {
                 any = true;
                 if (!e.ready) {
                     return false;
@@ -369,7 +438,7 @@ public final class PartyRace implements RaceLink {
         e.result = Result.FINISHED;
         e.at = raceMs;
         e.reached = base.targets().size();
-        if (firstFinish < 0) {
+        if (firstFinish < 0 && !e.npc) { // stage 2: an NPC's finish never hurries a real racer
             firstFinish = ticks.getAsLong();
         }
         int place = finishers();
@@ -423,7 +492,7 @@ public final class PartyRace implements RaceLink {
         e.ready = true;
         int ready = 0;
         for (Entry o : entries.values()) {
-            if (o.ready && o.state == RaceStandings.State.RACING && o.result == null) {
+            if (!o.npc && o.ready && o.state == RaceStandings.State.RACING && o.result == null) {
                 ready++;
             }
         }
@@ -551,6 +620,23 @@ public final class PartyRace implements RaceLink {
         for (Entry e : all) {
             Result r = e.result == null ? (e.seated ? Result.STILL_RACING : Result.NOT_STARTED) : e.result;
             out.add(new Line(r == Result.FINISHED ? ++place : 0, e.id, e.name, r == Result.FINISHED ? e.ms : -1, r));
+        }
+        return out;
+    }
+
+    /**
+     * Stage 2: {@code lines} as if no NPC had raced: every NPC line left out and the finishers' places counted again
+     * among the real racers only. Anything that rewards a place (the family week's party win, the podium photo)
+     * reads this, so an NPC can never take a place from, or give one to, a real player.
+     */
+    public static List<Line> realOnly(List<Line> lines) {
+        List<Line> out = new ArrayList<>();
+        int place = 0;
+        for (Line l : lines) {
+            if (l.id() != null && com.dierks.homecraft.games.cpu.CpuRoster.isCpu(l.id())) {
+                continue;
+            }
+            out.add(l.result() == Result.FINISHED ? new Line(++place, l.id(), l.name(), l.ms(), l.result()) : l);
         }
         return out;
     }

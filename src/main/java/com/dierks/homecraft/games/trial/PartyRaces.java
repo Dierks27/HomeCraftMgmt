@@ -623,7 +623,8 @@ public final class PartyRaces {
             }
             free.add(p);
         }
-        if (free.size() < PartyLobby.MIN_PLAYERS) {
+        List<UUID> npcIds = trials.partyNpcs().coming(lobby, free); // stage 2: the NPCs keeping them company
+        if (free.isEmpty() || free.size() + npcIds.size() < PartyLobby.MIN_PLAYERS) {
             games().tell(host, Refusal.of("The race needs 2 racers who are free right now."));
             return;
         }
@@ -647,6 +648,13 @@ public final class PartyRaces {
             games().tell(host, Refusal.of("This track's grid fits " + grid.size() + " boats - race with fewer friends."));
             return;
         }
+        // stage 2: the NPCs' places, behind every real racer's (the real racers' grid is exactly as without them)
+        List<Course.Spot> npcSpots = npcIds.isEmpty() ? List.of()
+                : PartyNpcs.npcSpots(base, new WorldSurface(world), grid, free.size(), npcIds.size());
+        if (free.size() + npcSpots.size() < PartyLobby.MIN_PLAYERS) {
+            games().tell(host, Refusal.of("There's no room on this track's grid for the NPCs right now."));
+            return;
+        }
         if (lobby.start(host.getUniqueId()) != null) {
             return;
         }
@@ -660,7 +668,8 @@ public final class PartyRaces {
         race.clubhouse(club != null && club.partyAfter() && base.world().equalsIgnoreCase(club.world())); // WP-CH
         races.put(lobby.id(), race);
         results.remove(lobby.id());
-        say(lobby, "&dRace on " + base.name() + "! &7" + free.size() + " racers"
+        int npcsIn = trials.partyNpcs().racing(race, base, free, npcIds.subList(0, npcSpots.size()), npcSpots);
+        say(lobby, "&dRace on " + base.name() + "! &7" + (free.size() + npcsIn) + " racers"
                 + (warm > 0 ? " - warm up first (" + Warmup.clock(warm) + ")" : "") + ". Free, just for fun.");
         String slalom = slalomNote(base);
         if (slalom != null) {
@@ -837,7 +846,8 @@ public final class PartyRaces {
         List<PartyRace.Line> lines = race.results();
         if (line == null) {
             results.put(race.lobbyId(), lines);
-            com.dierks.homecraft.games.clubhouse.FamilyWeek.partyWon(games(), lines, race.racers().size()); // 0.38.4: the family week's win
+            com.dierks.homecraft.games.clubhouse.FamilyWeek.partyWon(games(), PartyRace.realOnly(lines),
+                    race.racers().size()); // 0.38.4: the family week's win (stage 2: among real racers only)
         }
         for (UUID id : race.racers()) {
             hideBar(id);
@@ -904,7 +914,7 @@ public final class PartyRaces {
         String course = race.base().name();
         club.result(ClubRaces.partySheet(course, lines, ++clubResults),
                 p -> new PartyResultsMenu(trials.plugin(), trials, p, course, lines).open(p));
-        List<UUID> top = ClubRaces.photoTop(lines);
+        List<UUID> top = ClubRaces.photoTop(PartyRace.realOnly(lines)); // stage 2: the podium is for real racers
         if (!top.isEmpty()) {
             club.podium(top); // 0.42.0: every party race of two or more ends with "Photo time!" on the podium
         }

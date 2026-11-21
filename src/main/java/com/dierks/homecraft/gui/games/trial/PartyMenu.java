@@ -121,6 +121,7 @@ public final class PartyMenu extends GameMenu {
                     : ready ? Menus.icon(Material.LIME_DYE, "&a" + name + " &7- ready")
                     : Menus.icon(Material.GRAY_DYE, "&f" + name + " &7- not ready yet"), null);
         }
+        npcTiles(lobby, members.size(), racing); // stage 2
 
         if (!racing) {
             int left = lobby.max() - lobby.size();
@@ -157,6 +158,26 @@ public final class PartyMenu extends GameMenu {
                 && com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), raced.kind()), racing,
                 trials.onRun(me)), raced); // WP-CH
         exitTile();
+    }
+
+    /**
+     * Stage 2: the party's NPC players after its members, each "Pip ⚙ NPC ★ - ready" (the gear, the word and its
+     * stars in the NAME, for Bedrock).
+     */
+    private void npcTiles(PartyLobby lobby, int from, boolean racing) {
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.any(plugin.games());
+        List<UUID> ids = lobby.npcs();
+        for (int k = 0; k < ids.size() && from + k < MEMBER_SLOTS.length; k++) {
+            com.dierks.homecraft.games.cpu.CpuPlayer c = com.dierks.homecraft.games.cpu.CpuRoster.byId(ids.get(k));
+            if (c == null) {
+                continue;
+            }
+            String name = com.dierks.homecraft.games.cpu.CpuRoster.tagged(npcs == null ? c.name() : npcs.name(c))
+                    + " &e" + c.level().starText();
+            set(MEMBER_SLOTS[from + k], Menus.icon(Material.ARMOR_STAND, "&b" + name + (racing ? " &7- racing"
+                    : " &7- ready"), "&7An NPC player: races for fun,", "&7never on a board.",
+                    "&7A friend who joins takes its place."), null);
+        }
     }
 
     /**

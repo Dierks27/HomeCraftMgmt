@@ -165,18 +165,92 @@ public final class CpuPlayers implements Game, TableNpcs {
     public void start() {
         loadLooks();
         if (ctx.plugin() != null) {
+            com.dierks.homecraft.games.world.WorldEntities.sweep(this); // a body a crash left: never one standing
             games().every(this, 20, 20, this::second);
+            games().every(this, 1, 1, this::tick);
         }
     }
 
     @Override
     public void stop() {
         prefs.clear();
+        clearWorlds();
     }
 
     @Override
     public void onQuit(Player player) {
         prefs.remove(player.getUniqueId());
+    }
+
+    // ---- the world games' NPCs (stage 2) ------------------------------------------------------------------
+
+    /** Each world game's NPCs that were running at the last tick (taken down when the game closes). */
+    private final Set<WorldNpcs> worlds = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    /** Which world game each NPC is in now: an NPC is never in two at once. */
+    private final Map<UUID, Object> busy = new ConcurrentHashMap<>();
+    private long tick;
+
+    /**
+     * Once a tick: every open world game's NPCs ({@link WorldNpcs.Host}), inside the NPC players' own guard, so a
+     * bug in one switches the NPC players off and never the game; a game that closed has its NPCs taken down.
+     */
+    public void tick() {
+        tick++;
+        GamesService g = games();
+        Set<WorldNpcs> now = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (Game game : g.games()) {
+            if (game instanceof WorldNpcs.Host h && game != this && g.enabled(game)) {
+                WorldNpcs w = h.npcs();
+                if (w != null) {
+                    now.add(w);
+                    w.tick(this, tick);
+                }
+            }
+        }
+        for (WorldNpcs w : worlds) {
+            if (!now.contains(w)) {
+                w.clear();
+            }
+        }
+        worlds.clear();
+        worlds.addAll(now);
+    }
+
+    /** Every world game's NPCs come down (the NPC players stopping or switched off). */
+    private void clearWorlds() {
+        GamesService g = games();
+        if (g != null) {
+            for (Game game : g.games()) {
+                if (game instanceof WorldNpcs.Host h && game != this) {
+                    WorldNpcs w = h.npcs();
+                    if (w != null) {
+                        try {
+                            w.clear();
+                        } catch (RuntimeException | LinkageError e) {
+                            g.logger().log(Level.WARNING, "Could not take down the NPCs of " + game.id(), e);
+                        }
+                    }
+                }
+            }
+        }
+        worlds.clear();
+        busy.clear();
+    }
+
+    /** {@code npc} goes into a world game ({@code where}): false when it is in another one now (never in two). */
+    public boolean claim(CpuPlayer npc, Object where) {
+        Object was = busy.putIfAbsent(npc.id(), where);
+        return was == null || was.equals(where);
+    }
+
+    /** {@code npc} is out of {@code where}. */
+    public void release(CpuPlayer npc, Object where) {
+        busy.remove(npc.id(), where);
+    }
+
+    /** Every NPC in a world game now, wherever. */
+    public Set<UUID> busy() {
+        return Set.copyOf(busy.keySet());
     }
 
     @Override
@@ -187,8 +261,15 @@ public final class CpuPlayers implements Game, TableNpcs {
     @Override
     public List<String> statusLines() {
         CpuSettings s = settings();
-        return List.of(CpuRoster.ALL.size() + " NPCs, up to " + s.regulars() + " in the Clubhouse; one joins a player"
-                + " alone at a table after " + s.joinAfterSeconds() + " s");
+        List<String> out = new ArrayList<>();
+        out.add(CpuRoster.ALL.size() + " NPCs, up to " + s.regulars() + " in the Clubhouse; one joins a player"
+                + " alone at a table, a party, a round or a room after " + s.joinAfterSeconds() + " s");
+        for (Game game : games().games()) { // stage 2: each world game's NPCs
+            if (game instanceof WorldNpcs.Host h && game != this && h.npcs() != null) {
+                out.add(h.npcs().statusLine());
+            }
+        }
+        return out;
     }
 
     // ---- once a second ------------------------------------------------------------------------------------

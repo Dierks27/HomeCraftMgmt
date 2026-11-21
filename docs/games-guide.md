@@ -1775,6 +1775,12 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - In Connect Four and Tic-Tac-Toe you can pick "Play an NPC". Easy ones are good for little players. Games against NPCs give no tokens.
 - Your NPC setting is on the Games screen (or /hcm play npc): on or off, and easy, matched or any. A parent or admin can set and lock it for you.
 
+### NPCs in the world games (0.52.0)
+
+- If you wait alone for a little while in racing with friends (parkour, rings, boat), Falling Floors, The Floor Is Lava's Group or Challenge, or golf together, NPCs come and play with you (up to 3). In Race Night they fill a race up to 4.
+- They race, hop and putt at their own level, or easy if anyone in the game wants easy. They show in that game's results with their gear, but never on a board and never for a reward. Your place and rewards are worked out as if they weren't there.
+- In Little (The Floor Is Lava) there is at most one friendly easy NPC, and only when NPCs are set to easy.
+
 ### The Floor Is Lava (0.50.0)
 
 - A toy-sized playroom (floor_is_lava). Stars float about; then a rumble and a glow, and the floor fills with lava: climb onto the sofa, the table, the toy blocks or the bookcase. Then it drains and new stars come out.

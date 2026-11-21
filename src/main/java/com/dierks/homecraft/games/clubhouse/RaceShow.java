@@ -55,6 +55,10 @@ import java.util.UUID;
  *
  * <p>Everything is a game entity ({@link WorldEntities#tag}): never saved, swept at every start and whenever a chunk
  * loads with one in it, and nobody can touch one (the games' own guard).
+ *
+ * <p><b>The track's trouble is never the Clubhouse's.</b> Anything that goes wrong drawing it (a block or a mob this
+ * server doesn't have) takes the track down with one WARN and is tried again a minute later; the room stays open, and
+ * Mob Races, with no track, takes no entries meanwhile.
  */
 final class RaceShow {
 
@@ -83,8 +87,14 @@ final class RaceShow {
     private MobRaces.Phase lastPhase = MobRaces.Phase.IDLE;
     private long ticks;
     private long spawnAfter;
-    /** Why there is no track, for the admins; {@code null} while it is up. */
+    /** After something went wrong: nothing is drawn until this tick, and the last trouble said. */
+    private long restAfterTrouble;
+    private String trouble;
+    /** How long the track rests after trouble before it is tried again (ticks). */
+    static final long TROUBLE_REST = 20 * 60;
+    /** Why there is no track, for the admins; {@code null} while it is up. And the reason last written to the log. */
     private String why = "not looked for yet";
+    private String logged;
 
     RaceShow(Clubhouse club) {
         this.club = club;
@@ -100,19 +110,59 @@ final class RaceShow {
 
     /** Once a second while the room is open: draw the track where it belongs, keep its board, tell the game. */
     void second(ClubhouseRoom room) {
+        if (ticks < restAfterTrouble) {
+            return;
+        }
+        try {
+            look(room);
+        } catch (RuntimeException | LinkageError e) {
+            troubled(e);
+        }
+    }
+
+    /** Every tick: the racers stand at the line while entries are taken, run the race's script, then go. */
+    void tick() {
+        ticks++;
+        if (ticks < restAfterTrouble) {
+            return;
+        }
+        try {
+            run();
+        } catch (RuntimeException | LinkageError e) {
+            troubled(e);
+        }
+    }
+
+    /** Something went wrong: everything comes down, one WARN (a new one only for new trouble), and a rest. */
+    private void troubled(Throwable e) {
+        restAfterTrouble = ticks + TROUBLE_REST;
+        String what = String.valueOf(e);
+        why = "it could not be drawn (" + what + "); it is tried again in a minute";
+        if (!what.equals(trouble)) {
+            trouble = what;
+            club.log().log(java.util.logging.Level.WARNING, "Clubhouse: Mob Races' track could not be drawn; the room"
+                    + " stays open and the track is tried again every minute", e);
+        }
+        try {
+            remove();
+        } catch (RuntimeException | LinkageError ignored) {
+            // what could not be removed is a game entity: the next start's sweep takes it
+        }
+    }
+
+    private void look(ClubhouseRoom room) {
         MobRaces races = races();
         World w = room == null ? null : Bukkit.getWorld(room.world());
         if (races == null || w == null) {
-            why = races == null ? "Mob Races is closed (/hcm games status says why)" : "the room's world isn't loaded";
-            remove();
+            none(races == null ? "Mob Races is closed (/hcm games status says why)" : "the room's world isn't loaded",
+                    false);
             return;
         }
         ClubhouseRoom.RaceSpot spot = club.settings().parlor() || room.hand() ? room.raceTrack() : null;
         if (spot == null) {
-            why = room.hand() ? "not placed: build a table " + RaceTrack.LENGTH + " long, " + RaceTrack.DEPTH
+            none(room.hand() ? "not placed: build a table " + RaceTrack.LENGTH + " long, " + RaceTrack.DEPTH
                     + " wide and one block high, stand on a corner of it facing along it, and use /hcm games clubhouse"
-                    + " parlor mob_races" : "the Game Parlor isn't built";
-            remove();
+                    + " parlor mob_races" : "the Game Parlor isn't built", false);
             return;
         }
         RaceTable.Frame f = spot.frame();
@@ -121,21 +171,34 @@ final class RaceShow {
         }
         if (!spot.built() && !tableThere(w, f)) {
             String table = "a table " + RaceTrack.LENGTH + " long, " + RaceTrack.DEPTH + " wide and one block high";
-            why = spot.own() ? "there is no table under the place you set (" + table + ", from the corner you stood"
+            none(spot.own() ? "there is no table under the place you set (" + table + ", from the corner you stood"
                     + " on, the way you faced and to your right)"
                     : "your " + (room.editing() ? "edited" : "saved") + " room has no table where HCM's stands: build "
                     + table + " anywhere in the Parlor, stand on a corner of it facing along it and use /hcm games"
-                    + " clubhouse parlor mob_races (or /hcm games clubhouse generated for HCM's room)";
-            remove();
+                    + " clubhouse parlor mob_races (or /hcm games clubhouse generated for HCM's room)", true);
             return;
         }
         why = null;
+        logged = null;
         if (!f.equals(frame) || !alive()) {
             remove();
             draw(w, f);
         }
         texts(races);
         races.trackSeen();
+    }
+
+    /**
+     * No track, and why. With {@code say}, the reason is written to the console once (an owner whose saved room has
+     * no table would otherwise only find Mob Races missing): the same words as the status line's.
+     */
+    private void none(String reason, boolean say) {
+        why = reason;
+        if (say && !reason.equals(logged)) {
+            logged = reason;
+            club.log().info("Clubhouse: Mob Races has no track - " + reason);
+        }
+        remove();
     }
 
     private static boolean loaded(World w, RaceTable.Frame f) {
@@ -179,6 +242,9 @@ final class RaceShow {
                 e.setBlock(Bukkit.createBlockData(p.block()));
                 e.setTransformation(new Transformation(new Vector3f(), new Quaternionf(),
                         new Vector3f((float) box[3], (float) box[4], (float) box[5]), new Quaternionf()));
+                // one light for the whole model: a display takes its light from the one block it stands in, so
+                // without this each piece would be lit a little differently from the piece beside it
+                e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
         }
         // three tap targets side by side take in the whole table, from the floor to over the track
@@ -315,9 +381,7 @@ final class RaceShow {
 
     // ---- every tick: the racers -----------------------------------------------------------------------
 
-    /** Every tick: the racers stand at the line while entries are taken, run the race's script, then go. */
-    void tick() {
-        ticks++;
+    private void run() {
         MobRaces races = frame == null ? null : races();
         World w = races == null ? null : Bukkit.getWorld(club.room() == null ? "" : club.room().world());
         MobRaces.Phase phase = races == null || w == null ? MobRaces.Phase.IDLE : races.phase();

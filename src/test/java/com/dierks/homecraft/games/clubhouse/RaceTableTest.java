@@ -77,7 +77,8 @@ class RaceTableTest {
                 String at = (x - BOX.minX()) + "," + (z - BOX.minZ());
                 assertNotNull(b.get(key(x, FLOOR, z)), "the Parlor's floor is under the table at " + at);
                 assertEquals(ClubhousePlanner.TRACK_TABLE, b.get(key(x, FEET, z)), "the table, one block high, at " + at);
-                assertNull(b.get(key(x, FEET + 1, z)), "one block of air over it, where the racers run, at " + at);
+                assertEquals(ClubhousePlanner.TRACK_LIGHT, b.get(key(x, FEET + 1, z)), "the block over it, where the"
+                        + " racers run, is an invisible light at " + at);
                 assertEquals(ClubhousePlanner.BARRIER, b.get(key(x, FEET + 2, z)), "an invisible barrier over that at "
                         + at + ": nobody stands on the track");
                 for (int y = FEET; y <= FEET + 2; y++) {
@@ -88,6 +89,12 @@ class RaceTableTest {
         // a player is 1.8 high: with the barrier there is one block of room over the table, so nobody fits on it,
         // and from the floor or from a card table's top (one block up) no jump reaches the barrier's top
         assertTrue(ClubhousePlanner.noFooting(ClubhousePlanner.BARRIER), "nothing spawns or stands on a barrier");
+        assertEquals(15, ClubhousePlanner.lightOf(ClubhousePlanner.TRACK_LIGHT), "the racers run in full light");
+        assertEquals(7, ClubhousePlanner.lightOf("minecraft:light[level=7,waterlogged=false]"));
+        assertTrue(ClubhousePlanner.letsLight(ClubhousePlanner.TRACK_LIGHT)
+                && ClubhousePlanner.noFooting(ClubhousePlanner.TRACK_LIGHT), "a light block is air to walk through and"
+                + " nothing to stand on");
+        assertEquals("minecraft:light", ClubhousePlanner.id(ClubhousePlanner.TRACK_LIGHT));
         assertTrue(ClubhousePlanner.letsLight(ClubhousePlanner.BARRIER), "and light passes it as it does air");
         assertFalse(ClubhousePlanner.noFooting(ClubhousePlanner.TRACK_TABLE), "the table itself is a solid block");
         // lanterns hang over its four corners
@@ -206,10 +213,10 @@ class RaceTableTest {
                 }
             }
         }
-        assertEquals(4, lanterns);
-        assertEquals(24 + 24 + 4 + 2 + RaceTrack.LENGTH, b.size() - without.size(), "the table, the barrier, four"
-                + " lanterns, two chains and the beam over its north row (it was there): nothing else is in the"
-                + " table's column");
+        assertEquals(4 + 24, lanterns, "four lanterns, and the 24 invisible lights over the table");
+        assertEquals(24 + 24 + 24 + 4 + 2 + RaceTrack.LENGTH, b.size() - without.size(), "the table, the light the"
+                + " racers run in, the barrier, four lanterns, two chains and the beam over its north row (it was"
+                + " there): nothing else is in the table's column");
     }
 
     // ---- the track drawn on it -------------------------------------------------------------------------------
@@ -423,6 +430,7 @@ class RaceTableTest {
         for (int x = X0; x <= X1; x++) {
             for (int z = Z0; z <= Z1; z++) {
                 host.world.put(x, FEET, z, ClubhousePlanner.FELT);
+                host.world.put(x, FEET + 1, z, "minecraft:air");
                 host.world.put(x, FEET + 2, z, "minecraft:air");
             }
         }
@@ -433,8 +441,8 @@ class RaceTableTest {
         long before = host.world.writes;
         ClubhouseRoom updated = room();
         ready(updated);
-        assertEquals(24 + 24 + 4, host.world.writes - before, "the table, its barrier and the two lanterns on their"
-                + " chains, and nothing else, are built");
+        assertEquals(24 + 24 + 24 + 4, host.world.writes - before, "the table, the light over it, its barrier and"
+                + " the two lanterns on their chains, and nothing else, are built");
         assertEquals(ClubhousePlanner.TRACK_TABLE, host.world.at(X0 + 3, FEET, Z0 + 1));
         assertTrue(updated.raceTrack().built());
     }

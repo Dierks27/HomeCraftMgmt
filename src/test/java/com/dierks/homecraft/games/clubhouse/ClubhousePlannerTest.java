@@ -84,7 +84,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("b8cb4e57bb59", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("0f6d2761fbae", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -252,8 +252,8 @@ class ClubhousePlannerTest {
                     if (below == null || ClubhousePlanner.noFooting(below)) {
                         continue; // nothing to stand on
                     }
-                    if (here != null && !id(here).endsWith("_carpet")) {
-                        continue; // no room to stand
+                    if (here != null && !id(here).endsWith("_carpet") && !id(here).equals("minecraft:light")) {
+                        continue; // no room to stand (a light block is air: Mob Races' table top is a place too)
                     }
                     places++;
                     int l = light.getOrDefault(key(x, y, z), 0);
@@ -1074,7 +1074,7 @@ class ClubhousePlannerTest {
             }
         }
         // displays only: no block is theirs (the plan is plan 10's, pinned with Mob Races' table)
-        assertEquals("b8cb4e57bb59", SITE.plan().hash(), "no block is a slot machine's");
+        assertEquals("0f6d2761fbae", SITE.plan().hash(), "no block is a slot machine's");
         assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
         for (String game : ClubhousePlanner.PARLOR_ROW_GAMES) {
@@ -1150,7 +1150,7 @@ class ClubhousePlannerTest {
         }
         assertEquals("machine_deepmine", com.dierks.homecraft.pack.ClubModels.machineFor("deep_mine").name());
         assertEquals("machine_mobs", com.dierks.homecraft.pack.ClubModels.machineFor("mob_slots").name());
-        assertEquals("b8cb4e57bb59", SITE.plan().hash(), "no block is theirs: they are displays only");
+        assertEquals("0f6d2761fbae", SITE.plan().hash(), "no block is theirs: they are displays only");
         assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
     }

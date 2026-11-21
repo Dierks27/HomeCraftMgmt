@@ -288,6 +288,14 @@ public final class ClubhousePlanner {
             case "minecraft:sea_lantern", "minecraft:lantern", "minecraft:glowstone", "minecraft:ochre_froglight",
                  "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", "minecraft:shroomlight" -> 15;
             case "minecraft:end_rod" -> 14;
+            case "minecraft:light" -> { // the invisible light over Mob Races' table: its level is its state
+                int at = blockData.indexOf("level=");
+                int end = at < 0 ? -1 : at + 6;
+                while (end >= 0 && end < blockData.length() && Character.isDigit(blockData.charAt(end))) {
+                    end++;
+                }
+                yield at < 0 ? 15 : Integer.parseInt(blockData.substring(at + 6, end));
+            }
             case "minecraft:brewing_stand" -> 1;
             case "minecraft:campfire" -> blockData.contains("lit=true") ? 15 : 0;
             default -> {
@@ -302,14 +310,14 @@ public final class ClubhousePlanner {
 
     /**
      * Whether light passes through a block (for the flood: air, glass, panes, chains, lanterns, fences, carpets,
-     * banners, candles, pots and plants, and the invisible barrier over Mob Races' table, which light passes as it
-     * does air). Everything else stops it: slabs, stairs and trapdoors too, though light can slip past some of them in
-     * the game, so the flood never counts more light than there is.
+     * banners, candles, pots and plants, and the invisible barrier and light blocks over Mob Races' table, which
+     * light passes as it does air). Everything else stops it: slabs, stairs and trapdoors too, though light can slip
+     * past some of them in the game, so the flood never counts more light than there is.
      */
     public static boolean letsLight(String blockData) {
         String id = id(blockData);
-        return id.equals(AIR) || id.equals(BARRIER) || id.equals("minecraft:glass") || id.endsWith("_pane")
-                || id.endsWith("chain")
+        return id.equals(AIR) || id.equals(BARRIER) || id.equals("minecraft:light") || id.equals("minecraft:glass")
+                || id.endsWith("_pane") || id.endsWith("chain")
                 || id.equals("minecraft:lantern") || id.endsWith("_fence") || id.endsWith("_carpet")
                 || id.endsWith("_banner") || id.endsWith("candle") || id.startsWith("minecraft:potted_")
                 || id.equals(SHRUB) || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod")
@@ -318,13 +326,13 @@ public final class ClubhousePlanner {
 
     /**
      * The blocks a mob can never stand on: glass and panes, lanterns, chains, candles, carpets, banners, plants and
-     * pots, fences (too narrow), and a barrier (the game spawns nothing on one). A mob could stand on anything else if
-     * it were dark there.
+     * pots, fences (too narrow), a barrier (the game spawns nothing on one) and a light block (it is air to stand
+     * on). A mob could stand on anything else if it were dark there.
      */
     public static boolean noFooting(String blockData) {
         String id = id(blockData);
-        return id.equals(BARRIER) || id.equals("minecraft:glass") || id.endsWith("_pane")
-                || id.equals("minecraft:lantern")
+        return id.equals(BARRIER) || id.equals("minecraft:light") || id.equals("minecraft:glass")
+                || id.endsWith("_pane") || id.equals("minecraft:lantern")
                 || id.endsWith("chain") || id.endsWith("candle") || id.endsWith("_carpet") || id.endsWith("_banner")
                 || id.startsWith("minecraft:potted_") || id.equals(SHRUB) || id.endsWith("_fence")
                 || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod") || id.equals(TINTED)
@@ -1192,28 +1200,35 @@ public final class ClubhousePlanner {
      * felt lies between it and the arrival row to its north, two between it and the card tables to its south, and two
      * columns between each end and the machines' mats on the side walls: it can be walked all the way round.
      *
-     * <p>Its blocks are a plain dark-wood table and nothing else; the racetrack on it is drawn ({@link RaceTable}),
-     * as the racers are. One block of air over the table is where they run, and an invisible barrier lies over
-     * that: nobody can step or jump onto the track, and nothing is in the way of seeing it or of walking round it.
-     * Two lanterns already hang from the beam over its north corners; two more hang on chains over its south ones.
+     * <p>Its blocks are a plain dark-wood table and nothing else that is seen; the racetrack on it is drawn
+     * ({@link RaceTable}), as the racers are. The block over the table is where they run: it is air to them and to
+     * the eye, an invisible light block ({@link #TRACK_LIGHT}) so that the track and the racers are lit as brightly as
+     * anything in the room, all over. An invisible barrier lies over that: nobody can step or jump onto the track, and
+     * nothing is in the way of seeing it or of walking round it. Two lanterns already hang from the beam over its
+     * north corners; two more hang on chains over its south ones.
      */
     private static void raceTable(Builder b) {
         for (int i = TRACK_X0; i < TRACK_X0 + RaceTrack.LENGTH; i++) {
             for (int k = TRACK_Z0; k < TRACK_Z0 + RaceTrack.DEPTH; k++) {
-                b.set(i, UP_FLOOR + 1, k, TRACK_TABLE); // in place of the felt there
-                b.set(i, UP_FLOOR + 3, k, BARRIER);
+                b.set(ARCADE_X0 + i, UP_FLOOR + 1, k, TRACK_TABLE); // in place of the felt there
+                b.set(ARCADE_X0 + i, UP_FLOOR + 2, k, TRACK_LIGHT);
+                b.set(ARCADE_X0 + i, UP_FLOOR + 3, k, BARRIER);
             }
         }
         for (int i : new int[]{TRACK_X0, TRACK_X0 + RaceTrack.LENGTH - 1}) {
-            b.set(i, UP_TOP, TRACK_Z0 + RaceTrack.DEPTH - 1, CHAIN);
-            b.set(i, UP_TOP - 1, TRACK_Z0 + RaceTrack.DEPTH - 1, HANGING);
+            b.set(ARCADE_X0 + i, UP_TOP, TRACK_Z0 + RaceTrack.DEPTH - 1, CHAIN);
+            b.set(ARCADE_X0 + i, UP_TOP - 1, TRACK_Z0 + RaceTrack.DEPTH - 1, HANGING);
         }
     }
 
-    /** Mob Races' table: its north-west corner (x, z offsets), the block it is made of, and the barrier over it. */
+    /**
+     * Mob Races' table: its north-west corner (x, z offsets), the block it is made of, the invisible light the racers
+     * run in and the barrier over it.
+     */
     static final int TRACK_X0 = 4;
     static final int TRACK_Z0 = MAIN_Z + 4;
     public static final String TRACK_TABLE = "minecraft:stripped_dark_oak_wood";
+    public static final String TRACK_LIGHT = "minecraft:light[level=15,waterlogged=false]";
     public static final String BARRIER = "minecraft:barrier";
 
     /**

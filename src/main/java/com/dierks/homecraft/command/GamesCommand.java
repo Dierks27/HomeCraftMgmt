@@ -78,7 +78,7 @@ public final class GamesCommand {
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
     static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup",
-            "watch", "cheer", "cheers", "rider"); // WP-CH: the Clubhouse's
+            "watch", "cheer", "cheers", "rider", "npc"); // WP-CH: the Clubhouse's; the NPC players' setting
 
     private final HomeCraftManagement plugin;
 
@@ -148,8 +148,53 @@ public final class GamesCommand {
             case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
             case "cup" -> cup(sender, args);
             case "watch", "cheer", "cheers", "rider" -> clubhouse(sender, args); // WP-CH
+            case "npc" -> npc(sender, args);
             default -> open(sender, args);
         }
+    }
+
+    /**
+     * {@code /hcm play npc [on|off|easy|matched|any]}: the player's own NPC players setting (with no word, its screen).
+     * A setting a parent or admin locked can't be changed here: it says so.
+     */
+    private void npc(CommandSender sender, String[] args) {
+        Player player = self(sender, "Only players have an NPC setting.");
+        if (player == null || deny(sender, PLAY)) {
+            return;
+        }
+        GamesService games = running(sender);
+        if (games == null) {
+            return;
+        }
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.of(games);
+        if (npcs == null) {
+            player.sendMessage(Text.of("&7NPC players are off on this server."));
+            return;
+        }
+        UUID id = player.getUniqueId();
+        com.dierks.homecraft.games.cpu.CpuChoice now = npcs.choice(id);
+        if (args.length < 3) {
+            npcs.open(player, null);
+            return;
+        }
+        String word = args[2].toLowerCase(Locale.ROOT);
+        com.dierks.homecraft.games.cpu.CpuChoice.Pref level = com.dierks.homecraft.games.cpu.CpuChoice.Pref.of(word);
+        com.dierks.homecraft.games.cpu.CpuChoice next;
+        if (word.equals("on") || word.equals("off")) {
+            next = new com.dierks.homecraft.games.cpu.CpuChoice(word.equals("on"), now.level());
+        } else if (level != null) {
+            next = new com.dierks.homecraft.games.cpu.CpuChoice(now.on(), level);
+        } else {
+            player.sendMessage(Text.of("&cUsage: /hcm play npc on|off|easy|matched|any"));
+            return;
+        }
+        if (!npcs.setOwn(id, next)) {
+            player.sendMessage(Text.of(npcs.prefs(id).locked() ? "&7Your NPC setting was chosen for you - a grown-up"
+                    + " can change it." : "&cCould not save that right now."));
+            return;
+        }
+        player.sendMessage(Text.of("&eNPC players: " + (next.on() ? "&aon" : "&coff") + "&7, " + next.level().word()
+                + " &8(/hcm play npc on|off|easy|matched|any)"));
     }
 
     /**
@@ -904,6 +949,8 @@ public final class GamesCommand {
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
                     || args[1].equalsIgnoreCase("cup") || args[1].equalsIgnoreCase("cheers"))) {
                 match(out, last, "on", "off");
+            } else if (n == 3 && args[1].equalsIgnoreCase("npc")) {
+                match(out, last, "on", "off", "easy", "matched", "any");
             } else if (n == 3 && (args[1].equalsIgnoreCase("watch") || args[1].equalsIgnoreCase("rider"))) { // WP-CH
                 players(out, last);
             } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)

@@ -131,6 +131,13 @@ public final class NpcMenu extends GameMenu {
     }
 
     private void said(boolean ok) {
+        if (ok && admin) {
+            // a parent's or admin's change is logged, as its command is
+            CpuPlayers npcs = npcs();
+            CpuChoice.Prefs p = npcs == null ? CpuChoice.Prefs.NONE : npcs.prefs(target);
+            plugin.getLogger().info("[Games] " + viewer.getName() + " (admin screen): NPC players for " + targetName
+                    + " " + p.effective().text() + (p.locked() ? " (locked)" : ""));
+        }
         if (ok) {
             Sounds.received(viewer);
         } else {

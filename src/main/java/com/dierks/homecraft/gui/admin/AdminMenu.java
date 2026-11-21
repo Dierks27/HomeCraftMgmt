@@ -83,12 +83,39 @@ public final class AdminMenu extends Menu {
                 "&8" + plugin.packs().packs().size() + " pack(s)"),
                 e -> new PacksAdminMenu(plugin, player, this::reopen).open(player));
 
+        set(19, Menus.icon(Material.PLAYER_HEAD, "&bPlayer game settings",
+                "&7Pick a player, then set their NPC",
+                "&7players (on/off, how they play)", "&7and lock it so they can't change it."),
+                e -> {
+                    if (gamesAdmin()) {
+                        new PlayerGameSettingsMenu(plugin, player, this::reopen).open(player);
+                    }
+                });
+
+        set(21, Menus.icon(Material.ARMOR_STAND, "&bNPC players",
+                "&7Rename an NPC, or pick its skin:",
+                "&7a built-in one, a player's, or a pasted texture."),
+                e -> {
+                    if (gamesAdmin()) {
+                        new NpcLooksMenu(plugin, player, null, this::reopen).open(player);
+                    }
+                });
+
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
 
         // Trading blocks are obtained via /hcm give <vending|display|auction>.
         set(26, Menus.icon(Material.ARMOR_STAND, "&8Armor-stand Minis",
                 "&8The second Mini form (posed stands)",
                 "&8lands in the next micro-pass."), null);
+    }
+
+    /** The games' settings for players and NPCs are the games admins' (hcm.games.admin), as their commands are. */
+    private boolean gamesAdmin() {
+        if (player.hasPermission(PlayerGameSettingsMenu.PERMISSION)) {
+            return true;
+        }
+        player.sendMessage(Text.of("&cOnly a games admin can change these."));
+        return false;
     }
 
     private void reopen() {

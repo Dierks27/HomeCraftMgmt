@@ -435,7 +435,23 @@ public final class CpuPlayers implements Game, TableNpcs {
             skins.put(npc.key(), skin);
             keep(META + npc.key() + ".skin", skin.text());
         }
+        if (profiles != null) {
+            profiles.forget(); // an account's skin is fetched again: the owner may have just changed it
+        }
         looksVersion++;
+    }
+
+    private NpcProfiles profiles;
+
+    /**
+     * What the NPC wears now, as a profile for a mannequin or a head: its chosen skin, or its own built-in one while an
+     * account's skin is fetched or if it can't be ({@link NpcProfiles}).
+     */
+    public io.papermc.paper.datacomponent.item.ResolvableProfile profile(CpuPlayer npc) {
+        if (profiles == null) {
+            profiles = new NpcProfiles(ctx.plugin(), games().logger());
+        }
+        return profiles.profile(npc, skin(npc), () -> looksVersion++);
     }
 
     private void keep(String key, String value) {

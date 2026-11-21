@@ -68,7 +68,7 @@ public final class GameCatalog {
      * {@code cheers} and {@code rider}, WP-CH).
      */
     public static final Set<String> RESERVED = Set.of("accept", "deny", "break", "leave", "invites", "news", "cup",
-            "watch", "cheer", "cheers", "rider");
+            "watch", "cheer", "cheers", "rider", "npc");
 
     private GameCatalog() {
     }

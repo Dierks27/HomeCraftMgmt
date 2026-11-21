@@ -1,5 +1,9 @@
 package com.dierks.homecraft.games.cabinet.tictactoe;
 
+import com.dierks.homecraft.games.cpu.CpuLevel;
+import com.dierks.homecraft.games.cpu.CpuMoves;
+import com.dierks.homecraft.games.cpu.CpuPlayer;
+
 import java.util.Objects;
 import java.util.SplittableRandom;
 import java.util.UUID;
@@ -32,6 +36,9 @@ public final class TicTacToeMatch {
     private final UUID second;
     private final TicTacToeAI.Level level;
     private final SplittableRandom rng;
+    /** The NPC player in the second seat instead of the Arcade, or {@code null}. */
+    private CpuPlayer npc;
+    private CpuLevel npcLevel;
     private UUID leaver;
     private int version;
 
@@ -45,6 +52,28 @@ public final class TicTacToeMatch {
     /** A game against the Arcade at {@code level}; {@code seed} is this game's own tie-break seed. */
     public static TicTacToeMatch vsArcade(UUID player, TicTacToeAI.Level level, long seed) {
         return new TicTacToeMatch(player, null, Objects.requireNonNull(level, "level"), seed);
+    }
+
+    /**
+     * A game against an NPC player at {@code level} (the level it plays at in this game): a game for fun, like a
+     * friend game: no token and no board ({@link #earnsDaily}). Its moves are {@link CpuMoves#ticTacToe}'s.
+     */
+    public static TicTacToeMatch vsNpc(UUID player, CpuPlayer npc, CpuLevel level, long seed) {
+        TicTacToeMatch m = new TicTacToeMatch(player, null, level == CpuLevel.HARD ? TicTacToeAI.Level.HARD
+                : TicTacToeAI.Level.EASY, seed);
+        m.npc = Objects.requireNonNull(npc, "npc");
+        m.npcLevel = level;
+        return m;
+    }
+
+    /** The NPC player in the second seat, or {@code null} (the Arcade, or a friend). */
+    public CpuPlayer npc() {
+        return npc;
+    }
+
+    /** The level the NPC plays at in this game, or {@code null}. */
+    public CpuLevel npcLevel() {
+        return npcLevel;
     }
 
     /** A friend game: {@code first} (who invited) plays X and moves first. */
@@ -117,7 +146,7 @@ public final class TicTacToeMatch {
         if (!arcadeToMove()) {
             return -1;
         }
-        int cell = TicTacToeAI.choose(board, level, rng);
+        int cell = npc != null ? CpuMoves.ticTacToe(board, npcLevel, rng) : TicTacToeAI.choose(board, level, rng);
         if (cell >= 0) {
             board.play(cell);
             version++;
@@ -162,7 +191,7 @@ public final class TicTacToeMatch {
      * draw or better on hard (the hard Arcade can't be beaten). Friend games never do.
      */
     public boolean earnsDaily(UUID player) {
-        if (!vsArcade()) {
+        if (!vsArcade() || npc != null) {
             return false;
         }
         Outcome o = outcome(player);

@@ -177,7 +177,9 @@ public final class TicTacToePlayMenu extends GameMenu {
             return;
         }
         told = true;
-        if (match.vsArcade()) {
+        if (match.npc() != null) {
+            ttt.finishNpc(viewer, match); // for fun: no token, no board
+        } else if (match.vsArcade()) {
             ttt.finish(viewer, match);
         } else {
             ttt.finishFriendGame(match);
@@ -188,7 +190,8 @@ public final class TicTacToePlayMenu extends GameMenu {
         if (!ttt.mayPlay(viewer)) {
             return;
         }
-        new TicTacToePlayMenu(plugin, ttt, viewer, back, ttt.vsArcade(viewer, match.level()), kid).open(viewer);
+        new TicTacToePlayMenu(plugin, ttt, viewer, back, match.npc() != null ? ttt.vsNpc(viewer, match.npc())
+                : ttt.vsArcade(viewer, match.level()), kid).open(viewer);
     }
 
     private ItemStack yourTile() {
@@ -200,7 +203,7 @@ public final class TicTacToePlayMenu extends GameMenu {
                     : Menus.glint(Menus.icon(m, you), false);
             case WON -> Menus.glint(Menus.icon(Material.NETHER_STAR, "&a&lYou won!"), true);
             case LOST -> Menus.icon(m, "&7" + theirName() + " won this one");
-            case DRAW -> match.vsArcade() && match.level() == TicTacToeAI.Level.HARD
+            case DRAW -> match.vsArcade() && match.npc() == null && match.level() == TicTacToeAI.Level.HARD
                     ? Menus.glint(Menus.icon(Material.NETHER_STAR, "&a&lA draw! &7The best result on hard"), true)
                     : Menus.icon(m, "&7A draw: the board is full");
             case LEFT -> Menus.icon(m, "&7You left the game");
@@ -210,8 +213,8 @@ public final class TicTacToePlayMenu extends GameMenu {
 
     private ItemStack theirTile() {
         int them = 1 - seat;
-        String who = match.vsArcade()
-                ? "&eThe Arcade &7(" + match.level().name().toLowerCase(Locale.ROOT) + ")"
+        String who = match.npc() != null ? theirName()
+                : match.vsArcade() ? "&eThe Arcade &7(" + match.level().name().toLowerCase(Locale.ROOT) + ")"
                 : "&e" + theirName();
         boolean theirTurn = !match.over() && match.board().turn() == them;
         String name = who + (theirTurn ? (match.vsArcade() ? " &e- thinking..." : " &e- their turn") : "");
@@ -219,6 +222,12 @@ public final class TicTacToePlayMenu extends GameMenu {
     }
 
     private String theirName() {
+        if (match.npc() != null) {
+            com.dierks.homecraft.games.cpu.CpuPlayers npcs =
+                    com.dierks.homecraft.games.cpu.CpuPlayers.any(plugin.games());
+            return npcs == null ? match.npc().name()
+                    : com.dierks.homecraft.games.cpu.CpuRoster.label(npcs.name(match.npc()), match.npcLevel());
+        }
         if (match.vsArcade()) {
             return "The Arcade";
         }

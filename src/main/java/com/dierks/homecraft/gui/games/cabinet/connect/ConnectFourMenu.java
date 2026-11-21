@@ -69,6 +69,12 @@ public final class ConnectFourMenu extends GameMenu {
             set(14, Menus.icon(Material.PLAYER_HEAD, "&bPlay a friend &7- just for fun",
                     "&7Pick someone online to invite.", "&7Friend games pay no tokens."), e -> pickFriend());
         }
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.of(plugin.games());
+        if (npcs != null && npcs.wants(viewer.getUniqueId())) {
+            set(15, Menus.icon(Material.ARMOR_STAND, "&bPlay an NPC &7" + com.dierks.homecraft.games.cpu.CpuRoster.MARKER
+                    + " - just for fun", "&7A computer player with a name.", "&7NPC games pay no tokens."),
+                    e -> pickNpc());
+        }
         Long wins = connect.hardWins(viewer);
         set(16, Menus.icon(Material.OAK_SIGN, "&eHigh scores &7- hard wins",
                 "&7Your hard wins: &f" + (wins == null ? 0 : wins)), e -> connect.scores(viewer, this::reopen));
@@ -93,6 +99,17 @@ public final class ConnectFourMenu extends GameMenu {
             return;
         }
         new ConnectFourPlayMenu(plugin, connect, viewer, this::reopen, connect.vsArcade(viewer, level)).open(viewer);
+    }
+
+    private void pickNpc() {
+        if (!connect.mayPlay(viewer)) {
+            return;
+        }
+        new com.dierks.homecraft.gui.games.NpcPickMenu(plugin, connect, viewer, this::reopen, npc -> {
+            if (connect.mayPlay(viewer)) {
+                new ConnectFourPlayMenu(plugin, connect, viewer, this::reopen, connect.vsNpc(viewer, npc)).open(viewer);
+            }
+        }).open(viewer);
     }
 
     private void pickFriend() {

@@ -80,7 +80,17 @@ public final class CoinFlipMenu extends GameMenu {
                 "&7Others can only ask you when this is on.", "&eClick to change it in Take a break"),
                 e -> coinFlip.takeABreak(viewer, this::reopen));
         set(INVITE, inviteTile(odds), e -> coinFlip.invite(viewer, settings, stake, this::reopen));
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.of(plugin.games());
+        if (npcs != null && npcs.wants(viewer.getUniqueId())) {
+            // NPC players: a pretend flip only. A real flip against the computer would be a new game of chance.
+            set(NPC, Menus.icon(Material.ARMOR_STAND, "&bFlip with an NPC &7" + com.dierks.homecraft.games.cpu.CpuRoster.MARKER,
+                    "&dPretend: no tokens move.", "&eClick to flip"), e -> new CoinFlipNpcMenu(plugin, coinFlip,
+                    viewer, this::reopen, CoinFlipNpcMenu.pick()).open(viewer));
+        }
     }
+
+    /** A pretend flip with an NPC player. */
+    private static final int NPC = 24;
 
     /** Up to three stake buttons; with more stakes, a window of three around the chosen one. */
     private void stakeButtons() {

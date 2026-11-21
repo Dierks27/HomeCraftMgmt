@@ -119,7 +119,8 @@ class KitSlotsTest {
             "clubhouse/TrophyWall.java", "f.setItem(item(t), false)",
             "clubhouse/JukeboxCorner.java", "jb.getInventory().clear()",
             "clubhouse/FeastTable.java", "f.setItem(item(kind), false)",
-            "clubhouse/ClubDecor.java", "onShelf.setItem(slot, bottle(n * 3 + slot))"); // 0.44.2: the bar's shelf blocks
+            "clubhouse/ClubDecor.java", "onShelf.setItem(slot, bottle(n * 3 + slot))", // 0.44.2: the bar's shelf blocks
+            "clubhouse/BarDrinks.java", "inv.setItem(take, null)"); // 0.50.0: a bottle off a shelf block, drunk
 
     @Test
     void noGameWritesAPlayersInventoryExceptThroughTheKitRules() throws IOException {

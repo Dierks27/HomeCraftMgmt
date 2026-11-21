@@ -403,7 +403,13 @@ class ClubhouseRoomTest {
         assertEquals(ClubBoard.MAX_ROWS, generated.trophyFrames().size(), "the generated room's east wall");
         assertEquals(90f, generated.trophyYaw(), 0.001f, "facing west, into the room (0.40.0: under All-time records)");
         assertArrayEquals(ClubhousePlanner.jukebox(BOX), generated.jukeboxBlock(), "the generated room's reading nook");
-        assertEquals(ClubhousePlanner.seats(BOX), generated.seats(), "a cushion's place on every chair (26.3)");
+        List<ClubhousePlanner.Seat> chairs = new java.util.ArrayList<>(ClubhousePlanner.seats(BOX));
+        if (generated.parlorMachines().isEmpty()) {
+            assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3)");
+        } else {
+            chairs.addAll(ClubhousePlanner.parlorSeats(BOX)); // 0.50.0: the Parlor's chairs too, while it is built
+            assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3), the Parlor's too");
+        }
 
         ClubhouseRoom r = room();
         r.here(new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f));

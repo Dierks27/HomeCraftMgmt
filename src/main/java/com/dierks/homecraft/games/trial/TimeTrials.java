@@ -139,7 +139,7 @@ import java.util.logging.Logger;
  * its original set's board. The words follow the cadence ("this week", "today"). And a Sky Rings
  * run's first fall-reset tells the player how to open their wings.
  */
-public final class TimeTrials implements Game {
+public final class TimeTrials implements Game, com.dierks.homecraft.games.cpu.WorldNpcs.Host {
 
     /** Built: the game follows its config switch. */
     static final boolean IMPLEMENTED = true;
@@ -221,6 +221,10 @@ public final class TimeTrials implements Game {
 
     /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
     private final PreviewTests previews = new PreviewTests();
+    /** Stage 2: the fastest clean solo run on each course since the restart, for the NPC racers' ghosts. */
+    private final RunTrails trails = new RunTrails();
+    /** Stage 2: NPC players in party races (their lobbies, their racers and their bodies). */
+    private final PartyNpcs partyNpcs = new PartyNpcs(this);
     /** Sky Rings: the rings' chunks held while someone flies them. */
     private final RingChunks ringChunks = new RingChunks(RingChunks.server(() -> games().plugin()));
     /** MOUNTAIN-V21-SPEC D17: how far Ice Boats really fly off a Mountain Run's drops (it measures, nothing more). */
@@ -514,6 +518,8 @@ public final class TimeTrials implements Game {
         boats.clear();
         cache = null;
         lastTick = 0;
+        trails.clear(); // stage 2: recorded runs are memory only
+        partyNpcs.clear();
     }
 
     @Override
@@ -1369,6 +1375,7 @@ public final class TimeTrials implements Game {
             Session s = p == null ? null : sessions().session(p);
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
+                trails.drop(run.player); // stage 2
                 flightsEnd(run, false); // D17
                 race.gone(run, p); // WP-R1
                 removeBoat(run, p);
@@ -1386,6 +1393,7 @@ public final class TimeTrials implements Game {
             if (run.race != null && race.tick(p, run, now)) { // WP-R1: the grid, the stand, called off
                 continue;
             }
+            record(p, run); // stage 2: where a counted solo run goes, for the NPC racers' ghosts
             switch (run.phase) {
                 case COUNTDOWN -> countdown(p, run, now);
                 case RUNNING -> running(p, run, now);
@@ -2087,6 +2095,7 @@ public final class TimeTrials implements Game {
         }
         run.backDue = false;
         run.lastReset = now;
+        trails.broken(run.player); // stage 2: a run put back is never an NPC's ghost
         int last = run.progress == null ? -1 : run.progress.lastCheckpoint();
         Location at = race.reseat(run, backTo(run, last)); // WP-R1: clear of the other race boats
         if (at == null || !move(p, run, at)) {
@@ -2378,6 +2387,7 @@ public final class TimeTrials implements Game {
         TimeTrialsSettings s = settings();
         TrialFinish.Summary summary = TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
         settledSplits(p, run, ms, summary); // 0.38.4
+        keepTrail(p, run, ms); // stage 2: the fastest clean solo run, for the NPC racers' ghosts (memory only)
         // The Weekly Cup (WP-C): a counted, timed run, solo or a party race's. A Race Night heat never
         // comes here (RaceMode.finish: its start is a grid spot), so it never sets a Cup time.
         CupLink.finished(games(), p, run.course, ms, verdict, run.warmup);
@@ -2588,6 +2598,7 @@ public final class TimeTrials implements Game {
     /** Forget the player's run (their session ended, or they left). */
     void end(Player player) {
         TrialRun run = runs.remove(player.getUniqueId());
+        trails.drop(player.getUniqueId()); // stage 2: a run that ended unfinished is never a ghost
         if (run != null) {
             flightsEnd(run, false); // D17: a no-op after the finish wrote its line
             removeBoat(run, player);
@@ -2678,6 +2689,62 @@ public final class TimeTrials implements Game {
     /** Every live run. */
     Collection<TrialRun> liveRuns() {
         return runs.values();
+    }
+
+    /**
+     * Stage 2: a tick of a counted solo run (not a race, a warm-up, a test or the Dropper) hands its position to
+     * {@link RunTrails}. It only reads: a run is exactly what it always was, and a problem here never touches it.
+     */
+    private void record(Player p, TrialRun run) {
+        if (run.phase != TrialRun.Phase.RUNNING || run.progress == null || run.race != null || run.warmup
+                || run.test || run.drop != null || run.voided != null || run.course.kind() == TrialKind.DROPPER) {
+            return;
+        }
+        try {
+            Entity where = run.boat != null && run.boat.isValid() ? run.boat : p;
+            Location at = where.getLocation();
+            Location look = p.getLocation();
+            trails.sample(run.player, run.course.id(), run.layout, run.progress.startNanos(),
+                    run.elapsedMs(System.nanoTime()), at.getX(), at.getY(), at.getZ(), look.getYaw(), look.getPitch());
+        } catch (RuntimeException | LinkageError e) {
+            trails.drop(run.player);
+        }
+    }
+
+    /** Stage 2: a counted solo run's recording is kept if it is the fastest clean one ({@link RunTrails}). */
+    private void keepTrail(Player p, TrialRun run, long ms) {
+        if (run.race != null || run.warmup || run.progress == null) {
+            trails.drop(run.player);
+            return;
+        }
+        try {
+            long[] times = Splits.fromRun(run, ms);
+            Point end = position(p, run);
+            trails.finished(run.player, run.course.id(), run.layout, ms, times, end.x(), end.y(), end.z());
+        } catch (RuntimeException | LinkageError e) {
+            trails.drop(run.player);
+        }
+    }
+
+    /** Stage 2: the run Time Trials recorded on {@code course} as laid out now, for an NPC's ghost, or null. */
+    RunTrails.Trail trail(Course course) {
+        return course == null ? null : trails.best(course.id(), course.layoutHash());
+    }
+
+    /** Stage 2: the recorded runs (for a test, and the admins' status). */
+    RunTrails trails() {
+        return trails;
+    }
+
+    /** Stage 2: NPC players in party races. */
+    public PartyNpcs partyNpcs() {
+        return partyNpcs;
+    }
+
+    /** Stage 2: NPC players in party races ({@link PartyNpcs}). */
+    @Override
+    public com.dierks.homecraft.games.cpu.WorldNpcs npcs() {
+        return partyNpcs;
     }
 
     /** Where the run is: the boat on a boat course, the player's feet otherwise. */

@@ -75,6 +75,15 @@ public final class CpuRoster {
         return "&f" + name + " &7" + MARKER + " &e" + level.starText();
     }
 
+    /**
+     * {@code "Pip ⚙ NPC"}: an NPC's name where a world game lists it among real players (a race's results, a round's
+     * lines, a scorecard): the gear and the word, so a child who can't read yet sees the gear and a grown-up reads
+     * "NPC". Never a colour code, so it sits inside any line.
+     */
+    public static String tagged(String name) {
+        return name + " " + MARKER + " " + WORD;
+    }
+
     /** {@code "Pip (NPC)"}: for a place that only takes plain words (the console, a log line). */
     public static String plain(String name) {
         return name + " (" + WORD + ")";

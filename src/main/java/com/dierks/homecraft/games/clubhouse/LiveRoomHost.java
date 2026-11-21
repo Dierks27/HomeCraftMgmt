@@ -151,13 +151,24 @@ final class LiveRoomHost implements RoomHost {
         return ClubhouseRegions.problems(box, d, arena(games()), handBuilt(), facts);
     }
 
-    /** The Falling Floors arena's box, as configured (on or off: its blocks may stand). */
+    /**
+     * The Falling Floors arena's box, as configured (on or off: its blocks may stand), and The Floor Is Lava's
+     * playroom's the same way.
+     */
     static List<Regions.Extra> arena(GamesService g) {
+        List<Regions.Extra> out = new java.util.ArrayList<>();
         try {
-            return List.of(new Regions.Extra(ArenaRegions.NAME, g.settings(FallingFloors.SPEC).box()));
+            out.add(new Regions.Extra(ArenaRegions.NAME, g.settings(FallingFloors.SPEC).box()));
         } catch (RuntimeException e) {
-            return List.of();
+            // unreadable: nothing to keep apart from
         }
+        try {
+            out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(
+                    g.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC)));
+        } catch (RuntimeException e) {
+            // as above
+        }
+        return out;
     }
 
     /** Every hand-built course's footprint, or {@code null} when the rows can't be read now. */

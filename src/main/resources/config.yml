@@ -2337,6 +2337,26 @@ games:
       # Three Creepers, which also give the free spins (2 in → 40). Never under
       # another line here.
       creeper: 20
+  # ---- mob_races ----
+  # Mob Races: six tiny mobs race round the model track in the Clubhouse's Game Parlor.
+  # A player picks one and puts tokens on it; everyone in the room is in the same race.
+  # Every racer is as likely to win as any other. A pick that wins gets one whole amount
+  # back, worked out per stake so the game gives back `rtp`; any other pick gets nothing.
+  mob_races:
+    # false = Mob Races is closed.
+    enabled: true
+    # The tokens a player can put on a racer.
+    stakes: [5, 10, 20]
+    # Races a player can enter per day (resets at local midnight).
+    daily_limit: 30
+    # Target tokens given back per 100 put in (85-95); the screen shows what it
+    # really reaches (27 back for 5 in is exactly 90).
+    rtp: 90
+    # Seconds the track waits for more entries after the first one (5-120). The race
+    # starts sooner if everyone in it asks.
+    gather_seconds: 20
+    # Seconds the winner takes to reach the finish (10-60).
+    race_seconds: 25
   # ---- creeper_sweeper ----
   # Creeper Sweeper: dig every safe square without digging a creeper.
   creeper_sweeper:
@@ -2869,7 +2889,7 @@ games:
       # permission hcm.clubhouse.secretroom, everyone's unless you take it away). false = not built.
       enabled: true
     parlor:
-      # The Game Parlor over the Arcade Room, through a little gold star on the 19th Hole's wall (for
+      # The Game Parlor over the Arcade Room, through a little lever by the 19th Hole's books (for
       # players with hcm.clubhouse.parlor and hcm.games.chance): the games of chance as machines you
       # tap, with their usual rules (the day's token limit, Take a break). false = not built.
       enabled: true
@@ -2884,3 +2904,25 @@ games:
     enabled: true
     # The Hub's world.
     world: fairyhub
+  # The Floor Is Lava (/hcm play floor_is_lava, or its cabinet in the Clubhouse's Arcade Room): a giant
+  # playroom that builds itself in an empty box of the Games world. Collect the stars; when the floor
+  # rumbles, climb on the furniture. The lava is real and can't hurt anyone. Three ways to play:
+  # Little (nobody can lose), Group (everyone together) and Challenge (last one standing). It gives
+  # no tokens: its bests are trophies in each player's secret room.
+  floor_is_lava:
+    # true = the playroom builds itself; nothing happens while games.enabled is false.
+    enabled: true
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses, the Clubhouse and the Falling Floors arena,
+    # and 16 from hand-built courses. The shipped spot is 576 blocks from everything else.
+    origin: [7312, 160, 8544]
+    # The most players in the playroom at once (1-12).
+    max_players: 6
+    # Stars to collect: all of them in Little, this many each round in Group (1-20).
+    stars: 10
+    # Seconds the floor is safe before the warning (8-120).
+    safe_seconds: 25
+    # Seconds the lava stays before it drains (4-60). Challenge uses half of both.
+    lava_seconds: 12
+    # Group's rounds (1-12). The lava comes one block higher each round.
+    rounds: 5

@@ -109,6 +109,35 @@ class SecretShelfTest {
                 "the Snake best alone: no Clubhouse cup, and its 130 tally rows aren't 100 games played");
     }
 
+    /**
+     * The Floor Is Lava's boards are bests, one per mode: Lilah's first finished round of Little is a new trophy in
+     * her secret room, and a later round with the same count is the same trophy, not another.
+     */
+    @Test
+    void theFloorIsLavasBestsAreTrophies() {
+        for (com.dierks.homecraft.games.lava.rules.LavaMode m : com.dierks.homecraft.games.lava.rules.LavaMode
+                .values()) {
+            assertTrue(SecretShelf.scoreBoard(GameKind.TRIAL, m.board()), m.board());
+        }
+        assertEquals(GameKind.TRIAL, com.dierks.homecraft.games.lava.FloorIsLava.SPEC.kind(), "the kind it is read by");
+        SecretShelf.Games lava = SecretShelf.games(g -> g.equals("floor_is_lava") ? GameKind.TRIAL : null,
+                g -> "The Floor Is Lava");
+        List<SecretShelf.Trophy> t = SecretShelf.trophies(List.of(
+                new GamesDao.Mine("floor_is_lava", "lava:little", 10, 1)), lava);
+        assertEquals(List.of("best:floor_is_lava:lava:little"), t.stream().map(SecretShelf.Trophy::key).toList(),
+                "one trophy: her best at Little");
+        assertTrue(t.get(0).label().contains("10 stars (Little)"), t.get(0).label());
+        assertEquals(t, SecretShelf.fresh(t, Set.of()), "and it bursts the first time she comes in");
+        List<SecretShelf.Trophy> all = SecretShelf.trophies(List.of(
+                new GamesDao.Mine("floor_is_lava", "lava:little", 10, 2),
+                new GamesDao.Mine("floor_is_lava", "lava:group", 1, 1),
+                new GamesDao.Mine("floor_is_lava", "lava:challenge", 4, 1)), lava);
+        assertEquals(List.of("best:floor_is_lava:lava:little", "best:floor_is_lava:lava:group",
+                "best:floor_is_lava:lava:challenge"), all.stream().map(SecretShelf.Trophy::key).toList());
+        assertTrue(all.get(1).label().contains("1 star (Group)"), all.get(1).label());
+        assertTrue(all.get(2).label().contains("4 rounds (Challenge)"), all.get(2).label());
+    }
+
     /** Only what was drawn is marked seen (a trophy with no place on the shelf keeps its burst), added to the old list. */
     @Test
     void onlyDrawnTrophiesAreMarkedSeen() {

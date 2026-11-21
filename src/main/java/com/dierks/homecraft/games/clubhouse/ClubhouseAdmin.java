@@ -271,7 +271,9 @@ final class ClubhouseAdmin implements GameAdmin {
                 if (clear) {
                     yield room.clearCabinet(a1);
                 }
-                String why = KidSet.refusal(a1, kindOf);
+                // The Floor Is Lava has a cabinet too (its tap starts Little), though it isn't a cabinet game
+                String why = a1.equals(SideRooms.LAVA_GAME) && kindOf.apply(a1) != null ? null
+                        : KidSet.refusal(a1, kindOf);
                 yield why != null ? "&c" + Character.toUpperCase(why.charAt(0)) + why.substring(1) + "."
                         : room.cabinet(a1, at);
             }
@@ -406,7 +408,8 @@ final class ClubhouseAdmin implements GameAdmin {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("cabinet")) {
             for (com.dierks.homecraft.games.Game g : game.games().games()) {
-                if (g.kind() == com.dierks.homecraft.games.GameKind.CABINET && g.id().startsWith(last)) {
+                if ((g.kind() == com.dierks.homecraft.games.GameKind.CABINET || g.id().equals(SideRooms.LAVA_GAME))
+                        && g.id().startsWith(last)) {
                     out.add(g.id());
                 }
             }
@@ -435,8 +438,9 @@ final class ClubhouseAdmin implements GameAdmin {
                     + " room you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse cabinet <game>|trophyroom|door arcade|trophy [clear] &7- your room's Arcade Room"
                     + " cabinets, trophy shelf and doorway signs (stand where it goes, facing out)",
-            "&e/hcm games clubhouse secret [room] [clear]|parlor star|room|<game>|ticket [clear] &7- your room's secret"
-                    + " trophy room (its door, its room) and Game Parlor (its star, room, machines, ticket booth)",
+            "&e/hcm games clubhouse secret [room] [clear]|parlor lever|room|<game>|ticket|mob_races [clear] &7- your"
+                    + " room's secret trophy room (its door, its room) and Game Parlor (its lever, room, machines, ticket"
+                    + " booth, and Mob Races' track: stand on a corner of a table 8 x 3, facing along it)",
             "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
                     + " save it as the Clubhouse",
             "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",

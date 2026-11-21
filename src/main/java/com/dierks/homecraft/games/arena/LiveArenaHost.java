@@ -175,13 +175,24 @@ class LiveArenaHost implements ArenaHost {
         return ArenaRegions.problems(box, d, clubhouse(), handBuilt(), facts);
     }
 
-    /** WP-CH: the Clubhouse's room as configured (on or off: its blocks may stand); none when unreadable. */
+    /**
+     * WP-CH: the Clubhouse's room as configured (on or off: its blocks may stand); none when unreadable. The Floor
+     * Is Lava's playroom too, the same way.
+     */
     private List<Regions.Extra> clubhouse() {
+        List<Regions.Extra> out = new ArrayList<>();
         try {
-            return ClubhouseRegions.extras(games().settings(Clubhouse.SPEC));
+            out.addAll(ClubhouseRegions.extras(games().settings(Clubhouse.SPEC)));
         } catch (RuntimeException e) {
-            return List.of();
+            // unreadable: nothing to keep apart from
         }
+        try {
+            out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(
+                    games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC)));
+        } catch (RuntimeException e) {
+            // as above
+        }
+        return out;
     }
 
     /** Every hand-built course's footprint, or {@code null} when the rows can't be read now. */

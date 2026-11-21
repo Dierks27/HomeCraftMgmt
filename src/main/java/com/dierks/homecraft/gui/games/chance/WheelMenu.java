@@ -81,6 +81,11 @@ public final class WheelMenu extends GameMenu {
     /** Whether the spin on screen is (or was) for dollars, and the ring it was spun on. */
     private boolean spinMoney;
     private WheelOdds spinOdds;
+    /**
+     * 0.50.0 (the owner: "anything that shows that you did something"): the prize whose spaces a tap on the ring made
+     * glow, or -1. It only shows: where the wheel stops decides the prize, and every space is just as likely.
+     */
+    private int glowing = -1;
 
     public WheelMenu(HomeCraftManagement plugin, Wheel wheel, Player viewer, Runnable back, WheelSettings settings) {
         super(plugin, wheel, viewer, back);
@@ -136,7 +141,12 @@ public final class WheelMenu extends GameMenu {
             return;
         }
         for (int i = 0; i < WheelRing.SLOTS.length; i++) {
-            set(WheelRing.SLOTS[i], space(odds, i), null);
+            int prize = odds.prize(i);
+            set(WheelRing.SLOTS[i], space(odds, i), spinning ? null : e -> {
+                glowing = glowing == prize ? -1 : prize; // a second tap on the same colour puts it out
+                viewer.playSound(viewer.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.6f, 1.3f);
+                refresh();
+            });
         }
         if (spinning || spin != null) {
             set(WheelRing.SLOTS[at], highlight(odds, at), null);
@@ -147,7 +157,7 @@ public final class WheelMenu extends GameMenu {
         int left = wheel.playsLeft(viewer, settings);
         set(PLAYS, Menus.icon(Material.CLOCK, left < 0 ? "&ePlays left today" : "&ePlays left today: &f" + left,
                 "&7" + settings.dailyLimit() + " spins a day. More at midnight."), null);
-        set(RESULT, resultTile(odds), null);
+        set(RESULT, glowing >= 0 && !spinning && spin == null ? glowTile(odds) : resultTile(odds), null);
         if (dollars) {
             set(TODAY, money.todayTile(game, settings.dailyLimit(), "spins"), null);
         } else {
@@ -187,24 +197,39 @@ public final class WheelMenu extends GameMenu {
         for (int j = 0; j < STAKES.length && from + j < open.size(); j++) {
             int s = open.get(from + j);
             boolean chosen = s == stake;
-            ItemStack icon = Menus.icon(Material.GOLD_NUGGET, (chosen ? "&a&l" : "&e") + s + " tokens a spin",
-                    chosen ? "&7Chosen." : "&7Click to choose.");
+            // 0.50.0: the chosen amount is a gold block, the others nuggets, so the choice shows at a glance
+            ItemStack icon = Menus.icon(chosen ? Material.GOLD_BLOCK : Material.GOLD_NUGGET,
+                    (chosen ? "&a&l✔ " : "&e") + s + " tokens a spin", chosen ? "&7Chosen." : "&7Click to choose.");
             Menus.glint(icon, chosen);
             if (s <= 64) {
                 Menus.count(icon, s);
             }
             set(STAKES[j], icon, chosen || spinning ? null : e -> {
                 stake = s;
+                viewer.playSound(viewer.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.6f, 1.0f);
                 refresh();
             });
         }
     }
 
-    /** A space: its exact prize for the chosen stake in the name, and how many spaces show it. */
+    /**
+     * A space: its exact prize for the chosen stake in the name, and how many spaces show it. The spaces of the colour
+     * tapped last glow.
+     */
     private ItemStack space(WheelOdds odds, int space) {
         int prize = odds.prize(space);
-        return Menus.icon(material(odds, prize), say(odds.label(prize)) + " &8· " + odds.spaces(prize) + " of 24",
-                "&7" + odds.odds(prize) + " give this", say("&7for " + odds.stake() + " tokens in."));
+        boolean glow = prize == glowing;
+        return Menus.glint(Menus.icon(material(odds, prize), (glow ? "&f» " : "") + say(odds.label(prize)) + " &8· "
+                        + odds.spaces(prize) + " of 24", "&7" + odds.odds(prize) + " give this",
+                say("&7for " + odds.stake() + " tokens in."), glow ? "&8Tap again to stop the glow." : "&8Tap to make"
+                        + " every space like it glow."), glow);
+    }
+
+    /** What the glowing spaces give, in the result's place until the next spin. */
+    private ItemStack glowTile(WheelOdds odds) {
+        return Menus.icon(material(odds, glowing), "&f» " + say(odds.label(glowing)),
+                "&7" + odds.spaces(glowing) + " of the 24 spaces give this, the ones glowing.",
+                "&7Where the wheel stops decides what you get;", "&7every space is just as likely.");
     }
 
     private static Material material(WheelOdds odds, int prize) {

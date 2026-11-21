@@ -117,7 +117,11 @@ public final class ClubModels {
         // The Parlor's last two slot machines: Deep Mine (three rows) and Mob Slots (free spins)
         machine("deep_mine", "machine_deepmine", Material.DEEPSLATE_DIAMOND_ORE,
                 "minecraft:block/deepslate_diamond_ore", Kind.CABINET);
-        machine("mob_slots", "machine_mobs", Material.SPAWNER, "minecraft:block/spawner", Kind.CABINET);
+        // 0.50.0: a Creeper's face (the machine's Wild) on a green screen. 0.49.0 named the spawner's texture, and the
+        // owner saw the missing-model square where the machine should be
+        machine("mob_slots", "machine_mobs", Material.CREEPER_HEAD, "minecraft:block/lime_concrete", Kind.CABINET);
+        // The Floor Is Lava's cabinet in the Arcade Room (a cabinet's size; its stand-in's icon is a lava bucket)
+        cabinet("floor_is_lava", "cabinet_lava", Material.LAVA_BUCKET, "minecraft:block/magma");
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -214,6 +218,14 @@ public final class ClubModels {
                 parts.add(box(1, 22, 1, 15, 24, 15, "top"));      // the lit marquee
                 parts.add(box(3, 8, 1, 13, 19, 2, "screen"));     // the screen, on the north side
                 parts.add(box(2, 2, 0, 14, 5, 2, "panel"));       // the control panel
+                if (m.name().equals("machine_mobs")) { // a Creeper's face on the screen, in the body's black
+                    parts.add(box(5, 14, 0, 7, 16, 1, "body"));  // the eyes
+                    parts.add(box(9, 14, 0, 11, 16, 1, "body"));
+                    parts.add(box(7, 13, 0, 9, 14, 1, "body"));  // the nose
+                    parts.add(box(6, 11, 0, 10, 13, 1, "body")); // the mouth
+                    parts.add(box(6, 10, 0, 7, 11, 1, "body"));  // and its two corners
+                    parts.add(box(9, 10, 0, 10, 11, 1, "body"));
+                }
             }
             case TROPHY -> {
                 if (m.name().equals("machine_cards")) { // a stack of cards and one face up beside it

@@ -94,7 +94,9 @@ public final class TokenService {
         ARCADE_FARM_SLOTS("Farm Slots"),
         // The Game Parlor's last two slot machines: Deep Mine (three rows that all count) and Mob Slots (free spins).
         ARCADE_DEEP_MINE("Deep Mine"),
-        ARCADE_MOB_SLOTS("Mob Slots");
+        ARCADE_MOB_SLOTS("Mob Slots"),
+        // Mob Races: the Game Parlor's model racetrack (six tiny mobs, pick one).
+        ARCADE_MOB_RACES("Mob Races");
 
         private final String label;
 

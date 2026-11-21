@@ -970,6 +970,11 @@ public final class ClubhouseRoom {
         return out;
     }
 
+    /** The generated room's cabinet places, in order, while its Arcade Room is built; none in an owner-built room. */
+    public List<ClubhousePlanner.Place3> generatedCabinetPlaces() {
+        return hand || !arcadeBuilt() ? List.of() : ClubhousePlanner.cabinets(site.box());
+    }
+
     /** The first of {@code list} that plays {@code game} stands at {@code at} now (none: one more, there). */
     static void moveFirst(List<Cabinet> list, String game, ClubhousePlanner.Place3 at) {
         for (int n = 0; n < list.size(); n++) {
@@ -1232,12 +1237,12 @@ public final class ClubhouseRoom {
         return near(handSecretRoom, x, y, z, UP_REACH);
     }
 
-    /** The Game Parlor's door (in the 19th Hole), and where its visitor comes back out. */
+    /** The Game Parlor's way in (in the 19th Hole: a lever since 0.50.0), and where its visitor comes back out. */
     public ClubhousePlanner.Place3 parlorStar() {
         if (!mine(handParlorDoor)) {
             return parlorBuilt() ? ClubhousePlanner.parlorStar(site.box()) : null;
         }
-        return place3(handParlorDoor, 1.5); // 0.45.0: a star, at eye height where the admin stood
+        return place3(handParlorDoor, 0); // 0.50.0: a lever in the block the admin stood in, on the wall they faced
     }
 
     public ClubhouseSite.Spot parlorReturn() {
@@ -1282,7 +1287,7 @@ public final class ClubhouseRoom {
                 out.add(new Cabinet(ClubhousePlanner.PARLOR_ROW_GAMES.get(n), row.get(n)));
             }
             for (Map.Entry<String, Place> e : handParlor.entrySet()) { // 0.45.0: a moved machine, the rest stay
-                if (overrides() && mine(e.getValue()) && !ClubhousePlanner.TICKET.equals(e.getKey())) {
+                if (overrides() && mine(e.getValue()) && !notAMachine(e.getKey())) {
                     moveFirst(out, e.getKey(), place3(e.getValue(), 0));
                 }
             }
@@ -1290,11 +1295,53 @@ public final class ClubhouseRoom {
         }
         for (Map.Entry<String, Place> e : handParlor.entrySet()) {
             ClubhousePlanner.Place3 p = place3(e.getValue(), 0);
-            if (p != null && !ClubhousePlanner.TICKET.equals(e.getKey())) {
+            if (p != null && !notAMachine(e.getKey())) {
                 out.add(new Cabinet(e.getKey(), p));
             }
         }
         return out;
+    }
+
+    /** Mob Races' id: its place in the Parlor is a whole table's, never a machine's. */
+    static final String MOB_RACES = com.dierks.homecraft.games.chance.mobraces.MobRacesSettings.ID;
+
+    /** The Parlor's places that are not a machine standing on one block: the ticket booth, and Mob Races' track. */
+    private static boolean notAMachine(String key) {
+        return ClubhousePlanner.TICKET.equals(key) || MOB_RACES.equals(key);
+    }
+
+    /**
+     * Where Mob Races' track is.
+     *
+     * @param frame the table it is drawn on
+     * @param own   the owner placed it ({@code parlor mob_races}); false: it is the generated room's own table
+     * @param built the table is known to be there: the generated room, built and checked. Otherwise (the owner's
+     *              place, or a room being edited or kept from a save) the blocks are the owner's, and whoever draws
+     *              the track looks for a table under it first
+     */
+    record RaceSpot(RaceTable.Frame frame, boolean own, boolean built) {
+    }
+
+    /**
+     * Mob Races' track, or {@code null} for none: in the generated room the table of the plan, in the middle of the
+     * Parlor; where the owner placed one ({@code /hcm games clubhouse parlor mob_races}, standing on a corner of a
+     * table they built, facing along it) in an owner-built room, or in a room they edit or saved. A saved or edited
+     * room keeps the blocks it has, so HCM's table is only there if the owner's room has it: {@link RaceSpot#built}
+     * says whether that still has to be looked for.
+     */
+    RaceSpot raceTrack() {
+        Place own = handParlor.get(MOB_RACES);
+        if (hand) {
+            return own == null || !own.world().equalsIgnoreCase(world()) ? null
+                    : new RaceSpot(RaceTable.Frame.standingOn(own.x(), own.y(), own.z(), own.yaw()), true, false);
+        }
+        if (!parlorBuilt()) {
+            return null;
+        }
+        if (own != null && overrides() && mine(own)) {
+            return new RaceSpot(RaceTable.Frame.standingOn(own.x(), own.y(), own.z(), own.yaw()), true, false);
+        }
+        return new RaceSpot(ClubhousePlanner.raceTable(site.box()), false, !overrides());
     }
 
     /**
@@ -1346,19 +1393,20 @@ public final class ClubhouseRoom {
                         + " the way you face.";
             }
             case "parlor" -> {
-                if ("door".equals(sub) || "star".equals(sub) || "room".equals(sub)) {
+                if ("door".equals(sub) || "star".equals(sub) || "lever".equals(sub) || "room".equals(sub)) {
                     boolean room = "room".equals(sub);
                     key = room ? PARLOR_ROOM_KEY : PARLOR_DOOR_KEY;
                     said = room ? "The Game Parlor's visitors arrive where you stand; its door out is behind you."
-                            : "The Game Parlor's gold star is where you stand.";
+                            : "The Game Parlor's lever is where you stand, low on the wall you face (stand right"
+                            + " against it).";
                 } else {
                     if (sub == null || sub.isBlank()) {
-                        return "&cWhich? &e/hcm games clubhouse parlor star|room|<game>|ticket [clear]";
+                        return "&cWhich? &e/hcm games clubhouse parlor lever|room|<game>|ticket|mob_races [clear]";
                     }
                     if (at != null && !chanceGame && !ClubhousePlanner.TICKET.equals(sub)) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
                                 + " twenty_one, higher_lower, nether_slots, motherlode, farm_slots, deep_mine,"
-                                + " mob_slots) and the Scratch Ticket's booth (ticket).";
+                                + " mob_slots), the Scratch Ticket's booth (ticket) and Mob Races' track (mob_races).";
                     }
                     Map<String, Place> next = new java.util.LinkedHashMap<>(handParlor);
                     if (at == null) {
@@ -1371,6 +1419,15 @@ public final class ClubhouseRoom {
                     }
                     handParlor.clear();
                     handParlor.putAll(next);
+                    if (MOB_RACES.equals(sub)) {
+                        return at == null ? "&aMob Races' track is cleared here."
+                                : "&aMob Races' track is drawn on the table you stand on: "
+                                + com.dierks.homecraft.games.chance.mobraces.RaceTrack.LENGTH + " blocks the way you"
+                                + " face, " + com.dierks.homecraft.games.chance.mobraces.RaceTrack.DEPTH
+                                + " to your right, one block high. &7Stand on a corner of it. Nothing is built for"
+                                + " you: with no table there it isn't drawn. To keep players off the track, leave one"
+                                + " block of air over the table and put barrier blocks over that." + notOnYet();
+                    }
                     return at == null ? "&aThe " + sub + " machine is cleared."
                             : "&aThe " + sub + " machine stands where you stand." + notOnYet();
                 }
@@ -1981,7 +2038,15 @@ public final class ClubhouseRoom {
      * room (its chairs are the owner's), or while there is no room.
      */
     public List<ClubhousePlanner.Seat> seats() {
-        return hand || site == null ? List.of() : ClubhousePlanner.seats(site.box());
+        if (hand || site == null) {
+            return List.of();
+        }
+        if (!parlorBuilt()) {
+            return ClubhousePlanner.seats(site.box());
+        }
+        List<ClubhousePlanner.Seat> all = new java.util.ArrayList<>(ClubhousePlanner.seats(site.box()));
+        all.addAll(ClubhousePlanner.parlorSeats(site.box())); // 0.50.0: the Parlor's card-table chairs too
+        return all;
     }
 
     /**

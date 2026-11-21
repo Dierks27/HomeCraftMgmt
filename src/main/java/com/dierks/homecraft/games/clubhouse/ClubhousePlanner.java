@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.arcade.feast.FeastRules;
+import com.dierks.homecraft.games.chance.mobraces.RaceTrack;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Plan;
@@ -55,9 +56,10 @@ public final class ClubhousePlanner {
      * jukebox corner. 3 (0.38.6): the two feast tables. 4 (0.40.0): the golf club. 5 (0.41.0): the side rooms, the
      * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
-     * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over.
+     * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over. 10:
+     * Mob Races' table in the middle of the Game Parlor, the Parlor's red carpet and its bigger card tables.
      */
-    public static final int ALGO = 9;
+    public static final int ALGO = 10;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -286,6 +288,14 @@ public final class ClubhousePlanner {
             case "minecraft:sea_lantern", "minecraft:lantern", "minecraft:glowstone", "minecraft:ochre_froglight",
                  "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", "minecraft:shroomlight" -> 15;
             case "minecraft:end_rod" -> 14;
+            case "minecraft:light" -> { // the invisible light over Mob Races' table: its level is its state
+                int at = blockData.indexOf("level=");
+                int end = at < 0 ? -1 : at + 6;
+                while (end >= 0 && end < blockData.length() && Character.isDigit(blockData.charAt(end))) {
+                    end++;
+                }
+                yield at < 0 ? 15 : Integer.parseInt(blockData.substring(at + 6, end));
+            }
             case "minecraft:brewing_stand" -> 1;
             case "minecraft:campfire" -> blockData.contains("lit=true") ? 15 : 0;
             default -> {
@@ -300,12 +310,14 @@ public final class ClubhousePlanner {
 
     /**
      * Whether light passes through a block (for the flood: air, glass, panes, chains, lanterns, fences, carpets,
-     * banners, candles, pots and plants). Everything else stops it: slabs, stairs and trapdoors too, though light
-     * can slip past some of them in the game, so the flood never counts more light than there is.
+     * banners, candles, pots and plants, and the invisible barrier and light blocks over Mob Races' table, which
+     * light passes as it does air). Everything else stops it: slabs, stairs and trapdoors too, though light can slip
+     * past some of them in the game, so the flood never counts more light than there is.
      */
     public static boolean letsLight(String blockData) {
         String id = id(blockData);
-        return id.equals(AIR) || id.equals("minecraft:glass") || id.endsWith("_pane") || id.endsWith("chain")
+        return id.equals(AIR) || id.equals(BARRIER) || id.equals("minecraft:light") || id.equals("minecraft:glass")
+                || id.endsWith("_pane") || id.endsWith("chain")
                 || id.equals("minecraft:lantern") || id.endsWith("_fence") || id.endsWith("_carpet")
                 || id.endsWith("_banner") || id.endsWith("candle") || id.startsWith("minecraft:potted_")
                 || id.equals(SHRUB) || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod")
@@ -314,11 +326,13 @@ public final class ClubhousePlanner {
 
     /**
      * The blocks a mob can never stand on: glass and panes, lanterns, chains, candles, carpets, banners, plants and
-     * pots, fences (too narrow). A mob could stand on anything else if it were dark there.
+     * pots, fences (too narrow), a barrier (the game spawns nothing on one) and a light block (it is air to stand
+     * on). A mob could stand on anything else if it were dark there.
      */
     public static boolean noFooting(String blockData) {
         String id = id(blockData);
-        return id.equals("minecraft:glass") || id.endsWith("_pane") || id.equals("minecraft:lantern")
+        return id.equals(BARRIER) || id.equals("minecraft:light") || id.equals("minecraft:glass")
+                || id.endsWith("_pane") || id.equals("minecraft:lantern")
                 || id.endsWith("chain") || id.endsWith("candle") || id.endsWith("_carpet") || id.endsWith("_banner")
                 || id.startsWith("minecraft:potted_") || id.equals(SHRUB) || id.endsWith("_fence")
                 || id.equals("minecraft:iron_bars") || id.equals("minecraft:end_rod") || id.equals(TINTED)
@@ -746,7 +760,7 @@ public final class ClubhousePlanner {
         b.set(4, 2, BREWING_Z, BREWING); // 0.42.0: a brewing stand at the counter's end (bottles and glasses: displays)
         rug(b, 2, 3, 2, 10, RUG, 3);
         // the reading nook: a wall of books, the jukebox in its middle, two armchairs and a lamp
-        for (int k = 13; k <= 19; k++) {
+        for (int k = 13; k <= NOOK_Z1; k++) {
             for (int j = 1; j <= 3; j++) {
                 b.set(1, j, k, BOOKS);
             }
@@ -1039,8 +1053,20 @@ public final class ClubhousePlanner {
     static final int SECRET_CZ = 40;
     /** The upstairs rooms' beams (rows clear of the secret room's trophy places, which are on odd rows). */
     static final int[] UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12};
-    /** The Game Parlor's two card tables (x, z offsets): Twenty-One and Higher or Lower. */
-    static final int[][] PARLOR_TABLE = {{5, 41}, {10, 41}};
+    /**
+     * The Game Parlor's two card tables (x, z offsets of each table's north-west felt block): Twenty-One and Higher or
+     * Lower. Since plan 10 (the owner: "maybe we can make the 4 person tables a bit larger") each is
+     * {@value #PARLOR_TABLE_W} felt wide (x) and {@value #PARLOR_TABLE_D} long (z), with a chair at each of its four
+     * corners, two down each side with a gap between (two chairs side by side would be a bench).
+     */
+    static final int[][] PARLOR_TABLE = {{4, 41}, {10, 41}};
+    static final int PARLOR_TABLE_W = 2;
+    static final int PARLOR_TABLE_D = 3;
+    /**
+     * The Game Parlor's floor (plan 10; the owner: "if you are going to do tables in green we shouldnt use that as the
+     * carpet"): a red casino carpet, so the green felt tables stand out. (Before plan 10: green carpet.)
+     */
+    public static final String PARLOR_CARPET = "minecraft:red_carpet";
     /** The parlor's machines on its walls (x, z, yaw): two Ore Slots, the Wheel, Coin Flip. */
     static final int[][] PARLOR_WALL = {{1, 37, -90}, {1, 40, -90}, {14, 37, 90}, {14, 40, 90}};
     /** The games those stand for, in order: the walls' four, then the two tables. */
@@ -1142,7 +1168,7 @@ public final class ClubhousePlanner {
 
     /**
      * The Game Parlor (0.43.0; the owner: "maybe that would be fun since we have a bunch of chance games"), over the
-     * Arcade Room and reached from the 19th Hole, never the Foyer: green baize on dark wood, brass trim, warm lamps; two
+     * Arcade Room and reached from the 19th Hole, never the Foyer: a red carpet, green felt tables, brass trim, warm lamps; two
      * Ore Slots machines and Coin Flip and the Wheel on its walls, a card table each for Twenty-One and Higher or Lower.
      * The machines are displays you tap (the games of chance's own gate: {@code hcm.games.chance}, the day's token
      * limit, Take a break, the click cooldown).
@@ -1152,7 +1178,7 @@ public final class ClubhousePlanner {
         upShell(b, x0, PLANKS);
         for (int i = x0 + 2; i <= x0 + 13; i++) {
             for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
-                b.set(i, UP_FLOOR + 1, k, FELT);
+                b.set(i, UP_FLOOR + 1, k, PARLOR_CARPET);
                 if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
                     b.set(i, UP_FLOOR, k, LIGHT);
                 }
@@ -1162,10 +1188,19 @@ public final class ClubhousePlanner {
             b.set(i, UP_FLOOR + 3, SIDE_Z1 + 1, BRASS); // a brass rail along the back wall
         }
         for (int[] t : PARLOR_TABLE) {
-            // 0.44.2: a one-block card table (felt on the floor) beside its chairs, the cards on top: no jumping
-            b.set(t[0], UP_FLOOR + 1, t[1], FELT_BLOCK);
-            b.seat(t[0] - 1, UP_FLOOR + 1, t[1], chair("west"), "GREEN");
-            b.seat(t[0] + 1, UP_FLOOR + 1, t[1], chair("east"), "GREEN");
+            // a card table one block high (felt on the floor: no jumping), the cards in its middle, a chair either
+            // side of each row (0.44.2-0.49.0: one block of felt and two chairs)
+            int east = t[0] + PARLOR_TABLE_W;
+            int south = t[1] + PARLOR_TABLE_D - 1;
+            for (int k = t[1]; k <= south; k++) {
+                for (int i = t[0]; i < east; i++) {
+                    b.set(i, UP_FLOOR + 1, k, FELT_BLOCK);
+                }
+                if (k == t[1] || k == south) {
+                    b.seat(t[0] - 1, UP_FLOOR + 1, k, chair("west"), "GREEN");
+                    b.seat(east, UP_FLOOR + 1, k, chair("east"), "GREEN");
+                }
+            }
         }
         for (int[] m : PARLOR_WALL) {
             b.set(m[0], UP_FLOOR, m[1], MAT);
@@ -1175,6 +1210,55 @@ public final class ClubhousePlanner {
                 b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
             }
         }
+        raceTable(b);
+    }
+
+    /**
+     * Mob Races' table (plan 10; the owner: "I hope you make a mini track and you literally see the tiny mobs running
+     * on the track!", "make the track as small as you can", "it would be fun to be able to walk around it"): in the
+     * open middle of the Game Parlor, {@value RaceTrack#LENGTH} blocks long (x {@value #TRACK_X0} to 11) and
+     * {@value RaceTrack#DEPTH} deep (z 36 to 38), one block high, centred on the room's middle line. A clear row of
+     * felt lies between it and the arrival row to its north, two between it and the card tables to its south, and two
+     * columns between each end and the machines' mats on the side walls: it can be walked all the way round.
+     *
+     * <p>Its blocks are a plain dark-wood table and nothing else that is seen; the racetrack on it is drawn
+     * ({@link RaceTable}), as the racers are. The block over the table is where they run: it is air to them and to
+     * the eye, an invisible light block ({@link #TRACK_LIGHT}) so that the track and the racers are lit as brightly as
+     * anything in the room, all over. An invisible barrier lies over that: nobody can step or jump onto the track, and
+     * nothing is in the way of seeing it or of walking round it. Two lanterns already hang from the beam over its
+     * north corners; two more hang on chains over its south ones.
+     */
+    private static void raceTable(Builder b) {
+        for (int i = TRACK_X0; i < TRACK_X0 + RaceTrack.LENGTH; i++) {
+            for (int k = TRACK_Z0; k < TRACK_Z0 + RaceTrack.DEPTH; k++) {
+                b.set(ARCADE_X0 + i, UP_FLOOR + 1, k, TRACK_TABLE); // in place of the felt there
+                b.set(ARCADE_X0 + i, UP_FLOOR + 2, k, TRACK_LIGHT);
+                b.set(ARCADE_X0 + i, UP_FLOOR + 3, k, BARRIER);
+            }
+        }
+        for (int i : new int[]{TRACK_X0, TRACK_X0 + RaceTrack.LENGTH - 1}) {
+            b.set(ARCADE_X0 + i, UP_TOP, TRACK_Z0 + RaceTrack.DEPTH - 1, CHAIN);
+            b.set(ARCADE_X0 + i, UP_TOP - 1, TRACK_Z0 + RaceTrack.DEPTH - 1, HANGING);
+        }
+    }
+
+    /**
+     * Mob Races' table: its north-west corner (x, z offsets), the block it is made of, the invisible light the racers
+     * run in and the barrier over it.
+     */
+    static final int TRACK_X0 = 4;
+    static final int TRACK_Z0 = MAIN_Z + 4;
+    public static final String TRACK_TABLE = "minecraft:stripped_dark_oak_wood";
+    public static final String TRACK_LIGHT = "minecraft:light[level=15,waterlogged=false]";
+    public static final String BARRIER = "minecraft:barrier";
+
+    /**
+     * Where Mob Races' table stands in {@code box}: its north-west corner at the height of its top, running east
+     * along its length and south across it (as if someone stood on that corner block facing east).
+     */
+    static RaceTable.Frame raceTable(Box box) {
+        return new RaceTable.Frame(box.minX() + ARCADE_X0 + TRACK_X0, box.minY() + UP_FLOOR + 2,
+                box.minZ() + TRACK_Z0, 1, 0, 0, 1);
     }
 
     /** Where the secret room's visitor arrives (its north end, facing in), and the door back out (on its north wall). */
@@ -1227,12 +1311,18 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Game Parlor's way in (0.45.0): a little gold star on the 19th Hole's west wall, between the nook and the
-     * fireplace, at eye height, so you have to know it is there. (0.43.0-0.44.2: a door there.)
+     * The Game Parlor's way in (0.50.0; the owner: "the star that we have in the club house is too obvious... maybe a
+     * lever"): a small lever low on the side of the reading nook's wall of books, at its south end, where nobody looks
+     * for one, the way a secret passage opens in a story. Its block is the air just south of the books' bottom row; it
+     * hangs on the books (to its north), so the place's yaw is the way someone faces who looks at it: north. It is a
+     * display, so no block changes for it. (0.45.0-0.49.0: a glowing gold star at eye height on the west wall.)
      */
     public static Place3 parlorStar(Box box) {
-        return new Place3(box.minX() + 1.15, box.minY() + 2.6, box.minZ() + PARLOR_DOOR_Z + 0.5, -90f);
+        return new Place3(box.minX() + 1.5, box.minY() + 1, box.minZ() + NOOK_Z1 + 1.5, 180f);
     }
+
+    /** The reading nook's wall of books runs along the west wall from z 13 to here. */
+    static final int NOOK_Z1 = 19;
 
     static final int PARLOR_DOOR_Z = 21;
 
@@ -1289,8 +1379,9 @@ public final class ClubhousePlanner {
         for (int[] m : PARLOR_WALL) {
             out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
         }
-        for (int[] t : PARLOR_TABLE) {
-            out.add(new Place3(box.minX() + t[0] + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + t[1] + 0.5, 0f));
+        for (int[] t : PARLOR_TABLE) { // the cards lie in the middle of the table
+            out.add(new Place3(box.minX() + t[0] + PARLOR_TABLE_W / 2.0, box.minY() + UP_FLOOR + 2,
+                    box.minZ() + t[1] + PARLOR_TABLE_D / 2.0, 0f));
         }
         return out;
     }
@@ -1543,6 +1634,16 @@ public final class ClubhousePlanner {
         hall(b);
         bar(b);
         gallery(b);
+        return b.seats;
+    }
+
+    /**
+     * The Game Parlor's chairs' cushions (0.50.0; the owner: "put some cushions on these ... seats would ya"): the card
+     * tables' chairs, only while the Parlor is built ({@link #seats} is the rooms downstairs).
+     */
+    public static List<Seat> parlorSeats(Box box) {
+        Builder b = new Builder(box);
+        parlor(b);
         return b.seats;
     }
 

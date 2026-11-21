@@ -377,6 +377,17 @@ public final class DailyCourses implements Game {
         return List.copyOf(out);
     }
 
+    /**
+     * {@link #extraBoxes(FallingFloorsSettings, ClubhouseSettings)}, and The Floor Is Lava's playroom
+     * ({@code games.floor_is_lava.origin}) after them, as configured, on or off.
+     */
+    public static List<Regions.Extra> extraBoxes(FallingFloorsSettings ff, ClubhouseSettings clubhouse,
+                                                 com.dierks.homecraft.games.lava.LavaSettings lava) {
+        List<Regions.Extra> out = new ArrayList<>(extraBoxes(ff, clubhouse));
+        out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(lava));
+        return List.copyOf(out);
+    }
+
     /** The running engine, or {@code null} while Fresh Courses is off. */
     public GenService engine() {
         return engine;
@@ -553,7 +564,8 @@ public final class DailyCourses implements Game {
 
         @Override
         public List<Regions.Extra> extras() {
-            return extraBoxes(games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC));
+            return extraBoxes(games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC),
+                    games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC));
         }
 
         @Override

@@ -136,12 +136,23 @@ final class SideRooms {
         if (s.arcadeRoom()) {
             List<String> games = kidSet(room.hand() ? room.handCabinetGames() : s.arcadeGames());
             List<ClubhouseRoom.Cabinet> cabs = room.cabinetPlaces(games);
+            ClubhousePlanner.Place3 lava = lavaPlace(room, games.size()); // The Floor Is Lava's cabinet
             for (int n = 0; n < cabs.size(); n++) {
                 ClubhouseRoom.Cabinet c = cabs.get(n);
+                if (c.at().equals(lava)) {
+                    continue; // the repeated cabinet whose place it takes
+                }
                 String key = "cab:" + n;
                 keep.add(key);
-                put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at()));
+                put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at(), null));
             }
+            if (lava != null) {
+                keep.add(LAVA_KEY);
+                put(w, LAVA_KEY, LAVA_GAME + "@" + lava, lava, () -> cabinet(w, LAVA_GAME, lava, LAVA_TAP));
+            }
+            lavaAt = lava;
+        } else {
+            lavaAt = null;
         }
         for (String which : ClubhouseRoom.DOORS) {
             boolean arcade = which.equals("arcade");
@@ -197,6 +208,62 @@ final class SideRooms {
         secretVisitors(room, w);
         parlorGuests(room, w);
         gates(w);
+    }
+
+    // ---- The Floor Is Lava's cabinet ------------------------------------------------------------------
+
+    /** The game the Arcade Room's lava cabinet starts, its slot's key and what its tap target carries. */
+    static final String LAVA_GAME = "floor_is_lava";
+    static final String LAVA_KEY = "lava";
+    static final String LAVA_TAP = "lava";
+    /** How far in front of its cabinet a player back from the playroom stands. */
+    static final double LAVA_BACK = 1.5;
+    /** Where the lava cabinet stands now, or {@code null} for none. */
+    private ClubhousePlanner.Place3 lavaAt;
+
+    /**
+     * Which of the generated Arcade Room's cabinet places The Floor Is Lava's cabinet takes: the first one that
+     * only repeats a game (the kid set is taken round again to fill the room), so no game loses its cabinet and no
+     * block changes. -1 when every place has a game of its own.
+     *
+     * @param games  how many games the kid set has
+     * @param places the room's cabinet places
+     */
+    static int lavaIndex(int games, int places) {
+        return places > 0 && games >= 0 && games < places ? games : -1;
+    }
+
+    /**
+     * Where the lava cabinet stands: in the generated room, a repeated place ({@link #lavaIndex}); in an owner-built
+     * room, where the owner put it ({@code /hcm games clubhouse cabinet floor_is_lava}). {@code null} while The Floor
+     * Is Lava is off, or there is no place for it.
+     */
+    private ClubhousePlanner.Place3 lavaPlace(ClubhouseRoom room, int kidGames) {
+        Game g = club.games().game(LAVA_GAME);
+        if (g == null || !club.games().enabled(g)) {
+            return null;
+        }
+        List<ClubhouseRoom.Cabinet> places = room.cabinetPlaces(List.of(LAVA_GAME));
+        if (room.hand()) {
+            return places.isEmpty() ? null : places.get(0).at();
+        }
+        List<ClubhousePlanner.Place3> generated = room.generatedCabinetPlaces();
+        int n = lavaIndex(kidGames, generated.size());
+        return n < 0 ? null : generated.get(n);
+    }
+
+    /**
+     * Where a player back from the playroom stands: {@value #LAVA_BACK} blocks in front of the lava cabinet, facing
+     * it; {@code null} while there is none.
+     */
+    ClubhouseSite.Spot lavaSpot() {
+        ClubhousePlanner.Place3 at = lavaAt;
+        if (at == null) {
+            return null;
+        }
+        double rad = Math.toRadians(at.yaw());
+        return new ClubhouseSite.Spot(at.x() - Math.sin(rad) * LAVA_BACK, at.y(), at.z() + Math.cos(rad) * LAVA_BACK,
+                WallBoards.snap(at.yaw() + 180f));
     }
 
     // ---- 0.43.0: ways in only their own players see ------------------------------------------------------
@@ -260,10 +327,10 @@ final class SideRooms {
             }
         }
         if (s.parlor()) {
-            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.45.0: the little star is the Parlor's
+            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.50.0: a lever by the books is the Parlor's way in
             if (in != null) {
                 keep.add("pstar");
-                put(w, "pstar", "pstar@" + in, in, () -> star(w, in, "parlor:in", PARLOR_WAY_IN));
+                put(w, "pstar", "plever@" + in, in, () -> lever(w, in, "parlor:in", PARLOR_WAY_IN));
             }
             ClubhousePlanner.Place3 out = room.parlorExit();
             if (out != null) {
@@ -295,20 +362,57 @@ final class SideRooms {
         }
     }
 
-    /** A little gold star on the wall and its tap target, to {@code tap}, for players with {@code permissions}. */
-    private Shown star(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
+    /**
+     * 0.50.0: a small lever on the wall (the owner: "the star ... is too obvious... maybe a lever"), to {@code tap},
+     * seen only by players with {@code permissions}. It hangs in the block of {@code at} on the block ahead of someone
+     * facing {@code at.yaw()}, at the height of that block's middle, unlit, so it looks like part of the room.
+     */
+    private Shown lever(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
         List<UUID> all = new ArrayList<>();
-        all.add(w.spawn(loc(w, at, 0), ItemDisplay.class, e -> {
+        double bx = Math.floor(at.x());
+        double by = Math.floor(at.y());
+        double bz = Math.floor(at.z());
+        all.add(w.spawn(new Location(w, bx, by, bz), BlockDisplay.class, e -> {
             gated(e, permissions);
-            e.setItemStack(new ItemStack(Material.NETHER_STAR));
-            e.setBillboard(Display.Billboard.CENTER);
-            e.setTransformation(scale(0.45f));
-            e.setBrightness(new Display.Brightness(15, 15));
+            e.setBlock(Bukkit.createBlockData(leverData(at.yaw(), false)));
         }).getUniqueId());
-        Entity target = tapTarget(w, loc(w, at, -0.35), 0.7f, 0.7f, tap);
+        Entity target = tapTarget(w, new Location(w, bx + 0.5, by + 0.15, bz + 0.5), 0.7f, 0.7f, tap);
         gated(target, permissions);
         all.add(target.getUniqueId());
         return new Shown(tap, all, List.of(), List.of());
+    }
+
+    /** A wall lever on the wall ahead of someone facing {@code yaw}: it points back at them. */
+    static String leverData(float yaw, boolean on) {
+        String ahead = facing(yaw);
+        String back = switch (ahead) {
+            case "north" -> "south";
+            case "south" -> "north";
+            case "east" -> "west";
+            default -> "east";
+        };
+        return "minecraft:lever[face=wall,facing=" + back + ",powered=" + on + "]";
+    }
+
+    /** The lever by the books goes down (and comes back up a second later), for everyone who can see it. */
+    private void pull(Entity target) {
+        Shown s = shown.get("pstar");
+        if (s == null || target == null) {
+            return;
+        }
+        for (UUID id : s.all()) {
+            if (Bukkit.getEntity(id) instanceof BlockDisplay d && d.getBlock().getMaterial() == Material.LEVER) {
+                String up = d.getBlock().getAsString();
+                d.setBlock(Bukkit.createBlockData(up.replace("powered=false", "powered=true")));
+                if (club.plugin() != null) {
+                    Bukkit.getScheduler().runTaskLater(club.plugin(), () -> {
+                        if (d.isValid()) {
+                            d.setBlock(Bukkit.createBlockData(up));
+                        }
+                    }, 20L);
+                }
+            }
+        }
     }
 
     /**
@@ -437,12 +541,22 @@ final class SideRooms {
                 if (!allOf(PARLOR_WAY_IN, p::hasPermission)) {
                     return; // nothing at all: no message, no sound
                 }
+                pull(e);
+                p.playSound(e.getLocation(), Sound.BLOCK_LEVER_CLICK, 0.8f, 0.6f);
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorArrival());
             }
             case "parlor:out" -> {
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_CLOSE, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorReturn());
+            }
+            case LAVA_TAP -> {
+                // one tap, nothing to choose or read: a chime and sparkles, then straight into Little
+                Location at = e.getLocation().add(0, 1.2, 0);
+                p.playSound(at, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.9f, 1.4f);
+                p.spawnParticle(Particle.SMALL_FLAME, at.clone().add(0, 1.0, 0), 8, 0.3, 0.25, 0.3, 0.01);
+                p.spawnParticle(Particle.HAPPY_VILLAGER, at, 10, 0.4, 0.6, 0.4, 0.0);
+                com.dierks.homecraft.games.lava.FloorIsLava.kidTap(club.games(), p);
             }
             default -> {
                 if (tap.startsWith("machine:")) {
@@ -659,15 +773,25 @@ final class SideRooms {
             p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.9f, 1.1f);
         }
         ClubhousePlanner.Place3 centre = room.secretCentre();
-        if (centre != null) { // the room is theirs: their head on the middle pedestal, their name over it
-            mine.add(w.spawn(loc(w, centre, headUp(1.4f)), ItemDisplay.class, e -> {
+        if (centre != null) { // the room is theirs: a grand gold cup on the middle pedestal, their name over it
+            // 0.50.0 (the owner: "Maybe just a big trophy there instead?"): it was their own head, two sizes up
+            ClubModels.Model grand = ClubModels.trophy(1);
+            boolean useModel = models;
+            mine.add(w.spawn(loc(w, centre, useModel ? grand.up() * CENTRE_CUP : 0.6), ItemDisplay.class, e -> {
                 hidden(e);
-                e.setItemStack(head(p.getUniqueId()));
-                e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
-                e.setBillboard(Display.Billboard.VERTICAL);
-                e.setTransformation(headTurn(1.4f));
+                if (useModel) {
+                    e.setItemStack(modelItem(grand));
+                    e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
+                    e.setRotation(centre.yaw(), 0f);
+                    e.setTransformation(scale(CENTRE_CUP));
+                } else {
+                    e.setItemStack(new ItemStack(grand.fallback()));
+                    e.setBillboard(Display.Billboard.VERTICAL);
+                    e.setTransformation(scale(1.2f));
+                }
+                e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
-            mine.add(w.spawn(loc(w, centre, 1.25), TextDisplay.class, e -> { // over the head, not through it
+            mine.add(w.spawn(loc(w, centre, CENTRE_CUP + 0.3), TextDisplay.class, e -> { // over the cup
                 hidden(e);
                 e.setBillboard(Display.Billboard.CENTER);
                 e.setTransformation(scale(0.8f));
@@ -758,19 +882,24 @@ final class SideRooms {
 
     // ---- the entities --------------------------------------------------------------------------------
 
-    /** A cabinet: the tap target, the model, the stand-in (two blocks and the floating icon), the adults' label. */
-    private Shown cabinet(World w, String gameId, ClubhousePlanner.Place3 at) {
+    /**
+     * A cabinet: the tap target, the model, the stand-in (two blocks and the floating icon), the adults' label. Its tap
+     * plays {@code gameId} as a kid's cabinet game, or, with {@code clubTap} (The Floor Is Lava's cabinet), does what
+     * {@link #tappedUp} says for it.
+     */
+    private Shown cabinet(World w, String gameId, ClubhousePlanner.Place3 at, String clubTap) {
         ClubModels.Model m = ClubModels.cabinetFor(gameId);
         List<UUID> models = new ArrayList<>();
         List<UUID> plain = new ArrayList<>();
         List<UUID> all = new ArrayList<>();
-        Interaction tap = w.spawn(loc(w, at, 0), Interaction.class, e -> {
-            WorldEntities.tag(e, club, null);
-            e.setInteractionWidth(1.0f);
-            e.setInteractionHeight(2.0f);
-            e.setResponsive(true);
-            e.getPersistentDataContainer().set(Keys.KID_CABINET, PersistentDataType.STRING, gameId);
-        });
+        Interaction tap = clubTap != null ? tapTarget(w, loc(w, at, 0), 1.0f, 2.0f, clubTap)
+                : w.spawn(loc(w, at, 0), Interaction.class, e -> {
+                    WorldEntities.tag(e, club, null);
+                    e.setInteractionWidth(1.0f);
+                    e.setInteractionHeight(2.0f);
+                    e.setResponsive(true);
+                    e.getPersistentDataContainer().set(Keys.KID_CABINET, PersistentDataType.STRING, gameId);
+                });
         all.add(tap.getUniqueId());
         models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
         double bx = Math.floor(at.x());
@@ -826,7 +955,7 @@ final class SideRooms {
                 WorldEntities.tag(e, club, null);
                 e.setItemStack(head(c.id()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
-                e.setBillboard(Display.Billboard.VERTICAL); // the face always to whoever looks
+                stillHead(e, p.head().yaw()); // 0.50.0: into the room, still
                 e.setTransformation(headTurn(HEAD_SCALE));
                 e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
@@ -902,6 +1031,23 @@ final class SideRooms {
             head.setItemMeta(skull);
         }
         return head;
+    }
+
+    // ---- 0.50.0: heads that look into the room and keep still ------------------------------------------
+
+    /**
+     * The owner (0.50.0): "they don't all look at you, instead they do the same movement as you do. So they mimic you"
+     * ("when I look left, they look to their left, my right"), then "the heads will look into the room and stay still
+     * ... is the simplest and maybe the best". 0.44.2's heads were billboards, which turn with the camera's angle:
+     * every head turned as the player turned. Now each is fixed, its face (a head item turned half round by
+     * {@link #headTurn}) toward {@code yaw}: into the room.
+     */
+    /** How big the secret room's centre cup is drawn (its model is a block tall). */
+    static final float CENTRE_CUP = 1.8f;
+
+    static void stillHead(ItemDisplay e, float yaw) {
+        e.setBillboard(Display.Billboard.FIXED);
+        e.setRotation(yaw, 0f);
     }
 
     /**
@@ -987,6 +1133,7 @@ final class SideRooms {
             club.games().parlorGuests(List.of());
         }
         applied.clear();
+        lavaAt = null;
         cups = List.of();
         pedestals = List.of();
         inTrophy.clear();
@@ -1166,8 +1313,8 @@ final class SideRooms {
             int colon = k.indexOf(':');
             String kind = (colon < 0 ? k : k.substring(0, colon)).toLowerCase(Locale.ROOT);
             switch (kind) {
-                case "cab", "mach" -> cab++;
-                case "door", "star", "sexit", "pdoor", "pexit" -> doors++;
+                case "cab", "mach", LAVA_KEY -> cab++;
+                case "door", "star", "sexit", "pdoor", "pexit", "sdoor", "pstar" -> doors++;
                 default -> cupsUp++;
             }
         }

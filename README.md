@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.49.0-deep-mine-mob-slots`
+- **Version:** `0.50.0-mob-races-floor-is-lava`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,44 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.50.0, also: The Floor Is Lava** (`floor_is_lava`), Lilah's game. A giant playroom where you are toy-sized; a
+rumble and a glow warn that the lava is coming, the floor fills with real (harmless) lava, you hop onto the
+furniture, then it drains and you collect stars. Three modes: **Little** (nobody can lose: touch the lava and you
+are put back on a dry spot with a sizzle; every star collected ends in fireworks and a new trophy in the secret
+room), **Group** (everyone shares one star count, the lava comes higher each round) and **Challenge** (the lava keeps
+rising, last one standing wins). One tap on its cabinet in the Clubhouse's Arcade Room starts Little and brings
+you back to the Arcade Room after; the Games screen and `/hcm play floor_is_lava` offer all three. The playroom
+builds itself in the Games world the first time (a new claim, 32 x 16 x 32 at `games.floor_is_lava.origin`). See
+[The Floor Is Lava](#the-floor-is-lava-0500). A new `games.floor_is_lava` section is added to config.yml at the first
+start (no config revision); no schema change; no tokens are paid. **Back to 0.49.0:** the jar alone; the playroom
+stays built and unused (`/hcm games lava` is gone with it).
+
+**0.50.0, also in the Clubhouse** (the owner's list from playing): **the Parlor's way in is a lever** tucked
+low beside the 19th Hole's bookshelves instead of the glowing star; **the bar's bottles can be drunk**: tap one on
+the back bar for three gulps and a random silly thing for 20 seconds (tiny you, super bouncy, floaty, zoomy,
+glowing, burps and hiccups, hearts, a rainbow trail, a music cloud; nothing hurts, and it all ends when you leave);
+**the Parlor has a red carpet** so the green tables stand out, and **its two card tables are bigger** (2 x 3, four
+chairs each, with cushions on 26.3); **Mob Slots has a real machine** (a Creeper face; 0.49.0's model named a
+texture that showed as the missing-model square); **the Wheel answers a tap**: the chosen amount is a gold block,
+and tapping a colour makes every space of that colour glow and says what it pays (where it stops still decides
+everything; there is no colour to pick); and **no menu item can be "taken" any more**: a click that opened another
+screen could leave a ghost of the clicked item on your cursor (never really yours; it vanished on the next sync),
+and every HCM screen now sends your inventory again a tick after each click. **The Trophy Room's heads look into
+the room and keep still** (0.44.2's turned with your camera, so they seemed to copy you), and **the secret room's
+middle pedestal holds a big gold cup** in place of your own head (the owner's idea).
+
+**0.50.0: Mob Races, a model racetrack in the Game Parlor.** Six tiny mobs (a chicken, a pig, a rabbit, a cow, a
+fox and a sheep, each a quarter to a third of their size, each with a coloured number flag) really run round a
+little track on a table in the middle of the Parlor, and you can walk all the way round it. Tap the table, pick a
+racer and what to put in; everyone in the room is in the same race. See [Mob Races](#mob-races-0500). The
+Clubhouse's plan changes (**plan 10**): the first start rebuilds the Clubhouse once, to add the table. A saved or
+edited Parlor keeps its own blocks and gets no table: build one and place the track with
+`/hcm games clubhouse parlor mob_races` (the status line says what's missing). Also: Deep Mine's tile is now its
+machine's picture (a deepslate diamond ore). No schema change; a new `games.mob_races` section is added to
+config.yml at the first start (no config revision). **Back to 0.49.0 from 0.50.0:** the jar alone; 0.49.0 rebuilds
+the Clubhouse once more (plan 9, no table). Let a running race finish before you swap jars: 0.49.0 doesn't know
+Mob Races, so an entry still open then is only settled (by its own data) once 0.50.0 is back.
 
 **0.49.0: Deep Mine and Mob Slots, the last two slot machines.** The owner, of the six machine types: "I want them
 all :)". **Deep Mine** shows a 3 x 3 grid and all three rows count, so one spin can win more than once. **Mob Slots**
@@ -4728,10 +4766,11 @@ room) that shows all her high scores."
 Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same gate as anywhere else**:
 `hcm.games.chance`, the day's `chance_daily_tokens`, Take a break and the cooldowns.
 
-- **The way in** is a little gold star on the 19th Hole's west wall, between the reading nook and the
-  fireplace (0.45.0, the owner: "the star the casino so you must know how to get into it"; it was a door).
+- **The way in** is a small lever low on the side of the reading nook's wall of books, at its south end in the
+  19th Hole (0.50.0, the owner: "the star ... is too obvious... maybe a lever"; 0.45.0-0.49.0 a glowing gold star
+  on the west wall, before that a door). Pull it (either click) and it goes down with a click, and you're upstairs.
   Nothing marks it. It needs **`hcm.clubhouse.parlor`** (new in 0.45.0, everyone's by default) **and**
-  `hcm.games.chance`: without both there is no star, and a machine does nothing. Lilah's path (foyer, hall,
+  `hcm.games.chance`: without both there is no lever, and a machine does nothing. Lilah's path (foyer, hall,
   Arcade Room, Trophy Room) never passes it. **To lock the Parlor down:** `/lp group default permission set
   hcm.clubhouse.parlor false`, then give it to the adults with `/lp user <player> permission set
   hcm.clubhouse.parlor true`.
@@ -4792,6 +4831,70 @@ and how much.
   `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
   and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
   100 is left out with a WARN, as on Ore Slots.
+
+##### The Floor Is Lava (0.50.0)
+
+Lilah's game (the owner: "is there any way we can add a game for Lilah 'The Floor Is Lava'"). Its own playroom
+in the Games world, built of blocks that can't burn: a sofa with a footstool, a coffee table with book steps, toy
+blocks, a toy chest and a tall bookcase, seven heights of ground, every step half a block, lit everywhere, with a
+glass roof. Nothing she needs is words.
+
+- **The loop.** The floor is safe and stars float about (walk into one: a chime and a sparkle). Then a rumble and
+  a glow, and the floor fills with real lava, one layer at a time; anyone on the furniture is safe. Then it drains
+  and the next stars come out (`safe_seconds` 25, `lava_seconds` 12; Challenge uses half of both).
+- **Little.** Nobody can lose. Touch the lava: a sizzle, a puff of smoke, and you are on the nearest dry spot,
+  facing into the room, no harm done. The round ends when every star (`stars`, 10) is collected: fireworks, a
+  fanfare, the big green play-again picture and a door out. Its best is a trophy in the secret room.
+- **Group.** Everyone together, one shared star count (a bar, no reading); `rounds` (5), the lava a block higher
+  each round. Touching it costs the group a star (never below none). A best to beat.
+- **Challenge.** The lava rises a block every round and never goes back down. Touch it and you are out, watching
+  from the gallery up on the bookcase; the last one standing wins (alone: how many rounds you lasted).
+- **Harmless.** No damage, no fire, no hunger, no drowning in the room; the lava is placed and taken away block by
+  block by the game, never flows, burns nothing, and every stop (the round over, everyone gone, a restart, a
+  crash) leaves the room as it was built, with no lava.
+- **Getting in.** The Floor Is Lava's cabinet (`cabinet_lava`; without the pack a lava bucket over a plain cabinet)
+  stands in the Clubhouse's Arcade Room, in the first cabinet place that only repeats a game. One tap starts Little
+  for that player (a second child joins the same round) and brings them back to the cabinet when they leave, tap
+  "All done", or 90 seconds after the end. From the Games screen or `/hcm play floor_is_lava` the three modes are
+  offered (pictures first); Group and Challenge wait a moment for others and can be started alone.
+- **Scores.** Boards `lava:little` (stars), `lava:group` (the shared total), `lava:challenge` (rounds lasted), each
+  shown in the secret room as "your best". No tokens.
+- **Admin.** `/hcm games lava status|rebuild|claim [confirm]|tp`; `/hcm games check` checks the room. Settings under
+  `games.floor_is_lava`: `enabled`, `origin` (must stay 32 blocks from every other place HCM builds), `max_players`
+  6, `stars` 10, `safe_seconds` 25, `lava_seconds` 12, `rounds` 5.
+- **Not seen on a server yet:** the room's look, the climbs with a Bedrock controller, the sounds' loudness, and the
+  orange tint of standing in lava (fire resistance doesn't take it away).
+
+##### Mob Races (0.50.0)
+
+A model racetrack on a table in the middle of the Game Parlor: an oval of red-brown track round a mossy infield,
+white rails, a checkered finish line, a little grandstand, flags and flowers. Six racers stand at the line between
+races: **1 Chicken** (red flag), **2 Pig** (pink), **3 Rabbit** (light blue), **4 Cow** (lime), **5 Fox** (orange)
+and **6 Sheep** (yellow). They are real mobs made small, and they can't be hurt or pushed.
+
+- **Playing.** Tap the table (any side of it) and a screen opens: the six racers as pictures, and what to put in
+  (shipped 5, 10 or 20 tokens; dollars with money play, like the other Parlor games). One tap on a racer enters
+  the race. The first entry starts a wait (`gather_seconds`, shipped 20) for anyone else in the room to join; the
+  race starts sooner if everyone in it taps **Start now**. One entry per player per race.
+- **One race for everyone.** When entries close, one draw decides the whole race and every entry is settled at
+  once, before a mob moves; the race on the table (`race_seconds`, shipped 25, for the winner) is the show of that
+  result, with the racers passing each other on the way. A racer that wins pays the same whole amount on every
+  stake: 27 back for 5 in, 54 for 10, 108 for 20 (exactly 90 of every 100, shown on the screen before you pick).
+  Any other racer pays nothing. Each racer wins one race in six.
+- **Leaving.** Walk out of the Parlor before the race starts and your stake comes back ("Your 5 back"). Quit the
+  server and it's finished for you by the same rule. Once the race has started your entry is already decided, so
+  leaving changes nothing: you're told how it came out (or at your next join).
+- **Limits.** `daily_limit` (shipped 30 races a day) and the day's token and money limits, Take a break and the
+  play gate apply as on every game of chance. Ledger source `Mob Races`.
+- **Where the table goes.** HCM's Parlor has it (plan 10; the first 0.50.0 start rebuilds the Clubhouse once). A
+  saved, edited or owner-built room keeps its blocks, so there is no table until you build one, 8 long, 3 wide
+  and one block high, stand on a corner of it facing along it, and type `/hcm games clubhouse parlor mob_races`
+  (`... mob_races clear` takes the track off). `/hcm games clubhouse status` says where the track is, or why
+  there is none.
+- **Bedrock players** see the wooden table, the racers and the text, but may not see the dressed track (Bedrock
+  doesn't draw block displays). The race and its result are the same.
+- If the server doesn't let animals be (a plugin or world setting that removes them), the racers vanish; the
+  races still run and pay, the console says so once.
 
 ##### The Twenty-One table (0.47.0)
 
@@ -4875,7 +4978,8 @@ nobody loses the games by switching the Clubhouse off. A hand already open can s
 
 - `/hcm games clubhouse secret`: the secret room's door (it faces the way you face).
 - `secret room`: where visitors arrive (the door out goes behind you, the trophies along a row three ahead).
-- `parlor star` (or `parlor door`, as before): the Parlor's gold star.
+- `parlor lever` (or `parlor star` / `parlor door`, as before): the Parlor's lever (0.50.0): stand right against
+  the wall you want it on, facing it; it goes low on that wall, in the block you stand in.
 - `parlor room`: where its visitors arrive.
 - `parlor <game>`: a machine (one of the games of chance).
 - `parlor ticket`: the Scratch Ticket's booth (0.46.1).

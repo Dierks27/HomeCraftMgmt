@@ -88,6 +88,9 @@ final class RaceShow {
     private MobRaces.Phase lastPhase = MobRaces.Phase.IDLE;
     private long ticks;
     private long spawnAfter;
+    /** How many racers have had to be made again since the last rest, and whether the console has been told. */
+    private int vanished;
+    private boolean saidVanish;
     /** After something went wrong: nothing is drawn until this tick, and the last trouble said. */
     private long restAfterTrouble;
     private String trouble;
@@ -442,6 +445,20 @@ final class RaceShow {
             if (ticks < spawnAfter || !w.isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
                 return;
             }
+            if (mobs[n] != null && ++vanished > 2 * Racer.COUNT) {
+                // the racers don't stay (a server with animals switched off removes them): no making them over and
+                // over. The race itself goes on, and the board still says how it comes out
+                vanished = 0;
+                spawnAfter = ticks + 200;
+                if (!saidVanish) {
+                    saidVanish = true;
+                    club.log().warning("Clubhouse: Mob Races' racers keep disappearing from the track (does this"
+                            + " server or world let animals be?). The races still run and pay; only the mobs are"
+                            + " missing.");
+                }
+                removeRacer(n);
+                return;
+            }
             removeRacer(n);
             mob = spawn(w, r, loc);
             if (mob == null) {
@@ -580,6 +597,7 @@ final class RaceShow {
     }
 
     private void removeRacers() {
+        vanished = 0;
         for (int n = 0; n < Racer.COUNT; n++) {
             if (mobs[n] != null || flags[n] != null) {
                 removeRacer(n);

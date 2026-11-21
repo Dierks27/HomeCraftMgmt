@@ -179,10 +179,49 @@ public final class KitGuardListener implements Listener {
         TAPPED_AT.put(e.getPlayer().getUniqueId(), System.currentTimeMillis());
     }
 
-    /** Whether {@code e} is a tap a game already answered, or the client's own echo of one. */
+    /**
+     * Blocks a game answers taps on (the Clubhouse's jukebox and bar shelves): while a player aims at one, a click is
+     * the tap, never the held kit item, whatever extra click (an arm swing, a "use item") the client sends with it.
+     */
+    private static final java.util.List<java.util.function.Predicate<org.bukkit.block.Block>> TAP_BLOCKS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** A game's tap blocks (registered once while it runs; {@link #noTapBlocks} takes it away). */
+    public static void tapBlocks(java.util.function.Predicate<org.bukkit.block.Block> isTap) {
+        TAP_BLOCKS.add(isTap);
+    }
+
+    public static void noTapBlocks(java.util.function.Predicate<org.bukkit.block.Block> isTap) {
+        TAP_BLOCKS.remove(isTap);
+    }
+
+    private static boolean tapBlock(org.bukkit.block.Block b) {
+        if (b == null) {
+            return false;
+        }
+        for (java.util.function.Predicate<org.bukkit.block.Block> t : TAP_BLOCKS) {
+            try {
+                if (t.test(b)) {
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+                // a game's check failing never stops a kit click
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code e} is a tap a game already answered, the client's echo of one, or a click aimed at one. */
     static boolean answeredTap(PlayerInteractEvent e) {
         if (TAPS.remove(e)) {
             return true;
+        }
+        if (!TAP_BLOCKS.isEmpty()) {
+            org.bukkit.block.Block at = e.getClickedBlock() != null ? e.getClickedBlock()
+                    : e.getPlayer().getTargetBlockExact(5);
+            if (tapBlock(at)) {
+                return true;
+            }
         }
         Long at = TAPPED_AT.get(e.getPlayer().getUniqueId());
         return at != null && System.currentTimeMillis() - at <= TAP_ECHO_MS && e.getClickedBlock() == null;

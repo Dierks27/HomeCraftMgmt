@@ -91,12 +91,17 @@ public final class ConnectFour extends CabinetGame {
         return settings().enabled() && IMPLEMENTED;
     }
 
+    /** "5 tokens", "a token": what the daily win pays, as the rules say it (0.51.1: it said "a token" for 5). */
+    static String tokens(int n) {
+        return n == 1 ? "a token" : n + " tokens";
+    }
+
     @Override
     public List<String> rules() {
         return List.of("Drop your pieces. Four in a row wins:",
                 "across, up, or on a slant.",
                 "Play the Arcade (easy, normal, hard) or a friend.",
-                "Today's first win on normal or hard pays a token.");
+                "Today's first win on normal or hard pays " + tokens(settings().dailyReward()) + ".");
     }
 
     @Override

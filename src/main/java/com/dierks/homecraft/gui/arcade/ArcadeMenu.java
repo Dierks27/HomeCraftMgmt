@@ -206,7 +206,10 @@ public final class ArcadeMenu extends Menu {
     /** Whether the Games screen's Golf tab has a tile: some open game passes {@link #golfTile}. */
     private static boolean anyGolf(GamesService games) {
         for (Game g : games.games()) {
-            if (games.enabled(g) && golfTile(g.kind(), true, DailyCourses.SPEC.id().equals(g.id()))) {
+            boolean fresh = DailyCourses.SPEC.id().equals(g.id());
+            // 0.51.1 (the arcade play-test): golf with no course lit the door onto "Nothing to play here yet"
+            if (games.enabled(g) && golfTile(g.kind(), true, fresh)
+                    && (fresh || !games.guard(g, g::playables, List.of()).isEmpty())) {
                 return true;
             }
         }
@@ -224,6 +227,9 @@ public final class ArcadeMenu extends Menu {
     /** Whether the Games screen's Courses tab has a tile: some open game passes {@link #courseTile}. */
     private static boolean anyCourse(GamesService games) {
         for (Game g : games.games()) {
+            if (Clubhouse.SPEC.id().equals(g.id())) {
+                continue; // 0.51.1: its one "playable" is the jukebox's Songs, not a course (the door lit onto nothing)
+            }
             if (g.kind() == GameKind.TRIAL && games.enabled(g)
                     && courseTile(g.kind(), true, games.guard(g, g::playables, List.of()).size())) {
                 return true;

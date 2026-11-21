@@ -159,9 +159,25 @@ public final class KitGuardListener implements Listener {
 
     // ---- kit clicks (R3.10) ---------------------------------------------------------------------
 
+    /**
+     * Clicks a game already answered as a tap on something in its room (the Clubhouse's jukebox, the bar's bottles):
+     * the kit item in hand is not also used. 0.51.1 (the arcade play-test): a tap on a bottle while holding "Leave game"
+     * armed the leave, and a second tap sent the player home; holding "Games" opened the Games screen over Songs.
+     */
+    private static final java.util.Set<PlayerInteractEvent> TAPS =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /** {@code e} was a tap on something in a game's room: no kit item acts on it. */
+    public static void tapOnly(PlayerInteractEvent e) {
+        TAPS.add(e);
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onKitClick(PlayerInteractEvent e) {
         if (e.getAction() == Action.PHYSICAL || !on() || !KitItems.isKit(e.getItem())) {
+            return;
+        }
+        if (TAPS.remove(e)) {
             return;
         }
         safely("a game item click", () -> kitClick(e));

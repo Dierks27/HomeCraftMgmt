@@ -101,6 +101,7 @@ final class JukeboxCorner implements SongMenu.Corner {
         e.setUseInteractedBlock(Event.Result.DENY);
         e.setUseItemInHand(Event.Result.DENY);
         e.setCancelled(true);
+        com.dierks.homecraft.games.world.KitGuardListener.tapOnly(e); // the kit item in hand does nothing too
         if (e.getHand() == EquipmentSlot.HAND) {
             openSongs(e.getPlayer());
         }

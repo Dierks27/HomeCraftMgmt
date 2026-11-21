@@ -473,6 +473,10 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             if (right) {
                 e.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
             }
+            if (barShelf(r, b)) { // 0.51.1: a tap on a bottle is only that (the kit item in hand does nothing)
+                e.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+                com.dierks.homecraft.games.world.KitGuardListener.tapOnly(e);
+            }
             // 0.50.0: a bottle on the back bar is a drink (either click: a controller's tap too), once per tap
             if (drinks != null && (left || e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND)
                     && barShelf(r, b)) {

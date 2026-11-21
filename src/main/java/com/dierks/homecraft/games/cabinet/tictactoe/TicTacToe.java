@@ -94,7 +94,8 @@ public final class TicTacToe extends CabinetGame {
         return List.of("Get three in a row.",
                 "Play the Arcade (easy or hard) or a friend.",
                 "Hard never loses: a draw is the best result!",
-                "Today's first easy win, or hard draw, pays a token.");
+                "Today's first easy win, or hard draw, pays "
+                        + (settings().dailyReward() == 1 ? "a token" : settings().dailyReward() + " tokens") + ".");
     }
 
     @Override

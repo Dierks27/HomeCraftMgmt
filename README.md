@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.50.0-mob-races-floor-is-lava`
+- **Version:** `0.50.1-ticket-screen`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,14 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.50.1: the Scratch Ticket's screen opens in the Parlor.** Found by the new live play-test (a real server with
+bot players): at the Parlor's booth, Buy paid and settled the ticket but its scratch screen never opened, because a
+Clubhouse visit only opens games screens and the ticket's wasn't marked as one; the player's screen kept showing the
+booth with the Buy tile "in hand", which could be dropped into the inventory until the next resync (never a real
+item). The ticket's screen is a games screen now, and any screen a visit refuses reopens the one the player was on,
+so the client and the server always agree. Verified live: 30 checks, no ghost in any click mode. **Back to 0.50.0:**
+the jar alone.
 
 **0.50.0, also: The Floor Is Lava** (`floor_is_lava`), Lilah's game. A giant playroom where you are toy-sized; a
 rumble and a glow warn that the lava is coming, the floor fills with real (harmless) lava, you hop onto the

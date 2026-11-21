@@ -22,7 +22,9 @@ import org.bukkit.inventory.ItemStack;
  * line says how many (spec §2, R1.18). Which result it was comes from the outcome's own
  * {@link ArcadeService.Outcome#someBack()} flag, not from the icon the service drew it with.
  */
-public final class ScratchTicketMenu extends Menu {
+// 0.50.1: a games screen (it hands out nothing), so it opens inside a Clubhouse visit: at the Parlor's booth the
+// kit guard refused it, the client kept showing the booth with the Buy tile on its cursor (the owner could "grab" it)
+public final class ScratchTicketMenu extends Menu implements com.dierks.homecraft.gui.games.GameScreen {
 
     private static final int[] SQUARES = {11, 13, 15};
     private static final int HEADER = 4;

@@ -330,7 +330,8 @@ final class ClubRegulars {
 
     /** Its name (with the gear), the gear, NPC and its stars under it, and its skin, whenever the owner changed them. */
     private void dress(CpuPlayers npcs, Body b) {
-        if (b.looks == npcs.looksVersion() || !(Bukkit.getEntity(b.mannequin) instanceof Mannequin m)) {
+        if (b.looks == npcs.looksVersion() || b.mannequin == null
+                || !(Bukkit.getEntity(b.mannequin) instanceof Mannequin m)) {
             return;
         }
         m.customName(Text.of("&f" + npcs.name(b.npc) + " &7" + CpuRoster.MARKER));
@@ -386,7 +387,7 @@ final class ClubRegulars {
         TwentyOneTable table = table();
         TwentyOneTable.Seat turn = table == null ? null : table.turn();
         for (Body b : bodies.values()) {
-            if (!(Bukkit.getEntity(b.mannequin) instanceof Mannequin m) || b.at == null) {
+            if (!(b.mannequin != null && Bukkit.getEntity(b.mannequin) instanceof Mannequin m) || b.at == null) {
                 continue;
             }
             Location at = m.getLocation();

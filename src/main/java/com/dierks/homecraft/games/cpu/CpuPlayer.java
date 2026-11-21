@@ -22,7 +22,11 @@ import java.util.UUID;
 public record CpuPlayer(String key, String name, NpcSkin.BuiltIn skin, CpuPersonality personality, CpuLevel level,
                         int favourite) {
 
-    /** Its UUID: made from {@code "hcm-npc:" + key}, a version-3 UUID no Mojang or offline account can have. */
+    /**
+     * Its UUID: made from {@code "hcm-npc:" + key}. A version-3 UUID, which no Mojang account has (theirs are version
+     * 4); an offline-mode account's is made from {@code "OfflinePlayer:" + name}, so it could match only by a hash
+     * collision.
+     */
     public UUID id() {
         return idOf(key);
     }

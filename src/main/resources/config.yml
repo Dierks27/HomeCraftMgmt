@@ -2926,3 +2926,15 @@ games:
     lava_seconds: 12
     # Group's rounds (1-12). The lava comes one block higher each round.
     rounds: 5
+  # NPC players: a few friendly computer players with a gear after their name. They hang out in the
+  # Clubhouse, sit in at the Twenty-One table, enter Mob Races and play Connect Four, Tic-Tac-Toe and a
+  # pretend Coin Flip. They play pretend: they never earn or spend tokens or money and are never on a
+  # board. Each player can turn them off for themselves (/hcm play npc); /hcm games npc sets it for
+  # someone (and locks it), and renames or reskins an NPC.
+  cpu:
+    # true = NPC players are on; nothing happens while games.enabled is false. false = none anywhere.
+    enabled: true
+    # How many NPCs hang out in the Clubhouse at once while someone is visiting (0-6; 0 = none).
+    regulars: 3
+    # Seconds a player sits alone at a table before an NPC joins them (5-600).
+    join_after_seconds: 20

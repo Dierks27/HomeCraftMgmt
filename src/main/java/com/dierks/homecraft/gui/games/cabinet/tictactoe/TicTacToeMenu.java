@@ -72,6 +72,12 @@ public final class TicTacToeMenu extends GameMenu {
                         }
                     });
         }
+        com.dierks.homecraft.games.cpu.CpuPlayers npcs = com.dierks.homecraft.games.cpu.CpuPlayers.of(plugin.games());
+        if (npcs != null && npcs.wants(viewer.getUniqueId())) {
+            set(15, Menus.icon(Material.ARMOR_STAND, "&bPlay an NPC &7" + com.dierks.homecraft.games.cpu.CpuRoster.MARKER
+                    + " - just for fun", "&7A computer player with a name.", "&7NPC games pay no tokens."),
+                    e -> pickNpc());
+        }
         Long wins = ttt.wins(viewer);
         set(16, Menus.icon(Material.OAK_SIGN, "&eHigh scores &7- wins",
                 "&7Your wins against the Arcade: &f" + (wins == null ? 0 : wins)), e -> ttt.scores(viewer, this::reopen));
@@ -96,6 +102,17 @@ public final class TicTacToeMenu extends GameMenu {
             return;
         }
         new TicTacToePlayMenu(plugin, ttt, viewer, this::reopen, ttt.vsArcade(viewer, level)).open(viewer);
+    }
+
+    private void pickNpc() {
+        if (!ttt.mayPlay(viewer)) {
+            return;
+        }
+        new com.dierks.homecraft.gui.games.NpcPickMenu(plugin, ttt, viewer, this::reopen, npc -> {
+            if (ttt.mayPlay(viewer)) {
+                new TicTacToePlayMenu(plugin, ttt, viewer, this::reopen, ttt.vsNpc(viewer, npc)).open(viewer);
+            }
+        }).open(viewer);
     }
 
     private void reopen() {

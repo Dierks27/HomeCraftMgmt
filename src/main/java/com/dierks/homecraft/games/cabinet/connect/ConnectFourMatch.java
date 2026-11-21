@@ -1,5 +1,9 @@
 package com.dierks.homecraft.games.cabinet.connect;
 
+import com.dierks.homecraft.games.cpu.CpuLevel;
+import com.dierks.homecraft.games.cpu.CpuMoves;
+import com.dierks.homecraft.games.cpu.CpuPlayer;
+
 import java.util.Objects;
 import java.util.SplittableRandom;
 import java.util.UUID;
@@ -35,6 +39,9 @@ public final class ConnectFourMatch {
     private final UUID second;
     private final ConnectFourAI.Level level;
     private final SplittableRandom rng;
+    /** The NPC player in the second seat instead of the Arcade, or {@code null}. */
+    private CpuPlayer npc;
+    private CpuLevel npcLevel;
     private UUID leaver;
     private int version;
 
@@ -48,6 +55,28 @@ public final class ConnectFourMatch {
     /** A game against the Arcade at {@code level}; {@code seed} is this game's own tie-break seed. */
     public static ConnectFourMatch vsArcade(UUID player, ConnectFourAI.Level level, long seed) {
         return new ConnectFourMatch(player, null, Objects.requireNonNull(level, "level"), seed);
+    }
+
+    /**
+     * A game against an NPC player at {@code level} (the level it plays at in this game): it plays as the Arcade at
+     * the matching strength, but it is a game for fun, like a friend game: no token, no board ({@link #earnsDaily},
+     * {@link #hardWin}).
+     */
+    public static ConnectFourMatch vsNpc(UUID player, CpuPlayer npc, CpuLevel level, long seed) {
+        ConnectFourMatch m = new ConnectFourMatch(player, null, CpuMoves.connectFourLevel(level), seed);
+        m.npc = Objects.requireNonNull(npc, "npc");
+        m.npcLevel = level;
+        return m;
+    }
+
+    /** The NPC player in the second seat, or {@code null} (the Arcade, or a friend). */
+    public CpuPlayer npc() {
+        return npc;
+    }
+
+    /** The level the NPC plays at in this game, or {@code null}. */
+    public CpuLevel npcLevel() {
+        return npcLevel;
     }
 
     /** A friend game: {@code first} (who invited) plays red and moves first. */
@@ -126,7 +155,7 @@ public final class ConnectFourMatch {
         if (!arcadeToMove()) {
             return -1;
         }
-        int col = ConnectFourAI.choose(board, level, rng);
+        int col = npc != null ? CpuMoves.connectFour(board, npcLevel, rng) : ConnectFourAI.choose(board, level, rng);
         if (col >= 0) {
             board.play(col);
             version++;
@@ -171,11 +200,11 @@ public final class ConnectFourMatch {
      * hard. Easy wins and friend games never do.
      */
     public boolean earnsDaily(UUID player) {
-        return vsArcade() && level != ConnectFourAI.Level.EASY && outcome(player) == Outcome.WON;
+        return vsArcade() && npc == null && level != ConnectFourAI.Level.EASY && outcome(player) == Outcome.WON;
     }
 
     /** Whether this finished game counts on the {@code hard} board: a win against the hard Arcade. */
     public boolean hardWin(UUID player) {
-        return vsArcade() && level == ConnectFourAI.Level.HARD && outcome(player) == Outcome.WON;
+        return vsArcade() && npc == null && level == ConnectFourAI.Level.HARD && outcome(player) == Outcome.WON;
     }
 }

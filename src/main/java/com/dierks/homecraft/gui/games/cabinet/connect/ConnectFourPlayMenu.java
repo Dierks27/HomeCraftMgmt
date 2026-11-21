@@ -188,7 +188,9 @@ public final class ConnectFourPlayMenu extends GameMenu {
             return;
         }
         told = true;
-        if (match.vsArcade()) {
+        if (match.npc() != null) {
+            connect.finishNpc(viewer, match); // for fun: no token, no board
+        } else if (match.vsArcade()) {
             connect.finish(viewer, match);
         } else {
             connect.finishFriendGame(match);
@@ -199,7 +201,8 @@ public final class ConnectFourPlayMenu extends GameMenu {
         if (!connect.mayPlay(viewer)) {
             return;
         }
-        new ConnectFourPlayMenu(plugin, connect, viewer, back, connect.vsArcade(viewer, match.level())).open(viewer);
+        new ConnectFourPlayMenu(plugin, connect, viewer, back, match.npc() != null ? connect.vsNpc(viewer, match.npc())
+                : connect.vsArcade(viewer, match.level())).open(viewer);
     }
 
     private ItemStack yourTile() {
@@ -219,8 +222,8 @@ public final class ConnectFourPlayMenu extends GameMenu {
 
     private ItemStack theirTile() {
         int them = 1 - seat;
-        String who = match.vsArcade()
-                ? "&eThe Arcade &7(" + match.level().name().toLowerCase(Locale.ROOT) + ")"
+        String who = match.npc() != null ? theirName()
+                : match.vsArcade() ? "&eThe Arcade &7(" + match.level().name().toLowerCase(Locale.ROOT) + ")"
                 : "&e" + theirName();
         boolean theirTurn = !match.over() && match.board().turn() == them;
         String name = who + (theirTurn ? (match.vsArcade() ? " &e- thinking..." : " &e- their turn") : "");
@@ -229,6 +232,12 @@ public final class ConnectFourPlayMenu extends GameMenu {
     }
 
     private String theirName() {
+        if (match.npc() != null) {
+            com.dierks.homecraft.games.cpu.CpuPlayers npcs =
+                    com.dierks.homecraft.games.cpu.CpuPlayers.any(plugin.games());
+            return npcs == null ? match.npc().name()
+                    : com.dierks.homecraft.games.cpu.CpuRoster.label(npcs.name(match.npc()), match.npcLevel());
+        }
         if (match.vsArcade()) {
             return "The Arcade";
         }

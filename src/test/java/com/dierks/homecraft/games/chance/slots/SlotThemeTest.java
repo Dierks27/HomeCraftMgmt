@@ -134,6 +134,48 @@ class SlotThemeTest {
     }
 
     @Test
+    void deepMinesAndMobSlotsThemesAreTheOnesAskedFor() {
+        SlotTheme deep = SlotTheme.DEEP;
+        assertEquals(List.of("coal", "copper", "iron", "gold", "diamond", "wild"), deep.reelKeys(),
+                "the ores' own names, as on Ore Slots");
+        assertEquals(Material.DEEPSLATE_COAL_ORE, deep.icon(Symbol.COAL), "but they are the deepslate ores");
+        assertEquals(Material.DEEPSLATE_COPPER_ORE, deep.icon(Symbol.COPPER));
+        assertEquals(Material.DEEPSLATE_IRON_ORE, deep.icon(Symbol.IRON));
+        assertEquals(Material.DEEPSLATE_GOLD_ORE, deep.icon(Symbol.GOLD));
+        assertEquals(Material.DEEPSLATE_DIAMOND_ORE, deep.icon(Symbol.DIAMOND));
+        assertEquals(Material.LANTERN, deep.icon(Symbol.WILD), "the Wild is a lantern");
+        assertEquals(Material.TUFF, deep.icon(Symbol.STONE));
+        assertEquals("Tuff", deep.blank());
+        assertEquals("Wild", deep.wild());
+        assertEquals("Three diamonds", deep.label(Line.THREE_DIAMONDS));
+        assertEquals(Material.DEEPSLATE_DIAMOND_ORE, deep.tileIcon(), "its tile is its machine's picture");
+        assertEquals(OreSlotsSettings.KEYS, SlotSettings.keys(deep, false), "the Ore Slots shape, key for key");
+
+        SlotTheme mob = SlotTheme.MOB;
+        assertEquals(List.of("rotten_flesh", "bone", "string", "ender_pearl", "blaze_rod", "creeper"),
+                mob.reelKeys(), "what the mobs drop, the commonest first, then the Creeper");
+        assertEquals(List.of("two", "rotten_flesh", "bone", "string", "ender_pearl", "blaze_rod", "creeper"),
+                mob.payKeys());
+        assertEquals(Material.ROTTEN_FLESH, mob.icon(Symbol.COAL));
+        assertEquals(Material.BONE, mob.icon(Symbol.COPPER));
+        assertEquals(Material.STRING, mob.icon(Symbol.IRON));
+        assertEquals(Material.ENDER_PEARL, mob.icon(Symbol.GOLD));
+        assertEquals(Material.BLAZE_ROD, mob.icon(Symbol.DIAMOND));
+        assertEquals(Material.CREEPER_HEAD, mob.icon(Symbol.WILD), "the Creeper is a creeper's head");
+        assertEquals(Material.COBWEB, mob.icon(Symbol.STONE));
+        assertEquals("Cobweb", mob.blank());
+        assertEquals("Creeper", mob.wild(), "the engine's Wild role is the Creeper here");
+        assertEquals("Three creepers", mob.label(Line.THREE_WILDS));
+        assertEquals("3 creeper", mob.combo(Line.THREE_WILDS));
+        assertEquals("Three ender pearls", mob.label(Line.THREE_GOLD));
+        assertEquals(Material.SPAWNER, mob.tileIcon());
+        assertEquals(Map.of("coal", 1, "copper", 2, "iron", 3, "gold", 4, "diamond", 5, "wild", 6),
+                mob.engineReels(Map.of("rotten_flesh", 1, "bone", 2, "string", 3, "ender_pearl", 4, "blaze_rod", 5,
+                        "creeper", 6)), "the Creeper's weight reaches the engine as its Wild's");
+        assertEquals(20, mob.enginePays(Map.of("creeper", 20)).get("wild"));
+    }
+
+    @Test
     void aThemesKeysReachTheEngineUnderTheEnginesOwnNames() {
         SlotSettings nether = SlotSettings.nether();
         assertEquals(Map.of("coal", 12, "copper", 9, "iron", 6, "gold", 3, "diamond", 2, "wild", 2),

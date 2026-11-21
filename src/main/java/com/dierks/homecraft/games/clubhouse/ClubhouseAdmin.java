@@ -438,8 +438,9 @@ final class ClubhouseAdmin implements GameAdmin {
                     + " room you built (stand where it goes, facing into the room)",
             "&e/hcm games clubhouse cabinet <game>|trophyroom|door arcade|trophy [clear] &7- your room's Arcade Room"
                     + " cabinets, trophy shelf and doorway signs (stand where it goes, facing out)",
-            "&e/hcm games clubhouse secret [room] [clear]|parlor star|room|<game>|ticket [clear] &7- your room's secret"
-                    + " trophy room (its door, its room) and Game Parlor (its star, room, machines, ticket booth)",
+            "&e/hcm games clubhouse secret [room] [clear]|parlor star|room|<game>|ticket|mob_races [clear] &7- your"
+                    + " room's secret trophy room (its door, its room) and Game Parlor (its star, room, machines, ticket"
+                    + " booth, and Mob Races' track: stand on a corner of a table 8 x 3, facing along it)",
             "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
                     + " save it as the Clubhouse",
             "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",

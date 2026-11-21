@@ -166,10 +166,26 @@ public final class KitGuardListener implements Listener {
      */
     private static final java.util.Set<PlayerInteractEvent> TAPS =
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    /**
+     * When each player last tapped such a thing (ms): the client follows a right-click on a block with a "use item"
+     * click of its own (a second event, on the air), which must not reach the kit item either.
+     */
+    private static final java.util.Map<java.util.UUID, Long> TAPPED_AT = new java.util.concurrent.ConcurrentHashMap<>();
+    static final long TAP_ECHO_MS = 150;
 
-    /** {@code e} was a tap on something in a game's room: no kit item acts on it. */
+    /** {@code e} was a tap on something in a game's room: no kit item acts on it, nor on the client's echo of it. */
     public static void tapOnly(PlayerInteractEvent e) {
         TAPS.add(e);
+        TAPPED_AT.put(e.getPlayer().getUniqueId(), System.currentTimeMillis());
+    }
+
+    /** Whether {@code e} is a tap a game already answered, or the client's own echo of one. */
+    static boolean answeredTap(PlayerInteractEvent e) {
+        if (TAPS.remove(e)) {
+            return true;
+        }
+        Long at = TAPPED_AT.get(e.getPlayer().getUniqueId());
+        return at != null && System.currentTimeMillis() - at <= TAP_ECHO_MS && e.getClickedBlock() == null;
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -177,7 +193,8 @@ public final class KitGuardListener implements Listener {
         if (e.getAction() == Action.PHYSICAL || !on() || !KitItems.isKit(e.getItem())) {
             return;
         }
-        if (TAPS.remove(e)) {
+        if (answeredTap(e)) {
+            deny(e); // nothing else uses it either
             return;
         }
         safely("a game item click", () -> kitClick(e));

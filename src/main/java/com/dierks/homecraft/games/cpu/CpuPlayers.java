@@ -261,8 +261,15 @@ public final class CpuPlayers implements Game, TableNpcs {
     @Override
     public List<String> statusLines() {
         CpuSettings s = settings();
-        return List.of(CpuRoster.ALL.size() + " NPCs, up to " + s.regulars() + " in the Clubhouse; one joins a player"
-                + " alone at a table after " + s.joinAfterSeconds() + " s");
+        List<String> out = new ArrayList<>();
+        out.add(CpuRoster.ALL.size() + " NPCs, up to " + s.regulars() + " in the Clubhouse; one joins a player"
+                + " alone at a table, a party, a round or a room after " + s.joinAfterSeconds() + " s");
+        for (Game game : games().games()) { // stage 2: each world game's NPCs
+            if (game instanceof WorldNpcs.Host h && game != this && h.npcs() != null) {
+                out.add(h.npcs().statusLine());
+            }
+        }
+        return out;
     }
 
     // ---- once a second ------------------------------------------------------------------------------------

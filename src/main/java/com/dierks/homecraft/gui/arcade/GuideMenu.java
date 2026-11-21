@@ -42,10 +42,10 @@ public final class GuideMenu extends Menu {
             Material.CHEST, Material.TARGET};
     private static final int[] TAB_SLOTS = {0, 2, 4, 6, 8};
     /**
-     * Where the games of chance line up on the Games page: ten places, one for each of them now that the Parlor has
-     * Deep Mine and Mob Slots too ("Before you play" and the day's limit moved two to the left to make the room).
+     * Where the games of chance line up on the Games page: eleven places, one for each of them now that the Parlor
+     * has Mob Races too ("Before you play" and the day's limit start the second row to make the room).
      */
-    private static final int[] CHANCE_SLOTS = {14, 15, 16, 17, 21, 22, 23, 24, 25, 26};
+    private static final int[] CHANCE_SLOTS = {14, 15, 16, 17, 20, 21, 22, 23, 24, 25, 26};
 
     private final Player player;
     private final int page;
@@ -222,10 +222,10 @@ public final class GuideMenu extends Menu {
                         "&7gives back less than it takes.");
                 set(13, arrow("→"), null);
                 chanceGames(games);
-                step(19, Material.PAPER, "&6Before you play", "&7Its screen shows the rules",
+                step(18, Material.PAPER, "&6Before you play", "&7Its screen shows the rules",
                         "&7and what it gives back.");
                 if (common.chanceDailyTokens() > 0) {
-                    step(20, Material.HOPPER, "&6Everyone: up to " + common.chanceDailyTokens() + " a day",
+                    step(19, Material.HOPPER, "&6Everyone: up to " + common.chanceDailyTokens() + " a day",
                             "&7Tokens put into all games", "&7of chance, each day.");
                 }
             }

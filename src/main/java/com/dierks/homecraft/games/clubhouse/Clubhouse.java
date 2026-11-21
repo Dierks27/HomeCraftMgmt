@@ -166,6 +166,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private SideRooms sideRooms;
     /** 0.42.0: the decoration that isn't blocks (the Feast Pot, the bar, the jukebox's records, the green, prizes). */
     private ClubDecor decor;
+    /** Mob Races in the Game Parlor: the model racetrack on its table and the tiny mobs that run on it. */
+    private RaceShow raceShow;
     /** 0.41.0: what tells the side rooms a cabinet game was won (registered with the games while running). */
     private final java.util.function.Consumer<GamesService.Cheer> cheerListener = c -> {
         SideRooms sr = sideRooms;
@@ -365,6 +367,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (sideRooms != null) {
             out.add("side rooms up: " + sideRooms.statusLine()); // 0.41.0
         }
+        if (raceShow != null) {
+            out.add(raceShow.statusLine());
+        }
         return out;
     }
 
@@ -390,6 +395,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         cushions = new ClubCushions(log());
         sideRooms = new SideRooms(this);
         decor = new ClubDecor(this);
+        raceShow = new RaceShow(this);
         g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
@@ -553,6 +559,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (decor != null) {
             decor.remove();
+        }
+        if (raceShow != null) {
+            raceShow.remove();
         }
         if (ctx.plugin() != null) {
             games().noCheers(cheerListener);
@@ -884,6 +893,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             r.tick();
         }
         sweepArrivals();
+        if (raceShow != null) {
+            raceShow.tick(); // Mob Races' racers move every tick
+        }
     }
 
     /**
@@ -928,6 +940,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             }
             if (decor != null) {
                 decor.remove();
+            }
+            if (raceShow != null) {
+                raceShow.remove();
             }
             wasOpen = false;
             return;
@@ -990,6 +1005,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (decor != null) {
             decor.second(r, visits.size() > 0); // 0.42.0
+        }
+        if (raceShow != null) {
+            raceShow.second(r);
         }
         feast(now);
     }
@@ -1143,6 +1161,11 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (games().parties().of(id) != null || (watch != null && watch.watching(id))) {
             return true;
+        }
+        if (games().inParlor(id) && games().game(ClubhouseRoom.MOB_RACES)
+                instanceof com.dierks.homecraft.games.chance.mobraces.MobRaces races
+                && races.phase() != com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase.IDLE) {
+            return true; // watching a Mob Race in the Parlor is not sitting idle
         }
         NightRunner n = night();
         return n != null && !n.phase().over() && n.in(id);

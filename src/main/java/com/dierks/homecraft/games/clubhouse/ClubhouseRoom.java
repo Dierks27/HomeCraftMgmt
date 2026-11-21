@@ -1232,12 +1232,12 @@ public final class ClubhouseRoom {
         return near(handSecretRoom, x, y, z, UP_REACH);
     }
 
-    /** The Game Parlor's door (in the 19th Hole), and where its visitor comes back out. */
+    /** The Game Parlor's way in (in the 19th Hole: a lever since 0.50.0), and where its visitor comes back out. */
     public ClubhousePlanner.Place3 parlorStar() {
         if (!mine(handParlorDoor)) {
             return parlorBuilt() ? ClubhousePlanner.parlorStar(site.box()) : null;
         }
-        return place3(handParlorDoor, 1.5); // 0.45.0: a star, at eye height where the admin stood
+        return place3(handParlorDoor, 0); // 0.50.0: a lever in the block the admin stood in, on the wall they faced
     }
 
     public ClubhouseSite.Spot parlorReturn() {
@@ -1388,14 +1388,15 @@ public final class ClubhouseRoom {
                         + " the way you face.";
             }
             case "parlor" -> {
-                if ("door".equals(sub) || "star".equals(sub) || "room".equals(sub)) {
+                if ("door".equals(sub) || "star".equals(sub) || "lever".equals(sub) || "room".equals(sub)) {
                     boolean room = "room".equals(sub);
                     key = room ? PARLOR_ROOM_KEY : PARLOR_DOOR_KEY;
                     said = room ? "The Game Parlor's visitors arrive where you stand; its door out is behind you."
-                            : "The Game Parlor's gold star is where you stand.";
+                            : "The Game Parlor's lever is where you stand, low on the wall you face (stand right"
+                            + " against it).";
                 } else {
                     if (sub == null || sub.isBlank()) {
-                        return "&cWhich? &e/hcm games clubhouse parlor star|room|<game>|ticket|mob_races [clear]";
+                        return "&cWhich? &e/hcm games clubhouse parlor lever|room|<game>|ticket|mob_races [clear]";
                     }
                     if (at != null && !chanceGame && !ClubhousePlanner.TICKET.equals(sub)) {
                         return "&cThe Game Parlor's machines are the games of chance (ore_slots, wheel, coin_flip,"
@@ -2032,7 +2033,15 @@ public final class ClubhouseRoom {
      * room (its chairs are the owner's), or while there is no room.
      */
     public List<ClubhousePlanner.Seat> seats() {
-        return hand || site == null ? List.of() : ClubhousePlanner.seats(site.box());
+        if (hand || site == null) {
+            return List.of();
+        }
+        if (!parlorBuilt()) {
+            return ClubhousePlanner.seats(site.box());
+        }
+        List<ClubhousePlanner.Seat> all = new java.util.ArrayList<>(ClubhousePlanner.seats(site.box()));
+        all.addAll(ClubhousePlanner.parlorSeats(site.box())); // 0.50.0: the Parlor's card-table chairs too
+        return all;
     }
 
     /**

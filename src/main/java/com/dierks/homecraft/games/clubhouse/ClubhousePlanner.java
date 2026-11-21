@@ -57,7 +57,7 @@ public final class ClubhousePlanner {
      * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
      * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over. 10:
-     * Mob Races' table in the middle of the Game Parlor.
+     * Mob Races' table in the middle of the Game Parlor, the Parlor's red carpet and its bigger card tables.
      */
     public static final int ALGO = 10;
     /** The plan's "slot" name. */
@@ -760,7 +760,7 @@ public final class ClubhousePlanner {
         b.set(4, 2, BREWING_Z, BREWING); // 0.42.0: a brewing stand at the counter's end (bottles and glasses: displays)
         rug(b, 2, 3, 2, 10, RUG, 3);
         // the reading nook: a wall of books, the jukebox in its middle, two armchairs and a lamp
-        for (int k = 13; k <= 19; k++) {
+        for (int k = 13; k <= NOOK_Z1; k++) {
             for (int j = 1; j <= 3; j++) {
                 b.set(1, j, k, BOOKS);
             }
@@ -1053,8 +1053,20 @@ public final class ClubhousePlanner {
     static final int SECRET_CZ = 40;
     /** The upstairs rooms' beams (rows clear of the secret room's trophy places, which are on odd rows). */
     static final int[] UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12};
-    /** The Game Parlor's two card tables (x, z offsets): Twenty-One and Higher or Lower. */
-    static final int[][] PARLOR_TABLE = {{5, 41}, {10, 41}};
+    /**
+     * The Game Parlor's two card tables (x, z offsets of each table's north-west felt block): Twenty-One and Higher or
+     * Lower. Since plan 10 (the owner: "maybe we can make the 4 person tables a bit larger") each is
+     * {@value #PARLOR_TABLE_W} felt wide (x) and {@value #PARLOR_TABLE_D} long (z), with a chair at each of its four
+     * corners, two down each side with a gap between (two chairs side by side would be a bench).
+     */
+    static final int[][] PARLOR_TABLE = {{4, 41}, {10, 41}};
+    static final int PARLOR_TABLE_W = 2;
+    static final int PARLOR_TABLE_D = 3;
+    /**
+     * The Game Parlor's floor (plan 10; the owner: "if you are going to do tables in green we shouldnt use that as the
+     * carpet"): a red casino carpet, so the green felt tables stand out. (Before plan 10: green carpet.)
+     */
+    public static final String PARLOR_CARPET = "minecraft:red_carpet";
     /** The parlor's machines on its walls (x, z, yaw): two Ore Slots, the Wheel, Coin Flip. */
     static final int[][] PARLOR_WALL = {{1, 37, -90}, {1, 40, -90}, {14, 37, 90}, {14, 40, 90}};
     /** The games those stand for, in order: the walls' four, then the two tables. */
@@ -1156,7 +1168,7 @@ public final class ClubhousePlanner {
 
     /**
      * The Game Parlor (0.43.0; the owner: "maybe that would be fun since we have a bunch of chance games"), over the
-     * Arcade Room and reached from the 19th Hole, never the Foyer: green baize on dark wood, brass trim, warm lamps; two
+     * Arcade Room and reached from the 19th Hole, never the Foyer: a red carpet, green felt tables, brass trim, warm lamps; two
      * Ore Slots machines and Coin Flip and the Wheel on its walls, a card table each for Twenty-One and Higher or Lower.
      * The machines are displays you tap (the games of chance's own gate: {@code hcm.games.chance}, the day's token
      * limit, Take a break, the click cooldown).
@@ -1166,7 +1178,7 @@ public final class ClubhousePlanner {
         upShell(b, x0, PLANKS);
         for (int i = x0 + 2; i <= x0 + 13; i++) {
             for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
-                b.set(i, UP_FLOOR + 1, k, FELT);
+                b.set(i, UP_FLOOR + 1, k, PARLOR_CARPET);
                 if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
                     b.set(i, UP_FLOOR, k, LIGHT);
                 }
@@ -1176,10 +1188,19 @@ public final class ClubhousePlanner {
             b.set(i, UP_FLOOR + 3, SIDE_Z1 + 1, BRASS); // a brass rail along the back wall
         }
         for (int[] t : PARLOR_TABLE) {
-            // 0.44.2: a one-block card table (felt on the floor) beside its chairs, the cards on top: no jumping
-            b.set(t[0], UP_FLOOR + 1, t[1], FELT_BLOCK);
-            b.seat(t[0] - 1, UP_FLOOR + 1, t[1], chair("west"), "GREEN");
-            b.seat(t[0] + 1, UP_FLOOR + 1, t[1], chair("east"), "GREEN");
+            // a card table one block high (felt on the floor: no jumping), the cards in its middle, a chair either
+            // side of each row (0.44.2-0.49.0: one block of felt and two chairs)
+            int east = t[0] + PARLOR_TABLE_W;
+            int south = t[1] + PARLOR_TABLE_D - 1;
+            for (int k = t[1]; k <= south; k++) {
+                for (int i = t[0]; i < east; i++) {
+                    b.set(i, UP_FLOOR + 1, k, FELT_BLOCK);
+                }
+                if (k == t[1] || k == south) {
+                    b.seat(t[0] - 1, UP_FLOOR + 1, k, chair("west"), "GREEN");
+                    b.seat(east, UP_FLOOR + 1, k, chair("east"), "GREEN");
+                }
+            }
         }
         for (int[] m : PARLOR_WALL) {
             b.set(m[0], UP_FLOOR, m[1], MAT);
@@ -1290,12 +1311,18 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Game Parlor's way in (0.45.0): a little gold star on the 19th Hole's west wall, between the nook and the
-     * fireplace, at eye height, so you have to know it is there. (0.43.0-0.44.2: a door there.)
+     * The Game Parlor's way in (0.50.0; the owner: "the star that we have in the club house is too obvious... maybe a
+     * lever"): a small lever low on the side of the reading nook's wall of books, at its south end, where nobody looks
+     * for one, the way a secret passage opens in a story. Its block is the air just south of the books' bottom row; it
+     * hangs on the books (to its north), so the place's yaw is the way someone faces who looks at it: north. It is a
+     * display, so no block changes for it. (0.45.0-0.49.0: a glowing gold star at eye height on the west wall.)
      */
     public static Place3 parlorStar(Box box) {
-        return new Place3(box.minX() + 1.15, box.minY() + 2.6, box.minZ() + PARLOR_DOOR_Z + 0.5, -90f);
+        return new Place3(box.minX() + 1.5, box.minY() + 1, box.minZ() + NOOK_Z1 + 1.5, 180f);
     }
+
+    /** The reading nook's wall of books runs along the west wall from z 13 to here. */
+    static final int NOOK_Z1 = 19;
 
     static final int PARLOR_DOOR_Z = 21;
 
@@ -1352,8 +1379,9 @@ public final class ClubhousePlanner {
         for (int[] m : PARLOR_WALL) {
             out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
         }
-        for (int[] t : PARLOR_TABLE) {
-            out.add(new Place3(box.minX() + t[0] + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + t[1] + 0.5, 0f));
+        for (int[] t : PARLOR_TABLE) { // the cards lie in the middle of the table
+            out.add(new Place3(box.minX() + t[0] + PARLOR_TABLE_W / 2.0, box.minY() + UP_FLOOR + 2,
+                    box.minZ() + t[1] + PARLOR_TABLE_D / 2.0, 0f));
         }
         return out;
     }
@@ -1606,6 +1634,16 @@ public final class ClubhousePlanner {
         hall(b);
         bar(b);
         gallery(b);
+        return b.seats;
+    }
+
+    /**
+     * The Game Parlor's chairs' cushions (0.50.0; the owner: "put some cushions on these ... seats would ya"): the card
+     * tables' chairs, only while the Parlor is built ({@link #seats} is the rooms downstairs).
+     */
+    public static List<Seat> parlorSeats(Box box) {
+        Builder b = new Builder(box);
+        parlor(b);
         return b.seats;
     }
 

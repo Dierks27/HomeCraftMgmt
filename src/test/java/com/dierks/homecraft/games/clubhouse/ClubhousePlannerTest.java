@@ -84,7 +84,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("0f6d2761fbae", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("db3ec92a2d96", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -369,8 +369,8 @@ class ClubhousePlannerTest {
                     && right.contains("_trapdoor") && right.contains("open=true"), "an armchair has two arms: " + op);
             armchairs++;
         }
-        assertEquals(2 * 6 + 2 * 4 + 4 + 2 * 2, atTables, "three a side at each banquet table, four at each 3 x 3 table,"
-                + " four at the card table, two at each of the Game Parlor's two tables (0.43.0)");
+        assertEquals(2 * 6 + 2 * 4 + 4 + 2 * 4, atTables, "three a side at each banquet table, four at each 3 x 3 table,"
+                + " four at the card table, four at each of the Game Parlor's two tables (0.50.0; two before)");
         assertEquals(6, armchairs, "two in the reading nook, two by the fire, two facing the trophies");
     }
 
@@ -974,12 +974,17 @@ class ClubhousePlannerTest {
         assertNotNull(b.get(key((int) Math.floor(door.x()), (int) door.y(), (int) Math.floor(door.z()) + 1)),
                 "against the Trophy Room's back wall");
         assertEquals(180f, door.yaw(), "facing into the room");
-        ClubhousePlanner.Place3 star = ClubhousePlanner.parlorStar(BOX);
-        assertNull(b.get(key((int) Math.floor(star.x()), (int) Math.floor(star.y()), (int) Math.floor(star.z()))),
-                "the Parlor's star hangs in air");
-        assertNotNull(b.get(key((int) Math.floor(star.x()) - 1, (int) Math.floor(star.y()), (int) Math.floor(star.z()))),
-                "on the 19th Hole's west wall");
-        assertTrue(star.x() - Math.floor(star.x()) < 0.3, "close to the wall, easy to miss");
+        // 0.50.0: the Parlor's way in is a lever low on the side of the reading nook's books, hung on them
+        ClubhousePlanner.Place3 lever = ClubhousePlanner.parlorStar(BOX);
+        int lx = (int) Math.floor(lever.x());
+        int ly = (int) Math.floor(lever.y());
+        int lz = (int) Math.floor(lever.z());
+        assertNull(b.get(key(lx, ly, lz)), "the Parlor's lever hangs in air");
+        assertEquals(BOX.minY() + 1, ly, "low down, at the floor's own block");
+        assertEquals(180f, lever.yaw(), "on the block to its north");
+        assertEquals(ClubhousePlanner.BOOKS, b.get(key(lx, ly, lz - 1)), "the nook's books");
+        assertEquals("minecraft:lever[face=wall,facing=south,powered=false]", SideRooms.leverData(lever.yaw(), false),
+                "a lever on the books, pointing out of them");
         assertEquals(ClubhousePlanner.PARLOR_GAMES.size(), ClubhousePlanner.parlorMachines(BOX).size(),
                 "a place for every machine");
         for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {
@@ -1074,7 +1079,7 @@ class ClubhousePlannerTest {
             }
         }
         // displays only: no block is theirs (the plan is plan 10's, pinned with Mob Races' table)
-        assertEquals("0f6d2761fbae", SITE.plan().hash(), "no block is a slot machine's");
+        assertEquals("db3ec92a2d96", SITE.plan().hash(), "no block is a slot machine's");
         assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
         for (String game : ClubhousePlanner.PARLOR_ROW_GAMES) {
@@ -1150,7 +1155,7 @@ class ClubhousePlannerTest {
         }
         assertEquals("machine_deepmine", com.dierks.homecraft.pack.ClubModels.machineFor("deep_mine").name());
         assertEquals("machine_mobs", com.dierks.homecraft.pack.ClubModels.machineFor("mob_slots").name());
-        assertEquals("0f6d2761fbae", SITE.plan().hash(), "no block is theirs: they are displays only");
+        assertEquals("db3ec92a2d96", SITE.plan().hash(), "no block is theirs: they are displays only");
         assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
     }
@@ -1199,5 +1204,19 @@ class ClubhousePlannerTest {
         Map<Long, String> merged = blocks(ClubSave.merged(saved, SITE.plan(),
                 ClubhousePlanner.regions(BOX, ClubhousePlanner.Rooms.BOTH)));
         assertEquals(b, merged, "the saved room, with the upstairs rooms added");
+    }
+
+    @Test
+    void theParlorsCardTableChairsHaveCushions() {
+        // 0.50.0 (the owner: "put some cushions on these ... seats"): four chairs at each of the two card tables
+        List<ClubhousePlanner.Seat> up = ClubhousePlanner.parlorSeats(BOX);
+        assertEquals(8, up.size());
+        for (ClubhousePlanner.Seat s : up) {
+            assertTrue(ClubhousePlanner.parlorInside(BOX).contains((int) Math.floor(s.x()), (int) Math.floor(s.y()),
+                    (int) Math.floor(s.z())), "a cushion in the Parlor: " + s);
+        }
+        for (ClubhousePlanner.Seat s : ClubhousePlanner.seats(BOX)) {
+            assertFalse(up.contains(s), "and not one of the rooms downstairs' twice");
+        }
     }
 }

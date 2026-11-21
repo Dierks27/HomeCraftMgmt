@@ -252,6 +252,20 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**0.50.0, also in the Clubhouse** (the owner's list from playing): **the Parlor's way in is a lever** tucked
+low beside the 19th Hole's bookshelves instead of the glowing star; **the bar's bottles can be drunk**: tap one on
+the back bar for three gulps and a random silly thing for 20 seconds (tiny you, super bouncy, floaty, zoomy,
+glowing, burps and hiccups, hearts, a rainbow trail, a music cloud; nothing hurts, and it all ends when you leave);
+**the Parlor has a red carpet** so the green tables stand out, and **its two card tables are bigger** (2 x 3, four
+chairs each, with cushions on 26.3); **Mob Slots has a real machine** (a Creeper face; 0.49.0's model named a
+texture that showed as the missing-model square); **the Wheel answers a tap**: the chosen amount is a gold block,
+and tapping a colour makes every space of that colour glow and says what it pays (where it stops still decides
+everything; there is no colour to pick); and **no menu item can be "taken" any more**: a click that opened another
+screen could leave a ghost of the clicked item on your cursor (never really yours; it vanished on the next sync),
+and every HCM screen now sends your inventory again a tick after each click. **The Trophy Room's heads look into
+the room and keep still** (0.44.2's turned with your camera, so they seemed to copy you), and **the secret room's
+middle pedestal holds a big gold cup** in place of your own head (the owner's idea).
+
 **0.50.0: Mob Races, a model racetrack in the Game Parlor.** Six tiny mobs (a chicken, a pig, a rabbit, a cow, a
 fox and a sheep, each a quarter to a third of their size, each with a coloured number flag) really run round a
 little track on a table in the middle of the Parlor, and you can walk all the way round it. Tap the table, pick a
@@ -4740,10 +4754,11 @@ room) that shows all her high scores."
 Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same gate as anywhere else**:
 `hcm.games.chance`, the day's `chance_daily_tokens`, Take a break and the cooldowns.
 
-- **The way in** is a little gold star on the 19th Hole's west wall, between the reading nook and the
-  fireplace (0.45.0, the owner: "the star the casino so you must know how to get into it"; it was a door).
+- **The way in** is a small lever low on the side of the reading nook's wall of books, at its south end in the
+  19th Hole (0.50.0, the owner: "the star ... is too obvious... maybe a lever"; 0.45.0-0.49.0 a glowing gold star
+  on the west wall, before that a door). Pull it (either click) and it goes down with a click, and you're upstairs.
   Nothing marks it. It needs **`hcm.clubhouse.parlor`** (new in 0.45.0, everyone's by default) **and**
-  `hcm.games.chance`: without both there is no star, and a machine does nothing. Lilah's path (foyer, hall,
+  `hcm.games.chance`: without both there is no lever, and a machine does nothing. Lilah's path (foyer, hall,
   Arcade Room, Trophy Room) never passes it. **To lock the Parlor down:** `/lp group default permission set
   hcm.clubhouse.parlor false`, then give it to the adults with `/lp user <player> permission set
   hcm.clubhouse.parlor true`.
@@ -4918,7 +4933,8 @@ nobody loses the games by switching the Clubhouse off. A hand already open can s
 
 - `/hcm games clubhouse secret`: the secret room's door (it faces the way you face).
 - `secret room`: where visitors arrive (the door out goes behind you, the trophies along a row three ahead).
-- `parlor star` (or `parlor door`, as before): the Parlor's gold star.
+- `parlor lever` (or `parlor star` / `parlor door`, as before): the Parlor's lever (0.50.0): stand right against
+  the wall you want it on, facing it; it goes low on that wall, in the block you stand in.
 - `parlor room`: where its visitors arrive.
 - `parlor <game>`: a machine (one of the games of chance).
 - `parlor ticket`: the Scratch Ticket's booth (0.46.1).

@@ -168,6 +168,26 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private ClubDecor decor;
     /** Mob Races in the Game Parlor: the model racetrack on its table and the tiny mobs that run on it. */
     private RaceShow raceShow;
+    /** 0.50.0: the back bar's bottles, to drink. */
+    private BarDrinks drinks;
+
+    /** Whether {@code b} is one of the back bar's shelves (the drinks), not any other shelf in the room. */
+    private static boolean barShelf(ClubhouseRoom r, org.bukkit.block.Block b) {
+        for (int[] at : r.barShelves()) {
+            if (at[0] == b.getX() && at[1] == b.getY() && at[2] == b.getZ()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The shelf place a click aimed at, or -1. */
+    private static int shelfSlot(org.bukkit.block.Block b, org.bukkit.util.Vector hit) {
+        if (hit == null || !(b.getBlockData() instanceof org.bukkit.block.data.Directional d)) {
+            return -1;
+        }
+        return BarDrinks.slotAt(d.getFacing().name().toLowerCase(java.util.Locale.ROOT), hit.getX(), hit.getZ());
+    }
     /** 0.41.0: what tells the side rooms a cabinet game was won (registered with the games while running). */
     private final java.util.function.Consumer<GamesService.Cheer> cheerListener = c -> {
         SideRooms sr = sideRooms;
@@ -395,6 +415,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         cushions = new ClubCushions(log());
         sideRooms = new SideRooms(this);
         decor = new ClubDecor(this);
+        drinks = new BarDrinks(this);
         raceShow = new RaceShow(this);
         g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
@@ -431,8 +452,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         g.on(this, org.bukkit.event.player.PlayerInteractEvent.class, EventPriority.LOWEST, false, e -> {
             org.bukkit.block.Block b = e.getClickedBlock();
             ClubhouseRoom r = room;
-            if (b == null || r == null || e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
-                    || !b.getType().name().endsWith("_SHELF")) {
+            boolean right = e.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
+            boolean left = e.getAction() == org.bukkit.event.block.Action.LEFT_CLICK_BLOCK;
+            if (b == null || r == null || !(right || left) || !b.getType().name().endsWith("_SHELF")) {
                 return;
             }
             if (r.hand() || !r.open()
@@ -442,7 +464,14 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             if (r.editing() && e.getPlayer().hasPermission("hcm.games.admin")) {
                 return;
             }
-            e.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            if (right) {
+                e.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+            }
+            // 0.50.0: a bottle on the back bar is a drink (either click: a controller's tap too), once per tap
+            if (drinks != null && (left || e.getHand() == org.bukkit.inventory.EquipmentSlot.HAND)
+                    && barShelf(r, b)) {
+                drinks.drink(e.getPlayer(), b, shelfSlot(b, e.getClickedPosition()), now());
+            }
         });
         // 0.41.0: a cabinet in the Arcade Room answers either click (a controller's too). The games' guard cancels
         // any touch of a game entity first, so these read cancelled events as well, and cancel them themselves.
@@ -554,6 +583,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     }
 
     private void stopRoom() {
+        if (drinks != null) {
+            drinks.stop();
+        }
         if (sideRooms != null) {
             sideRooms.remove();
         }
@@ -861,6 +893,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
 
     /** Out of the Clubhouse, however it happened: forgotten, off the no-push team. Never throws. */
     private void gone(UUID id, Player p) {
+        if (drinks != null) {
+            drinks.gone(id, p); // nobody leaves tiny
+        }
         arriving.remove(id);
         kits.remove(id);
         toldGuarded.remove(id);
@@ -891,6 +926,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         ClubhouseRoom r = room;
         if (r != null) {
             r.tick();
+        }
+        if (drinks != null) {
+            drinks.tick(); // 0.50.0: the bar's drinks: the gulps, then something silly for a while
         }
         sweepArrivals();
         if (raceShow != null) {

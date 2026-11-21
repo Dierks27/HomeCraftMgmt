@@ -260,10 +260,10 @@ final class SideRooms {
             }
         }
         if (s.parlor()) {
-            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.45.0: the little star is the Parlor's
+            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.50.0: a lever by the books is the Parlor's way in
             if (in != null) {
                 keep.add("pstar");
-                put(w, "pstar", "pstar@" + in, in, () -> star(w, in, "parlor:in", PARLOR_WAY_IN));
+                put(w, "pstar", "plever@" + in, in, () -> lever(w, in, "parlor:in", PARLOR_WAY_IN));
             }
             ClubhousePlanner.Place3 out = room.parlorExit();
             if (out != null) {
@@ -295,20 +295,57 @@ final class SideRooms {
         }
     }
 
-    /** A little gold star on the wall and its tap target, to {@code tap}, for players with {@code permissions}. */
-    private Shown star(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
+    /**
+     * 0.50.0: a small lever on the wall (the owner: "the star ... is too obvious... maybe a lever"), to {@code tap},
+     * seen only by players with {@code permissions}. It hangs in the block of {@code at} on the block ahead of someone
+     * facing {@code at.yaw()}, at the height of that block's middle, unlit, so it looks like part of the room.
+     */
+    private Shown lever(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
         List<UUID> all = new ArrayList<>();
-        all.add(w.spawn(loc(w, at, 0), ItemDisplay.class, e -> {
+        double bx = Math.floor(at.x());
+        double by = Math.floor(at.y());
+        double bz = Math.floor(at.z());
+        all.add(w.spawn(new Location(w, bx, by, bz), BlockDisplay.class, e -> {
             gated(e, permissions);
-            e.setItemStack(new ItemStack(Material.NETHER_STAR));
-            e.setBillboard(Display.Billboard.CENTER);
-            e.setTransformation(scale(0.45f));
-            e.setBrightness(new Display.Brightness(15, 15));
+            e.setBlock(Bukkit.createBlockData(leverData(at.yaw(), false)));
         }).getUniqueId());
-        Entity target = tapTarget(w, loc(w, at, -0.35), 0.7f, 0.7f, tap);
+        Entity target = tapTarget(w, new Location(w, bx + 0.5, by + 0.15, bz + 0.5), 0.7f, 0.7f, tap);
         gated(target, permissions);
         all.add(target.getUniqueId());
         return new Shown(tap, all, List.of(), List.of());
+    }
+
+    /** A wall lever on the wall ahead of someone facing {@code yaw}: it points back at them. */
+    static String leverData(float yaw, boolean on) {
+        String ahead = facing(yaw);
+        String back = switch (ahead) {
+            case "north" -> "south";
+            case "south" -> "north";
+            case "east" -> "west";
+            default -> "east";
+        };
+        return "minecraft:lever[face=wall,facing=" + back + ",powered=" + on + "]";
+    }
+
+    /** The lever by the books goes down (and comes back up a second later), for everyone who can see it. */
+    private void pull(Entity target) {
+        Shown s = shown.get("pstar");
+        if (s == null || target == null) {
+            return;
+        }
+        for (UUID id : s.all()) {
+            if (Bukkit.getEntity(id) instanceof BlockDisplay d && d.getBlock().getMaterial() == Material.LEVER) {
+                String up = d.getBlock().getAsString();
+                d.setBlock(Bukkit.createBlockData(up.replace("powered=false", "powered=true")));
+                if (club.plugin() != null) {
+                    Bukkit.getScheduler().runTaskLater(club.plugin(), () -> {
+                        if (d.isValid()) {
+                            d.setBlock(Bukkit.createBlockData(up));
+                        }
+                    }, 20L);
+                }
+            }
+        }
     }
 
     /**
@@ -437,6 +474,8 @@ final class SideRooms {
                 if (!allOf(PARLOR_WAY_IN, p::hasPermission)) {
                     return; // nothing at all: no message, no sound
                 }
+                pull(e);
+                p.playSound(e.getLocation(), Sound.BLOCK_LEVER_CLICK, 0.8f, 0.6f);
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorArrival());
             }
@@ -659,15 +698,25 @@ final class SideRooms {
             p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.9f, 1.1f);
         }
         ClubhousePlanner.Place3 centre = room.secretCentre();
-        if (centre != null) { // the room is theirs: their head on the middle pedestal, their name over it
-            mine.add(w.spawn(loc(w, centre, headUp(1.4f)), ItemDisplay.class, e -> {
+        if (centre != null) { // the room is theirs: a grand gold cup on the middle pedestal, their name over it
+            // 0.50.0 (the owner: "Maybe just a big trophy there instead?"): it was their own head, two sizes up
+            ClubModels.Model grand = ClubModels.trophy(1);
+            boolean useModel = models;
+            mine.add(w.spawn(loc(w, centre, useModel ? grand.up() * CENTRE_CUP : 0.6), ItemDisplay.class, e -> {
                 hidden(e);
-                e.setItemStack(head(p.getUniqueId()));
-                e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
-                e.setBillboard(Display.Billboard.VERTICAL);
-                e.setTransformation(headTurn(1.4f));
+                if (useModel) {
+                    e.setItemStack(modelItem(grand));
+                    e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
+                    e.setRotation(centre.yaw(), 0f);
+                    e.setTransformation(scale(CENTRE_CUP));
+                } else {
+                    e.setItemStack(new ItemStack(grand.fallback()));
+                    e.setBillboard(Display.Billboard.VERTICAL);
+                    e.setTransformation(scale(1.2f));
+                }
+                e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
-            mine.add(w.spawn(loc(w, centre, 1.25), TextDisplay.class, e -> { // over the head, not through it
+            mine.add(w.spawn(loc(w, centre, CENTRE_CUP + 0.3), TextDisplay.class, e -> { // over the cup
                 hidden(e);
                 e.setBillboard(Display.Billboard.CENTER);
                 e.setTransformation(scale(0.8f));
@@ -826,7 +875,7 @@ final class SideRooms {
                 WorldEntities.tag(e, club, null);
                 e.setItemStack(head(c.id()));
                 e.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.NONE);
-                e.setBillboard(Display.Billboard.VERTICAL); // the face always to whoever looks
+                stillHead(e, p.head().yaw()); // 0.50.0: into the room, still
                 e.setTransformation(headTurn(HEAD_SCALE));
                 e.setBrightness(new Display.Brightness(15, 15));
             }).getUniqueId());
@@ -902,6 +951,23 @@ final class SideRooms {
             head.setItemMeta(skull);
         }
         return head;
+    }
+
+    // ---- 0.50.0: heads that look into the room and keep still ------------------------------------------
+
+    /**
+     * The owner (0.50.0): "they don't all look at you, instead they do the same movement as you do. So they mimic you"
+     * ("when I look left, they look to their left, my right"), then "the heads will look into the room and stay still
+     * ... is the simplest and maybe the best". 0.44.2's heads were billboards, which turn with the camera's angle:
+     * every head turned as the player turned. Now each is fixed, its face (a head item turned half round by
+     * {@link #headTurn}) toward {@code yaw}: into the room.
+     */
+    /** How big the secret room's centre cup is drawn (its model is a block tall). */
+    static final float CENTRE_CUP = 1.8f;
+
+    static void stillHead(ItemDisplay e, float yaw) {
+        e.setBillboard(Display.Billboard.FIXED);
+        e.setRotation(yaw, 0f);
     }
 
     /**
@@ -1167,7 +1233,7 @@ final class SideRooms {
             String kind = (colon < 0 ? k : k.substring(0, colon)).toLowerCase(Locale.ROOT);
             switch (kind) {
                 case "cab", "mach" -> cab++;
-                case "door", "star", "sexit", "pdoor", "pexit" -> doors++;
+                case "door", "star", "sexit", "pdoor", "pexit", "sdoor", "pstar" -> doors++;
                 default -> cupsUp++;
             }
         }

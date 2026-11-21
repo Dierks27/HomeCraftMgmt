@@ -185,18 +185,33 @@ class RaceTableTest {
             assertTrue(z > Z1 + 1, "the back row's standing places are south of the way round");
         }
         assertTrue(BOX.minZ() + ClubhousePlanner.PARLOR_TICKET[1] - 1 > Z1 + 1, "the booth's too");
+        int wide = ClubhousePlanner.PARLOR_TABLE_W;
+        int deep = ClubhousePlanner.PARLOR_TABLE_D;
+        assertEquals(6, wide * deep, "the card tables are 2 x 3 (the owner: make the 4 person tables a bit larger)");
         for (int[] t : ClubhousePlanner.PARLOR_TABLE) {
-            int z = BOX.minZ() + t[1];
-            assertEquals(Z1 + 3, z, "two clear rows between the track and the card tables");
-            for (int dx = -1; dx <= 1; dx++) { // the table and the chair either side of it
-                int x = BOX.minX() + t[0] + dx;
-                assertNotNull(b.get(key(x, FEET, z)), "a card table or its chair stands where it did: " + x + "," + z);
-                assertFalse(onTable(x, z) || onTheWayRound(x, z));
+            assertEquals(Z1 + 3, BOX.minZ() + t[1], "two clear rows between the track and the card tables");
+            int chairs = 0;
+            for (int dz = 0; dz < deep; dz++) {
+                int z = BOX.minZ() + t[1] + dz;
+                for (int dx = -1; dx <= wide; dx++) {
+                    int x = BOX.minX() + t[0] + dx;
+                    String at = b.get(key(x, FEET, z));
+                    assertFalse(onTable(x, z) || onTheWayRound(x, z));
+                    if (dx == -1 || dx == wide) {
+                        boolean corner = dz == 0 || dz == deep - 1;
+                        assertEquals(corner, at != null && ClubhousePlanner.id(at).endsWith("_stairs"),
+                                "a chair at each corner, none between: " + x + "," + z);
+                        chairs += corner ? 1 : 0;
+                    } else {
+                        assertEquals(ClubhousePlanner.FELT_BLOCK, at, "the card table");
+                    }
+                }
             }
-            assertEquals(ClubhousePlanner.FELT_BLOCK, b.get(key(BOX.minX() + t[0], FEET, z)), "the card table");
-            assertTrue(ClubhousePlanner.id(b.get(key(BOX.minX() + t[0] - 1, FEET, z))).endsWith("_stairs"), "a chair");
-            assertTrue(ClubhousePlanner.id(b.get(key(BOX.minX() + t[0] + 1, FEET, z))).endsWith("_stairs"), "a chair");
+            assertEquals(4, chairs, "four seats, as the Twenty-One table has");
         }
+        // the floor is red carpet, so the green tables stand out (the owner)
+        assertEquals(ClubhousePlanner.PARLOR_CARPET, b.get(key(BOX.minX() + 7, FEET, BOX.minZ() + 44)));
+        assertFalse(ClubhousePlanner.PARLOR_CARPET.contains("green"));
         // two clear columns between each end of the table and the machines' mats on the side walls
         for (int[] w : ClubhousePlanner.PARLOR_WALL) {
             int mx = BOX.minX() + w[0];
@@ -429,7 +444,7 @@ class RaceTableTest {
         // a server updating from plan 9: its room stands without the table, and the boot's build writes just that
         for (int x = X0; x <= X1; x++) {
             for (int z = Z0; z <= Z1; z++) {
-                host.world.put(x, FEET, z, ClubhousePlanner.FELT);
+                host.world.put(x, FEET, z, ClubhousePlanner.PARLOR_CARPET);
                 host.world.put(x, FEET + 1, z, "minecraft:air");
                 host.world.put(x, FEET + 2, z, "minecraft:air");
             }

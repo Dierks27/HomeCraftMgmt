@@ -475,9 +475,9 @@ final class RaceShow {
             return; // standing where it stood
         }
         placed[n] = loc;
+        Entity flag = flags[n] == null ? null : Bukkit.getEntity(flags[n]);
         if (!mob.teleport(loc) && rides[n]) {
             // this server won't move a mob with a rider: the flag gets off and is moved over it instead
-            Entity flag = flags[n] == null ? null : Bukkit.getEntity(flags[n]);
             if (flag != null) {
                 flag.leaveVehicle();
             }
@@ -487,7 +487,10 @@ final class RaceShow {
         if (mob instanceof LivingEntity living) {
             living.setBodyYaw(loc.getYaw());
         }
-        if (!rides[n] && flags[n] != null && Bukkit.getEntity(flags[n]) instanceof TextDisplay flag) {
+        if (rides[n] && (flag == null || !flag.isInsideVehicle())) {
+            rides[n] = false; // the move set its rider down: from here the flag is moved with it
+        }
+        if (!rides[n] && flag != null) {
             flag.teleport(loc.clone().add(0, flagUp(r), 0));
         }
     }

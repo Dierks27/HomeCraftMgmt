@@ -213,7 +213,7 @@ public final class LavaSite {
     }
 
     /** Whether a player on {@code a} can step onto the neighbouring {@code b}: up a step, or down with nothing in the way. */
-    private boolean walks(Stand a, Stand b) {
+    public boolean walks(Stand a, Stand b) { // stage 2: NPC players walk by the same rule
         if (b.y() > a.y() + STEP + 1e-9) {
             return false;
         }

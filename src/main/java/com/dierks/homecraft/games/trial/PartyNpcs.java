@@ -14,7 +14,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Pose;
 
@@ -382,31 +381,11 @@ public final class PartyNpcs implements WorldNpcs {
             }
             Location at = new Location(w, p.x(), p.y(), p.z(), p.yaw(), p.pitch());
             if (n.hideInWalls() && (n.kind() == TrialKind.BOAT || n.kind() == TrialKind.PARKOUR)) {
-                at = onGround(at);
+                at = NpcBodies.onGround(at);
             }
             Pose pose = n.kind() == TrialKind.ELYTRA && !p.done() && ms > 1_000 ? Pose.FALL_FLYING : Pose.STANDING;
             bodies.place(key, n.npc(), n.level(), at, pose, n.kind() == TrialKind.BOAT, n.hideInWalls());
         }
-    }
-
-    /**
-     * A point on a checkpoint line set on the ground under it, when there is ground within a few blocks (a boat NPC
-     * on the ice or water, a runner on the path), so a line drawn between checkpoints doesn't float.
-     */
-    private static Location onGround(Location at) {
-        World w = at.getWorld();
-        int x = at.getBlockX();
-        int z = at.getBlockZ();
-        int top = at.getBlockY() + 1;
-        for (int y = top; y >= top - 4; y--) {
-            Block b = w.getBlockAt(x, y, z);
-            if (b.isLiquid() || !b.isPassable()) {
-                Location out = at.clone();
-                out.setY(b.isLiquid() ? y + 0.9 : b.getBoundingBox().getMaxY());
-                return out;
-            }
-        }
-        return at;
     }
 
     private static void cheer(World w, GhostPath.Pose p) {

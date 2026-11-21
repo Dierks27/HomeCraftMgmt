@@ -171,6 +171,31 @@ public final class NpcBodies {
         return m;
     }
 
+    /**
+     * A point on a line drawn between checkpoints, set on the ground under it when there is ground within a few blocks
+     * (a boat NPC on the ice or the water, a runner on the path), so the line doesn't float: from the block its feet
+     * are in down to four under, the first top of a block or of water. Never higher than the block its feet are in,
+     * so never onto a roof over the path. Read only.
+     */
+    public static Location onGround(Location at) {
+        World w = at.getWorld();
+        if (w == null || !w.isChunkLoaded(at.getBlockX() >> 4, at.getBlockZ() >> 4)) {
+            return at;
+        }
+        int x = at.getBlockX();
+        int z = at.getBlockZ();
+        int feet = at.getBlockY();
+        for (int y = feet; y >= feet - 4; y--) {
+            Block b = w.getBlockAt(x, y, z);
+            if (b.isLiquid() || !b.isPassable()) {
+                Location out = at.clone();
+                out.setY(b.isLiquid() ? y + 0.9 : b.getBoundingBox().getMaxY());
+                return out;
+            }
+        }
+        return at;
+    }
+
     /** Whether feet or head at {@code at} would be inside a solid block. */
     private static boolean solid(Location at) {
         Block feet = at.getBlock();

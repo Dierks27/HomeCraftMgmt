@@ -236,6 +236,9 @@ public final class NightNpcs implements WorldNpcs {
             Location at = p == null ? new Location(w, r.spot.x(), r.spot.y(), r.spot.z(), r.spot.yaw(), 0f)
                     : new Location(w, p.x(), p.y(), p.z(), p.yaw(), p.pitch());
             boolean boat = n.track().base().kind() == TrialKind.BOAT;
+            if (p != null && r.onLine) {
+                at = NpcBodies.onGround(at); // a checkpoint line: on the ice or the water under it
+            }
             bodies.place(key, r.npc, r.level, at, Pose.STANDING, boat, p != null && r.onLine);
             if (p != null && p.done() && !r.done) {
                 r.done = true;

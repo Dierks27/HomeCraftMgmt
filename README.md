@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.51.0-npc-players`
+- **Version:** `0.51.1-play-test-fixes`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,18 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.51.1: fixes from playing every game on a live test server.** Two bot play-testers played every arcade and casino
+game on a real server: every payout was right, nothing leaked, no error. They did find these, all fixed:
+**Take a break's pause did nothing when picked inside the Clubhouse** (its confirm screen was refused there, like the
+Scratch Ticket's); **tapping a bar bottle or the jukebox also used the Clubhouse item in your hand** (holding Leave,
+two taps sent you home); **a money screen could spin tokens** if money play was switched off while it was open (now
+refused, nothing taken); and smaller ones: the Wheel's glow showing an old prize, the Twenty-One table's "Their move"
+on your own turn and "5 back" on a push (now "your 5 back"), a player hurried while away now told how their hand came
+out, slots and Mob Races greying Spin/Enter at the day's limit, Coin Flip's stale "Waiting for", the Luck tab's dead
+Scratch Ticket/crate links in the Clubhouse, pot odds on the pot machines' tiles, the Arcade's Courses and Mini golf
+doors lit with nothing to play, an empty prize on the Arcade Crate, "pays a token" for 5 tokens, Race Night's "Three
+short races" whatever the count, and wording on money screens. **Back to 0.51.0:** the jar alone.
 
 **0.51.0: NPC players.** The owner: "I am on the server all the time and its kind of lonely ... CPU players in the
 games it would make it a bit more fun for me". Six NPC players, each with a name, a skin and a level, always marked

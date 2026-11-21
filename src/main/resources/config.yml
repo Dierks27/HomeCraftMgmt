@@ -2904,3 +2904,25 @@ games:
     enabled: true
     # The Hub's world.
     world: fairyhub
+  # The Floor Is Lava (/hcm play floor_is_lava, or its cabinet in the Clubhouse's Arcade Room): a giant
+  # playroom that builds itself in an empty box of the Games world. Collect the stars; when the floor
+  # rumbles, climb on the furniture. The lava is real and can't hurt anyone. Three ways to play:
+  # Little (nobody can lose), Group (everyone together) and Challenge (last one standing). It gives
+  # no tokens: its bests are trophies in each player's secret room.
+  floor_is_lava:
+    # true = the playroom builds itself; nothing happens while games.enabled is false.
+    enabled: true
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses, the Clubhouse and the Falling Floors arena,
+    # and 16 from hand-built courses. The shipped spot is 576 blocks from everything else.
+    origin: [7312, 160, 8544]
+    # The most players in the playroom at once (1-12).
+    max_players: 6
+    # Stars to collect: all of them in Little, this many each round in Group (1-20).
+    stars: 10
+    # Seconds the floor is safe before the warning (8-120).
+    safe_seconds: 25
+    # Seconds the lava stays before it drains (4-60). Challenge uses half of both.
+    lava_seconds: 12
+    # Group's rounds (1-12). The lava comes one block higher each round.
+    rounds: 5

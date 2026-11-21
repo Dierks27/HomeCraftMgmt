@@ -68,6 +68,14 @@ public interface ClubDoor {
         return false;
     }
 
+    /**
+     * A visitor who has just been taken in ({@link #takeIn}) goes on to stand in the Arcade Room, in front of its
+     * Floor Is Lava cabinet: where a child who tapped it comes back to. Nothing happens when there is no such
+     * cabinet (they stay where {@link #takeIn} put them), and a door that doesn't say does nothing.
+     */
+    default void toArcade(Player p) {
+    }
+
     /** {@code party_after}: party racers come back here after the race. */
     boolean partyAfter();
 

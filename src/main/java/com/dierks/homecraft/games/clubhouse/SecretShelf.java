@@ -120,7 +120,8 @@ final class SecretShelf {
      * course. {@code game_scores} also keeps points tallies in the same shape (the Clubhouse's {@code club:<week>},
      * {@code clubday:<day>} and {@code clubwins:<week>}, Falling Floors' and Race Night's weekly and season rows, Fresh
      * Courses' stars): before, each of those became a silver "best" cup, a new one every day, until they filled the
-     * ledges and no real best was shown, and their rows counted as games played.
+     * ledges and no real best was shown, and their rows counted as games played. The Floor Is Lava's three boards
+     * ({@code lava:little}, {@code lava:group}, {@code lava:challenge}) are bests, one per mode, and each is a trophy.
      */
     static boolean scoreBoard(GameKind kind, String board) {
         if (board == null) {
@@ -128,14 +129,25 @@ final class SecretShelf {
         }
         return switch (kind) {
             case CABINET -> !board.contains(":") || board.startsWith("daily:");
-            case TRIAL -> board.startsWith("course:");
+            case TRIAL -> board.startsWith("course:") || board.startsWith(LAVA);
             case GOLF -> board.startsWith("golf:");
             default -> false;
         };
     }
 
-    /** A best as players read it: a course's time, golf's strokes, else the number. */
+    /** The Floor Is Lava's boards ({@code LavaMode.BOARD_PREFIX}): a best per mode, never a tally. */
+    static final String LAVA = com.dierks.homecraft.games.lava.rules.LavaMode.BOARD_PREFIX;
+
+    /** A best as players read it: a course's time, golf's strokes, The Floor Is Lava's stars or rounds, else the number. */
     static String score(GamesDao.Mine r) {
+        if (r.board().startsWith(LAVA)) {
+            com.dierks.homecraft.games.lava.rules.LavaMode mode =
+                    com.dierks.homecraft.games.lava.rules.LavaMode.of(r.board().substring(LAVA.length()));
+            String what = mode == com.dierks.homecraft.games.lava.rules.LavaMode.CHALLENGE
+                    ? r.score() + (r.score() == 1 ? " round" : " rounds")
+                    : r.score() + (r.score() == 1 ? " star" : " stars");
+            return mode == null ? String.valueOf(r.score()) : what + " (" + mode.label() + ")";
+        }
         if (r.board().startsWith("course:")) {
             return TrialText.time(r.score());
         }

@@ -120,6 +120,8 @@ public final class ClubModels {
         // 0.50.0: a Creeper's face (the machine's Wild) on a green screen. 0.49.0 named the spawner's texture, and the
         // owner saw the missing-model square where the machine should be
         machine("mob_slots", "machine_mobs", Material.CREEPER_HEAD, "minecraft:block/lime_concrete", Kind.CABINET);
+        // The Floor Is Lava's cabinet in the Arcade Room (a cabinet's size; its stand-in's icon is a lava bucket)
+        cabinet("floor_is_lava", "cabinet_lava", Material.LAVA_BUCKET, "minecraft:block/magma");
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {

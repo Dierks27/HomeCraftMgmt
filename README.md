@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.50.0-mob-races`
+- **Version:** `0.50.0-mob-races-floor-is-lava`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,18 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.50.0, also: The Floor Is Lava** (`floor_is_lava`), Lilah's game. A giant playroom where you are toy-sized; a
+rumble and a glow warn that the lava is coming, the floor fills with real (harmless) lava, you hop onto the
+furniture, then it drains and you collect stars. Three modes: **Little** (nobody can lose: touch the lava and you
+are put back on a dry spot with a sizzle; every star collected ends in fireworks and a new trophy in the secret
+room), **Group** (everyone shares one star count, the lava comes higher each round) and **Challenge** (the lava keeps
+rising, last one standing wins). One tap on its cabinet in the Clubhouse's Arcade Room starts Little and brings
+you back to the Arcade Room after; the Games screen and `/hcm play floor_is_lava` offer all three. The playroom
+builds itself in the Games world the first time (a new claim, 32 x 16 x 32 at `games.floor_is_lava.origin`). See
+[The Floor Is Lava](#the-floor-is-lava-0500). A new `games.floor_is_lava` section is added to config.yml at the first
+start (no config revision); no schema change; no tokens are paid. **Back to 0.49.0:** the jar alone; the playroom
+stays built and unused (`/hcm games lava` is gone with it).
 
 **0.50.0, also in the Clubhouse** (the owner's list from playing): **the Parlor's way in is a lever** tucked
 low beside the 19th Hole's bookshelves instead of the glowing star; **the bar's bottles can be drunk**: tap one on
@@ -4819,6 +4831,39 @@ and how much.
   `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
   and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
   100 is left out with a WARN, as on Ore Slots.
+
+##### The Floor Is Lava (0.50.0)
+
+Lilah's game (the owner: "is there any way we can add a game for Lilah 'The Floor Is Lava'"). Its own playroom
+in the Games world, built of blocks that can't burn: a sofa with a footstool, a coffee table with book steps, toy
+blocks, a toy chest and a tall bookcase, seven heights of ground, every step half a block, lit everywhere, with a
+glass roof. Nothing she needs is words.
+
+- **The loop.** The floor is safe and stars float about (walk into one: a chime and a sparkle). Then a rumble and
+  a glow, and the floor fills with real lava, one layer at a time; anyone on the furniture is safe. Then it drains
+  and the next stars come out (`safe_seconds` 25, `lava_seconds` 12; Challenge uses half of both).
+- **Little.** Nobody can lose. Touch the lava: a sizzle, a puff of smoke, and you are on the nearest dry spot,
+  facing into the room, no harm done. The round ends when every star (`stars`, 10) is collected: fireworks, a
+  fanfare, the big green play-again picture and a door out. Its best is a trophy in the secret room.
+- **Group.** Everyone together, one shared star count (a bar, no reading); `rounds` (5), the lava a block higher
+  each round. Touching it costs the group a star (never below none). A best to beat.
+- **Challenge.** The lava rises a block every round and never goes back down. Touch it and you are out, watching
+  from the gallery up on the bookcase; the last one standing wins (alone: how many rounds you lasted).
+- **Harmless.** No damage, no fire, no hunger, no drowning in the room; the lava is placed and taken away block by
+  block by the game, never flows, burns nothing, and every stop (the round over, everyone gone, a restart, a
+  crash) leaves the room as it was built, with no lava.
+- **Getting in.** The Floor Is Lava's cabinet (`cabinet_lava`; without the pack a lava bucket over a plain cabinet)
+  stands in the Clubhouse's Arcade Room, in the first cabinet place that only repeats a game. One tap starts Little
+  for that player (a second child joins the same round) and brings them back to the cabinet when they leave, tap
+  "All done", or 90 seconds after the end. From the Games screen or `/hcm play floor_is_lava` the three modes are
+  offered (pictures first); Group and Challenge wait a moment for others and can be started alone.
+- **Scores.** Boards `lava:little` (stars), `lava:group` (the shared total), `lava:challenge` (rounds lasted), each
+  shown in the secret room as "your best". No tokens.
+- **Admin.** `/hcm games lava status|rebuild|claim [confirm]|tp`; `/hcm games check` checks the room. Settings under
+  `games.floor_is_lava`: `enabled`, `origin` (must stay 32 blocks from every other place HCM builds), `max_players`
+  6, `stars` 10, `safe_seconds` 25, `lava_seconds` 12, `rounds` 5.
+- **Not seen on a server yet:** the room's look, the climbs with a Bedrock controller, the sounds' loudness, and the
+  orange tint of standing in lava (fire resistance doesn't take it away).
 
 ##### Mob Races (0.50.0)
 

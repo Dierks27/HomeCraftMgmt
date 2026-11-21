@@ -1766,6 +1766,14 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **When it's off** (the owner's switch, or while it's being built), courses, golf and races work exactly as before, starting and ending at home, and the Clubhouse buttons aren't shown.
 <!-- ---- end the Clubhouse ---- -->
 
+### The Floor Is Lava (0.50.0)
+
+- A toy-sized playroom (floor_is_lava). Stars float about; then a rumble and a glow, and the floor fills with lava: climb onto the sofa, the table, the toy blocks or the bookcase. Then it drains and new stars come out.
+- Little: nobody can lose. Touch the lava and you sizzle and pop back onto the nearest dry spot. Collect every star for fireworks and a trophy in your secret room. One tap on its cabinet in the Clubhouse's Arcade Room starts it, and brings you back there after.
+- Group: everyone shares one star count, and the lava comes higher each round; touching it costs the group a star.
+- Challenge: the lava keeps rising; touch it and you're out (you watch from up on the bookcase). Last one standing wins.
+- The lava never hurts, burns or spreads. No tokens; your best in each is kept.
+
 ### Little things to do in the Clubhouse (0.50.0)
 
 - The bottles on the 19th Hole's back bar can be drunk: tap one (either click, or a controller tap) and you take three gulps, then something silly happens for 20 seconds: you go tiny, super bouncy, floaty, zoomy or glowing, or you burp and hiccup, or hearts, a rainbow trail or music follow you around. Nothing hurts, and it all ends when you leave the Clubhouse. The bottle comes back on the shelf a few seconds later.

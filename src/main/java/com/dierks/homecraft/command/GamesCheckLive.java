@@ -201,7 +201,8 @@ final class GamesCheckLive implements GamesCheck.Facts {
         List<GamesCheck.Region> regions = new ArrayList<>();
         // WP-D fix, and WP-CH: the arena's box and the Clubhouse's, as Fresh Courses' vet and keep see them
         List<Regions.Extra> extraBoxes = DailyCourses.extraBoxes(cfg.settings(FallingFloors.SPEC),
-                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC));
+                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC),
+                cfg.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC));
         for (DailySettings.SlotConfig c : all) {
             Slots.Def def = Slots.any(c.id());
             if (def == null) {
@@ -411,6 +412,14 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (arenaBox != null && (cfg.enabled() && ff.enabled() || arenaClaim != null)) {
             out.add(new SightCheck.Place(SightCheck.Kind.ARENA, ArenaRegions.NAME, "Falling Floors", arenaBox));
         }
+        com.dierks.homecraft.games.lava.LavaSettings lava = cfg.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC);
+        String lavaClaim = meta.get(com.dierks.homecraft.games.lava.LavaService.CLAIM_KEY);
+        Box lavaBox = cfg.readable(com.dierks.homecraft.games.lava.FloorIsLava.SPEC.id()) ? lava.box()
+                : claimedBox(lavaClaim, world);
+        if (lavaBox != null && (cfg.enabled() && lava.enabled() || lavaClaim != null)) {
+            out.add(new SightCheck.Place(SightCheck.Kind.LAVA, com.dierks.homecraft.games.lava.LavaRegions.NAME,
+                    "The Floor Is Lava", lavaBox));
+        }
         if (w != null) {
             org.bukkit.Location s = w.getSpawnLocation();
             out.add(new SightCheck.Place(SightCheck.Kind.SPAWN, "spawn", "the spawn of " + w.getName(),
@@ -554,6 +563,52 @@ final class GamesCheckLive implements GamesCheck.Facts {
     }
 
     // ---- end Falling Floors ----
+
+    // ---- The Floor Is Lava ----
+
+    /** The Floor Is Lava from its config, the world, the claim and the running playroom; read-only. */
+    @Override
+    public LavaCheck.Facts lava() {
+        GamesConfig.Parsed cfg = config();
+        com.dierks.homecraft.games.lava.LavaSettings ls = cfg.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC);
+        DailySettings st = cfg.settings(DailyCourses.SPEC);
+        String world = st.world().isBlank() ? (cfg.common().worlds().isEmpty() ? "" : cfg.common().worlds().get(0))
+                : st.world();
+        World w = world.isBlank() ? null : Bukkit.getWorld(world);
+        Box box = ls.box();
+        List<String> problems = List.of();
+        if (w != null) {
+            BukkitWorldPort port = new BukkitWorldPort(plugin, w);
+            boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
+            // apart from the arena and the Clubhouse, as its own host checks before it builds
+            List<Regions.Extra> others = new ArrayList<>(DailyCourses.extraBoxes(cfg.settings(FallingFloors.SPEC),
+                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC)));
+            problems = com.dierks.homecraft.games.lava.LavaRegions.problems(box, st, others, Regions.handBuilt(rows()),
+                    new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(), w.getMaxHeight(), port.border(),
+                            port.spawn(), st.safeSpot()));
+        }
+        ArenaCheck.Claim claim;
+        try {
+            String c = new GenMetaDao(plugin.database()).get(com.dierks.homecraft.games.lava.LavaService.CLAIM_KEY);
+            claim = c == null ? ArenaCheck.Claim.UNCLAIMED
+                    : c.equals(com.dierks.homecraft.games.lava.LavaService.claimText(world, box))
+                    ? ArenaCheck.Claim.CLAIMED : ArenaCheck.Claim.MOVED;
+        } catch (SQLException | RuntimeException e) {
+            claim = ArenaCheck.Claim.UNKNOWN;
+        }
+        GamesService g = games();
+        Game game = g == null ? null : g.game(com.dierks.homecraft.games.lava.FloorIsLava.SPEC.id());
+        com.dierks.homecraft.games.lava.FloorIsLava running =
+                game instanceof com.dierks.homecraft.games.lava.FloorIsLava f && f.running() ? f : null;
+        com.dierks.homecraft.games.clubhouse.ClubhouseSettings cs =
+                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC);
+        boolean arcade = cfg.enabled() && cs.enabled() && cs.arcadeRoom();
+        return new LavaCheck.Facts(cfg.enabled() && ls.enabled(), world, w != null, box.describe(), problems, claim,
+                running == null ? null : running.closedWhy(), running != null && running.ready(), arcade,
+                cs.arcadeGames().size() < com.dierks.homecraft.games.clubhouse.ClubhousePlanner.CABINETS);
+    }
+
+    // ---- end The Floor Is Lava ----
 
     // ---- the Clubhouse (WP-CH) ----
 

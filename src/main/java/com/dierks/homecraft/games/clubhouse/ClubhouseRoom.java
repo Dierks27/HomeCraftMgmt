@@ -970,6 +970,11 @@ public final class ClubhouseRoom {
         return out;
     }
 
+    /** The generated room's cabinet places, in order, while its Arcade Room is built; none in an owner-built room. */
+    public List<ClubhousePlanner.Place3> generatedCabinetPlaces() {
+        return hand || !arcadeBuilt() ? List.of() : ClubhousePlanner.cabinets(site.box());
+    }
+
     /** The first of {@code list} that plays {@code game} stands at {@code at} now (none: one more, there). */
     static void moveFirst(List<Cabinet> list, String game, ClubhousePlanner.Place3 at) {
         for (int n = 0; n < list.size(); n++) {

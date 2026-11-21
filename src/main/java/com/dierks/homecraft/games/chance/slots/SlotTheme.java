@@ -69,7 +69,7 @@ public final class SlotTheme {
 
     /** Deep Mine: three rows that all count, down among the deepslate ores. */
     public static final SlotTheme DEEP = new SlotTheme("deep", "ore", "deepslate ores",
-            Material.DEEPSLATE_EMERALD_ORE, Material.RAW_COPPER)
+            Material.DEEPSLATE_DIAMOND_ORE, Material.RAW_COPPER)
             .symbol(Symbol.COAL, "coal", "Coal", "Three coal", Material.DEEPSLATE_COAL_ORE)
             .symbol(Symbol.COPPER, "copper", "Copper", "Three copper", Material.DEEPSLATE_COPPER_ORE)
             .symbol(Symbol.IRON, "iron", "Iron", "Three iron", Material.DEEPSLATE_IRON_ORE)

@@ -171,7 +171,7 @@ public final class KitGuardListener implements Listener {
      * click of its own (a second event, on the air), which must not reach the kit item either.
      */
     private static final java.util.Map<java.util.UUID, Long> TAPPED_AT = new java.util.concurrent.ConcurrentHashMap<>();
-    static final long TAP_ECHO_MS = 150;
+    static final long TAP_ECHO_MS = 600; // a client may send its "use item" a few ticks after the tap (and after a screen opens)
 
     /** {@code e} was a tap on something in a game's room: no kit item acts on it, nor on the client's echo of it. */
     public static void tapOnly(PlayerInteractEvent e) {

@@ -194,7 +194,7 @@ public final class CpuPlayers implements Game, TableNpcs {
     // ---- once a second ------------------------------------------------------------------------------------
 
     /** The Twenty-One table's NPCs, and NPC entries in a race that is gathering. */
-    void second() {
+    public void second() {
         GamesService g = games();
         if (g.game(TwentyOne.SPEC.id()) instanceof TwentyOne t && g.enabled(t)) {
             t.table().cpuTick(this);

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.49.0-deep-mine-mob-slots`
+- **Version:** `0.50.0-mob-races`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,18 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.50.0: Mob Races, a model racetrack in the Game Parlor.** Six tiny mobs (a chicken, a pig, a rabbit, a cow, a
+fox and a sheep, each a quarter to a third of their size, each with a coloured number flag) really run round a
+little track on a table in the middle of the Parlor, and you can walk all the way round it. Tap the table, pick a
+racer and what to put in; everyone in the room is in the same race. See [Mob Races](#mob-races-0500). The
+Clubhouse's plan changes (**plan 10**): the first start rebuilds the Clubhouse once, to add the table. A saved or
+edited Parlor keeps its own blocks and gets no table: build one and place the track with
+`/hcm games clubhouse parlor mob_races` (the status line says what's missing). Also: Deep Mine's tile is now its
+machine's picture (a deepslate diamond ore). No schema change; a new `games.mob_races` section is added to
+config.yml at the first start (no config revision). **Back to 0.49.0 from 0.50.0:** the jar alone; 0.49.0 rebuilds
+the Clubhouse once more (plan 9, no table). Let a running race finish before you swap jars: 0.49.0 doesn't know
+Mob Races, so an entry still open then is only settled (by its own data) once 0.50.0 is back.
 
 **0.49.0: Deep Mine and Mob Slots, the last two slot machines.** The owner, of the six machine types: "I want them
 all :)". **Deep Mine** shows a 3 x 3 grid and all three rows count, so one spin can win more than once. **Mob Slots**
@@ -4792,6 +4804,37 @@ and how much.
   `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
   and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
   100 is left out with a WARN, as on Ore Slots.
+
+##### Mob Races (0.50.0)
+
+A model racetrack on a table in the middle of the Game Parlor: an oval of red-brown track round a mossy infield,
+white rails, a checkered finish line, a little grandstand, flags and flowers. Six racers stand at the line between
+races: **1 Chicken** (red flag), **2 Pig** (pink), **3 Rabbit** (light blue), **4 Cow** (lime), **5 Fox** (orange)
+and **6 Sheep** (yellow). They are real mobs made small, and they can't be hurt or pushed.
+
+- **Playing.** Tap the table (any side of it) and a screen opens: the six racers as pictures, and what to put in
+  (shipped 5, 10 or 20 tokens; dollars with money play, like the other Parlor games). One tap on a racer enters
+  the race. The first entry starts a wait (`gather_seconds`, shipped 20) for anyone else in the room to join; the
+  race starts sooner if everyone in it taps **Start now**. One entry per player per race.
+- **One race for everyone.** When entries close, one draw decides the whole race and every entry is settled at
+  once, before a mob moves; the race on the table (`race_seconds`, shipped 25, for the winner) is the show of that
+  result, with the racers passing each other on the way. A racer that wins pays the same whole amount on every
+  stake: 27 back for 5 in, 54 for 10, 108 for 20 (exactly 90 of every 100, shown on the screen before you pick).
+  Any other racer pays nothing. Each racer wins one race in six.
+- **Leaving.** Walk out of the Parlor before the race starts and your stake comes back ("Your 5 back"). Quit the
+  server and it's finished for you by the same rule. Once the race has started your entry is already decided, so
+  leaving changes nothing: you're told how it came out (or at your next join).
+- **Limits.** `daily_limit` (shipped 30 races a day) and the day's token and money limits, Take a break and the
+  play gate apply as on every game of chance. Ledger source `Mob Races`.
+- **Where the table goes.** HCM's Parlor has it (plan 10; the first 0.50.0 start rebuilds the Clubhouse once). A
+  saved, edited or owner-built room keeps its blocks, so there is no table until you build one, 8 long, 3 wide
+  and one block high, stand on a corner of it facing along it, and type `/hcm games clubhouse parlor mob_races`
+  (`... mob_races clear` takes the track off). `/hcm games clubhouse status` says where the track is, or why
+  there is none.
+- **Bedrock players** see the wooden table, the racers and the text, but may not see the dressed track (Bedrock
+  doesn't draw block displays). The race and its result are the same.
+- If the server doesn't let animals be (a plugin or world setting that removes them), the racers vanish; the
+  races still run and pay, the console says so once.
 
 ##### The Twenty-One table (0.47.0)
 

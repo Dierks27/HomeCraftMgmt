@@ -1766,6 +1766,15 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **When it's off** (the owner's switch, or while it's being built), courses, golf and races work exactly as before, starting and ending at home, and the Clubhouse buttons aren't shown.
 <!-- ---- end the Clubhouse ---- -->
 
+### NPC players (0.51.0)
+
+- NPCs are computer players. Their name always has a gear and stars after it (Tansy ⚙ ★★★): the stars are how good they are.
+- In the Clubhouse a few NPCs hang about: at the bar, in the chairs, at the machines and the race table. They wave when you come near.
+- At the Twenty-One table an NPC sits down if you've been alone for a little while. NPCs play with pretend chips: they never win or lose anything real. Tap an NPC's seat to ask it to get up.
+- In Mob Races NPCs can enter alongside you and cheer their racer. They never change what you get.
+- In Connect Four and Tic-Tac-Toe you can pick "Play an NPC". Easy ones are good for little players. Games against NPCs give no tokens.
+- Your NPC setting is on the Games screen (or /hcm play npc): on or off, and easy, matched or any. A parent or admin can set and lock it for you.
+
 ### The Floor Is Lava (0.50.0)
 
 - A toy-sized playroom (floor_is_lava). Stars float about; then a rumble and a glow, and the floor fills with lava: climb onto the sofa, the table, the toy blocks or the bookcase. Then it drains and new stars come out.

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.50.1-ticket-screen`
+- **Version:** `0.51.0-npc-players`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,15 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.51.0: NPC players.** The owner: "I am on the server all the time and its kind of lonely ... CPU players in the
+games it would make it a bit more fun for me". Six NPC players, each with a name, a skin and a level, always marked
+with a gear (**Pip ⚙ ★**), so nobody mistakes one for a real person. They hang out in the Clubhouse as regulars, sit
+at the Twenty-One table (on their own, or with you when you've sat alone a while), enter Mob Races, and play Connect
+Four and Tic-Tac-Toe ("Play an NPC") and a pretend Coin Flip. They never win or spend anything real and never appear
+on a board or trophy. See [NPC players](#npc-players-0510). A new `games.cpu` section is added to config.yml at the
+first start (no config revision); no schema change. **Back to 0.50.1:** the jar alone; the NPC settings players saved
+are ignored, and the owner's NPC names and skins stay stored for next time.
 
 **0.50.1: the Scratch Ticket's screen opens in the Parlor.** Found by the new live play-test (a real server with
 bot players): at the Parlor's booth, Buy paid and settled the ticket but its scratch screen never opened, because a
@@ -4839,6 +4848,50 @@ and how much.
   `games.farm_slots` have the same keys as `games.ore_slots` (with their own symbol names under `reels` and `pays`),
   and the pot machines add `feed_percent`. Each is solved exactly: a stake that can't give back 85 to 95 of every
   100 is left out with a WARN, as on Ore Slots.
+
+##### NPC players (0.51.0)
+
+Computer players for when the server is quiet. The owner chose the wording: they are **NPCs**, and their name always
+carries a gear and their level in stars, **Tansy ⚙ ★★★**, so nobody, Lilah included, mistakes one for a real player.
+
+| NPC | Level | How they play | Skin (built-in) |
+|---|---|---|---|
+| Pip | ★ easy | chatty: waves and cheers most | Sunny |
+| Biscuit | ★ easy | has a favourite racer (the Rabbit) | Kai |
+| Wren | ★★ medium | careful: small pretend stakes, never doubles | Noor |
+| Mabel | ★★ medium | has a favourite racer (the Pig) | Makena |
+| Ozzie | ★★★ hard | bold: big pretend stakes, quick | Efe |
+| Tansy | ★★★ hard | careful | Zuri |
+
+- **Clubhouse regulars.** While anyone is visiting, `regulars` (3) NPCs are about: on the bar stools having a drink,
+  in the Great Hall's chairs and armchairs, at the Arcade Room's cabinets and the Trophy Room's cups, at the Parlor's
+  slot machines (only for players who can see the Parlor), by the Mob Races table cheering a finish, and at the
+  Twenty-One table. They move every minute or two and wave when you come near. They can't be hit, pushed or moved.
+- **The Twenty-One table.** An NPC sits down when you've sat alone for `join_after_seconds` (20), and now and then a
+  couple play a round on their own when the table is empty. They play basic strategy (easy ones make more mistakes)
+  with **pretend chips**: no stake, no round, no payout. They always give a seat to a real player, between rounds,
+  and you can tap an NPC's seat to send it away.
+- **Mob Races.** Once a real player has entered, up to two NPCs may enter too and cheer their pick. A race never
+  runs with only NPCs, and they never change anyone's pay.
+- **Connect Four, Tic-Tac-Toe:** "Play an NPC" picks an opponent (the stars show how good it is). Easy ones make
+  silly moves; hard ones look ahead (Tic-Tac-Toe's hard is perfect). **Coin Flip:** a pretend flip with an NPC ("no
+  tokens move"). NPC games pay no tokens and record no score.
+- **Nothing real.** NPCs never earn or spend tokens or money, never appear on any board, best, trophy, the Weekly Cup
+  or the secret room, and never count as players online.
+- **Each player's own setting:** the NPC tile on the Games screen, or `/hcm play npc [on|off|easy|matched|any]`. Off:
+  no NPCs in your games and none drawn for you. **Easy:** every NPC in a game you're in plays easy (whatever its own
+  level). **Matched:** they play near your own record against NPCs. **Any:** each plays at its own level.
+- **A parent's or admin's lock:** `/hcm admin` → **Player game settings** → a player → set and lock (Lilah: easy,
+  locked), or `/hcm games npc player <player> show|set <on|off> <level>|lock <on|off> <level>|unlock`. A locked
+  player sees "Set for you".
+- **Names and skins:** `/hcm admin` → **NPC players**, or `/hcm games npc skin <npc> default:<name>[:slim]|player:<minecraft name>|texture:<value> [signature]|reset`
+  and `/hcm games npc name <npc> <name>|reset`. A skin that can't be loaded falls back to the NPC's own built-in one.
+- **Server-wide:** `games.cpu.enabled`, `regulars` (0-6), `join_after_seconds`.
+- **Seen on the test server:** three regulars about the Clubhouse, and an NPC (Tansy ⚙ ★★★) sitting down at the
+  Twenty-One table after the bot sat alone, playing pretend chips; no errors. Not yet seen: the NPCs' skins on a
+  real client, sitting poses, Bedrock.
+- **Coming next:** NPCs in the world games (racing parkour, rings, boat, Race Night, Falling Floors, golf, and The
+  Floor Is Lava's Group and Challenge).
 
 ##### The Floor Is Lava (0.50.0)
 

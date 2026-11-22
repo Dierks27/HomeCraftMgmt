@@ -33,8 +33,8 @@ import java.util.Set;
  * to the middle of an aisle and an archway ({@link #path}); then pulled straight where a body (with a margin) fits
  * the whole way ({@link #smooth}), so a regular walks in lines and turns, not grid zig-zags.
  *
- * <p>Built once per plan ({@link #of}, by the plan's hash) and read only after: about a millisecond's work for the
- * whole Clubhouse.
+ * <p>Built once per plan ({@link #of}, by the plan's hash) and read only after: some 1,600 cells for the whole
+ * Clubhouse, a few tens of milliseconds the first time (cold), and a path a fraction of a millisecond.
  */
 final class WalkGrid {
 

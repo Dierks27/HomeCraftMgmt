@@ -966,6 +966,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (raceShow != null) {
             raceShow.tick(); // Mob Races' racers move every tick
         }
+        if (regulars != null) {
+            regulars.tick(); // the NPC regulars walk a step a tick
+        }
     }
 
     /**

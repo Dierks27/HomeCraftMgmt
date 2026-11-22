@@ -327,10 +327,10 @@ final class SideRooms {
             }
         }
         if (s.parlor()) {
-            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.50.0: a lever by the books is the Parlor's way in
+            ClubhousePlanner.Place3 in = room.parlorStar(); // 0.52.1: a secret book is the Parlor's way in
             if (in != null) {
                 keep.add("pstar");
-                put(w, "pstar", "plever@" + in, in, () -> lever(w, in, "parlor:in", PARLOR_WAY_IN));
+                put(w, "pstar", "pbook@" + in, in, () -> secretBook(w, in, "parlor:in", PARLOR_WAY_IN));
             }
             ClubhousePlanner.Place3 out = room.parlorExit();
             if (out != null) {
@@ -363,56 +363,17 @@ final class SideRooms {
     }
 
     /**
-     * 0.50.0: a small lever on the wall (the owner: "the star ... is too obvious... maybe a lever"), to {@code tap},
-     * seen only by players with {@code permissions}. It hangs in the block of {@code at} on the block ahead of someone
-     * facing {@code at.yaw()}, at the height of that block's middle, unlit, so it looks like part of the room.
+     * 0.52.1: the secret book (the owner: "make it much harder to find"): nothing drawn at all, only a tap target that
+     * fills the book's block (a hair bigger, so a click on the book's face is a click on it), for players with
+     * {@code permissions}. Only a crouched tap opens the way ({@link #tappedUp}).
      */
-    private Shown lever(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
+    private Shown secretBook(World w, ClubhousePlanner.Place3 at, String tap, String permissions) {
         List<UUID> all = new ArrayList<>();
-        double bx = Math.floor(at.x());
-        double by = Math.floor(at.y());
-        double bz = Math.floor(at.z());
-        all.add(w.spawn(new Location(w, bx, by, bz), BlockDisplay.class, e -> {
-            gated(e, permissions);
-            e.setBlock(Bukkit.createBlockData(leverData(at.yaw(), false)));
-        }).getUniqueId());
-        Entity target = tapTarget(w, new Location(w, bx + 0.5, by + 0.15, bz + 0.5), 0.7f, 0.7f, tap);
+        Location centre = new Location(w, Math.floor(at.x()) + 0.5, Math.floor(at.y()) - 0.01, Math.floor(at.z()) + 0.5);
+        Entity target = tapTarget(w, centre, 1.04f, 1.02f, tap);
         gated(target, permissions);
         all.add(target.getUniqueId());
         return new Shown(tap, all, List.of(), List.of());
-    }
-
-    /** A wall lever on the wall ahead of someone facing {@code yaw}: it points back at them. */
-    static String leverData(float yaw, boolean on) {
-        String ahead = facing(yaw);
-        String back = switch (ahead) {
-            case "north" -> "south";
-            case "south" -> "north";
-            case "east" -> "west";
-            default -> "east";
-        };
-        return "minecraft:lever[face=wall,facing=" + back + ",powered=" + on + "]";
-    }
-
-    /** The lever by the books goes down (and comes back up a second later), for everyone who can see it. */
-    private void pull(Entity target) {
-        Shown s = shown.get("pstar");
-        if (s == null || target == null) {
-            return;
-        }
-        for (UUID id : s.all()) {
-            if (Bukkit.getEntity(id) instanceof BlockDisplay d && d.getBlock().getMaterial() == Material.LEVER) {
-                String up = d.getBlock().getAsString();
-                d.setBlock(Bukkit.createBlockData(up.replace("powered=false", "powered=true")));
-                if (club.plugin() != null) {
-                    Bukkit.getScheduler().runTaskLater(club.plugin(), () -> {
-                        if (d.isValid()) {
-                            d.setBlock(Bukkit.createBlockData(up));
-                        }
-                    }, 20L);
-                }
-            }
-        }
     }
 
     /**
@@ -541,9 +502,11 @@ final class SideRooms {
                 if (!allOf(PARLOR_WAY_IN, p::hasPermission)) {
                     return; // nothing at all: no message, no sound
                 }
-                pull(e);
-                p.playSound(e.getLocation(), Sound.BLOCK_LEVER_CLICK, 0.8f, 0.6f);
-                p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 1.0f);
+                if (!p.isSneaking()) {
+                    return; // 0.52.1: only a crouched tap opens it; a plain tap on the book does nothing at all
+                }
+                p.playSound(e.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.9f, 0.8f);
+                p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_OPEN, 0.8f, 0.7f);
                 club.moveTo(p, room.parlorArrival());
             }
             case "parlor:out" -> {

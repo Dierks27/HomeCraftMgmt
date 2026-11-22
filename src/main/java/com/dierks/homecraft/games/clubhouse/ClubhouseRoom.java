@@ -1247,7 +1247,7 @@ public final class ClubhouseRoom {
         if (!mine(handParlorDoor)) {
             return parlorBuilt() ? ClubhousePlanner.parlorStar(site.box()) : null;
         }
-        return place3(handParlorDoor, 0); // 0.50.0: a lever in the block the admin stood in, on the wall they faced
+        return place3(handParlorDoor, 0); // 0.52.1: a secret crouched tap in the block the admin stood in
     }
 
     public ClubhouseSite.Spot parlorReturn() {
@@ -1402,8 +1402,8 @@ public final class ClubhouseRoom {
                     boolean room = "room".equals(sub);
                     key = room ? PARLOR_ROOM_KEY : PARLOR_DOOR_KEY;
                     said = room ? "The Game Parlor's visitors arrive where you stand; its door out is behind you."
-                            : "The Game Parlor's lever is where you stand, low on the wall you face (stand right"
-                            + " against it).";
+                            : "The Game Parlor's secret way in is where you stand: crouch and tap there (nothing"
+                            + " shows; a plain tap does nothing).";
                 } else {
                     if (sub == null || sub.isBlank()) {
                         return "&cWhich? &e/hcm games clubhouse parlor lever|room|<game>|ticket|mob_races [clear]";

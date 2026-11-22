@@ -254,7 +254,7 @@ permissions:
     default: true
   hcm.clubhouse.parlor:
     description: >-
-      The Clubhouse's Game Parlor (0.45.0): a pull of the little lever by the 19th Hole's books takes you
+      The Clubhouse's Game Parlor (0.45.0): a crouched tap on a secret book in the 19th Hole takes you
       up to the games of chance (which still need hcm.games.chance). Everyone has it; lock the room down
       with /lp group default permission set hcm.clubhouse.parlor false and give it back to the adults:
       /lp user <player> permission set hcm.clubhouse.parlor true

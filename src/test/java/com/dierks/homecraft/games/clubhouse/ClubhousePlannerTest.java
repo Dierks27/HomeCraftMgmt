@@ -974,17 +974,16 @@ class ClubhousePlannerTest {
         assertNotNull(b.get(key((int) Math.floor(door.x()), (int) door.y(), (int) Math.floor(door.z()) + 1)),
                 "against the Trophy Room's back wall");
         assertEquals(180f, door.yaw(), "facing into the room");
-        // 0.50.0: the Parlor's way in is a lever low on the side of the reading nook's books, hung on them
-        ClubhousePlanner.Place3 lever = ClubhousePlanner.parlorStar(BOX);
-        int lx = (int) Math.floor(lever.x());
-        int ly = (int) Math.floor(lever.y());
-        int lz = (int) Math.floor(lever.z());
-        assertNull(b.get(key(lx, ly, lz)), "the Parlor's lever hangs in air");
-        assertEquals(BOX.minY() + 1, ly, "low down, at the floor's own block");
-        assertEquals(180f, lever.yaw(), "on the block to its north");
-        assertEquals(ClubhousePlanner.BOOKS, b.get(key(lx, ly, lz - 1)), "the nook's books");
-        assertEquals("minecraft:lever[face=wall,facing=south,powered=false]", SideRooms.leverData(lever.yaw(), false),
-                "a lever on the books, pointing out of them");
+        // 0.52.1: the Parlor's way in is a secret book: the reading nook's top row, nothing drawn, a crouched tap
+        ClubhousePlanner.Place3 book = ClubhousePlanner.parlorStar(BOX);
+        int lx = (int) Math.floor(book.x());
+        int ly = (int) Math.floor(book.y());
+        int lz = (int) Math.floor(book.z());
+        assertEquals(ClubhousePlanner.BOOKS, b.get(key(lx, ly, lz)), "it is one of the nook's books");
+        assertEquals(ClubhousePlanner.BOOKS, b.get(key(lx, ly - 2, lz)), "in the wall of books, top row");
+        assertNull(b.get(key(lx, ly + 1, lz)) == null ? null : (ClubhousePlanner.BOOKS.equals(b.get(key(lx, ly + 1, lz)))
+                ? "a book over it" : null), "the top row");
+        assertNull(b.get(key(lx + 1, ly, lz)), "its face is open to the room, to be tapped");
         assertEquals(ClubhousePlanner.PARLOR_GAMES.size(), ClubhousePlanner.parlorMachines(BOX).size(),
                 "a place for every machine");
         for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {

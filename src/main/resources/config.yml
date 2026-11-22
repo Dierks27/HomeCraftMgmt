@@ -2889,7 +2889,7 @@ games:
       # permission hcm.clubhouse.secretroom, everyone's unless you take it away). false = not built.
       enabled: true
     parlor:
-      # The Game Parlor over the Arcade Room, through a little lever by the 19th Hole's books (for
+      # The Game Parlor over the Arcade Room, through a secret book in the 19th Hole (a crouched tap) (for
       # players with hcm.clubhouse.parlor and hcm.games.chance): the games of chance as machines you
       # tap, with their usual rules (the day's token limit, Take a break). false = not built.
       enabled: true

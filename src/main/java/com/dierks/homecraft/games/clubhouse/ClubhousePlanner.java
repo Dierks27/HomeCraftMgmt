@@ -1311,15 +1311,18 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Game Parlor's way in (0.50.0; the owner: "the star that we have in the club house is too obvious... maybe a
-     * lever"): a small lever low on the side of the reading nook's wall of books, at its south end, where nobody looks
-     * for one, the way a secret passage opens in a story. Its block is the air just south of the books' bottom row; it
-     * hangs on the books (to its north), so the place's yaw is the way someone faces who looks at it: north. It is a
-     * display, so no block changes for it. (0.45.0-0.49.0: a glowing gold star at eye height on the west wall.)
+     * The Game Parlor's way in (0.52.1; the owner, after their four-year-old walked straight up to the lever and into the
+     * Parlor: "lets make it much harder to find the secret parlor"): one book in the reading nook's wall of books, the
+     * top row, second from its south end. Nothing marks it, and only a crouched tap opens it (a plain tap does
+     * nothing), the way a secret passage opens when you know which book to pull. The place is the book block itself.
+     * (0.50.0-0.52.0: a small lever beside the books; 0.45.0-0.49.0: a glowing gold star.)
      */
     public static Place3 parlorStar(Box box) {
-        return new Place3(box.minX() + 1.5, box.minY() + 1, box.minZ() + NOOK_Z1 + 1.5, 180f);
+        return new Place3(box.minX() + 1.5, box.minY() + PARLOR_BOOK[1], box.minZ() + PARLOR_BOOK[2] + 0.5, -90f);
     }
+
+    /** The secret book (x, y, z offsets): the nook's top row, second from its south end. */
+    static final int[] PARLOR_BOOK = {1, 3, 18};
 
     /** The reading nook's wall of books runs along the west wall from z 13 to here. */
     static final int NOOK_Z1 = 19;

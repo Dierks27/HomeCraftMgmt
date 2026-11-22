@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.52.0-npc-world-games`
+- **Version:** `0.52.1-secret-book`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,13 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.52.1: the Game Parlor's way in is a secret book.** The owner: their four-year-old "walked right up to that lever
+and boom straight into the parlor" ("lets make it much harder to find the secret parlor"). The lever is gone: the way
+in is the top row's second book from the fireplace end of the 19th Hole's wall of books, and only a **crouched** tap
+opens it. Nothing is drawn, and a plain tap does nothing. (To keep a child out for good, take the permission away:
+`/lp user <name> permission set hcm.clubhouse.parlor false`; then nothing happens even crouched.) **Back to
+0.52.0:** the jar alone (the lever comes back).
 
 **0.52.0: NPC players in the world games.** The owner wanted NPCs not only at the tables but "any of the
 multiplayer games like Rings or racing parkour". Now, when you've waited alone a while (everyone in the game with NPCs
@@ -4804,11 +4811,11 @@ room) that shows all her high scores."
 Wheel, Coin Flip, Twenty-One and Higher or Lower. They run through **the same gate as anywhere else**:
 `hcm.games.chance`, the day's `chance_daily_tokens`, Take a break and the cooldowns.
 
-- **The way in** is a small lever low on the side of the reading nook's wall of books, at its south end in the
-  19th Hole (0.50.0, the owner: "the star ... is too obvious... maybe a lever"; 0.45.0-0.49.0 a glowing gold star
-  on the west wall, before that a door). Pull it (either click) and it goes down with a click, and you're upstairs.
-  Nothing marks it. It needs **`hcm.clubhouse.parlor`** (new in 0.45.0, everyone's by default) **and**
-  `hcm.games.chance`: without both there is no lever, and a machine does nothing. Lilah's path (foyer, hall,
+- **The way in** is a secret book (0.52.1; the owner's four-year-old walked straight up to 0.50.0's lever and into the
+  Parlor): in the 19th Hole's reading nook, the wall of books, **the top row, second book from the south end** (the
+  end nearest the fireplace). **Crouch and tap it**: a plain tap does nothing at all, and nothing is drawn on it.
+  (0.50.0-0.52.0: a small lever beside the books; 0.45.0-0.49.0: a glowing gold star; before that, a door.) Nothing marks it. It needs **`hcm.clubhouse.parlor`** (new in 0.45.0, everyone's by default) **and**
+  `hcm.games.chance`: without both the book does nothing even crouched, and a machine does nothing. Lilah's path (foyer, hall,
   Arcade Room, Trophy Room) never passes it. **To lock the Parlor down:** `/lp group default permission set
   hcm.clubhouse.parlor false`, then give it to the adults with `/lp user <player> permission set
   hcm.clubhouse.parlor true`.
@@ -5091,8 +5098,9 @@ nobody loses the games by switching the Clubhouse off. A hand already open can s
 
 - `/hcm games clubhouse secret`: the secret room's door (it faces the way you face).
 - `secret room`: where visitors arrive (the door out goes behind you, the trophies along a row three ahead).
-- `parlor lever` (or `parlor star` / `parlor door`, as before): the Parlor's lever (0.50.0): stand right against
-  the wall you want it on, facing it; it goes low on that wall, in the block you stand in.
+- `parlor lever` (or `parlor star` / `parlor door`, as before): the Parlor's secret way in (0.52.1: a crouched tap; nothing
+  is drawn): stand right against
+  the wall you want it on, facing it; a crouched tap in the block you stand in opens it.
 - `parlor room`: where its visitors arrive.
 - `parlor <game>`: a machine (one of the games of chance).
 - `parlor ticket`: the Scratch Ticket's booth (0.46.1).

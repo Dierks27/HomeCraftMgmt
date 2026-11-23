@@ -11,19 +11,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A Mob Race as written before it is run: the same seed is the same race; everyone starts at the line, only ever
- * moves forward and finishes, in the script's order, the winner clear of the second; each racer wins one race in six;
- * and a race is worth watching (the lead changes hands, and the winner is behind someone on the way).
+ * moves forward and finishes, in the script's order, the winner clear of the second; the winner is the card's draw;
+ * the stats lean on the show a little (a quick starter is up early, a stayer comes on late); and a race is worth
+ * watching (the lead changes hands, and the winner is behind someone on the way).
  */
 class RaceScriptTest {
 
     /** The shipped race: 25 seconds. */
     private static final int TICKS = MobRacesSettings.defaults().raceTicks();
 
+    /** Each seed's race is run on a card of its own (a different one for every seed). */
+    private static int[] card(long seed) {
+        return RaceCard.of(seed * 7919 + 3).parts();
+    }
+
+    private static RaceScript race(long seed, int ticks) {
+        return RaceScript.of(seed, ticks, card(seed));
+    }
+
     @Test
     void theSameSeedIsTheSameRace() {
         for (long seed : new long[]{0, 1, -7, 42, Long.MAX_VALUE, Long.MIN_VALUE}) {
-            RaceScript a = RaceScript.of(seed, TICKS);
-            RaceScript b = RaceScript.of(seed, TICKS);
+            RaceScript a = race(seed, TICKS);
+            RaceScript b = race(seed, TICKS);
             assertEquals(seed, a.seed());
             assertEquals(TICKS, a.ticks(), "the winner is home on the race's last tick");
             for (int racer = 0; racer < Racer.COUNT; racer++) {
@@ -35,16 +45,19 @@ class RaceScriptTest {
                 }
             }
         }
-        assertThrows(IllegalArgumentException.class, () -> RaceScript.of(1, 99), "a race has a length");
+        assertThrows(IllegalArgumentException.class, () -> RaceScript.of(1, 99, card(1)), "a race has a length");
+        assertThrows(IllegalArgumentException.class, () -> RaceScript.of(1, 200, new int[]{1, 1, 1, 1, 1, 1}),
+                "and chances that add up");
     }
 
     @Test
     void everyoneStartsAtTheLineOnlyMovesForwardAndFinishesInOrder() {
         for (int ticks : new int[]{MobRacesSettings.RACE_MIN * 20, TICKS, MobRacesSettings.RACE_MAX * 20}) {
             for (long seed = 0; seed < 150; seed++) {
-                RaceScript s = RaceScript.of(seed, ticks);
+                RaceScript s = race(seed, ticks);
                 String what = "seed " + seed + ", " + ticks + " ticks";
-                assertEquals(RaceScript.winner(seed), s.winner(), what + ": the winner is the seed's one draw");
+                assertEquals(RaceScript.winner(seed, card(seed)), s.winner(), what + ": the winner is the seed's one"
+                        + " draw over the card");
                 assertEquals(s.winner(), s.finisher(0));
                 assertEquals(ticks, s.finishTick(s.winner()), what + ": the winner finishes on the race's tick");
                 Set<Integer> seen = new HashSet<>();
@@ -97,38 +110,56 @@ class RaceScriptTest {
         double length = shipped.laps() * RaceTrack.LAP;
         double least = Double.MAX_VALUE;
         for (long seed = 0; seed < 400; seed++) {
-            RaceScript s = RaceScript.of(seed, TICKS);
+            RaceScript s = race(seed, TICKS);
             double gap = (1.0 - s.at(s.finisher(1), TICKS)) * length;
             least = Math.min(least, gap);
         }
         assertTrue(least >= 0.4, "the second is at least 0.4 of a block behind on a track 8 blocks long: " + least);
     }
 
+    /** The script's winner is the card's draw, whatever the race's length; and over many races, at its chance. */
     @Test
-    void everyRacerWinsOneRaceInSix() {
-        int races = 60_000;
+    void theWinnerIsTheCardsDraw() {
+        int[] parts = RaceCard.of(42).parts();
+        int races = 6_000;
         int[] wins = new int[Racer.COUNT];
         for (long seed = 0; seed < races; seed++) {
-            wins[RaceScript.winner(seed)]++;
+            RaceScript s = RaceScript.of(seed, 200, parts);
+            assertEquals(RaceCard.winner(seed, parts), s.winner());
+            wins[s.winner()]++;
         }
-        // 10,000 each, give or take: one standard deviation is 91, so 400 is over four of them
-        for (int racer = 0; racer < Racer.COUNT; racer++) {
-            assertTrue(Math.abs(wins[racer] - races / Racer.COUNT) <= 400, Racer.of(racer) + " won " + wins[racer]
-                    + " of " + races + " (10,000 give or take 400)");
+        for (int i = 0; i < Racer.COUNT; i++) {
+            double p = parts[i] / (double) RaceCard.WHOLE;
+            assertEquals(races * p, wins[i], 5 * Math.sqrt(races * p * (1 - p)), Racer.of(i) + " at " + p);
         }
-        // and seeds drawn at random, as in play, land the same way
-        java.util.SplittableRandom r = new java.util.SplittableRandom(20261120L);
-        int[] drawn = new int[Racer.COUNT];
-        for (int n = 0; n < races; n++) {
-            drawn[RaceScript.winner(r.nextLong())]++;
+        for (long seed = 0; seed < 300; seed++) {
+            assertEquals(RaceScript.winner(seed, card(seed)), race(seed, TICKS).winner());
         }
-        for (int racer = 0; racer < Racer.COUNT; racer++) {
-            assertTrue(Math.abs(drawn[racer] - races / Racer.COUNT) <= 400, Racer.of(racer) + " won " + drawn[racer]);
+    }
+
+    /**
+     * The stats lean on the show, a little: over many races on even chances, the Chicken (Start 5) is further on
+     * early than the Cow (Start 2), and the Cow (Stamina 5) runs more of its race in the last third than the Rabbit
+     * (Stamina 1).
+     */
+    @Test
+    void theStatsLeanOnTheShow() {
+        int[] even = {1667, 1667, 1667, 1667, 1666, 1666};
+        double chickenEarly = 0;
+        double cowEarly = 0;
+        double cowLate = 0;
+        double rabbitLate = 0;
+        int races = 1_500;
+        for (long seed = 0; seed < races; seed++) {
+            RaceScript s = RaceScript.of(seed, TICKS, even);
+            chickenEarly += s.at(Racer.CHICKEN.lane(), s.finishTick(Racer.CHICKEN.lane()) / 5);
+            cowEarly += s.at(Racer.COW.lane(), s.finishTick(Racer.COW.lane()) / 5);
+            cowLate += 1 - s.at(Racer.COW.lane(), s.finishTick(Racer.COW.lane()) * 2 / 3);
+            rabbitLate += 1 - s.at(Racer.RABBIT.lane(), s.finishTick(Racer.RABBIT.lane()) * 2 / 3);
         }
-        // the script's winner is that draw, whatever the race's length
-        for (long seed = 0; seed < 500; seed++) {
-            assertEquals(RaceScript.winner(seed), RaceScript.of(seed, 200).winner());
-        }
+        assertTrue(chickenEarly > cowEarly, "a quick starter is up early: " + chickenEarly / races + " vs "
+                + cowEarly / races);
+        assertTrue(cowLate > rabbitLate, "a stayer comes on late: " + cowLate / races + " vs " + rabbitLate / races);
     }
 
     /** Every place behind the winner goes to every racer too: the order isn't the lanes'. */
@@ -136,7 +167,7 @@ class RaceScriptTest {
     void theOrderBehindTheWinnerIsMixed() {
         boolean[][] took = new boolean[Racer.COUNT][Racer.COUNT];
         for (long seed = 0; seed < 600; seed++) {
-            RaceScript s = RaceScript.of(seed, 200);
+            RaceScript s = race(seed, 200);
             for (int place = 0; place < Racer.COUNT; place++) {
                 took[place][s.finisher(place)] = true;
             }
@@ -158,7 +189,7 @@ class RaceScriptTest {
         int races = 0;
         for (int ticks : new int[]{MobRacesSettings.RACE_MIN * 20, TICKS, MobRacesSettings.RACE_MAX * 20}) {
             for (long seed = 0; seed < 400; seed++) {
-                RaceScript s = RaceScript.of(seed, ticks);
+                RaceScript s = race(seed, ticks);
                 String what = "seed " + seed + ", " + ticks + " ticks";
                 // counted here from the positions themselves, not taken from the script's own word
                 int changes = 0;

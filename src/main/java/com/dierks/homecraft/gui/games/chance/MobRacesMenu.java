@@ -6,7 +6,7 @@ import com.dierks.homecraft.games.chance.mobraces.MobRaces;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces.Entry;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase;
 import com.dierks.homecraft.games.chance.mobraces.MobRacesSettings;
-import com.dierks.homecraft.games.chance.mobraces.MobRacesSettings.Odds;
+import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
@@ -25,14 +25,19 @@ import java.util.List;
  *
  * <pre>
  *  row 0   4 the track: free, or how long until the race starts and how many are in
- *  row 1   10-12, 14-16 the six racers, each in its own colour (a click picks it)
+ *  row 1   10-12, 14-16 the six racers on this race's card, each in its own colour (a click picks it): its chance,
+ *          what it pays at the stake chosen and what that gives back, its stats, its form today, its last finishes;
+ *          the favourite and the longest shot marked
  *  row 2   under each racer, who has entered on it
- *  row 3   29 how to play · 31 what a win pays and what the game gives back · 33 today
+ *  row 3   29 how to play · 31 what your pick pays · 33 today
+ *  row 4   40 how the odds work
  *  row 5   45 the chips' total · 46-48 stakes or chips · 49 Close · 50 Enter, then Start now · 51 your balance
  *          53 tokens or money
  * </pre>
  *
- * Nothing here moves tokens or money: Enter asks the race, which puts the stake in through the play gate.
+ * Every number here is the race card's ({@link RaceCard}) and the race's own pay ({@link MobRaces#pay}): the
+ * same ones the race is drawn and paid with. Nothing here moves tokens or money: Enter asks the race, which puts the
+ * stake in through the play gate.
  */
 public final class MobRacesMenu extends GameMenu {
 
@@ -41,6 +46,7 @@ public final class MobRacesMenu extends GameMenu {
     private static final int RULES = 29;
     private static final int PAYS = 31;
     private static final int TODAY = 33;
+    private static final int HOW = 40;
     private static final int CHIPS_BACK = 45;
     private static final int[] STAKES = {46, 47, 48};
     private static final int ENTER = 50;
@@ -113,6 +119,95 @@ public final class MobRacesMenu extends GameMenu {
         return money.on() ? money.stake() : stake;
     }
 
+    // ---- what a tile says (pure) ----------------------------------------------------------------------------
+
+    /** "★★★★☆": a rating of 1 to 5 as gold stars and grey ones. */
+    static String stars(int rating) {
+        return "&e" + "★".repeat(rating) + "&8" + "☆".repeat(5 - rating);
+    }
+
+    /** Today's form as arrows and a word: "&a▲▲ great form", "&7– as usual", "&c▼ off form". */
+    static String form(int form) {
+        return switch (form) {
+            case 2 -> "&a▲▲ great form";
+            case 1 -> "&a▲ good form";
+            case 0 -> "&7– as usual";
+            case -1 -> "&c▼ off form";
+            default -> "&c▼▼ well off form";
+        };
+    }
+
+    /** "1st 4th 2nd 6th 3rd", most recent first, or that it hasn't raced here yet. */
+    static String finishes(List<Integer> places) {
+        if (places.isEmpty()) {
+            return "&7No races here yet";
+        }
+        List<String> out = new ArrayList<>();
+        for (int p : places) {
+            out.add((p == 1 ? "&a" : "&f") + p + switch (p) {
+                case 1 -> "st";
+                case 2 -> "nd";
+                case 3 -> "rd";
+                default -> "th";
+            });
+        }
+        return String.join(" ", out);
+    }
+
+    /**
+     * A racer's tile lines on this card (pure): its chance, what it pays at {@code stake} ({@code pay}, or not offered
+     * there), what that gives back, its stats, its form today and its last finishes, then its mark.
+     *
+     * @param pay    what it pays at {@code stake}, or {@code null} when that pair isn't offered (or no stake is chosen)
+     * @param stake  the stake chosen, or 0 for none yet
+     * @param recent its last finishes, most recent first
+     */
+    static List<String> racerLines(Racer r, RaceCard card, RaceCard.Pay pay, int stake, boolean dollars,
+                                   List<Integer> recent) {
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Wins about &f1 race in " + card.oneIn(r) + " &8(" + card.percent(r) + ")");
+        if (stake <= 0) {
+            lore.add(dollars ? "&7Add a chip to see what it pays." : "&7Pick what to put in to see what it pays.");
+        } else if (pay == null) {
+            lore.add("&8Not offered at " + MoneyPlay.amount(dollars, stake) + " this race.");
+        } else {
+            lore.add("&f" + MoneyPlay.amount(dollars, pay.stake()) + " in → &6" + MoneyPlay.amount(dollars, pay.pays())
+                    + " back &7if it wins");
+            lore.add("&7A pick on it gives back about " + RtpLimits.tenthPercent(pay.rtp()));
+            lore.add("&7of every 100 " + MoneyPlay.unit(dollars) + " over lots of races.");
+        }
+        lore.add("&7Speed    " + stars(r.speed()));
+        lore.add("&7Stamina " + stars(r.stamina()));
+        lore.add("&7Start     " + stars(r.start()));
+        lore.add("&7Today: " + form(card.form(r)));
+        lore.add("&7Last 5: " + finishes(recent));
+        if (card.favourite() == r) {
+            lore.add(RaceCard.FAVOURITE + " &7The favourite this race");
+        } else if (card.longest() == r) {
+            lore.add(RaceCard.LONGEST + " &7The longest shot this race");
+        }
+        return lore;
+    }
+
+    /** The "How the odds work" tile's lines (pure); {@code low} is the lowest return offered, or {@code NaN}. */
+    static List<String> howLines(double low) {
+        List<String> out = new ArrayList<>();
+        out.add("&7Every racer has Speed, Stamina and Start,");
+        out.add("&7and a form today: &a▲ &7up, &c▼ &7down.");
+        out.add("&7Together they make its chance of winning:");
+        out.add("&7the stronger it is, the more often it wins.");
+        out.add("&7A favourite pays less and a longshot more,");
+        out.add("&7so every pick gives back about the same");
+        out.add("&7over lots of races" + (Double.isNaN(low) ? "." : ": at least " + RtpLimits.wholePercent(low)
+                + " of every 100."));
+        out.add("&7No pick is a better deal than another.");
+        out.add("&7Each race has its own card, and it stays");
+        out.add("&7the same until that race is run.");
+        out.add("&7The winner is decided when entries close.");
+        out.add(RaceCard.FAVOURITE + " &7the favourite  " + RaceCard.LONGEST + " &7the longest shot");
+        return out;
+    }
+
     // ---- painting -----------------------------------------------------------------------------------------
 
     @Override
@@ -121,18 +216,23 @@ public final class MobRacesMenu extends GameMenu {
         Entry me = me();
         boolean dollars = me != null ? me.money() : money.on();
         MobRacesSettings s = races.settings();
+        RaceCard card = races.card();
+        int in = me != null ? me.stake() : in();
         paintState();
-        paintRacers(me);
+        paintRacers(me, card, in, dollars);
         set(RULES, rulesTile(game.rules()), null);
-        Odds odds = me != null ? new Odds(me.stake(), me.pays()) : races.odds(in(), dollars);
-        paintPays(odds, dollars);
+        RaceCard.Pay pay = me != null ? new RaceCard.Pay(me.stake(), me.pays(), card.parts(me.pick()))
+                : races.pay(pick, in, dollars);
+        paintPays(pay, dollars, in);
+        set(HOW, Menus.icon(Material.PAPER, "&eHow the odds work",
+                howLines(races.lowestRtp()).toArray(new String[0])), null);
         set(TODAY, dollars ? money.todayTile(game, s.dailyLimit(), "races")
                 : CardGameTiles.today(races.games(), game, viewer, plugin.clock(), s.dailyLimit(), "races"), null);
         set(BALANCE, dollars ? money.balanceTile() : balanceTile(), null);
         exitTile();
         if (me == null) {
             paintStakes(s, dollars);
-            paintEnter(odds, dollars);
+            paintEnter(pay, dollars, in);
         } else {
             paintStartNow(me);
         }
@@ -151,13 +251,14 @@ public final class MobRacesMenu extends GameMenu {
         }
     }
 
-    private void paintRacers(Entry me) {
+    private void paintRacers(Entry me, RaceCard card, int in, boolean dollars) {
         List<Entry> all = races.entries();
         for (Racer r : Racer.values()) {
             int slot = RACERS[r.lane()];
             boolean mine = me != null ? me.pick() == r : pick == r;
-            List<String> lore = new ArrayList<>();
-            lore.add("&7Wins 1 race in " + Racer.COUNT + ", like every racer.");
+            RaceCard.Pay pay = me != null && mine ? new RaceCard.Pay(me.stake(), me.pays(), card.parts(r))
+                    : races.pay(r, in, dollars);
+            List<String> lore = racerLines(r, card, pay, in, dollars, races.recent(r));
             if (me != null) {
                 if (mine) {
                     lore.add("&aYou're on this one.");
@@ -165,8 +266,10 @@ public final class MobRacesMenu extends GameMenu {
             } else {
                 lore.add(mine ? "&aYour pick" : "&eClick to pick");
             }
-            ItemStack icon = Menus.count(Menus.glint(Menus.icon(banner(r), r.label() + (mine ? " &f- your pick" : ""),
-                    lore.toArray(new String[0])), mine), r.number());
+            String mark = card.favourite() == r ? " " + RaceCard.FAVOURITE
+                    : card.longest() == r ? " " + RaceCard.LONGEST : "";
+            ItemStack icon = Menus.count(Menus.glint(Menus.icon(spawnEgg(r), r.label() + mark
+                    + (mine ? " &f- your pick" : ""), lore.toArray(new String[0])), mine), r.number());
             set(slot, icon, me != null ? null : e -> {
                 pick = r;
                 refresh();
@@ -178,30 +281,48 @@ public final class MobRacesMenu extends GameMenu {
                 }
             }
             if (!names.isEmpty()) {
-                set(slot + 9, Menus.count(Menus.icon(Material.NAME_TAG, "&f" + String.join(", ", names),
+                set(slot + 9, Menus.count(Menus.icon(banner(r), "&f" + String.join(", ", names),
                         "&7In this race on " + r.label()), names.size()), null);
             }
         }
     }
 
-    private static Material banner(Racer r) {
+    /** The racer's picture: its own mob's spawn egg (a block-free item every client has), or its banner. */
+    static Material spawnEgg(Racer r) {
+        Material m = Material.getMaterial(r.mob() + "_SPAWN_EGG");
+        return m == null ? banner(r) : m;
+    }
+
+    static Material banner(Racer r) {
         Material m = Material.getMaterial(r.dye() + "_BANNER");
         return m == null ? Material.WHITE_BANNER : m;
     }
 
-    private void paintPays(Odds odds, boolean dollars) {
-        if (odds == null) {
+    private void paintPays(RaceCard.Pay pay, boolean dollars, int in) {
+        if (pick == null) {
             set(PAYS, Menus.icon(Material.PAPER, "&eWhat a win pays",
-                    dollars ? "&7Add your chips to see." : "&7Pick what to put in to see."), null);
+                    "&7Each racer pays its own amount:", "&7a favourite less, a longshot more.",
+                    "&7Pick a racer to see yours."), null);
             return;
         }
-        set(PAYS, Menus.icon(Material.PAPER, "&eA winning pick gets &6" + MoneyPlay.amount(dollars, odds.pays()),
-                "&7" + MoneyPlay.amount(dollars, odds.stake()) + " in → " + MoneyPlay.amount(dollars, odds.pays())
+        if (pay == null) {
+            set(PAYS, Menus.icon(Material.PAPER, "&eWhat a win pays",
+                    in <= 0 ? (dollars ? "&7Add your chips to see." : "&7Pick what to put in to see.")
+                            : "&7" + pick.label() + " &7isn't offered at " + MoneyPlay.amount(dollars, in) + ".",
+                    "&7(Its pay there would be outside 85-95", "&7of every 100, or over the biggest payout.)"),
+                    null);
+            return;
+        }
+        RaceCard card = races.card();
+        set(PAYS, Menus.icon(Material.PAPER, "&eIf " + pick.label() + " &ewins: &6" + MoneyPlay.amount(dollars,
+                        pay.pays()),
+                "&7" + MoneyPlay.amount(dollars, pay.stake()) + " in → " + MoneyPlay.amount(dollars, pay.pays())
                         + " back if your pick wins.",
                 "&7If another racer wins, nothing comes back.",
-                "&7Every racer wins 1 race in " + Racer.COUNT + ".",
-                "&7Over lots of races it gives back about",
-                "&7" + RtpLimits.wholePercent(odds.rtp()) + " of every " + (dollars ? "$100" : "100 tokens") + "."), null);
+                "&7" + pick.label() + " &7wins about 1 race in " + card.oneIn(pick) + " (" + card.percent(pick) + ").",
+                "&7Over lots of races a pick on it gives back",
+                "&7about " + RtpLimits.tenthPercent(pay.rtp()) + " of every 100 " + MoneyPlay.unit(dollars) + "."),
+                null);
     }
 
     // ---- before entering ----------------------------------------------------------------------------------
@@ -225,9 +346,11 @@ public final class MobRacesMenu extends GameMenu {
             int from = Math.max(0, Math.min(at - 1, open.size() - STAKES.length));
             for (int j = 0; j < STAKES.length && from + j < open.size(); j++) {
                 int value = open.get(from + j);
-                Odds o = s.odds(value);
-                set(STAKES[j], CardGameTiles.stake(value, value == stake,
-                        List.of("&7A winning pick gets " + o.pays() + " back.")), e -> {
+                RaceCard.Pay p = races.pay(pick, value, false);
+                String line = pick == null ? "&7What it pays depends on the racer."
+                        : p == null ? "&8" + pick.mobName() + " isn't offered at " + value + "."
+                        : "&7If " + pick.label() + " &7wins: " + p.pays() + " back.";
+                set(STAKES[j], CardGameTiles.stake(value, value == stake, List.of(line)), e -> {
                     stake = value;
                     refresh();
                 });
@@ -268,14 +391,14 @@ public final class MobRacesMenu extends GameMenu {
         };
     }
 
-    private void paintEnter(Odds odds, boolean dollars) {
+    private void paintEnter(RaceCard.Pay pay, boolean dollars, int in) {
         if (pick == null) {
             set(ENTER, CardGameTiles.unlit("Enter", "pick a racer first"), null);
             return;
         }
-        if (odds == null) {
-            set(ENTER, CardGameTiles.unlit("Enter", dollars && money.stake() <= 0 ? "add a chip first"
-                    : dollars ? "not at this stake" : "closed right now"), null);
+        if (pay == null) {
+            set(ENTER, CardGameTiles.unlit("Enter", dollars && in <= 0 ? "add a chip first"
+                    : in > 0 ? "not offered at this stake" : "closed right now"), null);
             return;
         }
         int left = races.racesLeft(viewer);
@@ -284,19 +407,19 @@ public final class MobRacesMenu extends GameMenu {
             return;
         }
         // 0.50.2 (the casino play-test): Enter stayed lit past the day's limit and the balance; the click was refused
-        String why = dollars ? moneyBlocker(odds.stake()) : tokenBlocker(odds.stake());
+        String why = dollars ? moneyBlocker(pay.stake()) : tokenBlocker(pay.stake());
         if (why != null) {
             set(ENTER, CardGameTiles.unlit("Enter", why), null);
             return;
         }
         Racer on = pick;
-        set(ENTER, Menus.icon(Material.GREEN_CONCRETE, "&aEnter &7- &6" + MoneyPlay.amount(dollars, odds.stake())
+        set(ENTER, Menus.icon(Material.GREEN_CONCRETE, "&aEnter &7- &6" + MoneyPlay.amount(dollars, pay.stake())
                         + " &7on " + on.label(),
-                "&7If " + on.label() + " &7wins you get &6" + MoneyPlay.amount(dollars, odds.pays()) + "&7.",
+                "&7If " + on.label() + " &7wins you get &6" + MoneyPlay.amount(dollars, pay.pays()) + "&7.",
                 "&7Your " + (dollars ? "money goes" : "tokens go") + " in now.",
                 "&eClick to enter the race"), e -> {
             hold(ClickHold.ACTION_MS);
-            races.enter(viewer, on, odds.stake(), dollars);
+            races.enter(viewer, on, pay.stake(), dollars);
             if (showing()) {
                 refresh();
             }

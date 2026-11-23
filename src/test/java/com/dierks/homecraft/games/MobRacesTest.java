@@ -5,7 +5,7 @@ import com.dierks.homecraft.games.GamesKit.Host;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase;
 import com.dierks.homecraft.games.chance.mobraces.MobRacesSettings;
-import com.dierks.homecraft.games.chance.mobraces.RaceScript;
+import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.RaceTicket;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
 import org.junit.jupiter.api.AfterEach;
@@ -34,10 +34,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>a refused stake doesn't enter; a second entry is refused; nobody enters while a race runs;</li>
  *   <li>an entrant who leaves before the start gets the stake back and the race goes on without them, or doesn't
  *       run if nobody is left; Start now by everyone starts at once;</li>
- *   <li>the day's limits count the stakes, and nothing is ever paid twice.</li>
+ *   <li>the day's limits count the stakes, and nothing is ever paid twice;</li>
+ *   <li>every entry pays what the race's card says for its racer and stake, and carries the card's chances.</li>
  * </ul>
+ *
+ * <p>Every race here is run on one card ({@link #CARD}: everyone in their usual form), so a pick's pay is known.
  */
 class MobRacesTest {
+
+    /** The card every race here is run on: every racer in its usual form. */
+    static final RaceCard CARD = RaceCard.withForm(new int[Racer.COUNT]);
 
     private Host host;
     private GamesService games;
@@ -47,6 +53,7 @@ class MobRacesTest {
     void setUp() {
         host = new Host(GamesKit.at(2026, 11, 20, 20, 0));
         host.bankOn = true;
+        host.parlorKept = new java.util.HashMap<>(); // hcm_meta, where the racers' last finishes are kept
         open(MobRacesSettings.defaults(), 1000);
     }
 
@@ -55,7 +62,14 @@ class MobRacesTest {
         host.config = GamesKit.config(GamesKit.common(true, chanceDailyTokens, 600, 6), "mob_races", settings);
         games = GamesKit.service(host, List.of(MobRaces.SPEC));
         races = (MobRaces) games.game("mob_races");
+        races.useCard(CARD);
         races.trackSeen();
+    }
+
+    /** What a winning pick on {@code r} pays with {@code stake} on it, on {@link #CARD} (tokens or dollars). */
+    private static int pays(Racer r, int stake, boolean money) {
+        int cap = money ? Parlor.Rules.defaults().capFor(stake) : 250;
+        return CARD.pay(r, stake, 90, cap).pays();
     }
 
     @AfterEach
@@ -76,7 +90,7 @@ class MobRacesTest {
     /** A race seed whose winner is {@code racer}. */
     private static long seedWhere(Racer racer) {
         for (long seed = 1; seed < 10_000; seed++) {
-            if (RaceScript.winner(seed) == racer.lane()) {
+            if (RaceCard.winner(seed, CARD.parts()) == racer.lane()) {
                 return seed;
             }
         }
@@ -139,9 +153,10 @@ class MobRacesTest {
         assertEquals(2, settled());
         assertEquals(2, count("SELECT COUNT(*) FROM game_rounds WHERE data LIKE '%race=" + seedWhere(Racer.CHICKEN)
                 + "'"), "the one race seed is in both rounds");
-        assertEquals(195 + 27, host.balanceOf(alex.id), "Alex's pick is paid: 5 in, 27 back");
+        int alexWin = pays(Racer.CHICKEN, 5, false);
+        assertEquals(195 + alexWin, host.balanceOf(alex.id), "Alex's pick is paid: 5 in, what the card says back");
         assertEquals(290.0, host.money.get(sam.id), "Sam's pick is not");
-        assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE money = 0 AND stake = 5 AND payout = 27"));
+        assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE money = 0 AND stake = 5 AND payout = " + alexWin));
         assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE money = 1 AND stake = 10 AND payout = 0"));
         assertNotNull(races.script());
         assertNull(races.winner(), "the room is not told who wins before the race is run");
@@ -155,8 +170,8 @@ class MobRacesTest {
         pass(1_000);
         assertEquals(Phase.RESULT, races.phase(), "the winner is home");
         assertEquals(Racer.CHICKEN, races.winner());
-        assertTrue(alex.heard().contains("1 Chicken won, and you picked it! 5 tokens in → 27 tokens back."),
-                alex.heard());
+        assertTrue(alex.heard().contains("1 Chicken won, and you picked it! 5 tokens in → " + alexWin
+                + " tokens back."), alex.heard());
         assertTrue(sam.heard().contains("1 Chicken won. You picked 2 Pig. No win this time."), sam.heard());
         pass(MobRaces.RESULT_MS - 1);
         assertEquals(Phase.RESULT, races.phase(), "the result stands a few seconds");
@@ -169,7 +184,7 @@ class MobRacesTest {
         games.rounds().settleOpen(alex.id);
         games.rounds().settleOpen(sam.id);
         games.rounds().sweep();
-        assertEquals(222, host.balanceOf(alex.id), "paid once");
+        assertEquals(195 + alexWin, host.balanceOf(alex.id), "paid once");
         assertEquals(290.0, host.money.get(sam.id));
         assertEquals(300.0, host.money.get(alex.id));
         assertEquals(200, host.balanceOf(sam.id));
@@ -187,12 +202,13 @@ class MobRacesTest {
         races.seedNextRace(seedWhere(Racer.PIG));
         pass(20_000);
         assertEquals(Phase.RUNNING, races.phase());
-        assertEquals(290.0 + 54, host.money.get(sam.id), "$10 in, $54 back, straight to the bank");
+        int samWin = pays(Racer.PIG, 10, true);
+        assertEquals(290.0 + samWin, host.money.get(sam.id), "$10 in, the card's pay back, straight to the bank");
         assertEquals(180, host.balanceOf(alex.id), "Alex's Chicken did not win: the 20 tokens stay in");
         assertEquals(200, host.balanceOf(sam.id), "a dollar win pays no tokens");
         assertEquals(0, count("SELECT COUNT(*) FROM game_rounds WHERE owed > 0"), "nothing is left owed");
         pass(25_000);
-        assertTrue(sam.heard().contains("2 Pig won, and you picked it! $10 in → $54 back."), sam.heard());
+        assertTrue(sam.heard().contains("2 Pig won, and you picked it! $10 in → $" + samWin + " back."), sam.heard());
         assertTrue(alex.heard().contains("You picked 1 Chicken. No win this time."), alex.heard());
         assertEquals(0, open());
     }
@@ -207,8 +223,9 @@ class MobRacesTest {
         assertTrue(races.enter(kim.player, Racer.SHEEP, 5, false));
         races.seedNextRace(seedWhere(Racer.FOX));
         pass(20_000);
-        assertEquals(195 + 27, host.balanceOf(alex.id));
-        assertEquals(190 + 54, host.balanceOf(sam.id));
+        int fox5 = pays(Racer.FOX, 5, false);
+        assertEquals(195 + fox5, host.balanceOf(alex.id));
+        assertEquals(190 + pays(Racer.FOX, 10, false), host.balanceOf(sam.id));
         assertEquals(195, host.balanceOf(kim.id));
         pass(25_000);
         pass(MobRaces.RESULT_MS);
@@ -218,7 +235,7 @@ class MobRacesTest {
         assertTrue(races.enter(alex.player, Racer.COW, 5, false));
         races.seedNextRace(seedWhere(Racer.RABBIT));
         pass(20_000);
-        assertEquals(222 - 5, host.balanceOf(alex.id));
+        assertEquals(195 + fox5 - 5, host.balanceOf(alex.id));
         pass(25_000);
         assertEquals(Racer.RABBIT, races.winner());
         assertTrue(alex.heard().contains("3 Rabbit won. You picked 4 Cow. No win this time."), alex.heard());
@@ -292,7 +309,7 @@ class MobRacesTest {
         assertEquals(1, races.entries().size());
         assertEquals(Racer.CHICKEN, races.entry(alex.id).pick());
         assertEquals(5, races.entry(alex.id).stake());
-        assertEquals(27, races.entry(alex.id).pays());
+        assertEquals(pays(Racer.CHICKEN, 5, false), races.entry(alex.id).pays());
     }
 
     @Test
@@ -342,7 +359,7 @@ class MobRacesTest {
         pass(20_000);
         assertEquals(Phase.RUNNING, races.phase());
         assertEquals(200, host.balanceOf(alex.id), "Alex's Chicken won, but Alex was out: nothing more is paid");
-        assertEquals(290.0 + 54, host.money.get(sam.id), "Sam's pick is paid");
+        assertEquals(290.0 + pays(Racer.CHICKEN, 10, true), host.money.get(sam.id), "Sam's pick is paid");
         assertEquals(0, open());
         assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE money = 0 AND stake = 5 AND payout = 5"),
                 "Alex's round: 5 in, 5 back");
@@ -452,7 +469,7 @@ class MobRacesTest {
     void theDaysLimitsCountTheStakes() throws Exception {
         MobRacesSettings d = MobRacesSettings.defaults();
         // two races a day, and 30 tokens a day for all games of chance
-        open(new MobRacesSettings(true, d.stakes(), 2, d.rtp(), d.gatherSeconds(), d.raceSeconds(), d.odds()), 30);
+        open(d.withDailyLimit(2), 30);
         Fake alex = player("Alex");
         assertEquals(2, races.racesLeft(alex.player));
         assertTrue(races.enter(alex.player, Racer.CHICKEN, 20, false));
@@ -525,13 +542,14 @@ class MobRacesTest {
         assertNotNull(games.rounds().step(alexsRound, RaceTicket.read(alexsRound.data()).in(seed).data()));
         games.rounds().settleOpen(sam.id);
         games.rounds().settleOpen(alex.id);
-        assertEquals(290.0 + 54, host.money.get(sam.id), "the Pig won that race: $54 back");
+        int pig10 = pays(Racer.PIG, 10, true);
+        assertEquals(290.0 + pig10, host.money.get(sam.id), "the Pig won that race: its pay back");
         assertEquals(195, host.balanceOf(alex.id), "the Cow did not: nothing back");
         assertEquals(0, open());
         // the race, finding both rounds finished elsewhere, runs for nobody and pays nothing again
         pass(20_000);
         assertEquals(Phase.IDLE, races.phase());
-        assertEquals(344.0, host.money.get(sam.id));
+        assertEquals(290.0 + pig10, host.money.get(sam.id));
         assertEquals(195, host.balanceOf(alex.id));
         assertEquals(0, host.severe());
     }
@@ -562,23 +580,123 @@ class MobRacesTest {
         assertEquals(Phase.IDLE, races.phase());
         assertTrue(alex.heard().contains("1 Chicken won, and you picked it!"), "they were paid at the start, so they"
                 + " are told: " + alex.heard());
-        assertEquals(222, host.balanceOf(alex.id));
+        assertEquals(195 + pays(Racer.CHICKEN, 5, false), host.balanceOf(alex.id));
     }
 
     @Test
     void whatItPublishesIsTheExactReturn() {
         List<String> lines = races.oddsLines();
-        assertTrue(lines.get(0).contains("gives back about 90 of every 100 tokens"), lines.toString());
-        assertTrue(lines.stream().anyMatch(l -> l.contains("5 in") && l.contains("90.0%") && l.contains("27")),
-                lines.toString());
-        assertEquals(27, races.odds(5, false).pays());
-        assertEquals(54, races.odds(10, true).pays(), "dollars are solved the same way");
-        assertEquals(270, races.odds(50, true).pays());
-        assertNull(races.odds(7, false));
-        assertNull(races.odds(0, true));
+        double low = races.lowestRtp();
+        assertTrue(lines.get(0).contains(RtpLimits.playerLine(low)), lines.toString());
+        assertTrue(RtpLimits.inBand(low));
+        for (Racer r : Racer.values()) {
+            for (int stake : List.of(5, 10, 20)) {
+                RaceCard.Pay p = races.pay(r, stake, false);
+                assertEquals(CARD.pay(r, stake, 90, 250), p, r + " at " + stake);
+                assertTrue(lines.stream().anyMatch(l -> l.contains(r.label()) && l.contains(" " + stake + " in → "
+                        + p.pays() + " (&f" + RtpLimits.tenthPercent(p.rtp()) + "%")), r + " " + lines);
+                assertTrue(p.rtp() >= low);
+            }
+            assertEquals(CARD.pay(r, 10, 90, Parlor.Rules.defaults().capFor(10)), races.pay(r, 10, true),
+                    "dollars are solved the same way, under the Parlor's cap");
+        }
+        assertNull(races.pay(Racer.CHICKEN, 7, false), "7 is not a stake the game offers");
+        assertNull(races.pay(Racer.CHICKEN, 0, true));
+        assertNull(races.pay(null, 5, false));
         assertEquals(4, races.rules().size());
         assertEquals("Mob Races", races.name());
         assertEquals(com.dierks.homecraft.arcade.TokenService.Source.ARCADE_MOB_RACES, races.source());
         assertTrue(races.featurable() == false, "never the featured game: it is a game of chance");
+    }
+
+    // ---- the card ------------------------------------------------------------------------------------------
+
+    /** Every entry carries the card's chances and its own pay, and the draw is the card's. */
+    @Test
+    void everyEntryCarriesItsRacesCardAndPays() throws Exception {
+        Fake alex = player("Alex");
+        Fake sam = player("Sam");
+        assertTrue(races.enter(alex.player, Racer.COW, 5, false));
+        assertTrue(races.enter(sam.player, Racer.RABBIT, 25, true));
+        RaceTicket a = RaceTicket.read(games.rounds().openRound(alex.id, "mob_races").data());
+        RaceTicket b = RaceTicket.read(games.rounds().openRound(sam.id, "mob_races").data());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(CARD.parts(), a.card());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(CARD.parts(), b.card());
+        assertEquals(pays(Racer.COW, 5, false), a.pays());
+        assertEquals(pays(Racer.RABBIT, 25, true), b.pays());
+        assertTrue(a.pays() != pays(Racer.CHICKEN, 5, false), "a weaker racer pays more than a stronger one");
+        assertTrue(a.pays() > pays(Racer.CHICKEN, 5, false));
+        long seed = seedWhere(Racer.COW);
+        races.seedNextRace(seed);
+        races.startNow(alex.player);
+        races.startNow(sam.player);
+        assertEquals(Phase.RUNNING, races.phase());
+        assertEquals(Racer.COW.lane(), races.script().winner(), "the show's winner is the card's draw");
+        assertEquals(195 + a.pays(), host.balanceOf(alex.id));
+    }
+
+    /** The card is fixed from the moment it is shown until its race is run, then the next race gets its own. */
+    @Test
+    void theCardIsFixedUntilItsRaceIsRun() throws Exception {
+        races.useCard(null); // random cards, as in play
+        RaceCard first = races.card();
+        assertTrue(first == races.card(), "the same card every time it is asked for");
+        Fake alex = player("Alex");
+        assertTrue(races.enter(alex.player, Racer.CHICKEN, 5, false));
+        assertTrue(first == races.card());
+        host.online.remove(alex.id);
+        pass(1_000);
+        assertEquals(Phase.IDLE, races.phase(), "the race is off: nobody is left");
+        assertTrue(first == races.card(), "a race called off keeps its card: no new card for leaving");
+        alex = player("Alex2");
+        assertTrue(races.enter(alex.player, Racer.CHICKEN, 5, false));
+        races.startNow(alex.player);
+        assertTrue(first == races.card(), "the race is run on it");
+        pass(25_000);
+        pass(MobRaces.RESULT_MS);
+        assertEquals(Phase.IDLE, races.phase());
+        assertTrue(first != races.card(), "the race was run: the next one has its own card");
+    }
+
+    /** Each racer's last finishes are kept (display only), most recent first. */
+    @Test
+    void theLastFinishesAreKept() throws Exception {
+        for (Racer r : Racer.values()) {
+            assertTrue(races.recent(r).isEmpty(), "no races yet");
+        }
+        Fake alex = player("Alex");
+        for (int n = 0; n < 7; n++) {
+            host.move(1_000);
+            assertTrue(races.enter(alex.player, Racer.CHICKEN, 5, false), alex.heard());
+            races.seedNextRace(seedWhere(n % 2 == 0 ? Racer.PIG : Racer.SHEEP));
+            races.startNow(alex.player);
+            pass(25_000);
+            pass(MobRaces.RESULT_MS);
+        }
+        assertEquals(MobRaces.RECENT, races.recent(Racer.PIG).size(), "five kept");
+        assertEquals(1, races.recent(Racer.PIG).get(0), "the last race (the seventh) was the Pig's");
+        assertEquals(1, races.recent(Racer.SHEEP).get(1));
+        assertTrue(races.recent(Racer.PIG).get(1) > 1);
+        // a new game object reads them back from the database
+        List<Integer> pig = races.recent(Racer.PIG);
+        open(MobRacesSettings.defaults(), 1000);
+        assertEquals(pig, races.recent(Racer.PIG), "kept in hcm_meta");
+    }
+
+    /** An old entry (v=1) still open after the upgrade is finished by the old rule, from its data alone. */
+    @Test
+    void anOldEntryLeftOpenIsSettledByTheOldRule() throws Exception {
+        Fake alex = player("Alex");
+        assertTrue(races.enter(alex.player, Racer.CHICKEN, 5, false));
+        ChanceRounds.Round round = games.rounds().openRound(alex.id, "mob_races");
+        // as an older version wrote it, with a race drawn where (every racer as likely) the Chicken wins
+        long seed = 1;
+        while (com.dierks.homecraft.games.chance.mobraces.RaceScript.evenWinner(seed) != Racer.CHICKEN.lane()) {
+            seed++;
+        }
+        assertNotNull(games.rounds().step(round, "v=1;pick=0;in=5;pays=27;race=" + seed));
+        games.rounds().settleOpen(alex.id);
+        assertEquals(195 + 27, host.balanceOf(alex.id), "the old pay, by the old draw");
+        assertEquals(0, open());
     }
 }

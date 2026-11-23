@@ -383,25 +383,40 @@ class RaceTableTest {
         assertEquals("&a&lMob Races", RaceShow.labelLine(MobRaces.Phase.RESULT, -1));
 
         List<String[]> in = List.of(new String[]{"Alex", Racer.CHICKEN.label()}, new String[]{"Sam", Racer.FOX.label()});
-        List<String> idle = RaceShow.boardLines(MobRaces.Phase.IDLE, -1, List.of(), null, null, List.of(), null);
-        assertEquals(List.of("&fSix racers. Pick one.", "&7Tap the table to enter"), idle);
-        assertTrue(RaceShow.boardLines(MobRaces.Phase.IDLE, -1, List.of(), null, null, List.of(), Racer.COW)
-                .contains("&7Last winner: &a4 Cow"));
-        List<String> gathering = RaceShow.boardLines(MobRaces.Phase.GATHERING, 7, in, null, null, List.of(), null);
-        assertEquals(List.of("&eThe race starts in 7 s", "&fAlex &7on &c1 Chicken", "&fSam &7on &65 Fox",
-                "&7Tap the table to enter too"), gathering, "the countdown and who is in on which racer");
-        List<String> running = RaceShow.boardLines(MobRaces.Phase.RUNNING, -1, in, Racer.PIG, null, List.of(), null);
+        List<String> card = List.of("&c1 Chicken &6✦ &7wins 1 in 2.5 &7· 5 in → &e11");
+        List<String> idle = RaceShow.boardLines(MobRaces.Phase.IDLE, -1, List.of(), null, null, List.of(), null, card,
+                List.of());
+        assertEquals(List.of("&fSix racers. Pick one.", card.get(0), "&7Tap the table to enter"), idle,
+                "the next race's card while the track is free");
+        assertTrue(RaceShow.boardLines(MobRaces.Phase.IDLE, -1, List.of(), null, null, List.of(), Racer.COW, card,
+                List.of()).contains("&7Last winner: &a4 Cow"));
+        List<String> gathering = RaceShow.boardLines(MobRaces.Phase.GATHERING, 7, in, null, null, List.of(), null,
+                card, List.of());
+        assertEquals(List.of("&eThe race starts in 7 s", card.get(0), "&fAlex &7on &c1 Chicken", "&fSam &7on &65 Fox",
+                "&7Tap the table to enter too"), gathering, "the countdown, the card and who is in on which racer");
+        List<String> running = RaceShow.boardLines(MobRaces.Phase.RUNNING, -1, in, Racer.PIG, null, List.of(), null,
+                List.of(), List.of());
         assertEquals(List.of("&eThey're off!", "&7In front: &d2 Pig", "&fAlex &7on &c1 Chicken", "&fSam &7on &65 Fox"),
-                running);
-        assertEquals(List.of("&6The winner: &65 Fox", "&aSam picked it!"), RaceShow.boardLines(MobRaces.Phase.RESULT,
-                -1, in, null, Racer.FOX, List.of("Sam"), Racer.FOX));
+                running, "nothing about the card while they run");
+        List<Racer> order = List.of(Racer.FOX, Racer.PIG, Racer.CHICKEN, Racer.SHEEP, Racer.COW, Racer.RABBIT);
+        assertEquals(List.of("&6The winner: &65 Fox", "&7Then: &d2 Pig&7, &c1 Chicken&7, &e6 Sheep&7, &a4 Cow&7, &b3 Rabbit",
+                "&aSam picked it!"), RaceShow.boardLines(MobRaces.Phase.RESULT, -1, in, null, Racer.FOX, List.of("Sam"),
+                Racer.FOX, List.of(), order), "after the race, the result in full");
         assertEquals(List.of("&6The winner: &e6 Sheep", "&7Nobody picked it this time."),
-                RaceShow.boardLines(MobRaces.Phase.RESULT, -1, in, null, Racer.SHEEP, List.of(), Racer.SHEEP));
+                RaceShow.boardLines(MobRaces.Phase.RESULT, -1, in, null, Racer.SHEEP, List.of(), Racer.SHEEP,
+                        List.of(), List.of()));
+        // a card line: its chance and its pay at the smallest stake, the favourite and the longest shot marked
+        assertEquals("&c1 Chicken &6✦ &7wins 1 in 2.5 &7· 5 in → &e11", RaceShow.cardLine(Racer.CHICKEN, "2.5", 5, 11,
+                true, false));
+        assertEquals("&a4 Cow &b➹ &7wins 1 in 25 &7· 5 in → &e112", RaceShow.cardLine(Racer.COW, "25", 5, 112, false,
+                true));
+        assertEquals("&d2 Pig &7wins 1 in 5 &7· &8not at 5", RaceShow.cardLine(Racer.PIG, "5", 5, 0, false, false));
         List<String[]> many = new ArrayList<>();
         for (int n = 0; n < RaceShow.BOARD_NAMES + 3; n++) {
             many.add(new String[]{"P" + n, Racer.of(n % Racer.COUNT).label()});
         }
-        List<String> crowded = RaceShow.boardLines(MobRaces.Phase.GATHERING, 3, many, null, null, List.of(), null);
+        List<String> crowded = RaceShow.boardLines(MobRaces.Phase.GATHERING, 3, many, null, null, List.of(), null,
+                card, List.of());
         assertTrue(crowded.contains("&7and 3 more"), "a full room still fits the board: " + crowded);
         assertEquals("machine:mob_races", RaceShow.TAP, "a tap on the table opens Mob Races as a machine's tap does");
     }

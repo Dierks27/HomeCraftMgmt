@@ -11,7 +11,6 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RtpLimits;
-import com.dierks.homecraft.games.chance.mobraces.MobRacesSettings.Odds;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -23,17 +22,22 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Mob Races: the Game Parlor's model racetrack (the owner: "I hope you make a mini track and you literally see the
  * tiny mobs running on the track!"). Six tiny mobs race round a table in the middle of the room; a player picks one
- * and puts tokens (or, in the Parlor with the money permission, dollars) on it. Every racer is as likely to win as
- * any other. A pick that wins pays one whole amount solved per stake ({@link MobRacesSettings}); anything else pays
- * nothing.
+ * and puts tokens (or, in the Parlor with the money permission, dollars) on it. The owner, after the first races: "gave
+ * us real odds and real stats on the mobs. So you could actually win more on longshots and also have a bit of info on
+ * the mob so you aren't just betting blindly."
+ *
+ * <p><b>Each race has its card</b> ({@link RaceCard}): made when the race is open for entries (the first time the
+ * board or a screen shows it), and fixed until that race is run. It holds every racer's form today and its exact
+ * chance of winning, which come from its stats by one formula; the winner is drawn with exactly those chances. A pick
+ * that wins pays what its tile says for that racer and stake ({@link #pay}): a favourite little, a longshot a lot, each
+ * as near the game's target return as whole amounts allow. Anything else pays nothing. A new card is made only once a
+ * race has been run on the old one.
  *
  * <p><b>One track, one race at a time, everyone in the room in the same race.</b> The first entry starts a short
  * wait ({@code gather_seconds}) in which anyone in the Parlor may enter: one racer and one stake each. If every
@@ -54,8 +58,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p><b>NPC players</b> ({@link #enterNpc}): while a race gathers with a real entrant in it, an NPC or two may enter
  * too, with a pretend stake on a racer of their own. An NPC's entry has no round: nothing is put in, nothing is paid,
- * and it touches neither the race's seed nor any real entry's ticket, so every real entry's odds and pay are what they
- * were (a race pays a fixed amount per stake whoever else is in). A race with only NPCs in it never runs: when the last
+ * and it touches neither the race's seed, nor its card, nor any real entry's ticket, so every real entry's chances and
+ * pay are what they were (a race's card is fixed whoever else is in). A race with only NPCs in it never runs: when the last
  * real entrant is gone, the race is off and the NPCs with it.
  */
 public final class MobRaces implements Game {
@@ -154,8 +158,12 @@ public final class MobRaces implements Game {
     private final GameContext ctx;
     private final Map<UUID, Entry> entries = new LinkedHashMap<>();
     private final Map<UUID, Runnable> screens = new LinkedHashMap<>();
-    /** What a win pays at each dollar stake asked for so far: solved once and kept. */
-    private final Map<String, Optional<Odds>> moneyOdds = new ConcurrentHashMap<>();
+    /** The next race's card, or the card of the race being run; {@code null} until it is first shown. */
+    private RaceCard card;
+    /** A test's own card for every race, or {@code null} (a random one each race, as in play). */
+    private RaceCard testCard;
+    /** Each racer's last finishes, most recent first (1 is a win), by lane; read from the database when first asked. */
+    private List<List<Integer>> recent;
     private Phase phase = Phase.IDLE;
     private long gatherUntil;
     private int shownSeconds = -1;
@@ -216,14 +224,14 @@ public final class MobRaces implements Game {
     @Override
     public boolean configEnabled() {
         MobRacesSettings s = settings();
-        return s.enabled() && !s.odds().isEmpty();
+        return s.enabled() && !s.open().isEmpty();
     }
 
     @Override
     public List<String> rules() {
         return List.of("Six tiny mobs race round the track in the Game Parlor.",
-                "Pick one and put something on it before they start.",
-                "Every racer is just as likely to win.",
+                "Each one's stats and form today make its chance of winning.",
+                "A favourite wins more often and pays less; a longshot pays more.",
                 "If your pick wins, you get what its tile says. If not, nothing.");
     }
 
@@ -234,8 +242,9 @@ public final class MobRaces implements Game {
         for (String line : rules()) {
             lore.add("&7" + line);
         }
-        if (!s.odds().isEmpty()) {
-            lore.add("&7It " + RtpLimits.playerLine(s.lowestRtp()) + ".");
+        double low = lowestRtp();
+        if (!Double.isNaN(low)) {
+            lore.add("&7Whichever you pick, it " + RtpLimits.playerLine(low) + ".");
         }
         lore.add("&e" + s.dailyLimit() + " races a day");
         lore.add("&7Tap the track in the Game Parlor to enter.");
@@ -290,9 +299,11 @@ public final class MobRaces implements Game {
     @Override
     public void stop() {
         if (phase == Phase.RUNNING) {
+            remember(script);
             tellResults();
         }
         reset();
+        card = null;
         changed();
     }
 
@@ -311,19 +322,26 @@ public final class MobRaces implements Game {
     @Override
     public List<String> oddsLines() {
         MobRacesSettings s = settings();
-        if (s.odds().isEmpty()) {
+        if (s.open().isEmpty()) {
             return List.of();
         }
+        RaceCard c = card();
         List<String> out = new ArrayList<>();
-        out.add("&6" + NAME + " &7— " + RtpLimits.playerLine(s.lowestRtp()) + " · " + s.dailyLimit()
-                + " races a day");
-        for (Odds o : s.odds()) {
-            out.add("&7  " + o.stake() + " in: &f" + RtpLimits.tenthPercent(o.rtp()) + "% &7(a winning pick gets "
-                    + o.pays() + ", 1 race in " + Racer.COUNT + ")");
+        out.add("&6" + NAME + " &7— " + RtpLimits.playerLine(lowestRtp()) + " · " + s.dailyLimit()
+                + " races a day · this race's card:");
+        for (Racer r : Racer.values()) {
+            StringBuilder b = new StringBuilder("&7  " + r.label() + " &7wins " + c.percent(r) + " (1 race in "
+                    + c.oneIn(r) + "):");
+            for (int stake : s.open()) {
+                RaceCard.Pay p = c.pay(r, stake, s.rtp(), s.cap());
+                b.append(p == null ? " " + stake + " in: not offered;" : " " + stake + " in → " + p.pays() + " (&f"
+                        + RtpLimits.tenthPercent(p.rtp()) + "%&7);");
+            }
+            out.add(b.substring(0, b.length() - 1));
         }
         for (int stake : s.stakes()) {
-            if (s.odds(stake) == null) {
-                out.add("&7  " + stake + " in: off (no whole amount gives back 85-95 of every 100)");
+            if (!s.offers(stake)) {
+                out.add("&7  " + stake + " in: off (not even a favourite can be paid inside 85-95 of every 100)");
             }
         }
         return out;
@@ -331,26 +349,52 @@ public final class MobRaces implements Game {
 
     @Override
     public void feed(FeedWriter out) {
-        feed(out, settings());
+        feed(out, settings(), card());
     }
 
-    /** Its {@code /api/arcade} entry (pure, for tests): each stake's exact return, and what a winning pick gets. */
-    static void feed(FeedWriter out, MobRacesSettings s) {
-        if (s.odds().isEmpty()) {
+    /**
+     * Its {@code /api/arcade} entry (pure, for tests): each stake's lowest exact return on this card, and what each
+     * racer pays at each stake with its exact chance.
+     */
+    static void feed(FeedWriter out, MobRacesSettings s, RaceCard c) {
+        if (s.open().isEmpty()) {
             return;
         }
         Map<Integer, Double> rtp = new LinkedHashMap<>();
         List<FeedWriter.PayRow> rows = new ArrayList<>();
-        for (Odds o : s.odds()) {
-            rtp.put(o.stake(), o.rtp());
-            rows.add(new FeedWriter.PayRow(o.stake(), "your pick wins", o.pays(), 1.0 / Racer.COUNT, null, null));
+        for (int stake : s.open()) {
+            double low = Double.NaN;
+            for (Racer r : Racer.values()) {
+                RaceCard.Pay p = c.pay(r, stake, s.rtp(), s.cap());
+                if (p == null) {
+                    continue;
+                }
+                low = Double.isNaN(low) ? p.rtp() : Math.min(low, p.rtp());
+                rows.add(new FeedWriter.PayRow(stake, r.mobName() + " wins", p.pays(), c.chance(r), null, null));
+            }
+            if (!Double.isNaN(low)) {
+                rtp.put(stake, low);
+            }
         }
         Map<String, Object> extra = new LinkedHashMap<>();
         extra.put("racers", Racer.COUNT);
+        List<Map<String, Object>> card = new ArrayList<>();
+        for (Racer r : Racer.values()) {
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("racer", r.mobName());
+            one.put("speed", r.speed());
+            one.put("stamina", r.stamina());
+            one.put("start", r.start());
+            one.put("form", c.form(r));
+            one.put("chance", c.chance(r));
+            card.add(one);
+        }
+        extra.put("card", card);
         out.chance(SPEC.id(), NAME, s.open(), rtp, s.dailyLimit(), rows,
-                "Six tiny mobs race round a track in the Clubhouse's Game Parlor. Pick one before they start; every"
-                        + " racer is just as likely to win. A winning pick gets the amount shown, any other nothing.",
-                extra);
+                "Six tiny mobs race round a track in the Clubhouse's Game Parlor. Each race has its card: every"
+                        + " racer's stats and form today make its exact chance of winning, and a winning pick gets"
+                        + " what that racer pays at the stake put on it (a favourite less, a longshot more); any"
+                        + " other pick gets nothing.", extra);
     }
 
     @Override
@@ -425,24 +469,138 @@ public final class MobRaces implements Game {
         screens.remove(id);
     }
 
-    /** What a win pays with {@code stake} on a racer, in tokens or dollars; {@code null} when that can't be played. */
-    public Odds odds(int stake, boolean money) {
-        return money ? moneyOdds(stake) : settings().odds(stake);
+    // ---- the card --------------------------------------------------------------------------------------------
+
+    /**
+     * This race's card: the one being run, or the next race's. Made the first time it is asked for after a race was
+     * run, and fixed until the next race is run on it (a race called off, or a race of NPCs alone, keeps it).
+     */
+    public RaceCard card() {
+        if (card == null) {
+            card = testCard != null ? testCard : RaceCard.of(ThreadLocalRandom.current().nextLong());
+        }
+        return card;
+    }
+
+    /** For tests: every race from now on is run on {@code card} (nothing in play calls this). */
+    public void useCard(RaceCard card) {
+        this.testCard = card;
+        if (phase == Phase.IDLE && entries.isEmpty()) {
+            this.card = null; // no race is open on the one shown: the test's card is the next one
+        }
     }
 
     /**
-     * The Game Parlor's money play: what a win pays with {@code dollars} on a racer, solved exactly as a token stake
-     * is (the same target, the same 85-95 band) under the Parlor's biggest payout; {@code null} when no whole amount
-     * fits the band at that stake.
+     * What a pick on {@code racer} with {@code stake} on it pays in this race, in tokens or (the Game Parlor's money
+     * play) dollars; {@code null} when that pair isn't offered. Tokens: a stake the game offers, under
+     * {@code games.max_payout}. Dollars: under the Parlor's biggest payout for that stake. Either way the pay whose
+     * return is closest to the target inside the 85-95 band.
      */
-    public Odds moneyOdds(int dollars) {
-        if (dollars <= 0) {
+    public RaceCard.Pay pay(Racer racer, int stake, boolean money) {
+        if (racer == null || stake <= 0) {
             return null;
         }
-        double rtp = settings().rtp();
-        int cap = games().parlor().rules().capFor(dollars);
-        return moneyOdds.computeIfAbsent(dollars + ":" + cap + ":" + rtp,
-                k -> Optional.ofNullable(MobRacesSettings.solve(dollars, rtp, cap))).orElse(null);
+        MobRacesSettings s = settings();
+        if (money) {
+            return card().pay(racer, stake, s.rtp(), games().parlor().rules().capFor(stake));
+        }
+        return s.offers(stake) ? card().pay(racer, stake, s.rtp(), s.cap()) : null;
+    }
+
+    /**
+     * The lowest exact return of any pick offered in tokens on this race's card ({@code NaN} with none): the game's
+     * one honest number. Every pick is within a little of it.
+     */
+    public double lowestRtp() {
+        MobRacesSettings s = settings();
+        double low = Double.NaN;
+        for (int stake : s.open()) {
+            for (Racer r : Racer.values()) {
+                RaceCard.Pay p = pay(r, stake, false);
+                if (p != null && (Double.isNaN(low) || p.rtp() < low)) {
+                    low = p.rtp();
+                }
+            }
+        }
+        return low;
+    }
+
+    /** How many of a racer's last finishes are kept and shown. */
+    public static final int RECENT = 5;
+    /** Where they are kept ({@code hcm_meta}). */
+    static final String KEY_RECENT = "gen.mobraces.recent";
+
+    /** {@code racer}'s last finishes on this server, most recent first (1 is a win), up to {@value #RECENT}. */
+    public List<Integer> recent(Racer racer) {
+        return List.copyOf(recent().get(racer.lane()));
+    }
+
+    private List<List<Integer>> recent() {
+        if (recent == null) {
+            recent = readRecent(null);
+            try {
+                Parlor.Store store = games().metaStore();
+                if (store != null) {
+                    recent = readRecent(store.get(KEY_RECENT));
+                }
+            } catch (SQLException | RuntimeException e) {
+                // only shown: a race runs and pays the same without them
+            }
+        }
+        return recent;
+    }
+
+    /** The kept finishes (pure): {@code "14263,2,..."}, one run of places a lane, most recent first. */
+    static List<List<Integer>> readRecent(String value) {
+        List<List<Integer>> out = new ArrayList<>();
+        String[] lanes = value == null ? new String[0] : value.split(",", -1);
+        for (int lane = 0; lane < Racer.COUNT; lane++) {
+            List<Integer> places = new ArrayList<>();
+            if (lanes.length == Racer.COUNT) {
+                for (char ch : lanes[lane].toCharArray()) {
+                    if (ch >= '1' && ch <= '0' + Racer.COUNT && places.size() < RECENT) {
+                        places.add(ch - '0');
+                    }
+                }
+            }
+            out.add(places);
+        }
+        return out;
+    }
+
+    /** The finishes as kept (pure). */
+    static String writeRecent(List<List<Integer>> recent) {
+        StringBuilder b = new StringBuilder();
+        for (int lane = 0; lane < Racer.COUNT; lane++) {
+            b.append(lane == 0 ? "" : ",");
+            for (int place : recent.get(lane)) {
+                b.append(place);
+            }
+        }
+        return b.toString();
+    }
+
+    /** The race just run: each racer's place goes first in its finishes, and is kept. */
+    private void remember(RaceScript race) {
+        if (race == null) {
+            return;
+        }
+        List<List<Integer>> all = recent();
+        for (int lane = 0; lane < Racer.COUNT; lane++) {
+            List<Integer> places = all.get(lane);
+            places.add(0, race.placeOf(lane) + 1);
+            while (places.size() > RECENT) {
+                places.remove(places.size() - 1);
+            }
+        }
+        try {
+            Parlor.Store store = games().metaStore();
+            if (store != null) {
+                store.set(KEY_RECENT, writeRecent(all));
+            }
+        } catch (SQLException | RuntimeException e) {
+            // only shown: kept in memory until the next start
+        }
     }
 
     /** Races {@code player} may still enter today, or -1 if they can't be counted right now. */
@@ -482,21 +640,21 @@ public final class MobRaces implements Game {
         if (why == null && entries.containsKey(id)) {
             why = ALREADY_IN;
         }
-        Odds odds = pick == null ? null : odds(stake, money);
-        if (why == null && odds == null) {
+        RaceCard.Pay pay = pick == null ? null : pay(pick, stake, money);
+        if (why == null && pay == null) {
             why = Refusal.CLOSED;
         }
         if (why != null) {
             games.tell(player, why);
             return false;
         }
-        RaceTicket ticket = RaceTicket.entry(pick.lane(), odds.stake(), odds.pays());
+        RaceTicket ticket = RaceTicket.entry(pick.lane(), pay.stake(), pay.pays(), card().parts());
         // an entry of theirs left open from before (a crash) is finished first, by its own data
         ChanceRounds.Round old = games.rounds().openRound(id, id());
         if (old != null) {
             games.rounds().finishNow(old);
         }
-        ChanceRounds.Round round = games.rounds().open(player, this, odds.stake(), ticket.data(), money);
+        ChanceRounds.Round round = games.rounds().open(player, this, pay.stake(), ticket.data(), money);
         if (round == null) {
             return false; // refused, and told why
         }
@@ -513,7 +671,7 @@ public final class MobRaces implements Game {
     /**
      * An NPC enters the race gathering now: a pretend {@code stake} on {@code pick}. Only while a real player is in it,
      * once per NPC, at most {@link #MAX_NPCS}. No round is opened and nothing is put in: its entry only shows on the
-     * board, and is told nothing.
+     * board, and is told nothing. It reads the race's card and changes nothing on it.
      *
      * @param id    the NPC's UUID (never a real player's)
      * @param label its name with its gear and stars
@@ -523,11 +681,12 @@ public final class MobRaces implements Game {
         if (phase != Phase.GATHERING || !anyReal() || pick == null || entries.containsKey(id) || npcCount() >= MAX_NPCS) {
             return false;
         }
-        Odds odds = settings().odds(stake);
-        if (odds == null) {
+        RaceCard.Pay pay = pay(pick, stake, false);
+        if (pay == null) {
             return false;
         }
-        Entry e = new Entry(id, label, pick, false, RaceTicket.entry(pick.lane(), odds.stake(), odds.pays()), null);
+        Entry e = new Entry(id, label, pick, false, RaceTicket.entry(pick.lane(), pay.stake(), pay.pays(),
+                card().parts()), null);
         e.npc = true;
         e.startNow = true; // an NPC never holds the start up
         entries.put(id, e);
@@ -605,6 +764,7 @@ public final class MobRaces implements Game {
                     phase = Phase.RESULT;
                     resultUntil = now + RESULT_MS;
                     lastWinner = Racer.of(script.winner());
+                    remember(script);
                     tellResults();
                     changed();
                 }
@@ -612,6 +772,7 @@ public final class MobRaces implements Game {
             case RESULT -> {
                 if (now >= resultUntil) {
                     reset();
+                    card = null; // the race on that card has been run: the next race gets its own
                     changed();
                 }
             }
@@ -649,7 +810,7 @@ public final class MobRaces implements Game {
 
     /**
      * Entries are closed: draw the race's one seed, write it into every entrant's round, and settle them all, before
-     * anything is shown. An entrant whose round was finished somewhere else meanwhile is out of the race (it paid
+     * anything is shown. The winner is drawn from the seed with exactly the card's chances, which every entry carries. An entrant whose round was finished somewhere else meanwhile is out of the race (it paid
      * there, once); with nobody left, there is no race.
      */
     private void startRace() {
@@ -678,7 +839,7 @@ public final class MobRaces implements Game {
             changed();
             return;
         }
-        script = RaceScript.of(seed, s.raceTicks());
+        script = RaceScript.of(seed, s.raceTicks(), card().parts());
         laps = s.laps();
         startedAt = now();
         phase = Phase.RUNNING;

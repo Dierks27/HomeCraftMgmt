@@ -9,6 +9,7 @@ import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces;
+import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOne;
 import com.dierks.homecraft.gui.Menus;
@@ -287,7 +288,7 @@ public final class CpuPlayers implements Game, TableNpcs {
 
     /**
      * While a race gathers with real entrants who all have NPCs on, now and then an NPC enters with a pretend stake: a
-     * hunch on its favourite racer, anyone else on one at random.
+     * pick by its personality ({@link #racePick}).
      */
     void raceEntries(MobRaces races) {
         if (races.phase() != MobRaces.Phase.GATHERING || races.secondsLeft() < 4 || !races.anyReal()
@@ -311,9 +312,23 @@ public final class CpuPlayers implements Game, TableNpcs {
             return;
         }
         CpuPlayer c = free.get(rng.nextInt(free.size()));
-        Racer pick = c.personality() == CpuPersonality.HUNCH ? Racer.of(c.favourite())
-                : Racer.values()[rng.nextInt(Racer.COUNT)];
-        races.enterNpc(c.id(), label(c), pick, CpuTwentyOne.stake(races.settings().open(), c.personality()));
+        Racer pick = racePick(c.personality(), c.favourite(), races.card(), rng.nextInt(Racer.COUNT));
+        races.enterNpc(c.id(), label(c), pick,
+                CpuTwentyOne.stake(races.settings().open(), c.personality()));
+    }
+
+    /**
+     * The racer an NPC picks by its personality (pure): a hunch keeps its favourite racer, a bold one likes the
+     * longest shot on the card, a careful one the favourite, a chatty one any ({@code any}, a lane). It only reads the
+     * card: nothing it picks changes a chance or a pay.
+     */
+    public static Racer racePick(CpuPersonality personality, int favourite, RaceCard card, int any) {
+        return switch (personality) {
+            case HUNCH -> Racer.of(favourite);
+            case BOLD -> card.longest();
+            case CAREFUL -> card.favourite();
+            default -> Racer.of(any);
+        };
     }
 
     // ---- TableNpcs ----------------------------------------------------------------------------------------

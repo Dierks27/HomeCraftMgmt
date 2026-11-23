@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.52.1-secret-book`
+- **Version:** `0.53.0-race-odds`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,15 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.53.0: Mob Races gets real odds and stats; the NPC regulars walk.** The owner: "give us real odds and real stats
+on the mobs. So you could actually win more on longshots ... As right now its a straight guess", and of the NPCs, "I
+don't know if there is a way for them to walk in instead of just disappearing". Every race now has a **card**: each
+racer's Speed, Stamina and Start, today's form and its last 5 finishes on this server, which together set its real
+chance of winning; a longshot really does pay much more, and every pick gives back about the same over time. See
+[Mob Races](#mob-races-0500). The Clubhouse regulars **walk** in from the front door, between the bar, the chairs and
+the machines, and out again, on paths worked out from the room's own plan. No config, schema or block change. **Back
+to 0.52.1:** the jar alone (a race entry left open settles by its own data either way).
 
 **0.52.1: the Game Parlor's way in is a secret book.** The owner: their four-year-old "walked right up to that lever
 and boom straight into the parlor" ("lets make it much harder to find the secret parlor"). The lever is gone: the way
@@ -4922,7 +4931,8 @@ carries a gear and their level in stars, **Tansy ⚙ ★★★**, so nobody, Lil
 | Ozzie | ★★★ hard | bold: big pretend stakes, quick | Efe |
 | Tansy | ★★★ hard | careful | Zuri |
 
-- **Clubhouse regulars.** While anyone is visiting, `regulars` (3) NPCs are about: on the bar stools having a drink,
+- **Clubhouse regulars.** (0.53.0: they **walk**: in from the front door, between their places and out again, at a
+  person's pace, around anyone in the way, on paths worked out from the room's plan.) While anyone is visiting, `regulars` (3) NPCs are about: on the bar stools having a drink,
   in the Great Hall's chairs and armchairs, at the Arcade Room's cabinets and the Trophy Room's cups, at the Parlor's
   slot machines (only for players who can see the Parlor), by the Mob Races table cheering a finish, and at the
   Twenty-One table. They move every minute or two and wave when you come near. They can't be hit, pushed or moved.
@@ -4996,11 +5006,22 @@ and **6 Sheep** (yellow). They are real mobs made small, and they can't be hurt 
   (shipped 5, 10 or 20 tokens; dollars with money play, like the other Parlor games). One tap on a racer enters
   the race. The first entry starts a wait (`gather_seconds`, shipped 20) for anyone else in the room to join; the
   race starts sooner if everyone in it taps **Start now**. One entry per player per race.
+- **The card (0.53.0): real odds, real stats.** Each race has a card, made when the race is first shown and fixed
+  until it runs. Every racer has fixed ratings that suit it (Speed / Stamina / Start, 1-5: Chicken 3/2/5, Pig 2/4/3,
+  Rabbit 5/1/4, Cow 1/5/2, Fox 4/3/3, Sheep 2/3/3) and today's **form** (-2 to +2). Their strength (the three
+  ratings plus twice the form) sets each racer's exact chance of winning (held between 4% and 45%), and the winner is
+  drawn by exactly those chances. Each racer's tile shows its chance ("wins about 1 race in 4"), what it pays at your
+  stake, its stars, its form (▲/▼), its last 5 finishes on this server, and ✦ on the favourite, ➹ on the longest
+  shot. **Pays follow the chance**: a favourite at 25% pays about 3.6x, a longshot at 5% about 18x, each set so it
+  gives back about 90 of every 100 (85-95, never over the cap; a racer whose pay can't fit at a stake isn't offered
+  there). No pick is a better deal than another; "How the odds work" on the screen says so. The board over the track
+  lists each racer's chance and pay while entries are open, and the full finishing order after. NPCs pick by
+  personality: the bold ones like longshots, the careful ones the favourite.
 - **One race for everyone.** When entries close, one draw decides the whole race and every entry is settled at
   once, before a mob moves; the race on the table (`race_seconds`, shipped 25, for the winner) is the show of that
   result, with the racers passing each other on the way. A racer that wins pays the same whole amount on every
-  stake: 27 back for 5 in, 54 for 10, 108 for 20 (exactly 90 of every 100, shown on the screen before you pick).
-  Any other racer pays nothing. Each racer wins one race in six.
+  stake (before 0.53.0: 27 back for 5 in, 54 for 10, 108 for 20; now it follows the racer's chance, see the card).
+  Any other racer pays nothing. (Before 0.53.0 each racer won one race in six and all paid the same.)
 - **Leaving.** Walk out of the Parlor before the race starts and your stake comes back ("Your 5 back"). Quit the
   server and it's finished for you by the same rule. Once the race has started your entry is already decided, so
   leaving changes nothing: you're told how it came out (or at your next join).

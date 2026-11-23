@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.chance.mobraces.MobRaces;
+import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.RaceScript;
 import com.dierks.homecraft.games.chance.mobraces.RaceTrack;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
@@ -310,8 +311,25 @@ final class RaceShow {
         RaceScript script = races.script();
         Racer front = script == null || races.phase() != MobRaces.Phase.RUNNING ? null
                 : Racer.of(script.leaderAt(Math.min(races.raceTick(), script.ticks())));
+        List<String> card = new ArrayList<>();
+        if (races.phase() == MobRaces.Phase.IDLE || races.phase() == MobRaces.Phase.GATHERING) {
+            List<Integer> open = races.settings().open();
+            RaceCard c = races.card();
+            for (Racer r : Racer.values()) {
+                int stake = open.isEmpty() ? 0 : open.get(0);
+                RaceCard.Pay p = races.pay(r, stake, false);
+                card.add(cardLine(r, c.oneIn(r), stake, p == null ? 0 : p.pays(), c.favourite() == r,
+                        c.longest() == r));
+            }
+        }
+        List<Racer> order = new ArrayList<>();
+        if (won != null && script != null) {
+            for (int place = 0; place < Racer.COUNT; place++) {
+                order.add(Racer.of(script.finisher(place)));
+            }
+        }
         String b = String.join("\n", boardLines(races.phase(), races.secondsLeft(), in, front, won, winners,
-                races.lastWinner()));
+                races.lastWinner(), card, order));
         if (!b.equals(boardText) && Bukkit.getEntity(board) instanceof TextDisplay t) {
             t.text(Text.of(b));
             boardText = b;
@@ -328,21 +346,35 @@ final class RaceShow {
     }
 
     /**
-     * The board's lines (pure): what to do while the track is free, the countdown and who is in on which racer while
-     * entries are taken, who is in front while they run, and the winner with whoever picked it.
+     * One racer's line on the board while entries are taken (pure): its chance and what it pays at the smallest
+     * stake, the favourite and the longest shot marked. {@code pays} 0 is a racer not offered at that stake.
+     */
+    static String cardLine(Racer r, String oneIn, int stake, int pays, boolean favourite, boolean longest) {
+        String mark = favourite ? " " + RaceCard.FAVOURITE : longest ? " " + RaceCard.LONGEST : "";
+        return r.label() + mark + " &7wins 1 in " + oneIn + " &7· " + (pays > 0 ? stake + " in → &e" + pays
+                : "&8not at " + stake);
+    }
+
+    /**
+     * The board's lines (pure): the race's card and what to do while the track is free, the countdown, the card and
+     * who is in on which racer while entries are taken, who is in front while they run, and the result (the winner,
+     * the order behind it, whoever picked it).
      *
      * @param in      each entrant's name and their racer's label, in the order they entered
      * @param front   who is in front now (while the race is run), or {@code null}
      * @param won     the winner once it is home, or {@code null}
      * @param winners the entrants who picked the winner
      * @param last    who won the last race, or {@code null}
+     * @param card    each racer's line on this race's card ({@link #cardLine}), shown while entries are taken
+     * @param order   the finishing order once the winner is home (empty before)
      */
     static List<String> boardLines(MobRaces.Phase phase, int secondsLeft, List<String[]> in, Racer front, Racer won,
-                                   List<String> winners, Racer last) {
+                                   List<String> winners, Racer last, List<String> card, List<Racer> order) {
         List<String> out = new ArrayList<>();
         switch (phase) {
             case GATHERING -> {
                 out.add("&eThe race starts in " + Math.max(0, secondsLeft) + " s");
+                out.addAll(card);
                 names(out, in);
                 out.add("&7Tap the table to enter too");
             }
@@ -355,6 +387,13 @@ final class RaceShow {
             }
             case RESULT -> {
                 out.add(won == null ? "&6The race is over" : "&6The winner: " + won.label());
+                if (order.size() == Racer.COUNT) {
+                    List<String> rest = new ArrayList<>();
+                    for (int place = 1; place < order.size(); place++) {
+                        rest.add(order.get(place).label());
+                    }
+                    out.add("&7Then: " + String.join("&7, ", rest));
+                }
                 if (winners.isEmpty()) {
                     out.add("&7Nobody picked it this time.");
                 } else {
@@ -365,6 +404,7 @@ final class RaceShow {
             }
             default -> {
                 out.add("&fSix racers. Pick one.");
+                out.addAll(card);
                 out.add("&7Tap the table to enter");
                 if (last != null) {
                     out.add("&7Last winner: " + last.label());

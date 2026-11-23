@@ -4,18 +4,23 @@ import java.util.SplittableRandom;
 
 /**
  * One Mob Race, written out before it is run (pure): who wins, the order the six finish in, and where each of them
- * is at every tick. The same seed and length always give the same race.
+ * is at every tick. The same seed, chances and length always give the same race.
  *
- * <p><b>The winner is one draw.</b> {@link #winner(long)} is {@code nextInt(6)} of the seed and nothing else, so each
- * racer wins exactly one race in six. That is all that is ever paid on. Everything else here is the show: it is made
- * from the same seed, after the winner, and can never change who won.
+ * <p><b>The winner is one draw.</b> {@link #winner(long, int[])} is the seed's first draw landing in one racer's
+ * chances ({@link RaceCard#winner(long, int[])}) and nothing else, so each racer wins at exactly its stated chance.
+ * That is all that is ever paid on. Everything else here is the show: it is made from the same seed, after the
+ * winner, and can never change who won. (An old entry, from before races had cards, was drawn with every racer as
+ * likely: {@link #evenWinner(long)}.)
  *
  * <p><b>The show.</b> A racer's place is a fraction of the whole race, 0 at the line and 1 at the finish. The winner
  * reaches 1 at tick {@link #ticks()}; the others follow one at a time, the second a clear gap behind
- * ({@link #WIN_GAP_MIN} ticks or more). Each runs at its own changing speed, never backwards and never standing
- * still, so the lead changes hands on the way round. A race is only kept if it is worth watching: the lead changes at
- * least {@link #LEAD_CHANGES} times and the winner is behind someone a third of the way in ({@link #TRIES} tries from
- * the seed; the liveliest is kept if none passes, which a test shows does not happen in practice).
+ * ({@link #WIN_GAP_MIN} ticks or more), in an order drawn by their chances too (a strong racer tends to place well).
+ * Each runs at its own changing speed, never backwards and never standing still, so the lead changes hands on the way
+ * round; its stats lean on that a little ({@link #LEAN}): a quick starter tends to be up early, a stayer comes on
+ * late. A race is only kept if it is worth watching: the lead changes at least {@link #LEAD_CHANGES} times and the
+ * winner is behind someone a third of the way in ({@link #TRIES} tries from the seed; the liveliest is kept if none
+ * passes, which a test shows does not happen in practice). Nothing on the track runs before the race is drawn: the
+ * racers stand at the line while entries are taken.
  */
 public final class RaceScript {
 
@@ -37,6 +42,8 @@ public final class RaceScript {
     private static final int STRETCHES_MIN = 6;
     private static final int STRETCHES_MAX = 14;
     private static final double SWING = 0.3;
+    /** How much a rating of 5 (or 1) moves a racer's pace in its part of the race, against a rating of 3. */
+    static final double LEAN = 0.04;
     /** Lead changes are counted from here on (ticks): all six are level at the line. */
     static final int COUNT_FROM = 10;
     /** How long a racer takes to slow down past the line (ticks), and how far each place runs on (blocks). */
@@ -68,36 +75,51 @@ public final class RaceScript {
         }
     }
 
-    /** Who wins the race drawn from {@code seed}: every racer exactly as likely as any other. */
-    public static int winner(long seed) {
+    /** Who wins the race drawn from {@code seed} with these chances (parts of {@value RaceCard#WHOLE}, by lane). */
+    public static int winner(long seed, int[] parts) {
+        return RaceCard.winner(seed, parts);
+    }
+
+    /** The old draw, every racer as likely as any other: an entry from before races had cards is settled by it. */
+    public static int evenWinner(long seed) {
         return new SplittableRandom(seed).nextInt(Racer.COUNT);
     }
 
     /**
-     * The race for {@code seed}, with the winner home at tick {@code ticks}.
+     * The race for {@code seed} with these chances, the winner home at tick {@code ticks}.
      *
-     * @throws IllegalArgumentException for a race shorter than five seconds
+     * @throws IllegalArgumentException for a race shorter than five seconds, or chances that don't add up
      */
-    public static RaceScript of(long seed, int ticks) {
+    public static RaceScript of(long seed, int ticks, int[] parts) {
         if (ticks < 100) {
             throw new IllegalArgumentException("a race is at least 100 ticks: " + ticks);
         }
+        if (!RaceCard.valid(parts)) {
+            throw new IllegalArgumentException("a race's chances add up to " + RaceCard.WHOLE);
+        }
         SplittableRandom r = new SplittableRandom(seed);
-        int winner = r.nextInt(Racer.COUNT); // the same first draw as winner(seed)
-        // the order behind the winner: a shuffle of the other five
+        int winner = RaceCard.winner(r, parts); // the same first draw as winner(seed, parts)
+        // the order behind the winner: drawn one place at a time, each by the chances of those still to place
         int[] order = new int[Racer.COUNT];
         order[0] = winner;
-        int n = 1;
-        for (int i = 0; i < Racer.COUNT; i++) {
-            if (i != winner) {
-                order[n++] = i;
+        boolean[] placed = new boolean[Racer.COUNT];
+        placed[winner] = true;
+        int left = RaceCard.WHOLE - parts[winner];
+        for (int p = 1; p < Racer.COUNT; p++) {
+            int at = r.nextInt(left);
+            int pick = -1;
+            for (int i = 0; i < Racer.COUNT; i++) {
+                if (!placed[i]) {
+                    pick = i;
+                    at -= parts[i];
+                    if (at < 0) {
+                        break;
+                    }
+                }
             }
-        }
-        for (int i = Racer.COUNT - 1; i > 1; i--) {
-            int j = 1 + r.nextInt(i);
-            int t = order[i];
-            order[i] = order[j];
-            order[j] = t;
+            order[p] = pick;
+            placed[pick] = true;
+            left -= parts[pick];
         }
         int[] finish = new int[Racer.COUNT];
         finish[order[0]] = ticks;
@@ -133,8 +155,11 @@ public final class RaceScript {
         int stretches = Math.max(STRETCHES_MIN, Math.min(STRETCHES_MAX, last / STRETCH_TICKS));
         for (int racer = 0; racer < Racer.COUNT; racer++) {
             double[] pace = new double[stretches + 1];
+            Racer who = Racer.of(racer);
             for (int k = 0; k < pace.length; k++) {
-                pace[k] = 1 - SWING + 2 * SWING * r.nextDouble();
+                // its stats lean on its pace: Start in the first third, Speed in the middle, Stamina in the last
+                int rating = 3 * k < pace.length ? who.start() : 3 * k < 2 * pace.length ? who.speed() : who.stamina();
+                pace[k] = 1 - SWING + 2 * SWING * r.nextDouble() + LEAN * (rating - 3) / 2;
             }
             int end = finish[racer];
             double[] run = at[racer];

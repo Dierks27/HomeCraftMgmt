@@ -242,7 +242,8 @@ public final class PlayGate {
      * Is Lava is here too: its cabinet in the Arcade Room, and its tile from the Games item, hand the visitor out
      * to its playroom and bring them back.
      */
-    static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup", "floor_is_lava");
+    static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup", "floor_is_lava",
+            "kid_races"); // 0.54.0: the Arcade Room's own race (the live test found its table refused: "isn't played")
 
     /**
      * Step 0: a player in a world session may only use that session's game; in the Clubhouse, also the

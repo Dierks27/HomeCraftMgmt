@@ -275,7 +275,9 @@ class PlayGateTest {
                 "the Cup");
         assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.lava.FloorIsLava.SPEC.id()),
                 "The Floor Is Lava (its Arcade Room cabinet and its tile hand the visitor out and back)");
-        assertEquals(4, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id()),
+                "the kid race (played on the Arcade Room's own table, inside the Clubhouse)");
+        assertEquals(5, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
         assertEquals(GameKind.GOLF, com.dierks.homecraft.games.golf.MiniGolf.SPEC.kind(), "golf passes by its kind");
     }
 

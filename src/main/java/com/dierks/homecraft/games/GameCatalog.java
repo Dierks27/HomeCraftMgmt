@@ -51,7 +51,8 @@ public final class GameCatalog {
      * five games of chance, so those keep their order; its last two (Deep Mine, Mob Slots) follow those, and Mob
      * Races (the Parlor's model racetrack) follows the slot machines.
      * The Floor Is Lava comes after them: a room of its own in the Games world. The NPC players (stage 1 of "CPU
-     * players") are last: a foundation every game asks, with no tile of its own.
+     * players") are after them: a foundation every game asks, with no tile of its own. The Arcade Room's free kid race
+     * (plan 11) is last: its block is appended at the end of {@code games:}.
      */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, NetherSlots.SPEC, Motherlode.SPEC, FarmSlots.SPEC,
@@ -59,7 +60,7 @@ public final class GameCatalog {
             SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC,
             WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC, Clubhouse.SPEC,
             com.dierks.homecraft.games.hub.Hub.SPEC, com.dierks.homecraft.games.lava.FloorIsLava.SPEC,
-            com.dierks.homecraft.games.cpu.CpuPlayers.SPEC);
+            com.dierks.homecraft.games.cpu.CpuPlayers.SPEC, com.dierks.homecraft.games.kidrace.KidRaces.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id

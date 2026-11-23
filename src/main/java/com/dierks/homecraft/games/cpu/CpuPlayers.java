@@ -284,6 +284,38 @@ public final class CpuPlayers implements Game, TableNpcs {
         if (g.game(MobRaces.SPEC.id()) instanceof MobRaces m && g.enabled(m)) {
             raceEntries(m);
         }
+        if (g.game(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id())
+                instanceof com.dierks.homecraft.games.kidrace.KidRaces k && g.enabled(k)) {
+            kidRaceEntries(k);
+        }
+    }
+
+    /**
+     * Plan 11: while the Arcade Room's free race gathers with real entrants who all have NPCs on, now and then a friendly
+     * NPC picks a racer too, any one (an easy picker: nothing is put in, nothing paid, and the race is the same).
+     */
+    void kidRaceEntries(com.dierks.homecraft.games.kidrace.KidRaces races) {
+        if (races.phase() != MobRaces.Phase.GATHERING || races.secondsLeft() < 4 || !races.anyReal()
+                || races.npcCount() >= com.dierks.homecraft.games.kidrace.KidRaces.MAX_NPCS || rng.nextInt(100) >= 20) {
+            return;
+        }
+        List<UUID> in = new ArrayList<>();
+        for (com.dierks.homecraft.games.kidrace.KidRaces.Entry e : races.entries()) {
+            if (!e.npc() && !wants(e.id())) {
+                return; // someone in the race has NPCs off
+            }
+            in.add(e.id());
+        }
+        List<CpuPlayer> free = new ArrayList<>();
+        for (CpuPlayer c : CpuRoster.ALL) {
+            if (!in.contains(c.id())) {
+                free.add(c);
+            }
+        }
+        if (!free.isEmpty()) {
+            CpuPlayer c = free.get(rng.nextInt(free.size()));
+            races.enterNpc(c.id(), label(c), Racer.of(rng.nextInt(Racer.COUNT)));
+        }
     }
 
     /**

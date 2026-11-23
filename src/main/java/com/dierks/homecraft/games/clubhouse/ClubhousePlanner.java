@@ -57,9 +57,12 @@ public final class ClubhousePlanner {
      * Arcade Room and the Trophy Room, through two archways in the Foyer's south wall. 6 (0.41.1): carpet runners to the
      * side rooms in place of the stripes, dark cabinet mats, a whole floor under every armchair arm, cushions centred. 7
      * (0.42.0): the podium to the Trophy Room, the bar, the green, the jukebox alcove, the Arcade Room made over. 10:
-     * Mob Races' table in the middle of the Game Parlor, the Parlor's red carpet and its bigger card tables.
+     * Mob Races' table in the middle of the Game Parlor, the Parlor's red carpet and its bigger card tables. 11: the
+     * Arcade Room filled out (the owner: "it looks very empty"): a second race table for the kid race, nine cabinet
+     * mats (one for every kid game and The Floor Is Lava's), a bright rug round the table, a ball pit, a plush case,
+     * bean bags and coloured lamps.
      */
-    public static final int ALGO = 10;
+    public static final int ALGO = 11;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -86,12 +89,15 @@ public final class ClubhousePlanner {
     static final int SIDE_Z0 = MAIN_Z;
     static final int SIDE_Z1 = MAIN_Z + ANNEX_Z - 2;
     /**
-     * The Arcade Room's cabinet places (x, z offsets, yaw), {@value #CABINETS} (0.42.0): two facing rows of three down
-     * the side walls, the east row facing west and the west row facing east, taken in turn from the archway's end. Nothing of a cabinet is
-     * in the plan but its coloured mat in the floor: the cabinet is a model (an entity) you can walk up to.
+     * The Arcade Room's cabinet places (x, z offsets, yaw), {@value #CABINETS} (0.42.0): two facing rows down the side
+     * walls, the east row facing west and the west row facing east, taken in turn from the archway's end. Nothing of a
+     * cabinet is in the plan but its coloured mat in the floor: the cabinet is a model (an entity) you can walk up to.
+     * Plan 11 adds three places after the first six (whose order and places stay as they were): the west wall's
+     * north end and both walls' south ends, so every kid game has a cabinet of its own and The Floor Is Lava one more.
+     * The east wall's north end stays free: it is the archway's way in.
      */
     static final int[][] CABINET_AT = {{14, 36, 90}, {1, 36, -90}, {14, 39, 90}, {1, 39, -90}, {14, 42, 90},
-            {1, 42, -90}};
+            {1, 42, -90}, {1, 33, -90}, {14, 45, 90}, {1, 45, -90}};
     /** 0.42.0: the Arcade Room's prize counter (x 5-10) and claw machines (x 2 and 13) on its back row. */
     static final int PRIZE_X0 = 5;
     static final int PRIZE_X1 = 10;
@@ -99,7 +105,7 @@ public final class ClubhousePlanner {
     /** 0.42.0: the Trophy Room's beams (across, at these rows) and banners (on the side walls). */
     static final int[] TROPHY_BEAM_Z = {38, 44};
     static final int[] TROPHY_BANNER_Z = {35, 41};
-    public static final int CABINETS = 6;
+    public static final int CABINETS = 9;
     /**
      * The Trophy Room's pedestals: the podium for last week's top three at the back (2 x 1 plinths, 1st in the middle
      * and highest, gold, iron and copper as the hall's; the trophy on the west block, the holder's head on the east),
@@ -1000,6 +1006,98 @@ public final class ClubhousePlanner {
                 b.set(i, SIDE_TOP, k, HANGING);
             }
         }
+        kidTable(b);
+        playThings(b);
+    }
+
+    /**
+     * Plan 11: the kid race's table in the Arcade Room (the owner: "we need to take the mob race and plop it into the
+     * arcade!", "A second track in the Arcade Room"): the Parlor's table turned to run north-south, x {@value
+     * #KID_TRACK_X0} to 8 and z {@value #KID_TRACK_Z0} to 42, west of the archway's way in, so the way from the
+     * archway down the east side stays wide open. Three columns of floor lie between it and the west cabinets' standing
+     * places, four between it and the east ones' (the archway's lane among them), two rows between its north end and the
+     * archway's row and two between its south end and the prize counter: it can be walked all the way round, and a
+     * bright rug in two rings lies on that way round.
+     *
+     * <p>The same treatment as the Parlor's: a plain dark-wood table one block high, an invisible light where the racers
+     * run, an invisible barrier over that (nobody stands or jumps onto the track), nothing in the way of seeing it.
+     */
+    private static void kidTable(Builder b) {
+        for (int i = KID_TRACK_X0; i < KID_TRACK_X0 + RaceTrack.DEPTH; i++) {
+            for (int k = KID_TRACK_Z0; k < KID_TRACK_Z0 + RaceTrack.LENGTH; k++) {
+                b.set(ARCADE_X0 + i, 1, k, TRACK_TABLE);
+                b.set(ARCADE_X0 + i, 2, k, TRACK_LIGHT);
+                b.set(ARCADE_X0 + i, 3, k, BARRIER);
+            }
+        }
+        // the bright rug on the way round: a yellow ring next to the table and a light blue one round that
+        for (int i = KID_TRACK_X0 - 2; i <= KID_TRACK_X0 + RaceTrack.DEPTH + 1; i++) {
+            for (int k = KID_TRACK_Z0 - 2; k <= KID_TRACK_Z0 + RaceTrack.LENGTH + 1; k++) {
+                int out = Math.max(Math.max(KID_TRACK_X0 - i, i - (KID_TRACK_X0 + RaceTrack.DEPTH - 1)),
+                        Math.max(KID_TRACK_Z0 - k, k - (KID_TRACK_Z0 + RaceTrack.LENGTH - 1)));
+                if (out == 1 || out == 2) {
+                    b.set(ARCADE_X0 + i, 1, k, KID_RUG[out - 1]);
+                }
+            }
+        }
+        // coloured lamps on chains over the rug's four corners
+        int n = 0;
+        for (int k : new int[]{KID_TRACK_Z0 - 1, KID_TRACK_Z0 + RaceTrack.LENGTH}) {
+            for (int i : new int[]{KID_TRACK_X0 - 1, KID_TRACK_X0 + RaceTrack.DEPTH}) {
+                b.set(ARCADE_X0 + i, SIDE_TOP, k, CHAIN);
+                b.set(ARCADE_X0 + i, SIDE_TOP - 1, k, KID_LAMPS[n++]);
+            }
+        }
+    }
+
+    /**
+     * Plan 11, the Arcade Room's play things, all on floor nobody needs to walk on: a ball pit in the south-east corner
+     * (a confetti of coloured carpet, its balls are displays: {@link #decor}), a glass plush case behind it on the back
+     * row, and a bean-bag nook in the south-west (two bean bags either side of the claw machine's corner and two on the
+     * west wall between its last two cabinets). Nothing to climb into: the case is glass to the top, a bean bag is one
+     * block high, and every top is lit.
+     */
+    private static void playThings(Builder b) {
+        int n = 0;
+        for (int i = BALL_PIT[0]; i <= BALL_PIT[1]; i++) {
+            for (int k = BALL_PIT[2]; k <= BALL_PIT[3]; k++) {
+                b.set(ARCADE_X0 + i, 1, k, BALL_CARPET[n++ % BALL_CARPET.length]);
+            }
+        }
+        for (int i : PLUSH_X) {
+            b.set(ARCADE_X0 + i, 1, SIDE_Z1, CABINET);
+            b.set(ARCADE_X0 + i, 2, SIDE_Z1, ROOF_GLASS);
+        }
+        for (int[] bag : BEAN_BAGS) {
+            b.set(ARCADE_X0 + bag[0], 1, bag[1], BEAN_BAG[bag[2]]);
+        }
+    }
+
+    /** Plan 11: the kid race's table, its north-west corner (x, z offsets): 3 wide (x) and 8 long (z). */
+    static final int KID_TRACK_X0 = 6;
+    static final int KID_TRACK_Z0 = MAIN_Z + 3;
+    /** The rug's two rings round it, the inner first; the lamps over its corners (north-west, north-east, ...). */
+    static final String[] KID_RUG = {"minecraft:yellow_carpet", "minecraft:light_blue_carpet"};
+    static final String[] KID_LAMPS = {"minecraft:pearlescent_froglight[axis=y]",
+            "minecraft:verdant_froglight[axis=y]", "minecraft:ochre_froglight[axis=y]", "minecraft:shroomlight"};
+    /** The ball pit: x 11-12, z 44-45 (x0, x1, z0, z1), and its carpet's colours. */
+    static final int[] BALL_PIT = {11, 12, SIDE_Z1 - 2, SIDE_Z1 - 1};
+    static final String[] BALL_CARPET = {"minecraft:red_carpet", "minecraft:lime_carpet", "minecraft:orange_carpet",
+            "minecraft:pink_carpet"};
+    /** The plush case on the back row (x), between the prize counter and the east claw machine. */
+    static final int[] PLUSH_X = {11, 12};
+    /** The bean bags (x, z, colour): either side of the west claw's corner, and on the west wall. */
+    static final int[][] BEAN_BAGS = {{3, SIDE_Z1, 0}, {4, SIDE_Z1, 1}, {1, SIDE_Z1 - 3, 2}, {1, SIDE_Z1 - 2, 3}};
+    static final String[] BEAN_BAG = {"minecraft:lime_wool", "minecraft:light_blue_wool", "minecraft:pink_wool",
+            "minecraft:yellow_wool"};
+
+    /**
+     * Plan 11: where the kid race's table stands in {@code box}: its north-east corner at the height of its top,
+     * running south along its length and west across it (as if someone stood on that corner block facing south).
+     */
+    static RaceTable.Frame arcadeTable(Box box) {
+        return new RaceTable.Frame(box.minX() + ARCADE_X0 + KID_TRACK_X0 + RaceTrack.DEPTH, box.minY() + 2,
+                box.minZ() + KID_TRACK_Z0, 0, 1, -1, 0);
     }
 
     /**
@@ -1584,6 +1682,30 @@ public final class ClubhousePlanner {
                 out.add(Prop.item("arcade.claw." + c + ".hook", "CHAIN", x0 + CLAW_X[c] + 0.5, y0 + 3.5,
                         z0 + SIDE_Z1 + 0.5, 0f, 0.6f, "face"));
             }
+            // plan 11: the plush case's plushies, two to a glass case
+            String[] plushies = {"CREEPER_HEAD", "PIGLIN_HEAD", "ZOMBIE_HEAD", "DRAGON_HEAD"};
+            for (int c = 0; c < PLUSH_X.length; c++) {
+                for (int m = 0; m < 2; m++) {
+                    out.add(Prop.item("arcade.plush." + c + "." + m, plushies[(2 * c + m) % plushies.length],
+                            x0 + ARCADE_X0 + PLUSH_X[c] + 0.3 + 0.4 * m, y0 + 2.35, z0 + SIDE_Z1 + 0.5, 0f, 0.4f,
+                            "face"));
+                }
+            }
+            // and the ball pit's balls: little coloured cubes lying on its carpet
+            String[] balls = {"RED_CONCRETE", "YELLOW_CONCRETE", "LIME_CONCRETE", "LIGHT_BLUE_CONCRETE",
+                    "ORANGE_CONCRETE", "PINK_CONCRETE", "MAGENTA_CONCRETE", "CYAN_CONCRETE"};
+            int n = 0;
+            for (int i = BALL_PIT[0]; i <= BALL_PIT[1]; i++) {
+                for (int k = BALL_PIT[2]; k <= BALL_PIT[3]; k++) {
+                    for (int m = 0; m < 4; m++) {
+                        double bx = x0 + ARCADE_X0 + i + 0.12 + 0.45 * (m % 2) + 0.06 * (n % 3);
+                        double bz = z0 + k + 0.12 + 0.45 * (m / 2) + 0.05 * (n % 2);
+                        out.add(new Prop("arcade.ball." + n, balls[n % balls.length], true, bx,
+                                y0 + 1 + 1.0 / 16 + (m == 3 ? BALL : 0), bz, 0f, BALL, BALL, BALL, "block"));
+                        n++;
+                    }
+                }
+            }
         }
         return out;
     }
@@ -1598,6 +1720,9 @@ public final class ClubhousePlanner {
         }
         return out;
     }
+
+    /** The size of a ball in the ball pit (blocks). */
+    static final float BALL = 0.3f;
 
     /** The Feast Pot's size on the cloth (blocks). */
     static final float POT_SIZE = 0.6f;
@@ -1765,5 +1890,6 @@ public final class ClubhousePlanner {
             "minecraft:quartz_pillar", "minecraft:green_wool", "minecraft:brown_wool", "minecraft:red_wool",
             "minecraft:ochre_froglight", "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", CLAW,
             "minecraft:cyan_concrete", "minecraft:lime_concrete", "minecraft:orange_concrete",
-            "minecraft:light_blue_concrete");
+            "minecraft:light_blue_concrete", "minecraft:lime_wool", "minecraft:light_blue_wool", "minecraft:pink_wool",
+            "minecraft:yellow_wool", "minecraft:shroomlight");
 }

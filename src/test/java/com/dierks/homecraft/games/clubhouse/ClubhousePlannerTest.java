@@ -84,7 +84,7 @@ class ClubhousePlannerTest {
 
     @Test
     void theGoldenHashPinsTheRoom() {
-        assertEquals("db3ec92a2d96", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
+        assertEquals("90d029b1d219", SITE.plan().hash(), "the Clubhouse's layout is pinned: a change is a decision"
                 + " (and then ClubhousePlanner.ALGO goes up, so every server rebuilds it once)");
         assertEquals(SITE.plan().hash(), ClubhousePlanner.plan(BOX).plan().hash(), "the same box always gives the same room");
         Box moved = BOX.translate(160, 0, -64);
@@ -92,7 +92,8 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(10, ClubhousePlanner.ALGO, "Mob Races' table in the Game Parlor: every server builds it once");
+        assertEquals(11, ClubhousePlanner.ALGO, "plan 11, the Arcade Room filled out with the kid race's table: every server"
+                + " builds it once");
     }
 
     @Test
@@ -687,7 +688,7 @@ class ClubhousePlannerTest {
     }
 
     /**
-     * The Arcade Room's six cabinet places stand on their mats, in the room, with room to walk up (two blocks of air
+     * The Arcade Room's nine cabinet places (plan 11; six before) stand on their mats, in the room, with room to walk up (two blocks of air
      * over each and one in front), the first four on the south wall facing the archway; the path reaches them.
      */
     @Test
@@ -817,7 +818,7 @@ class ClubhousePlannerTest {
         for (int i : ClubhousePlanner.CLAW_X) {
             assertEquals(ClubhousePlanner.CLAW, rel(b, i, 1, ClubhousePlanner.SIDE_Z1), "a claw machine");
         }
-        assertEquals(ClubhousePlanner.CABINETS, ClubhousePlanner.cabinets(BOX).size(), "all six places");
+        assertEquals(ClubhousePlanner.CABINETS, ClubhousePlanner.cabinets(BOX).size(), "all nine places");
         long prizes = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH).stream()
                 .filter(x -> x.key().startsWith("arcade.")).count();
         assertTrue(prizes >= 6, "prizes on show: " + prizes);
@@ -1078,8 +1079,9 @@ class ClubhousePlannerTest {
             }
         }
         // displays only: no block is theirs (the plan is plan 10's, pinned with Mob Races' table)
-        assertEquals("db3ec92a2d96", SITE.plan().hash(), "no block is a slot machine's");
-        assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
+        assertEquals("90d029b1d219", SITE.plan().hash(), "no block is a slot machine's");
+        assertEquals(11, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's; the machines changed no"
+                + " plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
         for (String game : ClubhousePlanner.PARLOR_ROW_GAMES) {
             assertNotNull(com.dierks.homecraft.pack.ClubModels.machineFor(game), game + " has a model name");
@@ -1154,8 +1156,9 @@ class ClubhousePlannerTest {
         }
         assertEquals("machine_deepmine", com.dierks.homecraft.pack.ClubModels.machineFor("deep_mine").name());
         assertEquals("machine_mobs", com.dierks.homecraft.pack.ClubModels.machineFor("mob_slots").name());
-        assertEquals("db3ec92a2d96", SITE.plan().hash(), "no block is theirs: they are displays only");
-        assertEquals(10, ClubhousePlanner.ALGO, "plan 10 is Mob Races' table; the machines changed no plan");
+        assertEquals("90d029b1d219", SITE.plan().hash(), "no block is theirs: they are displays only");
+        assertEquals(11, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's; the machines changed no"
+                + " plan");
         assertEquals(6, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were");
     }
 

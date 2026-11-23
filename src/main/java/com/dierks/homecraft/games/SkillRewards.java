@@ -273,6 +273,14 @@ public final class SkillRewards {
         return "event:" + (eventId == null ? "" : eventId.trim());
     }
 
+    /**
+     * The Arcade Room's kid race won ({@link RewardKind#RACE_WIN}), once per player per race: {@code race:<start>},
+     * the moment that race started (no two races start together).
+     */
+    public static String raceRef(long startedAt) {
+        return "race:" + startedAt;
+    }
+
     /** A hole-in-one on a hole today: {@code hio:<course>:<hole>:<day>}. */
     public static String holeInOneRef(String course, int hole, long day) {
         return "hio:" + course + ":" + hole + ":" + day;

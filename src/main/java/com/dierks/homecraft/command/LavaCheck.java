@@ -28,7 +28,7 @@ final class LavaCheck {
      * @param closed       why the running playroom closed itself, or {@code null}
      * @param ready        the playroom is built and checked (players may come in)
      * @param arcadeRoom   the Clubhouse and its Arcade Room are on (its cabinet can stand there)
-     * @param cabinetPlace the Arcade Room has a cabinet place that only repeats a game (the lava cabinet takes it)
+     * @param cabinetPlace the Arcade Room has a cabinet place after its listed games (the lava cabinet takes it)
      */
     record Facts(boolean enabled, String world, boolean worldLoaded, String box, List<String> problems,
                  ArenaCheck.Claim claim, String closed, boolean ready, boolean arcadeRoom, boolean cabinetPlace) {

@@ -121,7 +121,8 @@ public record MobRacesSettings(boolean enabled, List<Integer> stakes, int dailyL
         return laps(raceSeconds);
     }
 
-    static int laps(int raceSeconds) {
+    /** How many laps a race of {@code raceSeconds} is (the Arcade Room's kid race runs at the same pace). */
+    public static int laps(int raceSeconds) {
         return Math.max(1, (int) Math.round(raceSeconds / SECONDS_A_LAP));
     }
 }

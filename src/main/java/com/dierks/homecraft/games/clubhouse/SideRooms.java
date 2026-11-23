@@ -135,20 +135,33 @@ final class SideRooms {
         Set<String> keep = new HashSet<>();
         if (s.arcadeRoom()) {
             List<String> games = kidSet(room.hand() ? room.handCabinetGames() : s.arcadeGames());
-            List<ClubhouseRoom.Cabinet> cabs = room.cabinetPlaces(games);
-            ClubhousePlanner.Place3 lava = lavaPlace(room, games.size()); // The Floor Is Lava's cabinet
+            List<ClubhouseRoom.Cabinet> cabs;
+            ClubhousePlanner.Place3 lava = null; // The Floor Is Lava's cabinet
+            if (room.hand()) {
+                cabs = room.cabinetPlaces(games);
+                lava = lavaPlace(room);
+            } else {
+                // plan 11: the listed games, The Floor Is Lava's cabinet, then every other open cabinet game, once each
+                cabs = room.cabinetPlaces(KidSet.fill(games, moreKidGames(), lavaOn() ? LAVA_GAME : null,
+                        room.generatedCabinetPlaces().size()));
+            }
             for (int n = 0; n < cabs.size(); n++) {
                 ClubhouseRoom.Cabinet c = cabs.get(n);
+                if (c.game().equals(LAVA_GAME)) {
+                    lava = c.at();
+                    continue;
+                }
                 if (c.at().equals(lava)) {
-                    continue; // the repeated cabinet whose place it takes
+                    continue; // an owner-built room's cabinet where its lava cabinet stands
                 }
                 String key = "cab:" + n;
                 keep.add(key);
                 put(w, key, c.game() + "@" + c.at(), c.at(), () -> cabinet(w, c.game(), c.at(), null));
             }
+            ClubhousePlanner.Place3 lavaAtNow = lava;
             if (lava != null) {
                 keep.add(LAVA_KEY);
-                put(w, LAVA_KEY, LAVA_GAME + "@" + lava, lava, () -> cabinet(w, LAVA_GAME, lava, LAVA_TAP));
+                put(w, LAVA_KEY, LAVA_GAME + "@" + lava, lava, () -> cabinet(w, LAVA_GAME, lavaAtNow, LAVA_TAP));
             }
             lavaAt = lava;
         } else {
@@ -205,6 +218,7 @@ final class SideRooms {
         views(w);
         shimmer(room, w);
         arcadeSounds(room, w);
+        arcadeGuests(room, w);
         secretVisitors(room, w);
         parlorGuests(room, w);
         gates(w);
@@ -222,9 +236,9 @@ final class SideRooms {
     private ClubhousePlanner.Place3 lavaAt;
 
     /**
-     * Which of the generated Arcade Room's cabinet places The Floor Is Lava's cabinet takes: the first one that
-     * only repeats a game (the kid set is taken round again to fill the room), so no game loses its cabinet and no
-     * block changes. -1 when every place has a game of its own.
+     * Which of the generated Arcade Room's cabinet places The Floor Is Lava's cabinet takes: the one right after the
+     * listed games ({@link KidSet#fill}; before plan 11 the first one that only repeated a game), so it stays where
+     * 0.45.0 put it. -1 when every place has a listed game of its own.
      *
      * @param games  how many games the kid set has
      * @param places the room's cabinet places
@@ -233,23 +247,38 @@ final class SideRooms {
         return places > 0 && games >= 0 && games < places ? games : -1;
     }
 
-    /**
-     * Where the lava cabinet stands: in the generated room, a repeated place ({@link #lavaIndex}); in an owner-built
-     * room, where the owner put it ({@code /hcm games clubhouse cabinet floor_is_lava}). {@code null} while The Floor
-     * Is Lava is off, or there is no place for it.
-     */
-    private ClubhousePlanner.Place3 lavaPlace(ClubhouseRoom room, int kidGames) {
+    /** Whether The Floor Is Lava is there and open (its cabinet stands only then). */
+    private boolean lavaOn() {
         Game g = club.games().game(LAVA_GAME);
-        if (g == null || !club.games().enabled(g)) {
+        return g != null && club.games().enabled(g);
+    }
+
+    /**
+     * Plan 11: the cabinet games that fill the generated room's places after the listed ones and the lava cabinet:
+     * every arcade cabinet game this server has open, in {@link KidSet#CABINET_GAMES}' order.
+     */
+    private List<String> moreKidGames() {
+        List<String> out = new ArrayList<>();
+        for (String id : KidSet.CABINET_GAMES) {
+            Game g = club.games().game(id);
+            if (g != null && g.kind() == GameKind.CABINET && club.games().enabled(g)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Where an owner-built room's lava cabinet stands: where the owner put it ({@code /hcm games clubhouse cabinet
+     * floor_is_lava}). {@code null} while The Floor Is Lava is off, or there is no place for it. (The generated room's
+     * is one of its places: {@link KidSet#fill}.)
+     */
+    private ClubhousePlanner.Place3 lavaPlace(ClubhouseRoom room) {
+        if (!lavaOn()) {
             return null;
         }
         List<ClubhouseRoom.Cabinet> places = room.cabinetPlaces(List.of(LAVA_GAME));
-        if (room.hand()) {
-            return places.isEmpty() ? null : places.get(0).at();
-        }
-        List<ClubhousePlanner.Place3> generated = room.generatedCabinetPlaces();
-        int n = lavaIndex(kidGames, generated.size());
-        return n < 0 ? null : generated.get(n);
+        return places.isEmpty() ? null : places.get(0).at();
     }
 
     /**
@@ -512,6 +541,18 @@ final class SideRooms {
             case "parlor:out" -> {
                 p.playSound(p.getLocation(), Sound.BLOCK_WOODEN_DOOR_CLOSE, 0.8f, 1.0f);
                 club.moveTo(p, room.parlorReturn());
+            }
+            case RaceShow.KID_TAP -> {
+                // plan 11, the Arcade Room's race table: a chime and sparkles, then the racers' screen through
+                // /hcm play's own entry point and gate (a free skill game: never the games of chance's gate)
+                Location at = e.getLocation().add(0, 1.2, 0);
+                p.playSound(at, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.9f, 1.4f);
+                p.spawnParticle(Particle.HAPPY_VILLAGER, at, 10, 0.6, 0.4, 0.6, 0.0);
+                if (club.games().game(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id())
+                        instanceof com.dierks.homecraft.games.kidrace.KidRaces kid) {
+                    kid.guest(p.getUniqueId()); // in the room now, for this tap
+                }
+                club.games().open(p, com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id(), null);
             }
             case LAVA_TAP -> {
                 // one tap, nothing to choose or read: a chime and sparkles, then straight into Little
@@ -795,6 +836,23 @@ final class SideRooms {
                 p.playSound(p.getLocation(), notes[r.nextInt(notes.length)], 0.25f, 0.6f + r.nextFloat() * 1.2f);
             }
         }
+    }
+
+    /** Plan 11: who is in the Arcade Room, told to its kid race (only they may enter it, and it is run for them). */
+    private void arcadeGuests(ClubhouseRoom room, World w) {
+        if (!(club.games().game(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id())
+                instanceof com.dierks.homecraft.games.kidrace.KidRaces kid)) {
+            return;
+        }
+        List<UUID> in = new ArrayList<>();
+        if (club.settings().arcadeRoom() || room.hand()) {
+            for (Player p : w.getPlayers()) {
+                if (room.inArcadeRoom(w.getName(), p.getX(), p.getY(), p.getZ())) {
+                    in.add(p.getUniqueId());
+                }
+            }
+        }
+        kid.guests(in);
     }
 
     /** Every this many seconds, an arcade chime. */

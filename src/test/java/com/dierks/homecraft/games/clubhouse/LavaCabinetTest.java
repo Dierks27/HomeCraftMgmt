@@ -20,7 +20,8 @@ class LavaCabinetTest {
 
     @Test
     void itTakesTheFirstRepeatedPlaceAndNoGameLosesItsCabinet() {
-        assertEquals(4, SideRooms.lavaIndex(4, ClubhousePlanner.CABINETS), "the shipped four games: the fifth place");
+        assertEquals(4, SideRooms.lavaIndex(4, ClubhousePlanner.CABINETS), "the shipped four games: the fifth place,"
+                + " where it always stood (plan 11 gives the places after it to the other kid games)");
         assertEquals(1, SideRooms.lavaIndex(1, ClubhousePlanner.CABINETS));
         assertEquals(-1, SideRooms.lavaIndex(ClubhousePlanner.CABINETS, ClubhousePlanner.CABINETS),
                 "every place has a game of its own: no lava cabinet (the check says so)");

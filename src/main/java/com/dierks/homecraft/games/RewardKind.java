@@ -64,7 +64,13 @@ public enum RewardKind {
      * One-time and per game, and paid through {@link SkillRewards#pay}, so never for a game of
      * chance.
      */
-    EVENT_PRIZE;
+    EVENT_PRIZE,
+    /**
+     * The Arcade Room's free kid race: the picker of the racer that won, once per race (ref {@code race:<start>},
+     * {@link SkillRewards#raceRef}). Capped: the game's {@code daily_cap} and the server's skill cap, so it can't be
+     * farmed. Appended after every old kind: the kinds are stored by name.
+     */
+    RACE_WIN;
 
     /** Whether it counts toward the daily caps (everything but a first clear and an event prize). */
     public boolean capped() {

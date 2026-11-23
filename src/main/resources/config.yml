@@ -2875,9 +2875,9 @@ games:
       # A cabinet for each game below: tap it (either click) and the game starts in Classic at
       # once - free, unlimited, never today's scored try. false = the room isn't built.
       enabled: true
-      # The cabinets, in order (at most 6). Any arcade cabinet game may be listed; a game of
-      # chance never opens here, even if listed. Also: snake, connect_four, creeper_sweeper,
-      # ore_merge.
+      # The first cabinets, in order (at most 9); The Floor Is Lava's comes next, then every other
+      # arcade cabinet game (snake, connect_four, creeper_sweeper, ore_merge), one cabinet each. A
+      # game of chance never opens here, even if listed.
       games: [whack_a_zombie, simon_says, mini_match, tic_tac_toe]
     trophy_room:
       # The all-time records as trophies, each with its holder's head beside it, and last week's
@@ -2938,3 +2938,19 @@ games:
     regulars: 3
     # Seconds a player sits alone at a table before an NPC joins them (5-600).
     join_after_seconds: 20
+  # Mob Races in the Clubhouse's Arcade Room: a free copy of the Game Parlor's race for kids, on a
+  # second track. Tap the table, then tap a racer: nothing to read, nothing put in. If your racer
+  # wins you get a few tokens (counts toward skill_daily_cap); if not, a cheer for the winner and
+  # nothing is taken. It is not a game of chance and never needs hcm.games.chance.
+  kid_races:
+    # false = the Arcade Room's track takes no races.
+    enabled: true
+    # Tokens when your racer wins (0-20). The same whichever racer it is.
+    prize: 2
+    # Most tokens a player wins here a day (0-100); after that the races are just for fun.
+    daily_cap: 10
+    # Seconds the track waits for more racers after the first one picks (5-120). It starts
+    # sooner when everyone in it taps the big green Go.
+    gather_seconds: 15
+    # Seconds the winner takes to reach the finish (10-60).
+    race_seconds: 20

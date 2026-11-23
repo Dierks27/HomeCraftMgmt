@@ -125,7 +125,7 @@ class ClubhouseSettingsTest {
     }
 
     /**
-     * 0.41.0: {@code arcade_room.enabled}, {@code arcade_room.games} (lower-cased, each once, at most six with one
+     * 0.41.0: {@code arcade_room.enabled}, {@code arcade_room.games} (lower-cased, each once, at most nine with one
      * WARN for the rest) and {@code trophy_room.enabled} are read from config; a game of chance in the list is the
      * room's to refuse ({@link KidSetTest}).
      */
@@ -133,15 +133,16 @@ class ClubhouseSettingsTest {
     void theSideRoomsAreReadFromConfig() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("arcade_room", Map.of("enabled", false, "games", List.of("Snake", "snake", "simon_says", "ore_slots",
-                "mini_match", "whack_a_zombie", "tic_tac_toe", "connect_four")));
+                "mini_match", "whack_a_zombie", "tic_tac_toe", "connect_four", "creeper_sweeper", "ore_merge",
+                "wheel")));
         m.put("trophy_room", Map.of("enabled", false));
         List<String> warns = new ArrayList<>();
         ClubhouseSettings s = read(m, warns);
         assertFalse(s.arcadeRoom());
         assertFalse(s.trophyRoom());
-        assertEquals(List.of("snake", "simon_says", "ore_slots", "mini_match", "whack_a_zombie", "tic_tac_toe"),
-                s.arcadeGames(), "in order, once each, the first six");
-        assertEquals(1, warns.size(), "one WARN for the seventh: " + warns);
+        assertEquals(List.of("snake", "simon_says", "ore_slots", "mini_match", "whack_a_zombie", "tic_tac_toe",
+                "connect_four", "creeper_sweeper", "ore_merge"), s.arcadeGames(), "in order, once each, the first nine");
+        assertEquals(1, warns.size(), "one WARN for the tenth: " + warns);
         assertTrue(warns.get(0).contains("games.clubhouse.arcade_room.games"), warns.get(0));
         assertEquals(new ClubhousePlanner.Rooms(false, false), s.rooms());
         assertTrue(ClubhouseSettings.defaults().withRooms(true, false).rooms().arcade());

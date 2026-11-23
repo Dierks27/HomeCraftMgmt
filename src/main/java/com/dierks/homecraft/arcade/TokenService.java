@@ -96,7 +96,10 @@ public final class TokenService {
         ARCADE_DEEP_MINE("Deep Mine"),
         ARCADE_MOB_SLOTS("Mob Slots"),
         // Mob Races: the Game Parlor's model racetrack (six tiny mobs, pick one).
-        ARCADE_MOB_RACES("Mob Races");
+        ARCADE_MOB_RACES("Mob Races"),
+        // The Arcade Room's free Mob Races for kids: a few tokens when your racer wins, under a daily cap. A skill
+        // game's reward: nothing is ever put in, so it is never a line of a game of chance.
+        GAMES_KID_RACES("Arcade Room races");
 
         private final String label;
 

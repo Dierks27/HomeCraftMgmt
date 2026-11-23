@@ -168,6 +168,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private ClubDecor decor;
     /** Mob Races in the Game Parlor: the model racetrack on its table and the tiny mobs that run on it. */
     private RaceShow raceShow;
+    /** Plan 11: the Arcade Room's track, for the free kid race. */
+    private RaceShow kidShow;
     /** 0.50.0: the back bar's bottles, to drink. */
     private BarDrinks drinks;
 
@@ -406,6 +408,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (raceShow != null) {
             out.add(raceShow.statusLine());
         }
+        if (kidShow != null) {
+            out.add(kidShow.statusLine());
+        }
         if (regulars != null) {
             out.add(regulars.statusLine());
         }
@@ -437,6 +442,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         drinks = new BarDrinks(this);
         com.dierks.homecraft.games.world.KitGuardListener.tapBlocks(tapBlock); // 0.51.1
         raceShow = new RaceShow(this);
+        kidShow = new RaceShow(this, RaceShow.ARCADE);
         regulars = new ClubRegulars(this);
         g.onCheer(cheerListener); // 0.41.0
         watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
@@ -620,6 +626,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (raceShow != null) {
             raceShow.remove();
+        }
+        if (kidShow != null) {
+            kidShow.remove();
         }
         if (regulars != null) {
             regulars.remove();
@@ -966,6 +975,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (raceShow != null) {
             raceShow.tick(); // Mob Races' racers move every tick
         }
+        if (kidShow != null) {
+            kidShow.tick(); // and the Arcade Room's
+        }
         if (regulars != null) {
             regulars.tick(); // the NPC regulars walk a step a tick
         }
@@ -1016,6 +1028,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             }
             if (raceShow != null) {
                 raceShow.remove();
+            }
+            if (kidShow != null) {
+                kidShow.remove();
             }
             if (regulars != null) {
                 regulars.remove();
@@ -1084,6 +1099,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (raceShow != null) {
             raceShow.second(r);
+        }
+        if (kidShow != null) {
+            kidShow.second(r);
         }
         if (regulars != null) {
             List<Player> here = new ArrayList<>();
@@ -1252,6 +1270,11 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
                 instanceof com.dierks.homecraft.games.chance.mobraces.MobRaces races
                 && races.phase() != com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase.IDLE) {
             return true; // watching a Mob Race in the Parlor is not sitting idle
+        }
+        if (games().game(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id())
+                instanceof com.dierks.homecraft.games.kidrace.KidRaces kid && kid.inRoom(id)
+                && kid.phase() != com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase.IDLE) {
+            return true; // nor is watching the Arcade Room's
         }
         NightRunner n = night();
         return n != null && !n.phase().over() && n.in(id);

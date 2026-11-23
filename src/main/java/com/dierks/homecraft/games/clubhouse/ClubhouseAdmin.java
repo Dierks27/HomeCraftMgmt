@@ -37,6 +37,8 @@ import java.util.Locale;
  *       the owner-built room's Arcade Room cabinets (one per game, on the block the admin stands on, facing their
  *       way; {@code cabinet all clear} takes every one down), its trophy shelf (the first trophy where the admin stands
  *       on their shelf, back to the wall, the row to their right) and the signs over its two doorways. Optional.</li>
+ *   <li>{@code arcade mob_races [clear]} (plan 11): the Arcade Room's race table for the free kid race, the one the
+ *       admin stands on (a corner of it, facing along it), as {@code parlor mob_races} is the Parlor's.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -52,7 +54,7 @@ final class ClubhouseAdmin implements GameAdmin {
     static final String NAME = "clubhouse";
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
-            "feast", "cabinet", "trophyroom", "door", "secret", "parlor", "edit", "save", "discard", "saves", "restore",
+            "feast", "cabinet", "trophyroom", "door", "secret", "parlor", "arcade", "edit", "save", "discard", "saves", "restore",
             "spot", "models", "generated", "rebuild", "off");
 
     private final Clubhouse game;
@@ -122,6 +124,19 @@ final class ClubhouseAdmin implements GameAdmin {
                             : l.getWorld().getName(), l.getX(), l.getY(), l.getZ(), l.getYaw());
                     var g = a1 == null ? null : game.games().game(a1);
                     out.add(room.upstairs(sub, a1, at, g != null && g.kind().chance()));
+                }
+            }
+            case "arcade" -> {
+                if (!(sender instanceof Player p)) {
+                    out.add("&cOnly a player can do that - stand where it goes first.");
+                } else if (room == null) {
+                    out.add(notRunning(closedWhy()));
+                } else {
+                    String a1 = args != null && args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : null;
+                    boolean clear = args != null && args.length > 2 && args[args.length - 1].equalsIgnoreCase("clear");
+                    Location l = p.getLocation();
+                    out.add(room.arcade(a1, clear ? null : new ClubhouseRoom.Place(l.getWorld() == null ? ""
+                            : l.getWorld().getName(), l.getX(), l.getY(), l.getZ(), l.getYaw())));
                 }
             }
             case "edit" -> out.add(room == null ? notRunning(closedWhy()) : room.edit());
@@ -406,6 +421,14 @@ final class ClubhouseAdmin implements GameAdmin {
                     out.add(w);
                 }
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade")) {
+            if (ClubhouseRoom.MOB_RACES.startsWith(last)) {
+                out.add(ClubhouseRoom.MOB_RACES);
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("arcade")) {
+            if ("clear".startsWith(last)) {
+                out.add("clear");
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("cabinet")) {
             for (com.dierks.homecraft.games.Game g : game.games().games()) {
                 if ((g.kind() == com.dierks.homecraft.games.GameKind.CABINET || g.id().equals(SideRooms.LAVA_GAME))
@@ -441,6 +464,8 @@ final class ClubhouseAdmin implements GameAdmin {
             "&e/hcm games clubhouse secret [room] [clear]|parlor lever|room|<game>|ticket|mob_races [clear] &7- your"
                     + " room's secret trophy room (its door, its room) and Game Parlor (its secret way in, room, machines, ticket"
                     + " booth, and Mob Races' track: stand on a corner of a table 8 x 3, facing along it)",
+            "&e/hcm games clubhouse arcade mob_races [clear] &7- your room's Arcade Room race table, for the free kid"
+                    + " race (stand on a corner of a table 8 x 3, facing along it)",
             "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
                     + " save it as the Clubhouse",
             "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",

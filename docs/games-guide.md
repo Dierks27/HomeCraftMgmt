@@ -1776,6 +1776,12 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - In Connect Four and Tic-Tac-Toe you can pick "Play an NPC". Easy ones are good for little players. Games against NPCs give no tokens.
 - Your NPC setting is on the Games screen (or /hcm play npc): on or off, and easy, matched or any. A parent or admin can set and lock it for you.
 
+### Mob Races for kids (0.54.0)
+
+- The Clubhouse's Arcade Room has its own little race track. Tap the table, then tap a mob. It's free.
+- If your mob wins: fireworks and 2 tokens (up to 10 a day). If not, everyone cheers for the winner and nothing is lost.
+- Every kid game now has its own cabinet in the Arcade Room: Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie, Connect Four, Tic-Tac-Toe and The Floor Is Lava.
+
 ### NPCs in the world games (0.52.0)
 
 - If you wait alone for a little while in racing with friends (parkour, rings, boat), Falling Floors, The Floor Is Lava's Group or Challenge, or golf together, NPCs come and play with you (up to 3). In Race Night they fill a race up to 4.

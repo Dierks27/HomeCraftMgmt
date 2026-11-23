@@ -31,10 +31,14 @@ class ClubModelsTest {
         }
         assertTrue(ids.containsAll(List.of("hcm:cabinet_whack", "hcm:cabinet_simon", "hcm:cabinet_match",
                 "hcm:cabinet_tictactoe", "hcm:cabinet_snake", "hcm:trophy_gold", "hcm:trophy_silver",
-                "hcm:trophy_bronze", "hcm:door_arcade", "hcm:door_trophy")), ids.toString());
+                "hcm:trophy_bronze", "hcm:door_arcade", "hcm:door_trophy", "hcm:cabinet_sweeper", "hcm:cabinet_merge",
+                "hcm:cabinet_connect")), ids.toString());
         assertEquals("hcm:cabinet_whack", ClubModels.cabinetFor("whack_a_zombie").id());
         assertEquals("hcm:cabinet_tictactoe", ClubModels.cabinetFor("TIC_TAC_TOE").id());
-        assertEquals("hcm:cabinet", ClubModels.cabinetFor("connect_four").id(), "any other cabinet game: the plain one");
+        assertEquals("hcm:cabinet_connect", ClubModels.cabinetFor("connect_four").id(), "plan 11: Connect Four's own");
+        assertEquals("hcm:cabinet_sweeper", ClubModels.cabinetFor("creeper_sweeper").id());
+        assertEquals("hcm:cabinet_merge", ClubModels.cabinetFor("ore_merge").id());
+        assertEquals("hcm:cabinet", ClubModels.cabinetFor("some_new_game").id(), "any other cabinet game: the plain one");
         assertEquals("hcm:trophy_gold", ClubModels.trophy(1).id());
         assertEquals("hcm:trophy_silver", ClubModels.trophy(2).id());
         assertEquals("hcm:trophy_bronze", ClubModels.trophy(3).id());

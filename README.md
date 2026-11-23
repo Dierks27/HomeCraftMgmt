@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.53.0-race-odds`
+- **Version:** `0.54.0-kid-races`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,17 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.54.0: Lilah's Mob Races, and an Arcade Room with every kid game.** The owner: "take the mob race and plop it
+into the arcade ... make it for my daughter" ("Free, prize only if she wins"), and "There were two Simon Says in the
+arcade ... it looks very empty". The Arcade Room gets **its own race track** (the Parlor's table turned north-south,
+with a rug round it), where **Mob Races is free**: tap the table, tap a racer (big pictures, nothing to read), and
+if it wins, fireworks and 2 tokens (10 a day at most); if not, a cheer for the winner and nothing lost. **Every kid
+cabinet game has its own cabinet now**, no repeats: new ones for Creeper Sweeper, Ore Merge and Connect Four, beside
+The Floor Is Lava's. The room is dressed up with coloured lamps, a ball pit, a case of plushies and bean bags.
+**Plan 11: the Clubhouse rebuilds once.** See [Lilah's Mob Races](#lilahs-mob-races-0540). A new `games.kid_races`
+section is added to config.yml at the first start (no config revision); no schema change. **Back to 0.53.0:** the jar
+alone; 0.53.0 rebuilds the Clubhouse once more (plan 10).
 
 **0.53.0: Mob Races gets real odds and stats; the NPC regulars walk.** The owner: "give us real odds and real stats
 on the mobs. So you could actually win more on longshots ... As right now its a straight guess", and of the NPCs, "I
@@ -4994,6 +5005,31 @@ glass roof. Nothing she needs is words.
   6, `stars` 10, `safe_seconds` 25, `lava_seconds` 12, `rounds` 5.
 - **Not seen on a server yet:** the room's look, the climbs with a Bedrock controller, the sounds' loudness, and the
   orange tint of standing in lava (fire resistance doesn't take it away).
+
+##### Lilah's Mob Races (0.54.0)
+
+A free copy of Mob Races for the children, on its own track in the Clubhouse's **Arcade Room** (plan 11: the
+Parlor's 8 x 3 table turned to run north-south at x 6-8, z 35-42, with a yellow and light-blue rug round it). It is a
+skill/fun game (`kid_races`, "Mob Races" to players), never a game of chance: no stake, no Parlor rules, nothing on
+the Luck tab.
+
+- **Playing.** Tap the table: a chime, then six big pictures, one per racer (its colour, its egg, its number as the
+  stack size, its stars). One tap on a racer enters. The race starts 15 seconds after the first pick, or at once when
+  everyone in it taps the big green Go. The same race card as the Parlor's decides the winner, and the same tiny mobs
+  run the race.
+- **If your racer wins:** fireworks, a fanfare and **2 tokens** ("Hooray!"), paid like the other kid games' rewards,
+  **10 a day at most**. Every racer pays the same. **If not:** a friendly sound and "X won the race! Hooray for X!";
+  nothing is taken. Then the kid end screen: a big green play-again, All done.
+- **NPCs** may join a race a real player is in (up to two, picking at random, never paid). A race with only NPCs
+  never runs.
+- **The Arcade Room** now has a cabinet place for every kid game, with no repeats: the five before, The Floor Is
+  Lava's, and new cabinets for **Snake, Connect Four, Creeper Sweeper and Ore Merge** (models `cabinet_sweeper`,
+  `cabinet_merge`, `cabinet_connect`; without the pack a creeper head, a diamond and red concrete). It is dressed with
+  coloured lamps on chains, a ball pit, a glass case of mob plushies and wool bean bags.
+- **Settings** (`games.kid_races`): `enabled`, `prize` (2), `daily_cap` (10), `gather_seconds` (15), `race_seconds`
+  (20). In an owner-built or edited room, build a table and use `/hcm games clubhouse arcade mob_races [clear]`.
+- **Seen on the test server:** the Clubhouse rebuilt to plan 11; every kid game's cabinet once; the table's screen;
+  a race picked, run and won, "+2 tokens ... Hooray!", the end screen.
 
 ##### Mob Races (0.50.0)
 

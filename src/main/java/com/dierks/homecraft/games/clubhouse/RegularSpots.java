@@ -88,6 +88,13 @@ final class RegularSpots {
             for (ClubhousePlanner.Place3 c : ClubhousePlanner.cabinets(box)) {
                 before(out, b, Kind.ARCADE, c, box.minY() + 1, false);
             }
+            // plan 11: beside the kid race's table, on its rug, either side, watching the race
+            int x0 = box.minX() + ClubhousePlanner.ARCADE_X0 + ClubhousePlanner.KID_TRACK_X0;
+            int z0 = box.minZ() + ClubhousePlanner.KID_TRACK_Z0;
+            for (int k = z0 + 1; k < z0 + RaceTrack.LENGTH; k += 3) {
+                stand(out, b, Kind.ARCADE, x0 - 1, box.minY() + 1, k, -90f, false);
+                stand(out, b, Kind.ARCADE, x0 + RaceTrack.DEPTH, box.minY() + 1, k + 1, 90f, false);
+            }
         }
         if (rooms.trophy()) {
             for (ClubhousePlanner.Pedestal p : ClubhousePlanner.pedestals(box)) {

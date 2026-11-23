@@ -122,6 +122,12 @@ public final class ClubModels {
         machine("mob_slots", "machine_mobs", Material.CREEPER_HEAD, "minecraft:block/lime_concrete", Kind.CABINET);
         // The Floor Is Lava's cabinet in the Arcade Room (a cabinet's size; its stand-in's icon is a lava bucket)
         cabinet("floor_is_lava", "cabinet_lava", Material.LAVA_BUCKET, "minecraft:block/magma");
+        // Plan 11 (the owner: "Do we have all the games that the kids can play in the arcade"): the last three cabinet
+        // games' own cabinets, after every model there was. Block-atlas textures only, as 0.41.1 found they must be:
+        // a Creeper's face on a green screen, a diamond ore screen, a red and yellow Connect Four grid
+        cabinet("creeper_sweeper", "cabinet_sweeper", Material.CREEPER_HEAD, "minecraft:block/lime_concrete");
+        cabinet("ore_merge", "cabinet_merge", Material.DIAMOND, "minecraft:block/diamond_ore");
+        cabinet("connect_four", "cabinet_connect", Material.RED_CONCRETE, "minecraft:block/blue_concrete");
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -218,13 +224,21 @@ public final class ClubModels {
                 parts.add(box(1, 22, 1, 15, 24, 15, "top"));      // the lit marquee
                 parts.add(box(3, 8, 1, 13, 19, 2, "screen"));     // the screen, on the north side
                 parts.add(box(2, 2, 0, 14, 5, 2, "panel"));       // the control panel
-                if (m.name().equals("machine_mobs")) { // a Creeper's face on the screen, in the body's black
+                if (m.name().equals("machine_mobs") || m.name().equals("cabinet_sweeper")) {
+                    // a Creeper's face on the screen, in the body's black
                     parts.add(box(5, 14, 0, 7, 16, 1, "body"));  // the eyes
                     parts.add(box(9, 14, 0, 11, 16, 1, "body"));
                     parts.add(box(7, 13, 0, 9, 14, 1, "body"));  // the nose
                     parts.add(box(6, 11, 0, 10, 13, 1, "body")); // the mouth
                     parts.add(box(6, 10, 0, 7, 11, 1, "body"));  // and its two corners
                     parts.add(box(9, 10, 0, 10, 11, 1, "body"));
+                }
+                if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it
+                    tex += ",\"red\":\"minecraft:block/red_concrete\",\"yellow\":\"minecraft:block/yellow_concrete\"";
+                    int[][] counters = {{4, 9, 0}, {6, 9, 1}, {8, 9, 0}, {6, 11, 0}, {8, 11, 1}, {10, 9, 1}, {8, 13, 1}};
+                    for (int[] c : counters) {
+                        parts.add(box(c[0], c[1], 0, c[0] + 1, c[1] + 1, 1, c[2] == 0 ? "red" : "yellow"));
+                    }
                 }
             }
             case TROPHY -> {

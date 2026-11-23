@@ -15,7 +15,43 @@ import java.util.function.Function;
  */
 public final class KidSet {
 
+    /**
+     * Every arcade cabinet game, in the order the Arcade Room gives the rest of its places to the ones not listed (plan
+     * 11; the owner: "Do we have all the games that the kids can play in the arcade as it looks very empty"): the
+     * shipped four first, then the four more.
+     */
+    public static final List<String> CABINET_GAMES = List.of("whack_a_zombie", "simon_says", "mini_match",
+            "tic_tac_toe", "snake", "connect_four", "creeper_sweeper", "ore_merge");
+
     private KidSet() {
+    }
+
+    /**
+     * The generated Arcade Room's places, in order (pure; plan 11): the listed games first, as they are listed; then
+     * The Floor Is Lava's cabinet ({@code lava}, {@code null} for none) in the next place, where 0.45.0 put it; then each
+     * game of {@code more} not listed yet, in order, while there are places. A game never has two cabinets: a place
+     * nothing is left for stays empty (0.42.0 took the list round again, and Simon Says stood there twice).
+     *
+     * @param listed the room's list, already checked ({@link #resolve})
+     * @param more   the games that may fill the rest (each an open arcade cabinet game)
+     * @param places how many places the room has
+     */
+    public static List<String> fill(List<String> listed, List<String> more, String lava, int places) {
+        List<String> out = new ArrayList<>();
+        for (String g : listed == null ? List.<String>of() : listed) {
+            if (out.size() < places && g != null && !out.contains(g)) {
+                out.add(g);
+            }
+        }
+        if (lava != null && out.size() < places && !out.contains(lava)) {
+            out.add(lava);
+        }
+        for (String g : more == null ? List.<String>of() : more) {
+            if (out.size() < places && g != null && !out.contains(g)) {
+                out.add(g);
+            }
+        }
+        return out;
     }
 
     /**

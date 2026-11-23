@@ -319,7 +319,7 @@ class ClubhouseRoomTest {
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
         assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "cabinet",
-                "trophyroom", "door", "secret", "parlor", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
+                "trophyroom", "door", "secret", "parlor", "arcade", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
                 "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("arcade", "trophy"), admin.tab(null, new String[]{"door", ""}), "the two doors");
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"door", "arcade", "c"}), "and clear");
@@ -597,8 +597,9 @@ class ClubhouseRoomTest {
         until(r, ClubhouseRoom.Phase.READY, 5_000);
         assertTrue(r.annexIn(), "confirmed: claimed and built");
         assertEquals("minecraft:air", host.world.at(ANNEX.minX() + 5, ANNEX.minY() + 3, ANNEX.minZ() + 5));
-        assertEquals(ClubhousePlanner.CABINETS, r.cabinetPlaces(ClubhouseSettings.KID_GAMES).size(),
-                "0.42.0: every place has a cabinet, the kid set taken round again");
+        assertEquals(ClubhouseSettings.KID_GAMES.size(), r.cabinetPlaces(ClubhouseSettings.KID_GAMES).size(),
+                "plan 11: one place a game, never a game twice (the room fills the rest: KidSet.fill)");
+        assertEquals(ClubhousePlanner.CABINETS, r.generatedCabinetPlaces().size());
         assertEquals(11, r.pedestals().size(), "the podium's three and eight records");
         assertNotNull(r.doorSign("arcade"));
         assertNotNull(r.doorSign("trophy"));

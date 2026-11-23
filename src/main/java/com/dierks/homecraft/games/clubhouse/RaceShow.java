@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.RaceScript;
 import com.dierks.homecraft.games.chance.mobraces.RaceTrack;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
+import com.dierks.homecraft.games.kidrace.KidRaces;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
@@ -64,8 +65,62 @@ import java.util.UUID;
  */
 final class RaceShow {
 
+    /**
+     * The race a track shows (plan 11: the Parlor's Mob Races, or the Arcade Room's free kid race), as the show reads
+     * it. Each of the two shows draws the same table, mobs and board ({@link RaceTable}, {@link RaceScript}); only the
+     * race behind it is its own.
+     */
+    interface Race {
+        MobRaces.Phase phase();
+
+        /** Seconds until entries close, or -1. */
+        int secondsLeft();
+
+        /** The race being run or just finished, or {@code null}. */
+        RaceScript script();
+
+        int raceTick();
+
+        int laps();
+
+        /** The winner once it is home, or {@code null}. */
+        Racer winner();
+
+        /** Who won the last race here, or {@code null}. */
+        Racer lastWinner();
+
+        /** Each entrant's name and their racer's label, in the order they entered. */
+        List<String[]> entrants();
+
+        /** The board's lines about the race's card while entries are taken. */
+        List<String> cardLines();
+
+        /** Tell the race its track is there now. */
+        void trackSeen();
+    }
+
+    /**
+     * Which track a show draws: its race, its table, its tap, the words it says.
+     *
+     * @param name    what the logs and the status call it ("Mob Races")
+     * @param tap     what its table's tap targets carry
+     * @param room    the room it is in, as an admin reads it ("the Game Parlor")
+     * @param command the admin's command that places it in an owner-built room ("parlor mob_races")
+     */
+    record Where(String name, String tap, String room, String command) {
+    }
+
+    /** The Game Parlor's Mob Races. */
+    static final Where PARLOR = new Where("Mob Races", "machine:" + ClubhouseRoom.MOB_RACES, "the Game Parlor",
+            "parlor mob_races");
+    /** Plan 11: what the Arcade Room's table's tap targets carry (SideRooms opens the kid race). */
+    static final String KID_TAP = "kidrace";
+    /** Plan 11: the Arcade Room's free kid race. */
+    static final Where ARCADE = new Where("The Arcade Room's Mob Races", KID_TAP, "the Arcade Room",
+            "arcade mob_races");
+
     /** What the track's tap targets do: the same as a machine's tap, for Mob Races. */
-    static final String TAP = "machine:" + ClubhouseRoom.MOB_RACES;
+    static final String TAP = PARLOR.tap();
     /** How far the tap targets reach past the table, and how high over its top (past the generated room's barrier). */
     static final float TAP_PAST = 0.02f;
     static final float TAP_UP = 2.02f;
@@ -76,6 +131,7 @@ final class RaceShow {
     static final int BOARD_NAMES = 6;
 
     private final Clubhouse club;
+    private final Where where;
     private RaceTable.Frame frame;
     private final List<UUID> drawn = new ArrayList<>();
     private UUID label;
@@ -102,14 +158,157 @@ final class RaceShow {
     private String logged;
 
     RaceShow(Clubhouse club) {
-        this.club = club;
+        this(club, PARLOR);
     }
 
-    /** Mob Races, while it is there and open. */
-    private MobRaces races() {
-        Game g = club.games().game(ClubhouseRoom.MOB_RACES);
-        return g instanceof MobRaces m && club.games().enabled(m) ? m : null;
+    RaceShow(Clubhouse club, Where where) {
+        this.club = club;
+        this.where = where;
     }
+
+    /** The race this track shows, while its game is there and open. */
+    private Race races() {
+        if (where == ARCADE) {
+            Game g = club.games().game(KidRaces.SPEC.id());
+            return g instanceof KidRaces k && club.games().enabled(k) ? kid(k) : null;
+        }
+        Game g = club.games().game(ClubhouseRoom.MOB_RACES);
+        return g instanceof MobRaces m && club.games().enabled(m) ? parlor(m) : null;
+    }
+
+    /** The Parlor's Mob Races as the show reads it: its card's lines are each racer's chance and pay. */
+    static Race parlor(MobRaces races) {
+        return new Race() {
+            @Override
+            public MobRaces.Phase phase() {
+                return races.phase();
+            }
+
+            @Override
+            public int secondsLeft() {
+                return races.secondsLeft();
+            }
+
+            @Override
+            public RaceScript script() {
+                return races.script();
+            }
+
+            @Override
+            public int raceTick() {
+                return races.raceTick();
+            }
+
+            @Override
+            public int laps() {
+                return races.laps();
+            }
+
+            @Override
+            public Racer winner() {
+                return races.winner();
+            }
+
+            @Override
+            public Racer lastWinner() {
+                return races.lastWinner();
+            }
+
+            @Override
+            public List<String[]> entrants() {
+                List<String[]> in = new ArrayList<>();
+                for (MobRaces.Entry e : races.entries()) {
+                    in.add(new String[]{e.name(), e.pick().label()});
+                }
+                return in;
+            }
+
+            @Override
+            public List<String> cardLines() {
+                List<String> card = new ArrayList<>();
+                List<Integer> open = races.settings().open();
+                RaceCard c = races.card();
+                for (Racer r : Racer.values()) {
+                    int stake = open.isEmpty() ? 0 : open.get(0);
+                    RaceCard.Pay p = races.pay(r, stake, false);
+                    card.add(cardLine(r, c.oneIn(r), stake, p == null ? 0 : p.pays(), c.favourite() == r,
+                            c.longest() == r));
+                }
+                return card;
+            }
+
+            @Override
+            public void trackSeen() {
+                races.trackSeen();
+            }
+        };
+    }
+
+    /** Plan 11: the Arcade Room's kid race as the show reads it: its card's lines are each racer's stars. */
+    static Race kid(KidRaces races) {
+        return new Race() {
+            @Override
+            public MobRaces.Phase phase() {
+                return races.phase();
+            }
+
+            @Override
+            public int secondsLeft() {
+                return races.secondsLeft();
+            }
+
+            @Override
+            public RaceScript script() {
+                return races.script();
+            }
+
+            @Override
+            public int raceTick() {
+                return races.raceTick();
+            }
+
+            @Override
+            public int laps() {
+                return races.laps();
+            }
+
+            @Override
+            public Racer winner() {
+                return races.winner();
+            }
+
+            @Override
+            public Racer lastWinner() {
+                return races.lastWinner();
+            }
+
+            @Override
+            public List<String[]> entrants() {
+                List<String[]> in = new ArrayList<>();
+                for (KidRaces.Entry e : races.entries()) {
+                    in.add(new String[]{e.name(), e.pick().label()});
+                }
+                return in;
+            }
+
+            @Override
+            public List<String> cardLines() {
+                List<String> card = new ArrayList<>();
+                RaceCard c = races.card();
+                for (Racer r : Racer.values()) {
+                    card.add(KidRaces.boardLine(r, KidRaces.stars(c, r)));
+                }
+                return card;
+            }
+
+            @Override
+            public void trackSeen() {
+                races.trackSeen();
+            }
+        };
+    }
+
+
 
     // ---- once a second: the track --------------------------------------------------------------------
 
@@ -145,8 +344,8 @@ final class RaceShow {
         why = "it could not be drawn (" + what + "); it is tried again in a minute";
         if (!what.equals(trouble)) {
             trouble = what;
-            club.log().log(java.util.logging.Level.WARNING, "Clubhouse: Mob Races' track could not be drawn; the room"
-                    + " stays open and the track is tried again every minute", e);
+            club.log().log(java.util.logging.Level.WARNING, "Clubhouse: " + where.name() + "' track could not be"
+                    + " drawn; the room stays open and the track is tried again every minute", e);
         }
         try {
             remove();
@@ -156,18 +355,20 @@ final class RaceShow {
     }
 
     private void look(ClubhouseRoom room) {
-        MobRaces races = races();
+        Race races = races();
         World w = room == null ? null : Bukkit.getWorld(room.world());
         if (races == null || w == null) {
-            none(races == null ? "Mob Races is closed (/hcm games status says why)" : "the room's world isn't loaded",
-                    false);
+            none(races == null ? where.name() + " is closed (/hcm games status says why)"
+                    : "the room's world isn't loaded", false);
             return;
         }
-        ClubhouseRoom.RaceSpot spot = club.settings().parlor() || room.hand() ? room.raceTrack() : null;
+        boolean on = where == ARCADE ? club.settings().arcadeRoom() : club.settings().parlor();
+        ClubhouseRoom.RaceSpot spot = on || room.hand() ? (where == ARCADE ? room.arcadeTrack() : room.raceTrack())
+                : null;
         if (spot == null) {
             none(room.hand() ? "not placed: build a table " + RaceTrack.LENGTH + " long, " + RaceTrack.DEPTH
-                    + " wide and one block high, stand on a corner of it facing along it, and use /hcm games clubhouse"
-                    + " parlor mob_races" : "the Game Parlor isn't built", false);
+                    + " wide and one block high, stand on a corner of it facing along it, and use /hcm games clubhouse "
+                    + where.command() : where.room() + " isn't built", false);
             return;
         }
         RaceTable.Frame f = spot.frame();
@@ -179,8 +380,9 @@ final class RaceShow {
             none(spot.own() ? "there is no table under the place you set (" + table + ", from the corner you stood"
                     + " on, the way you faced and to your right)"
                     : "your " + (room.editing() ? "edited" : "saved") + " room has no table where HCM's stands: build "
-                    + table + " anywhere in the Parlor, stand on a corner of it facing along it and use /hcm games"
-                    + " clubhouse parlor mob_races (or /hcm games clubhouse generated for HCM's room)", true);
+                    + table + " anywhere in " + where.room() + ", stand on a corner of it facing along it and use"
+                    + " /hcm games clubhouse " + where.command() + " (or /hcm games clubhouse generated for HCM's"
+                    + " room)", true);
             return;
         }
         why = null;
@@ -201,7 +403,7 @@ final class RaceShow {
         why = reason;
         if (say && !reason.equals(logged)) {
             logged = reason;
-            club.log().info("Clubhouse: Mob Races has no track - " + reason);
+            club.log().info("Clubhouse: " + where.name() + " has no track - " + reason);
         }
         remove();
     }
@@ -263,7 +465,7 @@ final class RaceShow {
                 e.setInteractionWidth(wide);
                 e.setInteractionHeight(1 + TAP_UP + 2 * TAP_PAST);
                 e.setResponsive(true);
-                e.getPersistentDataContainer().set(Keys.CLUB_TAP, PersistentDataType.STRING, TAP);
+                e.getPersistentDataContainer().set(Keys.CLUB_TAP, PersistentDataType.STRING, where.tap());
             }).getUniqueId());
         }
         double mx = f.x(RaceTrack.LENGTH / 2.0, RaceTrack.DEPTH / 2.0);
@@ -293,35 +495,25 @@ final class RaceShow {
     }
 
     /** The label and the board as they read now; an entity's text is only set when it changes. */
-    private void texts(MobRaces races) {
+    private void texts(Race races) {
         String l = labelLine(races.phase(), races.secondsLeft());
         if (!l.equals(labelText) && Bukkit.getEntity(label) instanceof TextDisplay t) {
             t.text(Text.of(l));
             labelText = l;
         }
-        List<String[]> in = new ArrayList<>();
+        List<String[]> in = races.entrants();
         List<String> winners = new ArrayList<>();
         Racer won = races.winner();
-        for (MobRaces.Entry e : races.entries()) {
-            in.add(new String[]{e.name(), e.pick().label()});
-            if (won != null && e.pick() == won) {
-                winners.add(e.name());
+        for (String[] e : in) {
+            if (won != null && e[1].equals(won.label())) {
+                winners.add(e[0]);
             }
         }
         RaceScript script = races.script();
         Racer front = script == null || races.phase() != MobRaces.Phase.RUNNING ? null
                 : Racer.of(script.leaderAt(Math.min(races.raceTick(), script.ticks())));
-        List<String> card = new ArrayList<>();
-        if (races.phase() == MobRaces.Phase.IDLE || races.phase() == MobRaces.Phase.GATHERING) {
-            List<Integer> open = races.settings().open();
-            RaceCard c = races.card();
-            for (Racer r : Racer.values()) {
-                int stake = open.isEmpty() ? 0 : open.get(0);
-                RaceCard.Pay p = races.pay(r, stake, false);
-                card.add(cardLine(r, c.oneIn(r), stake, p == null ? 0 : p.pays(), c.favourite() == r,
-                        c.longest() == r));
-            }
-        }
+        List<String> card = races.phase() == MobRaces.Phase.IDLE || races.phase() == MobRaces.Phase.GATHERING
+                ? races.cardLines() : List.of();
         List<Racer> order = new ArrayList<>();
         if (won != null && script != null) {
             for (int place = 0; place < Racer.COUNT; place++) {
@@ -426,7 +618,7 @@ final class RaceShow {
     // ---- every tick: the racers -----------------------------------------------------------------------
 
     private void run() {
-        MobRaces races = frame == null ? null : races();
+        Race races = frame == null ? null : races();
         World w = races == null ? null : Bukkit.getWorld(club.room() == null ? "" : club.room().world());
         MobRaces.Phase phase = races == null || w == null ? MobRaces.Phase.IDLE : races.phase();
         if (phase == MobRaces.Phase.IDLE) {
@@ -492,9 +684,9 @@ final class RaceShow {
                 spawnAfter = ticks + 200;
                 if (!saidVanish) {
                     saidVanish = true;
-                    club.log().warning("Clubhouse: Mob Races' racers keep disappearing from the track (does this"
-                            + " server or world let animals be?). The races still run and pay; only the mobs are"
-                            + " missing.");
+                    club.log().warning("Clubhouse: " + where.name() + "' racers keep disappearing from the track"
+                            + " (does this server or world let animals be?). The races still run and pay; only the"
+                            + " mobs are missing.");
                 }
                 removeRacer(n);
                 return;
@@ -674,9 +866,10 @@ final class RaceShow {
     String statusLine() {
         if (frame != null) {
             double[] box = frame.footprint();
-            return "Mob Races' track: up, on the table at " + (int) box[0] + " " + frame.blockY() + " " + (int) box[1]
-                    + " to " + ((int) Math.ceil(box[2]) - 1) + " " + frame.blockY() + " " + ((int) Math.ceil(box[3]) - 1);
+            return where.name() + "' track: up, on the table at " + (int) box[0] + " " + frame.blockY() + " "
+                    + (int) box[1] + " to " + ((int) Math.ceil(box[2]) - 1) + " " + frame.blockY() + " "
+                    + ((int) Math.ceil(box[3]) - 1);
         }
-        return "Mob Races' track: none - " + (why == null ? "not drawn yet (nobody is near it)" : why);
+        return where.name() + "' track: none - " + (why == null ? "not drawn yet (nobody is near it)" : why);
     }
 }

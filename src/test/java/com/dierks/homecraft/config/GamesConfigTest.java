@@ -178,7 +178,7 @@ class GamesConfigTest {
                 "motherlode", "farm_slots", "deep_mine", "mob_slots", "mob_races", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
                 "trials", "golf", "cup", "fresh_courses", "race_night", "falling_floors", "clubhouse",
-                "hub", "floor_is_lava", "cpu"), ids);
+                "hub", "floor_is_lava", "cpu", "kid_races"), ids);
         assertEquals(11, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
                 "eleven games of chance: the first five, the three more slot machines after them, Deep Mine and"
                         + " Mob Slots, then Mob Races");
@@ -187,6 +187,35 @@ class GamesConfigTest {
         }
         assertTrue(GameCatalog.taken("ORE_SLOTS"), "a game id can't be a course id");
         assertFalse(GameCatalog.taken("river_run"));
+    }
+
+    /**
+     * Plan 11: the Arcade Room's free kid race ships on, 2 tokens a win and 10 a day, last in the {@code games:} block
+     * (where the backfill appends it on an upgraded server); a value out of its range is clamped with one WARN.
+     */
+    @Test
+    void theKidRaceShipsFreeWithASmallCappedPrizeAtTheEndOfTheBlock() throws Exception {
+        GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
+        com.dierks.homecraft.games.kidrace.KidRacesSettings k =
+                parsed.settings(com.dierks.homecraft.games.kidrace.KidRaces.SPEC);
+        assertEquals(com.dierks.homecraft.games.kidrace.KidRacesSettings.defaults(), k);
+        assertTrue(k.enabled());
+        assertEquals(2, k.prize());
+        assertEquals(10, k.dailyCap());
+        assertTrue(k.dailyCap() <= parsed.common().skillDailyCap(), "inside the server's skill cap");
+        assertFalse(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.kind().chance(), "never a game of chance");
+        List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
+        assertEquals("kid_races", blocks.get(blocks.size() - 1), "appended at the end of games:");
+        assertEquals(List.of("enabled", "prize", "daily_cap", "gather_seconds", "race_seconds"),
+                com.dierks.homecraft.games.kidrace.KidRacesSettings.KEYS);
+        List<String> warns = new ArrayList<>();
+        com.dierks.homecraft.games.kidrace.KidRacesSettings read =
+                com.dierks.homecraft.games.kidrace.KidRacesSettings.parse(new GamesConfig.Node("games.kid_races",
+                        Map.of("prize", 500, "daily_cap", 7, "gather_seconds", 1), warns::add), k);
+        assertEquals(com.dierks.homecraft.games.kidrace.KidRacesSettings.PRIZE_MAX, read.prize(), "clamped");
+        assertEquals(7, read.dailyCap());
+        assertEquals(com.dierks.homecraft.games.kidrace.KidRacesSettings.GATHER_MIN, read.gatherSeconds());
+        assertEquals(2, warns.size(), "one WARN each: " + warns);
     }
 
     @Test

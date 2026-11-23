@@ -75,6 +75,8 @@ public final class ClubhouseRoom {
     public static final String PARLOR_DOOR_KEY = META_PREFIX + "hand.parlor.door";
     public static final String PARLOR_ROOM_KEY = META_PREFIX + "hand.parlor.room";
     public static final String PARLOR_KEY = META_PREFIX + "hand.parlor.machines";
+    /** Plan 11: where the owner placed the Arcade Room's race table ({@code arcade mob_races}): "world;x;y;z;yaw". */
+    public static final String ARCADE_TRACK_KEY = META_PREFIX + "hand.arcade.track";
     public static final String SAVED_KEY = META_PREFIX + "saved";
     /** How many saves are kept (the newest). */
     public static final int SAVES_KEPT = 5;
@@ -211,6 +213,7 @@ public final class ClubhouseRoom {
     private Place handParlorDoor;
     private Place handParlorRoom;
     private final Map<String, Place> handParlor = new java.util.LinkedHashMap<>();
+    private Place handArcadeTrack;
     private final Map<String, Place> handDoors = new HashMap<>();
     private BuildJob job;
     private boolean jobScan;
@@ -286,6 +289,7 @@ public final class ClubhouseRoom {
             handParlorRoom = Place.of(host.meta(PARLOR_ROOM_KEY));
             handParlor.clear();
             handParlor.putAll(cabinetsOf(host.meta(PARLOR_KEY)));
+            handArcadeTrack = Place.of(host.meta(ARCADE_TRACK_KEY));
             savedId = host.meta(SAVED_KEY);
             handCabinets.clear();
             handCabinets.putAll(cabinetsOf(host.meta(CABINETS_KEY)));
@@ -944,10 +948,11 @@ public final class ClubhouseRoom {
             if (!arcadeBuilt()) {
                 return out;
             }
-            // 0.42.0: every place has a cabinet, the kid set taken round again to fill the room ("repeats are fine")
+            // plan 11: one place for each game, in order, never a game twice (0.42.0 took the kid set round again to
+            // fill the room, and a game stood there twice); the room's list is filled out first (KidSet.fill)
             List<ClubhousePlanner.Place3> at = ClubhousePlanner.cabinets(site.box());
-            for (int n = 0; n < at.size(); n++) {
-                out.add(new Cabinet(games.get(n % games.size()), at.get(n)));
+            for (int n = 0; n < at.size() && n < games.size(); n++) {
+                out.add(new Cabinet(games.get(n), at.get(n)));
             }
             // 0.45.0: in an edited or saved room a cabinet the owner moved takes its game's first place; the others
             // stay (moving one used to take all the generated ones away)
@@ -1044,7 +1049,11 @@ public final class ClubhouseRoom {
         if (!hand) {
             return arcadeBuilt() && ClubhousePlanner.arcadeInside(site.box()).contains(x, y, z);
         }
-        for (Place at : handCabinets.values()) {
+        List<Place> near = new ArrayList<>(handCabinets.values());
+        if (handArcadeTrack != null) {
+            near.add(handArcadeTrack); // plan 11: the owner's race table is in their Arcade Room too
+        }
+        for (Place at : near) {
             if (at.world().equalsIgnoreCase(world()) && Math.abs(at.x() - x) <= 8 && Math.abs(at.z() - z) <= 8
                     && Math.abs(at.y() - y) <= 4) {
                 return true;
@@ -1347,6 +1356,47 @@ public final class ClubhouseRoom {
             return new RaceSpot(RaceTable.Frame.standingOn(own.x(), own.y(), own.z(), own.yaw()), true, false);
         }
         return new RaceSpot(ClubhousePlanner.raceTable(site.box()), false, !overrides());
+    }
+
+    /**
+     * Plan 11: the kid race's track in the Arcade Room, or {@code null} for none: in the generated room the table of the
+     * plan; where the owner placed one ({@code /hcm games clubhouse arcade mob_races}, standing on a corner of a table
+     * they built, facing along it) in an owner-built room, or in a room they edit or saved. As the Parlor's ({@link
+     * #raceTrack}): a saved or edited room keeps the blocks it has, so the table has to be looked for there.
+     */
+    RaceSpot arcadeTrack() {
+        Place own = handArcadeTrack;
+        if (hand) {
+            return own == null || !own.world().equalsIgnoreCase(world()) ? null
+                    : new RaceSpot(RaceTable.Frame.standingOn(own.x(), own.y(), own.z(), own.yaw()), true, false);
+        }
+        if (!arcadeBuilt()) {
+            return null;
+        }
+        if (own != null && overrides() && mine(own)) {
+            return new RaceSpot(RaceTable.Frame.standingOn(own.x(), own.y(), own.z(), own.yaw()), true, false);
+        }
+        return new RaceSpot(ClubhousePlanner.arcadeTable(site.box()), false, !overrides());
+    }
+
+    /**
+     * Plan 11, {@code /hcm games clubhouse arcade mob_races [clear]}: the Arcade Room's race table is the one the admin
+     * stands on (a corner of it, facing along it), as {@code parlor mob_races} is the Parlor's.
+     */
+    public String arcade(String sub, Place at) {
+        if (!MOB_RACES.equals(sub)) {
+            return "&cWhich? &e/hcm games clubhouse arcade mob_races [clear] &7(the Arcade Room's race table)";
+        }
+        if (!setMeta(ARCADE_TRACK_KEY, at == null ? null : at.text())) {
+            return "&cThat can't be saved to the database right now.";
+        }
+        handArcadeTrack = at;
+        return at == null ? "&aThe Arcade Room's race track is cleared here."
+                : "&aThe Arcade Room's race track is drawn on the table you stand on: "
+                + com.dierks.homecraft.games.chance.mobraces.RaceTrack.LENGTH + " blocks the way you face, "
+                + com.dierks.homecraft.games.chance.mobraces.RaceTrack.DEPTH + " to your right, one block high. &7Stand"
+                + " on a corner of it. Nothing is built for you: with no table there it isn't drawn. To keep players off"
+                + " the track, leave one block of air over the table and put barrier blocks over that." + notOnYet();
     }
 
     /**
@@ -1785,7 +1835,11 @@ public final class ClubhouseRoom {
             out.add(new ClubSave.Spot("feast plate " + pl++, c[0], c[1], c[2], ClubSave.Need.AIR));
         }
         int c = 1;
-        for (Cabinet cab : cabinetPlaces(List.of("a", "b", "c", "d", "e", "f"))) {
+        List<String> every = new ArrayList<>();
+        for (int at = 0; at < ClubhousePlanner.CABINETS; at++) {
+            every.add("cabinet-" + at);
+        }
+        for (Cabinet cab : cabinetPlaces(every)) {
             out.add(stand("cabinet " + c++, new ClubhouseSite.Spot(cab.at().x(), cab.at().y(), cab.at().z(), 0f)));
         }
         int t = 1;

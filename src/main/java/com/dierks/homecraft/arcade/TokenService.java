@@ -102,7 +102,11 @@ public final class TokenService {
         GAMES_KID_RACES("Arcade Room races"),
         // The Game Parlor's Sports Board (0.55.0): played for money only, so no token line is ever written under it;
         // it is the game's name in the games' own lists.
-        ARCADE_SPORTSBOOK("Sports Board");
+        ARCADE_SPORTSBOOK("Sports Board"),
+        // 0.57.0: Bingo Night in the Game Parlor (cards bought, prizes shared) and the Arcade Room's free Picture Bingo
+        // for kids (a few tokens when your card gets three in a row: a skill game's reward, never a game of chance's).
+        ARCADE_BINGO("Bingo Night"),
+        GAMES_KID_BINGO("Picture Bingo");
 
         private final String label;
 

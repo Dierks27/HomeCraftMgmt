@@ -2912,20 +2912,32 @@ games:
   floor_is_lava:
     # true = the playroom builds itself; nothing happens while games.enabled is false.
     enabled: true
-    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # The box's corner (x y z; x and z a multiple of 16). It is 48 x 16 x 48 (it grew from 32 x 16 x 32
+    # in 0.57.0: the new ground is claimed at the next start when it is empty) and must stay 32 blocks
     # from every Fresh Courses area, the kept courses, the Clubhouse and the Falling Floors arena,
     # and 16 from hand-built courses. The shipped spot is 576 blocks from everything else.
     origin: [7312, 160, 8544]
     # The most players in the playroom at once (1-12).
     max_players: 6
-    # Stars to collect: all of them in Little, this many each round in Group (1-20).
+    # Stars to collect: all of them in Little, this many each round on the floor in Group (1-20).
     stars: 10
-    # Seconds the floor is safe before the warning (8-120).
+    # The longest the floor is safe before the warning, in seconds (8-120). Each round draws its own
+    # time: Little 75-100% of this, Group 45-70%, Challenge 28-45% (shorter every round).
     safe_seconds: 25
-    # Seconds the lava stays before it drains (4-60). Challenge uses half of both.
+    # The longest the lava stays in Little, in seconds (4-60): Little draws 75-100% of this, Group
+    # 100-140% (with stars to hop for), Challenge 60-90%. The warning is 5 s in Little, 2.5-4 s in
+    # Group and 1.5-2.5 s in Challenge.
     lava_seconds: 12
     # Group's rounds (1-12). The lava comes one block higher each round.
     rounds: 5
+    # true = the furniture moves: somewhere new every game, and in Group and Challenge every round
+    # (it sparkles and hums first, while the floor is safe). false = it stays where it was built.
+    moving_room: true
+    # true = most rounds have a surprise: a piece that wobbles and sinks, lava on one side first, a
+    # quick rise, a shower of stars, a bouncy cushion (Little only gets the last two, now and then).
+    surprises: true
+    # Group's hearts (1-9): a round that misses its star goal costs one; with none left it is over.
+    hearts: 3
   # NPC players: a few friendly computer players with a gear after their name. They hang out in the
   # Clubhouse, sit in at the Twenty-One table, enter Mob Races and play Connect Four, Tic-Tac-Toe and a
   # pretend Coin Flip. They play pretend: they never earn or spend tokens or money and are never on a

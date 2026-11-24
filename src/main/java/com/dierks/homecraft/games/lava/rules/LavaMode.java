@@ -13,17 +13,19 @@ import java.util.Locale;
  * </ul>
  */
 public enum LavaMode {
-    LITTLE("Little", "little"),
-    GROUP("Group", "group"),
-    CHALLENGE("Challenge", "challenge");
+    LITTLE("Little", "little", "little"),
+    GROUP("Group", "group", "group2"),
+    CHALLENGE("Challenge", "challenge", "challenge2");
 
     /** What every score board of this game starts with: the secret trophy room reads them as bests. */
     public static final String BOARD_PREFIX = "lava:";
 
     private final String label;
     private final String id;
+    private final String boardId;
 
-    LavaMode(String label, String id) {
+    LavaMode(String label, String id, String boardId) {
+        this.boardId = boardId;
         this.label = label;
         this.id = id;
     }
@@ -33,14 +35,19 @@ public enum LavaMode {
         return label;
     }
 
-    /** Its id: the last word of its score board ({@link #board}). */
+    /** Its id ({@code /hcm} and the settings say it). */
     public String id() {
         return id;
     }
 
-    /** This mode's score board ({@code lava:little}, {@code lava:group}, {@code lava:challenge}). */
+    /**
+     * This mode's score board: {@code lava:little}, and (0.57.0) {@code lava:group2} and {@code lava:challenge2}. Group
+     * and Challenge became different games in 0.57.0 (star goals and hearts, stars to keep collecting, a moving room,
+     * surprises), so their old bests ({@code lava:group}, {@code lava:challenge}) stay where they are as trophies and
+     * new boards start; Little is still "every star", its board the same.
+     */
     public String board() {
-        return BOARD_PREFIX + id;
+        return BOARD_PREFIX + boardId;
     }
 
     /** The mode with this id, or {@code null}. */

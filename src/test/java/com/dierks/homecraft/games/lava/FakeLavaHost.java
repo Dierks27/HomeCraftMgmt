@@ -44,6 +44,7 @@ final class FakeLavaHost implements LavaHost {
         final List<Cue> sounds = new ArrayList<>();
         final List<LavaSite.Spot> teleportedTo = new ArrayList<>();
         int calmed;
+        int carried;
         int movedToSafety;
         int sessionsEnded;
         int endScreens;
@@ -202,6 +203,18 @@ final class FakeLavaHost implements LavaHost {
         p.at(spot.x(), spot.y(), spot.z());
         p.inLava = false;
         p.teleportedTo.add(spot);
+        return true;
+    }
+
+    /** 0.57.0: moved with the furniture: counted on its own (it is no touch of the lava). */
+    @Override
+    public boolean carry(UUID player, String world, LavaSite.Spot spot) {
+        P p = players.get(player);
+        if (p == null || !p.online || spot == null) {
+            return false;
+        }
+        p.at(spot.x(), spot.y(), spot.z());
+        p.carried++;
         return true;
     }
 

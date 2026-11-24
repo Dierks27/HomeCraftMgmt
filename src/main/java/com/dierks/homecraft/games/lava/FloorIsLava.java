@@ -20,6 +20,7 @@ import com.dierks.homecraft.games.lava.rules.LavaRound;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.lava.LavaKidMenu;
 import com.dierks.homecraft.gui.games.lava.LavaModeMenu;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -75,9 +76,11 @@ import java.util.logging.Logger;
  *   <li>The Games screen's tile, or {@code /hcm play floor_is_lava}: a screen with the three modes as pictures.
  *       From home, that is a world session of its own (the player's things are kept safe and come back at the
  *       end); from the Clubhouse's Games item, the visitor's session is handed over in place.</li>
- *   <li>The Clubhouse's Arcade Room has a cabinet for it ({@link #kidTap}): one tap, no choosing, straight into
- *       Little, by the same hand-out a course uses. Whoever came from the Clubhouse goes back to its Arcade Room
- *       when they leave or say All done, never home.</li>
+ *   <li>The Clubhouse's Arcade Room has a cabinet for it ({@link #kidTap}). 0.57.0 (the owner: "when you get in
+ *       through the arcade machine you should be able to pick any level you want not just easy"): a tap opens the
+ *       cabinet's own screen ({@code LavaKidMenu}), three pictures side by side with one, two or three blocks of
+ *       magma under them, and a tap on one goes in by the same hand-out a course uses. Whoever came from the
+ *       Clubhouse goes back to its Arcade Room when they leave or say All done, never home.</li>
  * </ul>
  *
  * <p><b>Harmless, for real.</b> Everyone in the room is in a world session: no damage from anything, no hunger, no
@@ -149,9 +152,10 @@ public final class FloorIsLava implements Game, com.dierks.homecraft.games.cpu.W
     @Override
     public List<String> rules() {
         return List.of("Collect the stars. When the floor rumbles, climb!",
-                "The lava can't hurt you.",
-                "Little: nobody can lose. Group: play together.",
-                "Challenge: the last one standing wins.");
+                "Stars come out on the furniture during the lava too,",
+                "and the furniture moves. The lava can't hurt you.",
+                "Little: nobody can lose. Group: a star goal each round.",
+                "Challenge: keep collecting; the last one standing wins.");
     }
 
     /** "&amp;6The Floor Is Lava &amp;7- 2 playing Little": the key fact in the NAME, for Bedrock. */
@@ -346,10 +350,10 @@ public final class FloorIsLava implements Game, com.dierks.homecraft.games.cpu.W
     }
 
     /**
-     * A tap on the Clubhouse's Floor Is Lava cabinet: {@code /hcm play}'s own gate, then straight into Little (or
-     * the Group round going), with nothing to choose and nothing to read.
+     * A tap on the Clubhouse's Floor Is Lava cabinet: {@code /hcm play}'s own gate, then (0.57.0) the cabinet's
+     * screen, three pictures to pick from with nothing to read ({@link LavaKidMenu}).
      *
-     * @return whether the player is on their way
+     * @return whether the screen opened
      */
     public static boolean kidTap(GamesService games, Player p) {
         Game g = games == null || p == null ? null : games.game(SPEC.id());
@@ -361,7 +365,28 @@ public final class FloorIsLava implements Game, com.dierks.homecraft.games.cpu.W
             games.tell(p, refusal);
             return false;
         }
-        return games.guard(lava, () -> lava.join(p, LavaMode.LITTLE, true), false);
+        return games.guard(lava, () -> {
+            if (lava.plugin() == null) {
+                return lava.join(p, LavaMode.LITTLE, true); // no screens without a server (the framework's tests)
+            }
+            new LavaKidMenu(lava.plugin(), lava, p).open(p);
+            return true;
+        }, false);
+    }
+
+    /**
+     * 0.57.0: the cabinet screen's choice: the gate again (a moment has passed), then into the room for {@code mode}
+     * by the cabinet's way (Little joins the Group round going, and they come back to the Arcade Room at the end).
+     *
+     * @return whether the player is on their way
+     */
+    public boolean kidPlay(Player p, LavaMode mode) {
+        Refusal refusal = games().canOpen(p, this);
+        if (refusal != null) {
+            games().tell(p, refusal);
+            return false;
+        }
+        return join(p, mode, true);
     }
 
     /**
@@ -580,8 +605,13 @@ public final class FloorIsLava implements Game, com.dierks.homecraft.games.cpu.W
      * words (the room is in use for another mode, a Challenge has started, it is being tidied).
      */
     public String modeRefusal(Player viewer, LavaMode mode) {
+        return modeRefusal(viewer, mode, false);
+    }
+
+    /** As {@link #modeRefusal(Player, LavaMode)}, for the cabinet's screen when {@code kid}. */
+    public String modeRefusal(Player viewer, LavaMode mode, boolean kid) {
         LavaService s = service;
-        return s == null ? LavaText.CLOSED : s.joinRefusal(viewer.getUniqueId(), mode, false);
+        return s == null ? LavaText.CLOSED : s.joinRefusal(viewer.getUniqueId(), mode, kid);
     }
 
     /** How many are in the room, and the mode being played ({@code null}: none). */

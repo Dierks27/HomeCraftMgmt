@@ -122,7 +122,9 @@ public final class ChanceRounds {
             Map.entry("deep_mine", TokenService.Source.ARCADE_DEEP_MINE),
             Map.entry("mob_slots", TokenService.Source.ARCADE_MOB_SLOTS),
             Map.entry("mob_races", TokenService.Source.ARCADE_MOB_RACES),
-            Map.entry("holdem", TokenService.Source.ARCADE_HOLDEM));
+            Map.entry("holdem", TokenService.Source.ARCADE_HOLDEM),
+
+            Map.entry("bingo", TokenService.Source.ARCADE_BINGO));
 
     /** An open screen whose settings changed under it (a reload): reopen to play. */
     static final Refusal CHANGED = Refusal.of("That game's settings just changed. Open it again to play.");

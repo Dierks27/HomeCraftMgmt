@@ -134,6 +134,12 @@ public final class ClubModels {
         // 0.57.0, Texas Hold'em: cards on a card table, like Twenty-One's (a placeholder until the owner's model): green
         // felt, two face-down cards and a short stack of chips. Its stand-in without the pack is its Games-screen icon
         machine("holdem", "machine_holdem", Material.PAPER, "minecraft:block/green_wool", Kind.TROPHY);
+        // 0.57.0, Bingo Night's machine in the Game Parlor (a cabinet's size, a placeholder until the owner's model): a
+        // white card on its screen with a few red daubs; its stand-in without the pack is a filled map (a card). And
+        // Picture Bingo's cabinet in the Arcade Room: a pink screen with a three-by-three card on it, some squares
+        // lit; its stand-in is a pig's spawn egg (the first picture)
+        machine("bingo", "machine_bingo", Material.FILLED_MAP, "minecraft:block/white_concrete", Kind.CABINET);
+        cabinet("kid_bingo", "cabinet_bingo", Material.PIG_SPAWN_EGG, "minecraft:block/pink_concrete");
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -250,6 +256,23 @@ public final class ClubModels {
                         parts.add(box(3, y, 0, 13, y + 1, 1, "body"));
                         parts.add(box(3, y + 1, 0, 5, y + 3, 1, "mark"));
                         parts.add(box(11, y + 1, 0, 13, y + 3, 1, "other"));
+                    }
+                }
+                if (m.name().equals("machine_bingo")) { // red daubs on a white card: a line across and a few more
+                    tex += ",\"daub\":\"minecraft:block/red_concrete\"";
+                    int[][] daubs = {{4, 13}, {6, 13}, {8, 13}, {10, 13}, {6, 16}, {10, 10}, {4, 10}};
+                    for (int[] d : daubs) {
+                        parts.add(box(d[0], d[1], 0, d[0] + 1, d[1] + 1, 1, "daub"));
+                    }
+                }
+                if (m.name().equals("cabinet_bingo")) { // a three-by-three card: white squares, some lit green
+                    tex += ",\"square\":\"minecraft:block/white_concrete\",\"lit\":\"minecraft:block/lime_concrete\"";
+                    for (int row = 0; row < 3; row++) {
+                        for (int col = 0; col < 3; col++) {
+                            int x = 4 + col * 3;
+                            int y = 10 + row * 3;
+                            parts.add(box(x, y, 0, x + 2, y + 2, 1, (row + col) % 2 == 0 ? "lit" : "square"));
+                        }
                     }
                 }
                 if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it

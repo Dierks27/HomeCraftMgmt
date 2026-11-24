@@ -243,7 +243,8 @@ public final class PlayGate {
      * to its playroom and bring them back.
      */
     static final Set<String> FROM_CLUBHOUSE = Set.of("trials", "fresh_courses", "cup", "floor_is_lava",
-            "kid_races"); // 0.54.0: the Arcade Room's own race (the live test found its table refused: "isn't played")
+            "kid_races", // 0.54.0: the Arcade Room's own race (the live test found its table refused: "isn't played")
+            "kid_bingo"); // 0.57.0: the Arcade Room's Picture Bingo, from its cabinet
 
     /**
      * Step 0: a player in a world session may only use that session's game; in the Clubhouse, also the

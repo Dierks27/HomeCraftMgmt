@@ -132,7 +132,8 @@ public final class GamesDao {
             TokenService.Source.ARCADE_MOTHERLODE.name(), TokenService.Source.ARCADE_FARM_SLOTS.name(),
             TokenService.Source.ARCADE_DEEP_MINE.name(), TokenService.Source.ARCADE_MOB_SLOTS.name(),
             TokenService.Source.ARCADE_MOB_RACES.name(),
-            TokenService.Source.ARCADE_HOLDEM.name()); // 0.57.0: a Hold'em buy-in for tokens
+            TokenService.Source.ARCADE_HOLDEM.name(), // 0.57.0: a Hold'em buy-in for tokens
+            TokenService.Source.ARCADE_BINGO.name()); // 0.57.0: Bingo Night's cards (Picture Bingo is free: not here)
 
     /** The game a reward that is once a day across games is stored under. */
     public static final String ACROSS_GAMES = "*";

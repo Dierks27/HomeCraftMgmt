@@ -52,8 +52,8 @@ public final class GameCatalog {
      * Races (the Parlor's model racetrack) follows the slot machines.
      * The Floor Is Lava comes after them: a room of its own in the Games world. The NPC players (stage 1 of "CPU
      * players") are after them: a foundation every game asks, with no tile of its own. The Arcade Room's free kid race
-     * (plan 11) follows them, then the Game Parlor's Sports Board (0.55.0), and Texas Hold'em (0.57.0) is last: each
-     * one's block was appended at the end of {@code games:} in its turn.
+     * (plan 11) follows them, then the Game Parlor's Sports Board (0.55.0), then Texas Hold'em, Bingo Night and the
+     * Arcade Room's Picture Bingo (0.57.0), last: each one's block was appended at the end of {@code games:} in its turn.
      */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, NetherSlots.SPEC, Motherlode.SPEC, FarmSlots.SPEC,
@@ -63,7 +63,9 @@ public final class GameCatalog {
             com.dierks.homecraft.games.hub.Hub.SPEC, com.dierks.homecraft.games.lava.FloorIsLava.SPEC,
             com.dierks.homecraft.games.cpu.CpuPlayers.SPEC, com.dierks.homecraft.games.kidrace.KidRaces.SPEC,
             com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC,
-            com.dierks.homecraft.games.chance.holdem.Holdem.SPEC);
+            com.dierks.homecraft.games.chance.holdem.Holdem.SPEC,
+
+            com.dierks.homecraft.games.chance.bingo.Bingo.SPEC, com.dierks.homecraft.games.kidbingo.KidBingo.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id

@@ -178,10 +178,10 @@ class GamesConfigTest {
                 "motherlode", "farm_slots", "deep_mine", "mob_slots", "mob_races", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
                 "trials", "golf", "cup", "fresh_courses", "race_night", "falling_floors", "clubhouse",
-                "hub", "floor_is_lava", "cpu", "kid_races", "sportsbook", "holdem"), ids);
-        assertEquals(13, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
-                "thirteen games of chance: the first five, the three more slot machines after them, Deep Mine and"
-                        + " Mob Slots, then Mob Races; then the Sports Board and Texas Hold'em, last");
+                "hub", "floor_is_lava", "cpu", "kid_races", "sportsbook", "holdem", "bingo", "kid_bingo"), ids);
+        assertEquals(14, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
+                "fourteen games of chance: the first five, the three more slot machines after them, Deep Mine and"
+                        + " Mob Slots, then Mob Races; then the Sports Board, Texas Hold'em and Bingo Night, last");
         for (String reserved : GameCatalog.RESERVED) {
             assertTrue(GameCatalog.taken(reserved), reserved + " is reserved for /hcm play");
         }
@@ -205,8 +205,8 @@ class GamesConfigTest {
         assertTrue(k.dailyCap() <= parsed.common().skillDailyCap(), "inside the server's skill cap");
         assertFalse(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.kind().chance(), "never a game of chance");
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals("kid_races", blocks.get(blocks.size() - 3),
-                "appended at the end of games: (0.55.0's Sports Board and 0.57.0's Hold'em were appended after it)");
+        assertEquals("kid_races", blocks.get(blocks.size() - 5),
+                "appended at the end of games: (0.55.0's Sports Board, 0.57.0's Hold'em and two bingos after it)");
         assertEquals(List.of("enabled", "prize", "daily_cap", "gather_seconds", "race_seconds"),
                 com.dierks.homecraft.games.kidrace.KidRacesSettings.KEYS);
         List<String> warns = new ArrayList<>();
@@ -225,6 +225,31 @@ class GamesConfigTest {
      * minutes, 24 hours ahead, 90 of every 100 back, a week to settle, Kalshi's public API. Out-of-range values are
      * clamped with one WARN, an unknown league is left out with one, and the rtp never leaves the band.
      */
+    /**
+     * 0.57.0: Bingo Night and the Arcade Room's Picture Bingo ship on, last in the {@code games:} block (where the
+     * backfill appends them on an upgraded server, with no config revision), as their defaults; Picture Bingo is free
+     * and never a game of chance, and its daily cap is inside the server's skill cap.
+     */
+    @Test
+    void theBingosShipAtTheEndOfTheBlock() throws Exception {
+        GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
+        assertEquals(com.dierks.homecraft.games.chance.bingo.BingoSettings.defaults(),
+                parsed.settings(com.dierks.homecraft.games.chance.bingo.Bingo.SPEC));
+        com.dierks.homecraft.games.kidbingo.KidBingoSettings k =
+                parsed.settings(com.dierks.homecraft.games.kidbingo.KidBingo.SPEC);
+        assertEquals(com.dierks.homecraft.games.kidbingo.KidBingoSettings.defaults(), k);
+        assertTrue(k.dailyCap() <= parsed.common().skillDailyCap(), "inside the server's skill cap");
+        assertTrue(com.dierks.homecraft.games.chance.bingo.Bingo.SPEC.kind().chance());
+        assertFalse(com.dierks.homecraft.games.kidbingo.KidBingo.SPEC.kind().chance(), "never a game of chance");
+        List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
+        assertEquals(List.of("bingo", "kid_bingo"), blocks.subList(blocks.size() - 2, blocks.size()),
+                "appended at the end of games:");
+        assertEquals(com.dierks.homecraft.games.chance.bingo.BingoSettings.KEYS,
+                new ArrayList<>(bundled().getConfigurationSection("games.bingo").getKeys(false)), "every key shipped");
+        assertEquals(com.dierks.homecraft.games.kidbingo.KidBingoSettings.KEYS,
+                new ArrayList<>(bundled().getConfigurationSection("games.kid_bingo").getKeys(false)));
+    }
+
     @Test
     void theSportsBoardShipsAtTheEndOfTheBlock() throws Exception {
         GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
@@ -243,8 +268,8 @@ class GamesConfigTest {
         assertTrue(com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC.kind().chance(),
                 "a game of chance: the play gate, Take a break and the Parlor's money rules all apply");
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals("sportsbook", blocks.get(blocks.size() - 2),
-                "appended at the end of games: (0.57.0's Hold'em was appended after it)");
+        assertEquals("sportsbook", blocks.get(blocks.size() - 4),
+                "appended at the end of games: (0.57.0's Hold'em, Bingo Night and Picture Bingo after it)");
         assertEquals(List.of("enabled", "leagues", "refresh_minutes", "hours_ahead", "rtp", "settle_days", "api_base"),
                 com.dierks.homecraft.games.chance.sportsbook.SportsbookSettings.KEYS);
         List<String> warns = new ArrayList<>();

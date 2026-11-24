@@ -85,6 +85,30 @@ class ClubModelsTest {
         assertTrue(json.getAsJsonArray("elements").size() >= 5, "felt, two cards and chips");
     }
 
+    /**
+     * 0.57.0: Bingo Night's machine in the Game Parlor and Picture Bingo's cabinet in the Arcade Room have their own
+     * placeholders (a cabinet's size, block-atlas textures only) and a picture stand-in for a player without the pack.
+     */
+    @Test
+    void theBingosHaveTheirOwnMachineAndCabinet() {
+        ClubModels.Model m = ClubModels.machineFor("bingo");
+        assertNotNull(m, "machine:bingo has a model");
+        assertEquals("hcm:machine_bingo", m.id());
+        assertEquals(ClubModels.Kind.CABINET, m.kind());
+        assertEquals(Material.FILLED_MAP, m.fallback(), "a card stands in without the pack");
+        ClubModels.Model c = ClubModels.cabinetFor("kid_bingo");
+        assertEquals("hcm:cabinet_bingo", c.id(), "Picture Bingo's own cabinet, not the plain one");
+        assertEquals(Material.PIG_SPAWN_EGG, c.fallback(), "a picture stands in: the first animal");
+        for (String name : List.of("machine_bingo", "cabinet_bingo")) {
+            JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                    .get("assets/hcm/models/item/placeholder/" + name + ".json")).getAsJsonObject();
+            for (Map.Entry<String, com.google.gson.JsonElement> t : json.getAsJsonObject("textures").entrySet()) {
+                assertTrue(t.getValue().getAsString().startsWith("minecraft:block/"), name + ": " + t.getKey());
+            }
+            assertTrue(json.getAsJsonArray("elements").size() > 4, name + ": its card is drawn on its screen");
+        }
+    }
+
     /** Without the pack each model has a vanilla stand-in: an item every client draws (never the missing cube). */
     @Test
     void everyModelHasAVanillaStandIn() {

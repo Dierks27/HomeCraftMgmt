@@ -3006,3 +3006,54 @@ games:
     away_seconds: 10
     # Seconds a hand's result stays on the table before the next hand is dealt (2-30).
     pause_seconds: 5
+  # Bingo Night in the Clubhouse's Game Parlor (tap its machine, or /hcm play bingo): 75-ball bingo
+  # played together. The first cards bought start a short wait for everyone else; then a number is
+  # called every few seconds and your cards daub themselves. The first card to make a line gets the
+  # line's part of the prize, the first to make four corners the rest; cards that make it on the
+  # same call share it. The prize is sized by the cards in play, so every card gives back the same
+  # share (rtp) over lots of rounds, however many play. NPC players and the room's own cards fill
+  # the room up to room_cards: what they win is play chips. Money play uses the Parlor's own rules.
+  bingo:
+    # false = no new rounds (cards already bought are given back).
+    enabled: true
+    # What one card costs in tokens (10-1000). A player buys 1 to 4 cards a round.
+    card_price: 10
+    # What one card costs in dollars for the Parlor's money play (10-1000). The Parlor's chips must
+    # be able to make 1 to 4 of it, and 4 of it must fit the Parlor's biggest stake.
+    card_dollars: 10
+    # Tokens (or dollars) given back per 100 put in, over lots of rounds (85-95).
+    rtp: 90
+    # Four corners' share of the prize, in percent (0-80). The line gets the rest. 0 = the line
+    # only, and a round ends at the first line.
+    corners_share: 60
+    # The fewest cards a round is played with (1-40): NPC players (when everyone in the round has
+    # them on) and the room's own cards fill it up, so one player still plays a real round.
+    room_cards: 8
+    # The most cards in a round (4-40). Lowered on its own if a lone winner's prize would pass
+    # max_payout.
+    max_cards: 24
+    # Rounds a player may play a day (1-10000).
+    daily_limit: 30
+    # Seconds cards are sold after the first is bought (5-120). It starts sooner when everyone in
+    # the round taps Start now.
+    gather_seconds: 20
+    # Seconds between numbers (1-10).
+    call_seconds: 2
+  # Picture Bingo in the Clubhouse's Arcade Room: free bingo for little ones who can't read yet. A
+  # card of eight animal pictures round a star; each animal called is shown big and heard, and lights
+  # up on your card by itself. Three in a row wins a few tokens (counts toward skill_daily_cap);
+  # anyone else gets a cheer, and nothing is taken. Tap its cabinet (list kid_bingo in
+  # clubhouse.arcade_room.games, or /hcm games clubhouse cabinet kid_bingo) or /hcm play kid_bingo.
+  # It is not a game of chance and never needs hcm.games.chance.
+  kid_bingo:
+    # false = no rounds.
+    enabled: true
+    # Tokens for three in a row (0-20).
+    prize: 2
+    # Most tokens a player wins here a day (0-100); after that the rounds are just for fun.
+    daily_cap: 10
+    # Seconds a round waits for more players after the first one taps (5-120). It starts sooner
+    # when everyone in it taps the big green Go.
+    gather_seconds: 10
+    # Seconds between animals (2-10).
+    call_seconds: 3

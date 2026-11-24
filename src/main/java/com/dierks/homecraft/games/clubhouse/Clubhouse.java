@@ -1260,7 +1260,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             return true; // a pending Go
         }
         Game on = com.dierks.homecraft.gui.games.GameMenu.gameOnScreen(online(id));
-        if (on != null && (on.kind() == GameKind.CABINET || on.kind().chance())) {
+        if (on != null && (on.kind() == GameKind.CABINET || on.kind().chance()
+                || KidSet.cabinet(on.id(), on.kind()))) { // 0.57.0: Picture Bingo's screen too
             return true; // 0.45.0: a hand in the Game Parlor too (it sent a visitor home mid-hand)
         }
         if (games().parties().of(id) != null || (watch != null && watch.watching(id))) {

@@ -44,8 +44,8 @@ import java.util.UUID;
  */
 final class FuseShow {
 
-    /** How far over the machine's foot the head hangs: above its name. */
-    private static final double HEAD_UP = 2.9;
+    /** How far over the machine's foot the head hangs: clear above its name and its stand-in picture. */
+    private static final double HEAD_UP = 3.4;
     /** How far the machine is looked for around each player in the Parlor. */
     private static final double FIND_RADIUS = 48;
 

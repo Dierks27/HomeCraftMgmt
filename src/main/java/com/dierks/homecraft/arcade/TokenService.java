@@ -102,7 +102,11 @@ public final class TokenService {
         GAMES_KID_RACES("Arcade Room races"),
         // The Game Parlor's Sports Board (0.55.0): played for money only, so no token line is ever written under it;
         // it is the game's name in the games' own lists.
-        ARCADE_SPORTSBOOK("Sports Board");
+        ARCADE_SPORTSBOOK("Sports Board"),
+        // 0.57.0, the Game Parlor's Video Poker (Jacks or Better) and Creeper Fuse (a rising multiple, everyone in the
+        // Parlor in the same fuse)
+        ARCADE_VIDEO_POKER("Video Poker"),
+        ARCADE_CREEPER_FUSE("Creeper Fuse");
 
         private final String label;
 

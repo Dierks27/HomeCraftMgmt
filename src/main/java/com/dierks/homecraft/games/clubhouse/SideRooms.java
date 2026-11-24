@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.clubhouse;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.pack.ClubModels;
 import com.dierks.homecraft.pack.PackModels;
@@ -29,6 +30,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Transformation;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -107,6 +111,9 @@ final class SideRooms {
     private List<TrophyShelf.Cup> cups = List.of();
     private List<ClubhousePlanner.Pedestal> pedestals = List.of();
     private final Set<String> warned = new HashSet<>();
+    /** 0.56.0: each wall board's live text (the Sports Board's lines), and what it last said. */
+    private final Map<String, UUID> boardText = new HashMap<>();
+    private final Map<String, String> boardSaid = new HashMap<>();
 
     /** One slot's entities: what it shows, and which are the model's, the stand-in's or everyone's. */
     private record Shown(String sig, List<UUID> all, List<UUID> models, List<UUID> plain) {
@@ -399,6 +406,9 @@ final class SideRooms {
                 String label = club.games().guard(g, g::machineLabel, g.name());
                 String sig = bd + (label.equals(g.name()) ? "" : "#" + label);
                 put(w, key, sig, bd.at(), () -> wallBoard(w, bd.game(), bd.at(), bd.width(), bd.height()));
+                if (g instanceof Sportsbook sb) { // 0.56.0: tonight's games on the board, kept up to date
+                    liveLines(bd.game(), bd.at(), club.games().guard(g, () -> sb.wallText(WALL_GAMES), List.<String>of()));
+                }
             }
             ClubhousePlanner.Place3 booth = room.parlorTicket(); // 0.46.1: the Scratch Ticket is the Parlor's
             if (booth != null && club.ticketOpen()) {
@@ -500,7 +510,9 @@ final class SideRooms {
      * games of chance's own gate), and its name hangs over it.
      */
     private Shown wallBoard(World w, String gameId, ClubhousePlanner.Place3 at, int width, int height) {
-        ClubModels.Model m = ClubModels.machineFor(gameId);
+        // 0.56.0: a wall board is the dark board, for everyone, with its live lines on it (a cabinet-sized model in
+        // front of a seven-wide wall read as one machine standing in an empty space)
+        ClubModels.Model m = null;
         List<UUID> models = new ArrayList<>();
         List<UUID> plain = new ArrayList<>();
         List<UUID> all = new ArrayList<>();
@@ -527,9 +539,73 @@ final class SideRooms {
         String name = game != null ? club.games().guard(game, game::machineLabel, game.name()) : gameId;
         all.add(label(w, new Location(w, g[6] + g[10] * 0.15, at.y() + BOARD_UP + g[4] + 0.15,
                 g[7] + g[11] * 0.15), "&a" + name, 0.6f).getUniqueId());
+        if (game instanceof Sportsbook) {
+            TextDisplay text = w.spawn(new Location(w, g[6] - g[10] * (0.5 - BOARD_THICK - 0.02), at.y() + BOARD_UP + 0.1,
+                    g[7] - g[11] * (0.5 - BOARD_THICK - 0.02), WallBoards.snap(at.yaw()), 0f), TextDisplay.class, e -> {
+                WorldEntities.tag(e, club, null);
+                e.setBillboard(Display.Billboard.FIXED); // flat on the board, facing into the room
+                e.setTransformation(scale(BOARD_TEXT_SCALE));
+                e.setLineWidth(BOARD_LINE_WIDTH);
+                e.setDefaultBackground(false);
+                e.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+                e.setBrightness(new Display.Brightness(15, 15));
+                e.setAlignment(TextDisplay.TextAlignment.CENTER);
+                e.text(Component.text("Loading tonight's games…", NamedTextColor.GRAY));
+            });
+            boardText.put(gameId, text.getUniqueId());
+            boardSaid.remove(gameId);
+            all.add(text.getUniqueId());
+        }
         all.addAll(models);
         all.addAll(plain);
         return new Shown(gameId, all, models, plain);
+    }
+
+    /** 0.56.0: how many of tonight's games the Sports Board's wall shows, the text's size and its widest line. */
+    static final int WALL_GAMES = 5;
+    static final float BOARD_TEXT_SCALE = 0.5f;
+    static final int BOARD_LINE_WIDTH = 520;
+    /** About how tall one line of the board's text is, in blocks, at size 1. */
+    static final double LINE_HIGH = 0.25;
+
+    /**
+     * 0.56.0: put {@code lines} on board {@code gameId}'s face when they changed, centred up and down on the board.
+     * Team names are shown as they are (never read as colour codes: "Texas A&M").
+     */
+    private void liveLines(String gameId, ClubhousePlanner.Place3 at, List<String> lines) {
+        UUID id = boardText.get(gameId);
+        Entity e = id == null ? null : Bukkit.getEntity(id);
+        if (!(e instanceof TextDisplay text) || lines == null || lines.isEmpty()) {
+            return;
+        }
+        String said = String.join("\n", lines);
+        if (said.equals(boardSaid.get(gameId))) {
+            return;
+        }
+        boardSaid.put(gameId, said);
+        text.text(boardComponent(lines));
+        Location l = text.getLocation();
+        l.setY(at.y() + BOARD_UP + textBottom(lines.size()));
+        text.teleport(l);
+    }
+
+    /** How far over the board's bottom edge {@code n} lines start, so they sit in its middle (pure). */
+    static double textBottom(int n) {
+        double tall = n * LINE_HIGH * BOARD_TEXT_SCALE;
+        return Math.max(0.08, (BOARD_TOP - tall) / 2);
+    }
+
+    /** The board's lines: the heading in gold, each game in white, its sides and what $10 gives back in green. */
+    static Component boardComponent(List<String> lines) {
+        Component out = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            Component c = i == 0 ? Component.text(line, NamedTextColor.GOLD).decorate(TextDecoration.BOLD)
+                    : line.startsWith("  ") ? Component.text(line.strip(), NamedTextColor.GREEN)
+                    : Component.text(line, NamedTextColor.WHITE);
+            out = out.append(i == 0 ? c : Component.newline().append(c));
+        }
+        return out;
     }
 
     /**

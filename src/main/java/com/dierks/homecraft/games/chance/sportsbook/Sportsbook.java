@@ -198,10 +198,15 @@ public final class Sportsbook implements Game {
     /** Its tile is shown only to someone who may make picks now: money play on, the permission, in the Parlor. */
     @Override
     public List<GameTile> tiles(Player viewer) {
-        if (viewer == null || !games().parlor().offered(viewer)) {
+        if (!tileShown(viewer)) {
             return List.of();
         }
         return List.of(new GameTile(Tab.LUCK, tile(viewer), id(), 0));
+    }
+
+    /** Whether {@code viewer} sees its tile: they may make picks now (money play, the permission, in the Parlor). */
+    public boolean tileShown(Player viewer) {
+        return viewer != null && games().parlor().offered(viewer);
     }
 
     /** No odds line: the board is played for money only, and {@code /hcm arcade odds} is read by players of every age. */
@@ -320,7 +325,8 @@ public final class Sportsbook implements Game {
         if (stake <= 0 || !Lines.offered(side.price(), rtp) || stake > mostFor(side.price())) {
             return null;
         }
-        return new Quote(side.ticker(), side.side(), side.price(), stake, Lines.payoutCents(stake, side.price(), rtp));
+        long payout = Lines.payoutCents(stake, side.price(), rtp);
+        return payout > stake * 100L ? new Quote(side.ticker(), side.side(), side.price(), stake, payout) : null;
     }
 
     /** One minute passed: refresh when one is due. */

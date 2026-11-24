@@ -283,5 +283,7 @@ class AccountMoveTest {
         assertTrue(missing.isEmpty(), "a table with a player or owner column must be moved or named as not moved "
                 + "(AccountMoveDao.MOVED / NOT_MOVED): " + missing);
         assertTrue(listed.contains("arcade_state"), "the Keeper numbers live in arcade_state");
+        assertTrue(AccountMoveDao.NOT_MOVED.containsKey("sports_picks"),
+                "0.55.0: a Sports Board pick is paid to the account that made it, so it stays there");
     }
 }

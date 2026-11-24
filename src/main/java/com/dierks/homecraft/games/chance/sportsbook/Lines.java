@@ -13,8 +13,8 @@ package com.dierks.homecraft.games.chance.sportsbook;
  * biggest payout: a side whose pay at a stake would pass it is offered only at smaller stakes.
  *
  * <p><b>Left out.</b> A side priced under {@link #LOW} or over {@link #HIGH} (too lopsided to be interesting, and the
- * rounding gets silly), and a side whose win would give back no more than was put in (a favourite priced at or over
- * {@code rtp}): a "win" that pays back less than the stake is not a win.
+ * rounding gets silly), and a side whose win would give back less than 1% more than was put in (a favourite priced at
+ * or near {@code rtp}): a "win" that pays back no more than the stake is not a win.
  */
 public final class Lines {
 
@@ -70,11 +70,12 @@ public final class Lines {
     }
 
     /**
-     * Whether a side priced {@code mills} is offered at all: inside the band, and its win gives back more than was
-     * put in (so a favourite priced at or over the return is left out).
+     * Whether a side priced {@code mills} is offered at all: inside the band, and its win gives back at least 1% more
+     * than was put in (so a favourite priced at, or just under, the return is left out: rounded down to the cent, its
+     * win would pay back no more than the stake).
      */
     public static boolean offered(int mills, int rtpTenths) {
-        return inBand(mills) && payoutCents(1, mills, rtpTenths) > 100;
+        return inBand(mills) && (long) mills * 101 <= (long) rtpTenths * 100;
     }
 
     /**

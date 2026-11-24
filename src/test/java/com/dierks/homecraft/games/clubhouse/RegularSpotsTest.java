@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RegularSpotsTest {
 
     private static final Box MAIN = LegacyBoxes.clubhouse();
-    private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, 48);
+    private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.SIZE_Z);
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
     private static final Map<Long, String> BLOCKS = RegularSpots.blocks(SITE.plan());
 

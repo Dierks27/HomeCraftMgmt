@@ -55,6 +55,13 @@ public final class ClubhouseRoom {
      */
     public static final String ANNEX_CLAIM_KEY = META_PREFIX + "annex.claim";
     /**
+     * Plan 13: the 16 rows the side rooms' wing grew by ({@link ClubhouseSettings#wingBox}) are claimed on their own
+     * too, the same way, once the side rooms' first box is: kept clear of every other games area, scanned, claimed only
+     * when empty. Until they are (or when they can't be), the side rooms keep their old size and the room says why; a
+     * server that has its rooms already builds them once more, grown.
+     */
+    public static final String WING_CLAIM_KEY = META_PREFIX + "wing.claim";
+    /**
      * 0.41.0: the owner-built room's Arcade Room cabinets (one key: "game=world;x;y;z;yaw|game=..."), its trophy shelf
      * and its two door signs ({@code DOOR_KEY + "arcade"|"trophy"}).
      */
@@ -165,12 +172,19 @@ public final class ClubhouseRoom {
     private final Box box;
     private final Box annex;
     private final Box full;
+    /** Plan 13: the wing's 16 new rows, and the box at its old size (the main room and the first 16 rows). */
+    private final Box wing;
+    private final Box old;
     private final ClubhousePlanner.Rooms rooms;
     private final String world;
     private final BuildBudget budget;
-    /** The main room alone, and with the annex (the rooms wanted, or none to clear it); {@code null} if not made. */
+    /**
+     * The main room alone, with the grown wing, and (plan 13) with the wing at its old size (the rooms wanted, or none
+     * to clear them); {@code null} if not made.
+     */
     private final ClubhouseSite mainSite;
     private final ClubhouseSite fullSite;
+    private final ClubhouseSite oldSite;
     /** The room being built or standing: one of the two, or (0.42.0) the owner's saved room. */
     private ClubhouseSite site;
     /** 0.42.0: edit mode, the save in use (its id and site), and whether HCM's plan changed since it was taken. */
@@ -184,8 +198,11 @@ public final class ClubhouseRoom {
     /** 0.41.0: whether the annex is part of the build (claimed), and why not when it is wanted but left out. */
     private boolean annexIn;
     private String annexOut;
-    /** What the running job is: a claim scan of the main box, of the annex, or the build. */
-    private enum JobKind { SCAN_MAIN, SCAN_ANNEX, BUILD }
+    /** Plan 13: whether the wing's new rows are part of the build (claimed), and why not when they are left out. */
+    private boolean wingIn;
+    private String wingOut;
+    /** What the running job is: a claim scan of the main box, of the annex, of the wing's new rows, or the build. */
+    private enum JobKind { SCAN_MAIN, SCAN_ANNEX, SCAN_WING, BUILD }
     private JobKind jobKind;
 
     private Phase phase = Phase.WAITING;
@@ -222,6 +239,8 @@ public final class ClubhouseRoom {
     private boolean confirmClaim;
     /** 0.41.0: {@code rebuild confirm} claims the side rooms' box too, even with blocks in it. */
     private boolean confirmAnnex;
+    /** Plan 13: {@code rebuild confirm} claims the wing's new rows too, even with blocks in them. */
+    private boolean confirmWing;
     private boolean verified;
     // for status
     private int builds;
@@ -236,22 +255,28 @@ public final class ClubhouseRoom {
         this.box = settings.mainBox();
         this.annex = settings.annexBox();
         this.full = settings.box();
+        this.wing = settings.wingBox();
+        this.old = settings.oldBox();
         this.rooms = settings.rooms();
         String w = host.worldName();
         this.world = w == null ? "" : w.trim();
         this.budget = new BuildBudget(host::nanoTime);
         ClubhouseSite m;
         ClubhouseSite f;
+        ClubhouseSite o;
         try {
             m = ClubhousePlanner.plan(box, ClubhousePlanner.Rooms.NONE);
             f = ClubhousePlanner.plan(full, rooms);
+            o = ClubhousePlanner.plan(old, rooms);
         } catch (RuntimeException e) {
             m = null;
             f = null;
+            o = null;
             planProblem = e.getMessage();
         }
         this.mainSite = m;
         this.fullSite = f;
+        this.oldSite = o;
         this.site = m;
     }
 
@@ -341,8 +366,10 @@ public final class ClubhouseRoom {
             // 0.42.0: the owner is decorating: open as it stands, nothing built, checked or put back
             try {
                 annexIn = claimText(world, annex).equals(host.meta(ANNEX_CLAIM_KEY));
+                wingIn = annexIn && claimText(world, wing).equals(host.meta(WING_CLAIM_KEY));
             } catch (Exception e) {
                 annexIn = false;
+                wingIn = false;
             }
             site = chosenSite();
             phase = Phase.READY;
@@ -358,7 +385,7 @@ public final class ClubhouseRoom {
      * left aside with a WARN (the generated room is built; {@code restore} picks it again).
      */
     private ClubhouseSite chosenSite() {
-        ClubhouseSite gen = annexIn ? fullSite : mainSite;
+        ClubhouseSite gen = generatedSite();
         savedSite = null;
         savedProblem = null;
         planChanged = false;
@@ -382,6 +409,11 @@ public final class ClubhouseRoom {
             host.logger().warning("Clubhouse: " + savedProblem + " - building HCM's room instead");
             return gen;
         }
+    }
+
+    /** HCM's room for what is claimed: the main room, with its wing at the old size, or (plan 13) grown. */
+    private ClubhouseSite generatedSite() {
+        return !annexIn ? mainSite : wingIn ? fullSite : oldSite;
     }
 
     private void close(String why) {
@@ -428,6 +460,10 @@ public final class ClubhouseRoom {
             }
             if (jobKind == JobKind.SCAN_ANNEX) {
                 annexScanned(done);
+                return;
+            }
+            if (jobKind == JobKind.SCAN_WING) {
+                wingScanned(done);
                 return;
             }
             builds++;
@@ -515,6 +551,8 @@ public final class ClubhouseRoom {
     private void afterMain(WorldPort port) {
         annexIn = false;
         annexOut = null;
+        wingIn = false;
+        wingOut = null;
         String claim;
         try {
             claim = host.meta(ANNEX_CLAIM_KEY);
@@ -546,7 +584,7 @@ public final class ClubhouseRoom {
         confirmAnnex = false;
         if (claimed) {
             annexIn = true;
-            startJob(port, JobKind.BUILD);
+            afterAnnex(port);
             return;
         }
         if (annexOut != null) {
@@ -581,6 +619,91 @@ public final class ClubhouseRoom {
         }
         host.logger().info("Clubhouse: claimed the side rooms' empty box (" + annex.describe() + ")");
         annexIn = true;
+        afterAnnex(port);
+    }
+
+    /**
+     * Plan 13: the side rooms' first box is claimed, the 16 rows their wing grew by next, the same way. Claimed before,
+     * they are built with the room (or cleared, rooms switched off); wanted and clear of every other games area, they
+     * are scanned, and claimed only when empty. Anything in their way (another area too near, blocks that aren't the
+     * Clubhouse's) keeps the side rooms at their old size, with one console line saying why; nothing else changes and
+     * nothing of anyone's is touched. {@code rebuild confirm} claims them anyway (never past another area).
+     */
+    private void afterAnnex(WorldPort port) {
+        wingIn = false;
+        wingOut = null;
+        String claim;
+        try {
+            claim = host.meta(WING_CLAIM_KEY);
+        } catch (Exception e) {
+            // never built small over rooms that may stand grown: wait for the database, as the main claim does
+            phase = Phase.WAITING;
+            waitingFor = "the side rooms' new rows' claim can't be read from the database";
+            return;
+        }
+        boolean claimed = claimText(world, wing).equals(claim);
+        if (!rooms.any() && !claimed) {
+            startJob(port, JobKind.BUILD); // no side room wanted: the old size is cleared, the new rows never touched
+            return;
+        }
+        List<String> problems = host.regionProblems(wing, world);
+        if (problems != null && !problems.isEmpty()) {
+            wingOut = "their 16 new rows (" + wing.describe() + ") can't be used: " + problems.get(0);
+            keepOldSize(port);
+            return;
+        }
+        if (!claimed && confirmWing) {
+            try {
+                host.meta(WING_CLAIM_KEY, claimText(world, wing));
+                claimed = true;
+            } catch (Exception e) {
+                wingOut = "their new rows' claim can't be written to the database";
+            }
+        }
+        confirmWing = false;
+        if (claimed) {
+            wingIn = true;
+            startJob(port, JobKind.BUILD);
+            return;
+        }
+        if (wingOut != null) {
+            keepOldSize(port);
+            return;
+        }
+        startJob(port, JobKind.SCAN_WING);
+    }
+
+    /** The wing's new rows can't be used now: the side rooms are built at their old size, and the console says why. */
+    private void keepOldSize(WorldPort port) {
+        host.logger().warning("Clubhouse: the side rooms keep their old size - " + wingOut);
+        startJob(port, JobKind.BUILD);
+    }
+
+    /** The wing's new rows are counted: empty, they are claimed and the rooms built grown; else the old size. */
+    private void wingScanned(BuildJob scan) {
+        WorldPort port = host.world(world);
+        if (port == null) {
+            phase = Phase.WAITING;
+            return;
+        }
+        if (scan.found() > 0) {
+            String first = scan.firstFound().isEmpty() ? "" : " (first at " + String.join(" ", scan.firstFound()) + ")";
+            wingOut = "their 16 new rows have " + scan.found() + " block" + (scan.found() == 1 ? "" : "s")
+                    + " that aren't the Clubhouse's" + first + " - /hcm games clubhouse rebuild confirm clears them";
+            keepOldSize(port);
+            return;
+        }
+        try {
+            host.meta(WING_CLAIM_KEY, claimText(world, wing));
+        } catch (Exception e) {
+            host.logger().log(Level.WARNING, "Clubhouse: could not record the side rooms' new rows' claim", e);
+            wingOut = "their new rows' claim can't be written to the database";
+            keepOldSize(port);
+            return;
+        }
+        host.logger().info("Clubhouse: claimed the side rooms' 16 new rows (" + wing.describe() + "): the Arcade Room"
+                + " and the Game Parlor grow");
+        wingIn = true;
         startJob(port, JobKind.BUILD);
     }
 
@@ -590,7 +713,8 @@ public final class ClubhouseRoom {
         if (kind == JobKind.BUILD) {
             site = chosenSite();
         }
-        Box where = kind == JobKind.SCAN_ANNEX ? annex : kind == JobKind.SCAN_MAIN ? box : site.box();
+        Box where = kind == JobKind.SCAN_ANNEX ? annex : kind == JobKind.SCAN_WING ? wing
+                : kind == JobKind.SCAN_MAIN ? box : site.box();
         try {
             job = new BuildJob(port, where, jobScan ? null : site.plan(), jobScan ? BuildJob.Mode.SCAN
                     : BuildJob.Mode.CONVERGE);
@@ -664,7 +788,7 @@ public final class ClubhouseRoom {
     /** Before a build: anyone in the box (the side rooms' too) who isn't a visitor is moved out of its way. */
     private void moveStrays() {
         for (Person p : host.people()) {
-            if ((p.in(world, box) || p.in(world, annex)) && !visitor.test(p.id())) {
+            if ((p.in(world, box) || p.in(world, annex) || p.in(world, wing)) && !visitor.test(p.id())) {
                 host.toSafety(p.id(), world);
             }
         }
@@ -708,6 +832,7 @@ public final class ClubhouseRoom {
         hand = false;
         confirmClaim = true;
         confirmAnnex = rooms.any();
+        confirmWing = rooms.any();
         settle();
         out.add("&aThe Clubhouse is being built and checked. &7/hcm games clubhouse status shows how it goes.");
         return out;
@@ -1301,7 +1426,8 @@ public final class ClubhouseRoom {
                 out.add(new Cabinet(ClubhousePlanner.PARLOR_ROW_GAMES.get(n), row.get(n)));
             }
             for (Map.Entry<String, Place> e : handParlor.entrySet()) { // 0.45.0: a moved machine, the rest stay
-                if (overrides() && mine(e.getValue()) && !notAMachine(e.getKey())) {
+                if (overrides() && mine(e.getValue()) && !notAMachine(e.getKey())
+                        && !ClubhousePlanner.PARLOR_BOARD_GAMES.contains(e.getKey())) { // a board moves in parlorBoards
                     moveFirst(out, e.getKey(), place3(e.getValue(), 0));
                 }
             }
@@ -1312,6 +1438,24 @@ public final class ClubhouseRoom {
             if (p != null && !notAMachine(e.getKey())) {
                 out.add(new Cabinet(e.getKey(), p));
             }
+        }
+        return out;
+    }
+
+    /**
+     * Plan 13: the generated Parlor's wall boards ({@link ClubhousePlanner#parlorBoards}: the sportsbook's), each where
+     * an edited or saved room's owner moved it ({@code /hcm games clubhouse parlor sportsbook}). None in an owner-built
+     * room: a board placed there is one of its machines ({@link #parlorMachines}).
+     */
+    public List<ClubhousePlanner.Board> parlorBoards() {
+        List<ClubhousePlanner.Board> out = new ArrayList<>();
+        if (hand || !parlorBuilt()) {
+            return out;
+        }
+        for (ClubhousePlanner.Board b : ClubhousePlanner.parlorBoards(site.box())) {
+            Place moved = handParlor.get(b.game());
+            ClubhousePlanner.Place3 at = overrides() && mine(moved) ? place3(moved, 0) : null;
+            out.add(at == null ? b : new ClubhousePlanner.Board(b.game(), at, b.width(), b.height()));
         }
         return out;
     }
@@ -1640,7 +1784,7 @@ public final class ClubhouseRoom {
             return out;
         }
         String id = "save-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new java.util.Date(host.now()));
-        String genHash = (annexIn ? fullSite : mainSite).plan().hash();
+        String genHash = generatedSite().plan().hash();
         try {
             host.writeSave(id, ClubSave.text(plan, genHash, ClubhousePlanner.regions(b,
                     annexIn ? rooms : ClubhousePlanner.Rooms.NONE).keySet()));
@@ -1980,6 +2124,15 @@ public final class ClubhouseRoom {
         return annexOut;
     }
 
+    /** Plan 13: whether the wing's 16 new rows are part of the generated room, and why not when they are left out. */
+    public boolean wingIn() {
+        return wingIn;
+    }
+
+    public String wingOut() {
+        return wingOut;
+    }
+
     /** The room's world: the owner-built room's, or the Games world. */
     public String world() {
         return hand && handSpawn != null ? handSpawn.world() : world;
@@ -2100,11 +2253,16 @@ public final class ClubhouseRoom {
         if (hand || site == null) {
             return List.of();
         }
-        if (!parlorBuilt()) {
-            return ClubhousePlanner.seats(site.box());
-        }
         List<ClubhousePlanner.Seat> all = new java.util.ArrayList<>(ClubhousePlanner.seats(site.box()));
-        all.addAll(ClubhousePlanner.parlorSeats(site.box())); // 0.50.0: the Parlor's card-table chairs too
+        if (parlorBuilt()) {
+            all.addAll(ClubhousePlanner.parlorSeats(site.box())); // 0.50.0: the Parlor's card-table chairs too
+        }
+        if (arcadeBuilt()) {
+            all.addAll(ClubhousePlanner.arcadeSeats(site.box())); // plan 13: the viewing stools and the bean bags
+        }
+        if (trophyBuilt()) {
+            all.addAll(ClubhousePlanner.trophySeats(site.box())); // plan 13: the armchairs facing the podium
+        }
         return all;
     }
 
@@ -2299,7 +2457,10 @@ public final class ClubhouseRoom {
             return "not built yet";
         }
         return (rooms.arcade() ? "the Arcade Room" : "") + (rooms.arcade() && rooms.trophy() ? " and " : "")
-                + (rooms.trophy() ? "the Trophy Room" : "") + ", " + annex.describe();
+                + (rooms.trophy() ? "the Trophy Room" : "") + ", "
+                + (wingIn ? new Box(annex.minX(), annex.minY(), annex.minZ(), wing.maxX(), wing.maxY(), wing.maxZ())
+                .describe() : annex.describe() + (wingOut == null ? ""
+                : " - at their old size: " + wingOut));
     }
 
     /** The build running now, or {@code null} (for the tests). */

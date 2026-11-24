@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.clubhouse;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.pack.ClubModels;
 import com.dierks.homecraft.pack.PackModels;
@@ -29,6 +30,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Transformation;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -107,6 +111,9 @@ final class SideRooms {
     private List<TrophyShelf.Cup> cups = List.of();
     private List<ClubhousePlanner.Pedestal> pedestals = List.of();
     private final Set<String> warned = new HashSet<>();
+    /** 0.56.0: each wall board's live text (the Sports Board's lines), and what it last said. */
+    private final Map<String, UUID> boardText = new HashMap<>();
+    private final Map<String, String> boardSaid = new HashMap<>();
 
     /** One slot's entities: what it shows, and which are the model's, the stand-in's or everyone's. */
     private record Shown(String sig, List<UUID> all, List<UUID> models, List<UUID> plain) {
@@ -373,15 +380,35 @@ final class SideRooms {
                 if (g == null) {
                     continue; // a game not built on this server
                 }
-                if (ClubhousePlanner.PARLOR_ROW_GAMES.contains(g.id()) && !club.games().enabled(g)) {
-                    continue; // The back row's slot machines stand only while their game is open
+                boolean board = ClubhousePlanner.PARLOR_BOARD_GAMES.contains(g.id());
+                if ((ClubhousePlanner.PARLOR_ROW_GAMES.contains(g.id()) || board) && !club.games().enabled(g)) {
+                    continue; // The back row's slot machines (and a wall board) stand only while their game is open
                 }
                 String key = "mach:" + n;
                 keep.add(key);
                 // A pot machine's label says what its pot holds, so the machine is drawn again when it changes
                 String label = club.games().guard(g, g::machineLabel, g.name());
                 String sig = m.game() + "@" + m.at() + (label.equals(g.name()) ? "" : "#" + label);
-                put(w, key, sig, m.at(), () -> machine(w, m.game(), m.at()));
+                // plan 13: a board game an owner-built room placed is drawn as a board, at the board's own size
+                put(w, key, sig, m.at(), board ? () -> wallBoard(w, m.game(), m.at(), ClubhousePlanner.BOARD_W,
+                        ClubhousePlanner.BOARD_H) : () -> machine(w, m.game(), m.at()));
+            }
+            // plan 13: the generated Parlor's wall boards (the sportsbook's), each only while its game is there and open
+            List<ClubhousePlanner.Board> boards = room.parlorBoards();
+            for (int n = 0; n < boards.size(); n++) {
+                ClubhousePlanner.Board bd = boards.get(n);
+                Game g = club.games().game(bd.game());
+                if (g == null || !club.games().enabled(g)) {
+                    continue;
+                }
+                String key = "board:" + n;
+                keep.add(key);
+                String label = club.games().guard(g, g::machineLabel, g.name());
+                String sig = bd + (label.equals(g.name()) ? "" : "#" + label);
+                put(w, key, sig, bd.at(), () -> wallBoard(w, bd.game(), bd.at(), bd.width(), bd.height()));
+                if (g instanceof Sportsbook sb) { // 0.56.0: tonight's games on the board, kept up to date
+                    liveLines(bd.game(), bd.at(), club.games().guard(g, () -> sb.wallText(WALL_GAMES), List.<String>of()));
+                }
             }
             ClubhousePlanner.Place3 booth = room.parlorTicket(); // 0.46.1: the Scratch Ticket is the Parlor's
             if (booth != null && club.ticketOpen()) {
@@ -468,6 +495,141 @@ final class SideRooms {
         all.addAll(models);
         all.addAll(plain);
         return new Shown(gameId, all, models, plain);
+    }
+
+    /** Plan 13: how far over its floor a wall board's bottom edge is, its most height, and its thickness. */
+    static final double BOARD_UP = 1.0;
+    static final double BOARD_TOP = 2.95;
+    static final double BOARD_THICK = 0.06;
+
+    /**
+     * Plan 13: a game's big board on a Parlor wall ({@link ClubhousePlanner.Board}; the sportsbook's), drawn from its
+     * place and size alone. Its look is its model's ({@link ClubModels#machineFor}, for players who have the pack;
+     * without one a plain dark board on the wall is the stand-in for everyone, and it is the stand-in for players
+     * without the pack too). A row of tap targets over its face, one a block, each opens {@code machine:<game>} (the
+     * games of chance's own gate), and its name hangs over it.
+     */
+    private Shown wallBoard(World w, String gameId, ClubhousePlanner.Place3 at, int width, int height) {
+        // 0.56.0: a wall board is the dark board, for everyone, with its live lines on it (a cabinet-sized model in
+        // front of a seven-wide wall read as one machine standing in an empty space)
+        ClubModels.Model m = null;
+        List<UUID> models = new ArrayList<>();
+        List<UUID> plain = new ArrayList<>();
+        List<UUID> all = new ArrayList<>();
+        double[] g = boardBox(at, width, height);
+        for (int s = 0; s < width; s++) {
+            double off = s - (width - 1) / 2.0;
+            all.add(tapTarget(w, new Location(w, g[6] + g[8] * off, at.y(), g[7] + g[9] * off), 1.0f,
+                    (float) (BOARD_UP + g[4] + 0.05), "machine:" + gameId).getUniqueId());
+        }
+        BlockDisplay dark = w.spawn(new Location(w, g[0], g[1], g[2]), BlockDisplay.class, e -> {
+            WorldEntities.tag(e, club, null);
+            if (m != null) {
+                e.setVisibleByDefault(false); // the stand-in: shown to players without the pack (views)
+            }
+            e.setBlock(Material.BLACK_CONCRETE.createBlockData());
+            e.setTransformation(new Transformation(new Vector3f(), new Quaternionf(),
+                    new Vector3f((float) g[3], (float) g[4], (float) g[5]), new Quaternionf()));
+        });
+        (m != null ? plain : all).add(dark.getUniqueId());
+        if (m != null) {
+            models.add(model(w, m, loc(w, at, m.up())).getUniqueId());
+        }
+        Game game = club.games().game(gameId);
+        String name = game != null ? club.games().guard(game, game::machineLabel, game.name()) : gameId;
+        all.add(label(w, new Location(w, g[6] + g[10] * 0.15, at.y() + BOARD_UP + g[4] + 0.15,
+                g[7] + g[11] * 0.15), "&a" + name, 0.6f).getUniqueId());
+        if (game instanceof Sportsbook) {
+            TextDisplay text = w.spawn(new Location(w, g[6] - g[10] * (0.5 - BOARD_THICK - 0.02), at.y() + BOARD_UP + 0.1,
+                    g[7] - g[11] * (0.5 - BOARD_THICK - 0.02), WallBoards.snap(at.yaw()), 0f), TextDisplay.class, e -> {
+                WorldEntities.tag(e, club, null);
+                e.setBillboard(Display.Billboard.FIXED); // flat on the board, facing into the room
+                e.setTransformation(scale(BOARD_TEXT_SCALE));
+                e.setLineWidth(BOARD_LINE_WIDTH);
+                e.setDefaultBackground(false);
+                e.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+                e.setBrightness(new Display.Brightness(15, 15));
+                e.setAlignment(TextDisplay.TextAlignment.CENTER);
+                e.text(Component.text("Loading tonight's games…", NamedTextColor.GRAY));
+            });
+            boardText.put(gameId, text.getUniqueId());
+            boardSaid.remove(gameId);
+            all.add(text.getUniqueId());
+        }
+        all.addAll(models);
+        all.addAll(plain);
+        return new Shown(gameId, all, models, plain);
+    }
+
+    /** 0.56.0: how many of tonight's games the Sports Board's wall shows, the text's size and its widest line. */
+    static final int WALL_GAMES = 5;
+    static final float BOARD_TEXT_SCALE = 0.5f;
+    static final int BOARD_LINE_WIDTH = 520;
+    /** About how tall one line of the board's text is, in blocks, at size 1. */
+    static final double LINE_HIGH = 0.25;
+
+    /**
+     * 0.56.0: put {@code lines} on board {@code gameId}'s face when they changed, centred up and down on the board.
+     * Team names are shown as they are (never read as colour codes: "Texas A&M").
+     */
+    private void liveLines(String gameId, ClubhousePlanner.Place3 at, List<String> lines) {
+        UUID id = boardText.get(gameId);
+        Entity e = id == null ? null : Bukkit.getEntity(id);
+        if (!(e instanceof TextDisplay text) || lines == null || lines.isEmpty()) {
+            return;
+        }
+        String said = String.join("\n", lines);
+        if (said.equals(boardSaid.get(gameId))) {
+            return;
+        }
+        boardSaid.put(gameId, said);
+        text.text(boardComponent(lines));
+        Location l = text.getLocation();
+        l.setY(at.y() + BOARD_UP + textBottom(lines.size()));
+        text.teleport(l);
+    }
+
+    /** How far over the board's bottom edge {@code n} lines start, so they sit in its middle (pure). */
+    static double textBottom(int n) {
+        double tall = n * LINE_HIGH * BOARD_TEXT_SCALE;
+        return Math.max(0.08, (BOARD_TOP - tall) / 2);
+    }
+
+    /** The board's lines: the heading in gold, each game in white, its sides and what $10 gives back in green. */
+    static Component boardComponent(List<String> lines) {
+        Component out = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            Component c = i == 0 ? Component.text(line, NamedTextColor.GOLD).decorate(TextDecoration.BOLD)
+                    : line.startsWith("  ") ? Component.text(line.strip(), NamedTextColor.GREEN)
+                    : Component.text(line, NamedTextColor.WHITE);
+            out = out.append(i == 0 ? c : Component.newline().append(c));
+        }
+        return out;
+    }
+
+    /**
+     * A wall board's geometry (pure): its dark slab's min corner (0-2) and size (3-5), the middle of the column in
+     * front of the wall it stands in (6, 7), the along-the-wall step (8, 9) and the way out from the wall (10, 11).
+     * The board hangs {@value #BOARD_UP} over the floor, at most {@value #BOARD_TOP} high, flat on the wall behind its
+     * place ({@code at} faces away from that wall), {@code width} blocks along it centred on the place.
+     */
+    static double[] boardBox(ClubhousePlanner.Place3 at, int width, int height) {
+        double rad = Math.toRadians(WallBoards.snap(at.yaw()));
+        double fx = Math.round(-Math.sin(rad));
+        double fz = Math.round(Math.cos(rad));
+        double ax = Math.abs(fz);
+        double az = Math.abs(fx);
+        double bx = Math.floor(at.x()) + 0.5;
+        double bz = Math.floor(at.z()) + 0.5;
+        double wallX = bx - fx * 0.5;
+        double wallZ = bz - fz * 0.5;
+        double sx = ax * width + Math.abs(fx) * BOARD_THICK;
+        double sz = az * width + Math.abs(fz) * BOARD_THICK;
+        double sy = Math.min(height, BOARD_TOP);
+        double cx = wallX + fx * BOARD_THICK / 2;
+        double cz = wallZ + fz * BOARD_THICK / 2;
+        return new double[]{cx - sx / 2, at.y() + BOARD_UP, cz - sz / 2, sx, sy, sz, bx, bz, ax, az, fx, fz};
     }
 
     /** An Interaction you tap (either click), carrying what the tap does. */

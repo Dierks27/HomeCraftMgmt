@@ -112,6 +112,7 @@ final class ClubDecor {
             Quaternionf left = new Quaternionf();
             switch (p.look()) {
                 case "face" -> e.setBillboard(Display.Billboard.VERTICAL);
+                case "ball" -> e.setBillboard(Display.Billboard.CENTER); // plan 13: round from above too (the ball pit)
                 case "flat" -> left.rotateX((float) (-Math.PI / 2)); // lying on the table
                 case "lean" -> left.rotateZ((float) Math.toRadians(20)); // leaning on the green's edge
                 default -> {

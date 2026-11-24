@@ -119,7 +119,8 @@ class RaceTableTest {
             }
         }
         assertEquals(24, cells.size());
-        assertEquals(12, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's");
+        assertEquals(13, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's; plan 13 grew the"
+                + " wing round it");
     }
 
     @Test

@@ -154,7 +154,7 @@ class ArcadeRoomTest {
             }
         }
         assertNotEquals(ClubhousePlanner.raceTable(BOX), f, "a second track: not the Parlor's");
-        assertEquals(12, ClubhousePlanner.ALGO, "a block change: every server builds the room once more");
+        assertEquals(13, ClubhousePlanner.ALGO, "a block change: every server builds the room once more");
         assertEquals("kidrace", RaceShow.KID_TAP, "its tap opens the kid race, never a machine of chance");
         assertFalse(RaceShow.KID_TAP.startsWith("machine:"));
     }
@@ -197,8 +197,8 @@ class ArcadeRoomTest {
         Map<Long, Integer> light = light();
         Box room = ClubhousePlanner.arcadeInside(BOX);
         List<ClubhousePlanner.Place3> cabs = ClubhousePlanner.cabinets(BOX);
-        assertEquals(9, cabs.size(), "nine places: the eight kid games and The Floor Is Lava");
-        assertEquals(9, ClubhousePlanner.CABINETS);
+        assertEquals(13, cabs.size(), "plan 13: thirteen places, the eight kid games, The Floor Is Lava and four spares");
+        assertEquals(13, ClubhousePlanner.CABINETS);
         List<int[]> before = new ArrayList<>();
         for (ClubhousePlanner.Place3 c : cabs) {
             int cx = (int) Math.floor(c.x());
@@ -218,8 +218,9 @@ class ArcadeRoomTest {
             assertTrue(light.getOrDefault(key(fx, FEET, fz), 0) >= LIT, "and lit: " + c);
             assertTrue(light.getOrDefault(key(cx, FEET, cz), 0) >= LIT, "the cabinet's place lit too: " + c);
         }
-        // the first six places are where they were (the filling order is stable)
-        int[][] first = {{14, 36}, {1, 36}, {14, 39}, {1, 39}, {14, 42}, {1, 42}};
+        // the first nine places are where they were (the filling order is stable), the spares after them
+        int[][] first = {{14, 36}, {1, 36}, {14, 39}, {1, 39}, {14, 42}, {1, 42}, {1, 33}, {14, 45}, {1, 45},
+                {14, 48}, {1, 48}, {14, 51}, {1, 51}};
         for (int n = 0; n < first.length; n++) {
             assertEquals(BOX.minX() + first[n][0] + 0.5, cabs.get(n).x(), 1e-9);
             assertEquals(BOX.minZ() + first[n][1] + 0.5, cabs.get(n).z(), 1e-9);
@@ -255,7 +256,10 @@ class ArcadeRoomTest {
     void everyKidGameHasExactlyOneCabinetAndNoneTwice() {
         List<String> shipped = SETTINGS.arcadeGames();
         List<String> room = KidSet.fill(shipped, KidSet.CABINET_GAMES, SideRooms.LAVA_GAME, ClubhousePlanner.CABINETS);
-        assertEquals(ClubhousePlanner.CABINETS, room.size(), "every place has a cabinet: " + room);
+        assertEquals(ClubhousePlanner.OLD_CABINETS, room.size(), "every game has a cabinet, the nine places as before;"
+                + " plan 13's four spares wait for more games: " + room);
+        assertEquals(room, KidSet.fill(shipped, KidSet.CABINET_GAMES, SideRooms.LAVA_GAME,
+                ClubhousePlanner.OLD_CABINETS), "the same games in the same places as a room at its old size");
         assertEquals(new HashSet<>(room).size(), room.size(), "no game twice: " + room);
         assertTrue(room.containsAll(KidSet.CABINET_GAMES), "every one of the eight kid games: " + room);
         assertEquals(8, KidSet.CABINET_GAMES.size());
@@ -292,19 +296,23 @@ class ArcadeRoomTest {
         Map<Long, Integer> light = light();
         int ax = BOX.minX() + ClubhousePlanner.ARCADE_X0;
         List<ClubhousePlanner.Prop> decor = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH);
-        assertEquals(0, decor.stream().filter(p -> p.key().startsWith("arcade.ball.")).count(),
-                "plan 12: no ball pit (the owner: it read as a weird thing in the hallway)");
-        assertTrue(decor.stream().filter(p -> p.key().startsWith("arcade.plush.")).count() >= 4, "plushies on show");
-        // the plush case: glass to its top, so nothing stands on it
-        for (int i : ClubhousePlanner.PLUSH_X) {
-            assertEquals(ClubhousePlanner.CABINET, at(ax + i, FEET, BOX.minZ() + ClubhousePlanner.SIDE_Z1));
-            assertEquals(ClubhousePlanner.ROOF_GLASS, at(ax + i, FEET + 1, BOX.minZ() + ClubhousePlanner.SIDE_Z1));
+        assertTrue(decor.stream().filter(p -> p.key().startsWith("arcade.ball.")).count() >= 100,
+                "plan 13: a ball pit full of balls, now that there is room (GrownWingTest has the rest)");
+        assertTrue(decor.stream().filter(p -> p.key().startsWith("arcade.plush.")).count() >= 16, "plushies on show");
+        // the plush case: glass to its lit top, so nothing stands on it
+        for (int[] c : ClubhousePlanner.PLUSH_CASE) {
+            int x = ax + c[0];
+            int z = BOX.minZ() + c[1];
+            assertEquals(ClubhousePlanner.CABINET, at(x, FEET, z));
+            assertEquals(ClubhousePlanner.ROOF_GLASS, at(x, FEET + 1, z));
+            assertEquals(ClubhousePlanner.ROOF_GLASS, at(x, FEET + 2, z));
+            assertEquals(15, ClubhousePlanner.lightOf(at(x, FEET + 3, z)), "a lit cap");
         }
-        // the bean bags: one block high, lit on top, air over them (nothing to climb into)
+        // the bean bags: a stair a child sits in, lit over it, air over that (nothing to climb into)
         for (int[] bag : ClubhousePlanner.BEAN_BAGS) {
             int x = ax + bag[0];
             int z = BOX.minZ() + bag[1];
-            assertTrue(at(x, FEET, z).endsWith("_wool"), "a bean bag");
+            assertTrue(at(x, FEET, z).contains("_stairs"), "a bean bag");
             assertNull(at(x, FEET + 1, z));
             assertNull(at(x, FEET + 2, z));
             assertTrue(light.getOrDefault(key(x, FEET + 1, z), 0) >= LIT, "its top is lit");

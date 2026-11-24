@@ -106,6 +106,10 @@ public final class HoldemMenu extends GameMenu {
         if (other != null && other != table) {
             other.leave(viewer.getUniqueId()); // one table at a time (gets up there with the chips)
         }
+        HoldemMenu before = OPEN.get(viewer.getUniqueId());
+        if (before != null && before.table != table) {
+            before.table.leave(viewer.getUniqueId()); // they were watching another table: not any more
+        }
         if (table.kind() == Kind.MONEY && !holdem.games().parlor().offered(viewer)) {
             holdem.games().tell(viewer, holdem.games().parlor().allowed(viewer));
             return;

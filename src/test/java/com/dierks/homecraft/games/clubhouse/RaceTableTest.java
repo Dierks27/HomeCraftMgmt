@@ -119,8 +119,8 @@ class RaceTableTest {
             }
         }
         assertEquals(24, cells.size());
-        assertEquals(13, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's; plan 13 grew the"
-                + " wing round it");
+        assertEquals(14, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's; plan 13 grew the"
+                + " wing round it; plan 14 the Parlor's Hold'em table");
     }
 
     @Test
@@ -166,7 +166,7 @@ class RaceTableTest {
         List<ClubhousePlanner.Place3> machines = new ArrayList<>(ClubhousePlanner.parlorMachines(BOX));
         machines.addAll(ClubhousePlanner.parlorRow(BOX));
         machines.add(ClubhousePlanner.parlorTicket(BOX));
-        assertEquals(6 + 5 + 1, machines.size());
+        assertEquals(6 + 4 + 5 + 1, machines.size(), "plan 14: three more on the walls and Hold'em's table");
         for (ClubhousePlanner.Place3 m : machines) {
             int mx = (int) Math.floor(m.x());
             int mz = (int) Math.floor(m.z());
@@ -455,7 +455,7 @@ class RaceTableTest {
         assertEquals(ClubhousePlanner.TRACK_TABLE, host.world.at(X0, FEET, Z0), "the table was written");
         assertEquals(ClubhousePlanner.BARRIER, host.world.at(X1, FEET + 2, Z1), "and its barrier");
         assertTrue(r.parlorMachines().stream().noneMatch(m -> m.game().equals("mob_races")), "it is not a machine");
-        assertEquals(11, r.parlorMachines().size(), "the eleven machines are where they were");
+        assertEquals(15, r.parlorMachines().size(), "the fifteen machines are where they were (plan 14: four more)");
 
         // a server updating from plan 9: its room stands without the table, and the boot's build writes just that
         for (int x = X0; x <= X1; x++) {
@@ -494,7 +494,7 @@ class RaceTableTest {
         assertTrue(own.own() && !own.built(), "editing: the owner's place, and the table is theirs to have built");
         assertEquals(RaceTable.Frame.standingOn(corner.x(), corner.y(), corner.z(), corner.yaw()), own.frame());
         assertTrue(r.parlorMachines().stream().noneMatch(m -> m.game().equals("mob_races")), "still not a machine");
-        assertEquals(11, r.parlorMachines().size());
+        assertEquals(15, r.parlorMachines().size());
         assertTrue(r.upstairs("parlor", "mob_races", null, true).contains("cleared"));
         ClubhouseRoom.RaceSpot plan = r.raceTrack();
         assertEquals(ClubhousePlanner.raceTable(BOX), plan.frame(), "cleared: HCM's place again");

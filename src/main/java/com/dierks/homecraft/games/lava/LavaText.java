@@ -27,11 +27,11 @@ public final class LavaText {
     public static final String KIT_AGAIN = "&a&l▶ Play again";
 
     public static final String LITTLE_INTRO = "&6Collect every star! &7When the floor rumbles, climb up on the"
-            + " furniture. The lava can't hurt you.";
-    public static final String GROUP_INTRO = "&6Collect stars together! &7The lava comes a little higher every round,"
-            + " and a touch costs the group one star.";
-    public static final String CHALLENGE_INTRO = "&6Keep climbing! &7The lava rises every round and never goes down."
-            + " Touch it and you're out.";
+            + " furniture - stars wait up there too. The lava can't hurt you.";
+    public static final String GROUP_INTRO = "&6Collect stars together! &7Every round has a star goal: miss it and a"
+            + " heart goes. Stars come out during the lava too, the furniture moves, and a touch costs a star.";
+    public static final String CHALLENGE_INTRO = "&6Keep climbing, keep collecting! &7The lava rises every round and"
+            + " never goes down. Touch it, or end a round without your stars, and you're out.";
     public static final String WATCHING = "&7You're watching this one from the top shelf.";
 
     /** The warning's title: arrows up, no words needed. */
@@ -40,6 +40,20 @@ public final class LavaText {
     public static final String SAFE_BIG = "&a★";
     public static final String LOST_STAR = "&c-1 ★";
     public static final String WIN_BIG = "&6★ ★ ★";
+    /** 0.57.0: the furniture is about to move: arrows both ways. */
+    public static final String SHIFT_BIG = "&b⇄ ⇄ ⇄";
+    public static final String SHIFT_SMALL = "&bThe furniture is moving!";
+    /** 0.57.0: the surprises' words under the warning's arrows (the pictures and sounds say it first). */
+    public static final String SINK_SMALL = "&eOne piece is wobbling - hop off it!";
+    public static final String PATCH_SMALL = "&6The lava starts on the glowing side!";
+    public static final String FAST_SMALL = "&cQuick - it comes all at once!";
+    public static final String SHOWER_SMALL = "&eA shower of stars!";
+    public static final String BOUNCY_SMALL = "&aA bouncy cushion!";
+    /** 0.57.0: stars came out on the furniture during the lava. */
+    public static final String LAVA_STARS = "&e★ Stars on the furniture - hop to them!";
+    /** 0.57.0, Group: the round's goal, reached or missed. */
+    public static final String GOAL_BIG = "&a★ ✔";
+    public static final String MISSED_BIG = "&c❤ -1";
 
     private LavaText() {
     }
@@ -67,15 +81,21 @@ public final class LavaText {
         return "&6" + "★".repeat(n) + "&8" + "☆".repeat(Math.max(0, goal - n));
     }
 
-    /** Group's bar: the shared count and the rounds as dots. */
-    public static String groupBar(int stars, int round, int rounds) {
+    /**
+     * Group's bar: the shared count, this round's stars of its goal (0.57.0), the hearts, and the rounds as dots.
+     */
+    public static String groupBar(int stars, int round, int rounds, int roundStars, int goal, int hearts, int ofHearts) {
         int r = Math.max(0, Math.min(round, rounds));
-        return "&6★ " + stars + "  &e" + "●".repeat(r) + "&8" + "○".repeat(Math.max(0, rounds - r));
+        int h = Math.max(0, Math.min(hearts, ofHearts));
+        return "&6★ " + stars + " &7(" + Math.max(0, roundStars) + "/" + goal + ")  &c" + "❤".repeat(h) + "&8"
+                + "❤".repeat(Math.max(0, ofHearts - h)) + "  &e" + "●".repeat(r) + "&8" + "○".repeat(Math.max(0,
+                rounds - r));
     }
 
-    /** Challenge's bar. */
-    public static String challengeBar(int round, int standing) {
-        return "&cRound " + round + " &7- " + standing + " standing";
+    /** Challenge's bar (0.57.0: with the player's own stars this round of what they need). */
+    public static String challengeBar(int round, int standing, int mine, int need) {
+        return "&cRound " + round + " &7- " + standing + " standing  " + (mine >= need ? "&a" : "&6") + "★ "
+                + Math.min(mine, need) + "/" + need;
     }
 
     public static String gatherBar(LavaMode mode, int seconds, int here) {
@@ -92,6 +112,16 @@ public final class LavaText {
 
     public static String out(int place, int survived) {
         return "&cThe lava got you! &7You lasted " + rounds(survived) + ".";
+    }
+
+    /** 0.57.0, Challenge: out for a round without its stars. */
+    public static String starless(int survived) {
+        return "&cNo star this round - you're out! &7You lasted " + rounds(survived) + ".";
+    }
+
+    /** 0.57.0, Group: the goal's small line. */
+    public static String goalSmall(int got, int goal, boolean made, int hearts) {
+        return made ? "&a" + got + " of " + goal + " ★" : "&7" + got + " of " + goal + " ★ - " + hearts + " ❤ left";
     }
 
     public static String rounds(int n) {
@@ -115,7 +145,9 @@ public final class LavaText {
             }
             case GROUP -> {
                 String beat = best == null ? "" : r.stars() > best ? " &aA new best!" : " &7Best: " + best + ".";
-                return "&6Together you collected &e" + stars(r.stars()) + "&6." + beat;
+                String goals = " &7(" + r.goals() + " of " + rounds(r.rounds()) + " reached the goal"
+                        + (r.hearts() == 0 ? ", no hearts left)" : ")");
+                return "&6Together you collected &e" + stars(r.stars()) + "&6." + goals + beat;
             }
             default -> {
                 LavaResult.Standing s = r.standing(player);

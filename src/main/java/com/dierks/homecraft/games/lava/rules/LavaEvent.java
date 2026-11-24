@@ -5,7 +5,8 @@ import java.util.UUID;
 
 /**
  * What a round of The Floor Is Lava tells the room, in the order it happened ({@link LavaRound}). The rules know
- * nothing of blocks or players' feet: the room turns each of these into lava, stars, sounds and teleports.
+ * nothing of blocks or players' feet: the room turns each of these into lava, stars, furniture moving, sounds and
+ * teleports.
  */
 public sealed interface LavaEvent {
 
@@ -26,8 +27,34 @@ public sealed interface LavaEvent {
     record PhaseChanged(LavaRound.Phase phase, int round, int level, int ticks) implements LavaEvent {
     }
 
-    /** These stars are out now, to be put somewhere new (a safe phase began). */
-    record StarsOut(int set, List<Integer> ids) implements LavaEvent {
+    /**
+     * 0.57.0: the furniture is about to move (the floor is safe): the pieces that will move glow and rumble for
+     * {@code ticks}, then {@link Shift}.
+     *
+     * @param seed the new layout's seed
+     */
+    record ShiftComing(int round, long seed, int ticks) implements LavaEvent {
+    }
+
+    /** 0.57.0: the furniture moves now, to {@link ShiftComing}'s layout. */
+    record Shift(int round, long seed) implements LavaEvent {
+    }
+
+    /**
+     * 0.57.0: this round's surprise, told as the stars come out (its warning is the room's: a wobble, a glow on one
+     * side, a quicker rumble, a sparkle, a bouncy cushion).
+     *
+     * @param pick a number the room uses to choose where (which piece, which side), the same for the same round
+     */
+    record SurpriseComing(LavaRound.Surprise surprise, int round, int pick) implements LavaEvent {
+    }
+
+    /**
+     * These stars are out now, to be put somewhere new.
+     *
+     * @param lava 0.57.0: stars that came out during the lava, up on the furniture
+     */
+    record StarsOut(int set, List<Integer> ids, boolean lava) implements LavaEvent {
         public StarsOut {
             ids = List.copyOf(ids);
         }
@@ -40,8 +67,9 @@ public sealed interface LavaEvent {
     /**
      * A star was collected.
      *
-     * @param have what is collected now (Little: of {@code goal}; Group: the shared count)
-     * @param goal Little's full count; 0 where there is no goal
+     * @param have what is collected now (Little: of {@code goal}; Group: the shared count; Challenge: the player's
+     *             own this round)
+     * @param goal Little's full count; Group: this round's goal; Challenge: the stars each needs this round
      */
     record StarTaken(UUID player, int id, int have, int goal) implements LavaEvent {
     }
@@ -56,13 +84,23 @@ public sealed interface LavaEvent {
     }
 
     /**
-     * Challenge: a player touched the lava (or left) and is out.
+     * Challenge: a player touched the lava (or left, or ran out of stars) and is out.
      *
      * @param place    their place (2 of 4...); players out at the same moment share it
      * @param survived the rounds they lasted
      * @param left     they left the room (nobody to move to the gallery)
+     * @param starless 0.57.0: they didn't collect the round's stars in time
      */
-    record Out(UUID player, int place, int survived, boolean left) implements LavaEvent {
+    record Out(UUID player, int place, int survived, boolean left, boolean starless) implements LavaEvent {
+    }
+
+    /**
+     * 0.57.0, Group: the round's star goal was reached or missed (a missed goal costs a heart).
+     *
+     * @param got    the stars this round, less its touches
+     * @param hearts the hearts left
+     */
+    record Goal(int round, int got, int goal, boolean made, int hearts) implements LavaEvent {
     }
 
     /** The round is over. */

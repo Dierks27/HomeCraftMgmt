@@ -431,7 +431,7 @@ final class ClubhouseAdmin implements GameAdmin {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("cabinet")) {
             for (com.dierks.homecraft.games.Game g : game.games().games()) {
-                if ((g.kind() == com.dierks.homecraft.games.GameKind.CABINET || g.id().equals(SideRooms.LAVA_GAME))
+                if ((KidSet.cabinet(g.id(), g.kind()) || g.id().equals(SideRooms.LAVA_GAME))
                         && g.id().startsWith(last)) {
                     out.add(g.id());
                 }

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GameKind;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -23,7 +24,22 @@ public final class KidSet {
     public static final List<String> CABINET_GAMES = List.of("whack_a_zombie", "simon_says", "mini_match",
             "tic_tac_toe", "snake", "connect_four", "creeper_sweeper", "ore_merge");
 
+    /**
+     * 0.57.0: the kid games played on a screen of their own that are not arcade cabinet games by kind (they are played
+     * together, so their kind is the kid race's), and may still have a cabinet in the Arcade Room: listed in
+     * {@code arcade_room.games}, or put where the owner stands ({@code /hcm games clubhouse cabinet kid_bingo}). Its tap
+     * starts them as a cabinet's does ({@link #cabinet}). None of them is in {@link #CABINET_GAMES}; since plan 14 the
+     * generated room still gives each one a spare place after those (the owner: every kid game gets a cabinet).
+     */
+    public static final Set<String> KID_SCREENS = Set.of("kid_bingo");
+
     private KidSet() {
+    }
+
+    /** Whether a game of {@code kind} called {@code id} may stand in the Arcade Room as a cabinet (never chance). */
+    public static boolean cabinet(String id, GameKind kind) {
+        return kind == GameKind.CABINET || (kind != null && !kind.chance() && id != null
+                && KID_SCREENS.contains(id.toLowerCase(Locale.ROOT)));
     }
 
     /**
@@ -70,7 +86,7 @@ public final class KidSet {
         if (kind.chance()) {
             return id + " is a game of chance, and those never go in the Arcade Room";
         }
-        if (kind != GameKind.CABINET) {
+        if (kind != GameKind.CABINET && !KID_SCREENS.contains(id.trim().toLowerCase(Locale.ROOT))) {
             return id + " isn't an arcade cabinet game";
         }
         return null;

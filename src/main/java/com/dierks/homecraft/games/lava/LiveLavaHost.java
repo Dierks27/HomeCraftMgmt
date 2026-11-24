@@ -98,6 +98,17 @@ final class LiveLavaHost implements LavaHost {
         return game.log();
     }
 
+    /** 0.57.0: the next layout on the server's async pool (pure: it touches nothing of the server's). */
+    @Override
+    public <T> java.util.concurrent.CompletableFuture<T> offThread(java.util.function.Supplier<T> work) {
+        try {
+            return java.util.concurrent.CompletableFuture.supplyAsync(work,
+                    r -> Bukkit.getScheduler().runTaskAsynchronously(game.plugin(), r));
+        } catch (RuntimeException e) { // the plugin is going away: do it here
+            return LavaHost.super.offThread(work);
+        }
+    }
+
     @Override
     public LavaSettings settings() {
         return game.settings();
@@ -263,12 +274,16 @@ final class LiveLavaHost implements LavaHost {
      */
     @Override
     public boolean teleport(UUID player, String world, LavaSite.Spot spot) {
+        return teleport(player, world, spot, 0f);
+    }
+
+    private boolean teleport(UUID player, String world, LavaSite.Spot spot, float pitch) {
         Player p = Bukkit.getPlayer(player);
         World w = world == null ? null : Bukkit.getWorld(world);
         if (p == null || w == null || spot == null) {
             return false;
         }
-        Location to = new Location(w, spot.x(), spot.y(), spot.z(), spot.yaw(), 0);
+        Location to = new Location(w, spot.x(), spot.y(), spot.z(), spot.yaw(), pitch);
         boolean ok = games().sessions().session(p) != null ? games().sessions().teleport(p, to) : p.teleport(to);
         if (ok) {
             p.setVelocity(new Vector(0, 0, 0));
@@ -276,6 +291,17 @@ final class LiveLavaHost implements LavaHost {
             p.setFireTicks(0);
         }
         return ok;
+    }
+
+    /** 0.57.0: as {@link #teleport}, keeping the way they look (they rode a piece, or one lifted them). */
+    @Override
+    public boolean carry(UUID player, String world, LavaSite.Spot spot) {
+        Player p = Bukkit.getPlayer(player);
+        if (p == null || spot == null) {
+            return false;
+        }
+        Location l = p.getLocation();
+        return teleport(player, world, new LavaSite.Spot(spot.x(), spot.y(), spot.z(), l.getYaw()), l.getPitch());
     }
 
     /** To {@code games.fresh.safe_spot}, or the world's spawn, as Fresh Courses moves people. */
@@ -433,6 +459,24 @@ final class LiveLavaHost implements LavaHost {
                 }
                 case COUNT -> p.playSound(at, Sound.BLOCK_NOTE_BLOCK_PLING, 0.5f, 1.0f);
                 case START -> p.playSound(at, Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, 1.6f);
+                case SHIFT -> {
+                    p.playSound(at, Sound.BLOCK_BEACON_AMBIENT, 0.8f, 1.4f);
+                    p.playSound(at, Sound.BLOCK_NOTE_BLOCK_DIDGERIDOO, 0.5f, 0.6f);
+                }
+                case MOVED -> p.playSound(at, Sound.ENTITY_ILLUSIONER_MIRROR_MOVE, 0.7f, 1.2f);
+                case WOBBLE -> p.playSound(at, Sound.BLOCK_POINTED_DRIPSTONE_LAND, 0.5f,
+                        0.7f + 0.05f * Math.floorMod(step, 6));
+                case SANK -> p.playSound(at, Sound.ITEM_BUCKET_EMPTY_LAVA, 0.6f, 0.6f);
+                case BOING -> p.playSound(at, Sound.BLOCK_SLIME_BLOCK_FALL, 0.8f, 1.0f);
+                case SHOWER -> {
+                    p.playSound(at, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.9f, 1.6f);
+                    p.playSound(at, Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.35f, 1.4f);
+                }
+                case GOAL -> {
+                    p.playSound(at, Sound.BLOCK_NOTE_BLOCK_BELL, 0.7f, 1.2f);
+                    p.playSound(at, Sound.BLOCK_NOTE_BLOCK_BELL, 0.7f, 1.6f);
+                }
+                case MISSED -> p.playSound(at, Sound.BLOCK_NOTE_BLOCK_BASS, 0.6f, 0.6f);
             }
         } catch (RuntimeException | LinkageError ignored) {
             // a sound is decoration
@@ -462,6 +506,18 @@ final class LiveLavaHost implements LavaHost {
                     w.spawnParticle(Particle.TOTEM_OF_UNDYING, at, 30, 0.5, 0.5, 0.5, 0.3);
                     w.playSound(at, Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.35f, 1.2f);
                 }
+                case SHIFT -> {
+                    w.spawnParticle(Particle.ELECTRIC_SPARK, at, 14, 1.2, 0.3, 1.2, 0.05);
+                    w.spawnParticle(Particle.END_ROD, at, 4, 1.0, 0.2, 1.0, 0.01);
+                }
+                case LANDED -> w.spawnParticle(Particle.POOF, at, 24, 1.4, 0.3, 1.4, 0.02);
+                case WOBBLE -> {
+                    w.spawnParticle(Particle.FALLING_DUST, at, 16, 1.0, 0.3, 1.0, 0.0,
+                            Material.ORANGE_CONCRETE_POWDER.createBlockData());
+                    w.spawnParticle(Particle.SMOKE, at, 6, 0.8, 0.2, 0.8, 0.01);
+                }
+                case SLIME -> w.spawnParticle(Particle.ITEM_SLIME, at, 10, 0.9, 0.2, 0.9, 0.05);
+                case SHOWER -> w.spawnParticle(Particle.END_ROD, at, 30, 3.0, 0.5, 3.0, 0.02);
             }
         } catch (RuntimeException | LinkageError ignored) {
             // a picture is decoration

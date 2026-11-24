@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.56.0-bigger-rooms`
+- **Version:** `0.57.0-family-games`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,31 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.57.0: four new games, a free Picture Bingo, and a harder Floor Is Lava.** The owner: "Let's do the games you
+mentioned next!" and "the floor is lava game is WAY too easy... when you get in through the arcade machine you should
+be able to pick any level you want... if the room could change maybe that would be more fun".
+- **The Floor Is Lava, harder and never the same.** The Arcade Room cabinet now offers all three modes as pictures
+  (one, two or three blocks of magma). The playroom is 48 x 48 (a shipped room claims its new ground at the next start)
+  and its furniture moves: somewhere new every game, and in Group and Challenge every round (it sparkles and hums
+  first; whoever stands on a piece rides along). The lava's timing is random, stars come out on the furniture during
+  the lava, Group has a star goal each round and three hearts, Challenge needs a star every round, and most rounds bring
+  a surprise (a piece that sinks, lava on one side first, a quick rise, a star shower, a bouncy slime cushion). Little
+  stays unlosable, with a new room every game. New boards `lava:group2` and `lava:challenge2`.
+- **Texas Hold'em** on its own card table in the Game Parlor: a friendly table with free play chips (NPC players sit
+  in), a tokens table and a money table (real players only; the house keeps nothing).
+- **Bingo Night** in the Parlor (1 to 4 cards a round, a number every two seconds, line and four corners), and
+  **Picture Bingo**, free for little ones, with its own cabinet in the Arcade Room: animal pictures and sounds, three in
+  a row for fireworks and a couple of tokens.
+- **Video Poker** (Jacks or Better, 93.5 of every 100 back with the best play) and **Creeper Fuse** (one fuse for the
+  whole Parlor: cash out before the creeper goes off) on the Parlor's walls.
+
+**The Clubhouse rebuilds once** (plan 14: the Hold'em table and three machine mats in a grown Parlor; a Parlor at its old
+size is unchanged, and its new games are reached with `/hcm play`). **The Floor Is Lava's room rebuilds and grows
+once.** No schema change; new config sections `games.holdem`, `games.bingo`, `games.kid_bingo`, `games.video_poker`,
+`games.creeper_fuse` and three new `games.floor_is_lava` keys arrive through the backfill (no config revision). **Back
+to 0.56.0:** the jar alone, but first stop any Hold'em table (`/hcm games holdem stop all` pays everyone back). The
+0.56.0 jar has not been tried on a grown Floor Is Lava room: check `/hcm games lava status` after going back.
 
 **0.56.0: a bigger Arcade Room and Game Parlor, filled.** The owner: "make it large enough that we can add more
 things, but not so big it looks empty". The side rooms' wing is 16 rows deeper (the Clubhouse box is 32 x 16 x 64,
@@ -5030,8 +5055,63 @@ glass roof. Nothing she needs is words.
 - **Admin.** `/hcm games lava status|rebuild|claim [confirm]|tp`; `/hcm games check` checks the room. Settings under
   `games.floor_is_lava`: `enabled`, `origin` (must stay 32 blocks from every other place HCM builds), `max_players`
   6, `stars` 10, `safe_seconds` 25, `lava_seconds` 12, `rounds` 5.
+- **0.57.0: harder, and never the same** (the owner: "WAY too easy ... you just know how it works and there is no
+  mystery in it anymore"). The cabinet opens a picker: a star (Little), a lava bucket (Group) and a golden helmet
+  (Challenge), side by side, with one, two or three blocks of magma under each. The room is 48 x 48 and its 11 pieces
+  (sofa, coffee table, toy chest, two toy staircases, two cushions, four stools) take a new seeded layout every game,
+  and in Group and Challenge every round from round 2 (3 s / 2 s of sparkles and a hum while the floor is safe; whoever
+  stands on a piece rides along, anyone a piece lands on is lifted onto it). Every layout is checked before it is used:
+  each piece reachable by steps or a jump, dry places at every lava height. Timings are drawn per phase: Little safe
+  19-25 s, lava 9-12 s; Group safe 11-17.5 s, warning 2.5-4 s, lava 12-17 s; Challenge safe 7-11 s (shorter each round),
+  warning 1.5-2.5 s, lava 7-11 s. Stars come out on the furniture during the lava. Group: a star goal each round (4 +
+  the round, more with more players) and `hearts` (3); a missed goal costs a heart. Challenge: out on a touch, or for a
+  round without your star (two from round 4). Surprises from round 2: a piece that wobbles and sinks, lava on one
+  glowing side first, a fast rise, a star shower, a bouncy slime cushion (Little: now and then a shower or the
+  cushion). NPCs ride and hop too. Boards `lava:group2` and `lava:challenge2` (the old bests stay as trophies).
+  Settings `moving_room`, `surprises`, `hearts`.
 - **Not seen on a server yet:** the room's look, the climbs with a Bedrock controller, the sounds' loudness, and the
   orange tint of standing in lava (fire resistance doesn't take it away).
+
+##### Texas Hold'em (0.57.0)
+
+A card table in the Game Parlor where 2 to 6 players play no-limit Hold'em against each other; the Arcade only deals
+and keeps nothing. Tap the table (or `/hcm play holdem`) for three tables:
+- **Friendly:** free play chips (`friendly_chips` 200, again when you run out); NPC players sit in when it's quiet (up
+  to `npc_seats` 4), each reading the cards as well as its level lets it (easy plays along, hard counts pot odds and
+  bluffs now and then); the easy lock makes them gentle. No tokens, no money.
+- **Tokens:** 1 chip = 1 token, buy in with `buy_ins` (20, 50, 100). **Money:** 1 chip = $1, for players who may play
+  for money, built from the Parlor's chips. Real players only at these two.
+- Chips are paid back when you get up between hands. Buy-ins go through the usual checks (the day's limits, Take a
+  break, `daily_limit` 10 a day). If the server stops mid-hand that hand is called off and everyone gets the chips they
+  had before it. Blinds move every hand; nobody is on a clock until someone taps Hurry Up; a player who closes the
+  screen is checked or folded for after `away_seconds`, then stood up.
+- Admin: `/hcm games holdem status|stop [friendly|tokens|money|all]`.
+
+##### Bingo Night and Picture Bingo (0.57.0)
+
+- **Bingo Night** (Parlor machine, or `/hcm play bingo`): buy 1 to 4 cards (`card_price` 10 tokens or `card_dollars`
+  $10). The first cards start a `gather_seconds` (20) wait for everyone else, then a number is called every
+  `call_seconds` (2) and your cards daub themselves. The first line wins part of the prize, the first four corners the
+  bigger part (`corners_share` 60); cards that make it on the same call share it. The prize is sized by the cards in
+  play so every card gives back `rtp` (90) of every 100 over time; a round always has at least `room_cards` (8): NPC
+  players and the room's own cards fill it, and what they win is play chips. Everything is decided when the calling
+  starts, so a crash never loses a card.
+- **Picture Bingo** (`kid_bingo`, free, its own cabinet in the Arcade Room): a 3 x 3 card of animal pictures round a
+  star; the caller shows each animal big and plays its sound, matching squares light up by themselves, and three in a
+  row wins fireworks and `prize` (2) tokens (up to `daily_cap` 10 a day). The owner, Lilah and NPCs can share a round.
+
+##### Video Poker and Creeper Fuse (0.57.0)
+
+- **Video Poker** (Parlor machine, `/hcm play video_poker`): Jacks or Better for 1, 2 or 5 tokens (or chips' dollars).
+  Tap cards to hold (they say HELD), Draw once; the pay table on screen pays the hand (Royal 100, Straight Flush 50,
+  Four 25, Full House 6, Flush 5, Straight 4, Three 3, Two Pair 2, Jacks or Better your stake back). Counted exactly
+  over every deal, hold and draw: the best play gives back 93.48 of every 100. A hand you walk away from is drawn for
+  you with the best hold. Pay table under `games.video_poker.pays` (refused outside 85-95).
+- **Creeper Fuse** (Parlor machine, `/hcm play creeper_fuse`): one fuse for everyone in the Parlor. Put in 10, 20 or 50
+  tokens, then the multiple climbs from 1.00x (doubling every `double_seconds` 6, up to `top` 20x) while the creeper
+  over the machine swells; Cash out any time, or set an auto cash-out. When it goes off (a bang and smoke, nothing
+  broken) anyone still in gets nothing. Where it goes off is drawn before it is lit, so cashing out anywhere gives back
+  `rtp` (94) of every 100 on average. A restart mid-fuse gives back the stake of everyone still in.
 
 ##### The Sports Board (0.55.0)
 

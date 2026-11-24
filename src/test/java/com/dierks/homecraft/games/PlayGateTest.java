@@ -277,7 +277,9 @@ class PlayGateTest {
                 "The Floor Is Lava (its Arcade Room cabinet and its tile hand the visitor out and back)");
         assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.id()),
                 "the kid race (played on the Arcade Room's own table, inside the Clubhouse)");
-        assertEquals(5, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
+        assertTrue(PlayGate.FROM_CLUBHOUSE.contains(com.dierks.homecraft.games.kidbingo.KidBingo.SPEC.id()),
+                "0.57.0: Picture Bingo (its Arcade Room cabinet, played on its screen inside the Clubhouse)");
+        assertEquals(6, PlayGate.FROM_CLUBHOUSE.size(), "and no other TRIAL-kind game (Race Night, Falling Floors)");
         assertEquals(GameKind.GOLF, com.dierks.homecraft.games.golf.MiniGolf.SPEC.kind(), "golf passes by its kind");
     }
 

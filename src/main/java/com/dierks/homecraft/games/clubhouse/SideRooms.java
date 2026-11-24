@@ -272,6 +272,12 @@ final class SideRooms {
                 out.add(id);
             }
         }
+        for (String id : KidSet.KID_SCREENS) { // 0.57.0: Picture Bingo takes a spare place too (every kid game a cabinet)
+            Game g = club.games().game(id);
+            if (g != null && club.games().enabled(g)) {
+                out.add(id);
+            }
+        }
         return out;
     }
 

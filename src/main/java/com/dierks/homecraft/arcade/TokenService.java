@@ -102,7 +102,18 @@ public final class TokenService {
         GAMES_KID_RACES("Arcade Room races"),
         // The Game Parlor's Sports Board (0.55.0): played for money only, so no token line is ever written under it;
         // it is the game's name in the games' own lists.
-        ARCADE_SPORTSBOOK("Sports Board");
+        ARCADE_SPORTSBOOK("Sports Board"),
+        // 0.57.0, Texas Hold'em in the Game Parlor: a buy-in at a tokens table goes in under it, and the chips a player
+        // gets up with come back under it. The players play each other, so it keeps nothing.
+        ARCADE_HOLDEM("Texas Hold'em"),
+        // 0.57.0: Bingo Night in the Game Parlor (cards bought, prizes shared) and the Arcade Room's free Picture Bingo
+        // for kids (a few tokens when your card gets three in a row: a skill game's reward, never a game of chance's).
+        ARCADE_BINGO("Bingo Night"),
+        GAMES_KID_BINGO("Picture Bingo"),
+        // 0.57.0, the Game Parlor's Video Poker (Jacks or Better) and Creeper Fuse (a rising multiple, everyone in the
+        // Parlor in the same fuse)
+        ARCADE_VIDEO_POKER("Video Poker"),
+        ARCADE_CREEPER_FUSE("Creeper Fuse");
 
         private final String label;
 

@@ -13,6 +13,7 @@ import java.util.SplittableRandom;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * wants them easy.
  */
 class LavaNpcSimTest {
+
+    /** The warning these tests play (0.57.0: drawn per round in the game; five seconds here). */
+    private static final int WARN_TICKS = 5 * LavaRound.TICKS_PER_SECOND;
 
     private static final UUID A = new UUID(2, 1);
     private static final UUID LILAH = new UUID(9, 1);
@@ -74,7 +78,7 @@ class LavaNpcSimTest {
         for (int i = 0; i < 120; i++) {
             touched.addAll(sim.step(t[0]++, LavaRound.Phase.SAFE, 0, level, mode, round));
         }
-        for (int i = 0; i < LavaRound.WARN_TICKS; i++) {
+        for (int i = 0; i < WARN_TICKS; i++) {
             touched.addAll(sim.step(t[0]++, LavaRound.Phase.WARNING, 0, level, mode, round));
         }
         for (int i = 0; i < 100; i++) {
@@ -83,7 +87,9 @@ class LavaNpcSimTest {
                 if (!w.out()) {
                     assertTrue(room.dry(w.at(), level), "while the lava is up an NPC is only ever on a dry stand: "
                             + w.at());
-                    assertEquals(w.at().y(), w.y(), 1e-9, "standing on it");
+                    if (!w.moving()) {
+                        assertEquals(w.at().y(), w.y(), 1e-9, "standing on it (0.57.0: or stepping, dry to dry, after a star)");
+                    }
                 }
             }
         }
@@ -171,5 +177,99 @@ class LavaNpcSimTest {
                 "only the places no real player has");
         assertEquals(0, LavaNpcs.room(LavaMode.GROUP, List.of(LILAH, DAD), id -> !id.equals(DAD), prefs::get, 8),
                 "anyone with NPCs off: none");
+    }
+
+    // ---- 0.57.0: the real room, hops, a moving room, stars to keep collecting --------------------------------
+
+    private static final com.dierks.homecraft.games.gen.api.Box BOX = LavaSettings.defaults().box();
+
+    /**
+     * In the real playroom NPCs go after pretend stars of their own (a sparkle where they get to), hop from piece to
+     * piece (medium and hard), and while the lava is up are only ever on dry ground (or put back onto it).
+     */
+    @Test
+    void inTheRealRoomTheyHopAboutAfterStarsAndStayDry() {
+        LavaSite site = LavaPlanner.site(BOX, 11);
+        LavaNpcSim.Room room = LavaNpcSim.Room.of(site);
+        int sparkles = 0;
+        int hops = 0;
+        for (CpuLevel level : CpuLevel.values()) {
+            LavaNpcSim sim = new LavaNpcSim(room, new SplittableRandom(level.ordinal()));
+            LavaNpcSim.Walker w = sim.add(A, level, site.starStands().get(10), 0);
+            LavaSite.Stand was = w.at();
+            long t = 0;
+            for (int round = 1; round <= 3; round++) {
+                for (int i = 0; i < 600; i++) {
+                    LavaRound.Phase p = i < 240 ? LavaRound.Phase.SAFE : i < 300 ? LavaRound.Phase.WARNING
+                            : i < 560 ? LavaRound.Phase.LAVA : LavaRound.Phase.DRAIN;
+                    int lvl = p == LavaRound.Phase.LAVA ? 1 : 0;
+                    sim.step(t++, p, lvl, 1, LavaMode.GROUP, round);
+                    sparkles += sim.sparkled().size();
+                    if (p == LavaRound.Phase.LAVA && !w.moving()) {
+                        assertTrue(site.dry(w.at(), 1), "dry while the lava is up: " + w.at());
+                    }
+                    if (!w.at().equals(was)) {
+                        if (Math.abs(w.at().x() - was.x()) + Math.abs(w.at().z() - was.z()) > 1) {
+                            hops++;
+                            assertTrue(level != CpuLevel.EASY || w.touches() > 0, "an easy NPC only walks");
+                        }
+                        was = w.at();
+                    }
+                }
+            }
+        }
+        assertTrue(sparkles > 10, "they collect pretend stars: " + sparkles);
+        assertTrue(hops > 0, "and hop: " + hops);
+    }
+
+    /** The furniture moves: an NPC on a piece rides it; nobody is left inside a block. */
+    @Test
+    void whenTheRoomMovesTheNpcsGoWhereAPlayerWould() {
+        LavaSite from = LavaPlanner.site(BOX, 21);
+        LavaSite to = LavaPlanner.site(BOX, 22);
+        LavaNpcSim sim = new LavaNpcSim(LavaNpcSim.Room.of(from), new SplittableRandom(3));
+        LavaSite.Stand seat = from.standUnder(from.spawn(2).x(), from.spawn(2).y(), from.spawn(2).z());
+        LavaNpcSim.Walker w = sim.add(A, CpuLevel.HARD, seat, 0);
+        sim.moveRoom(LavaNpcSim.Room.of(to), wk -> {
+            LavaSite.Spot s = LavaShift.carry(from, to, wk.x(), wk.y(), wk.z(), 0);
+            return s == null ? to.standUnder(wk.x(), wk.y(), wk.z()) : to.standUnder(s.x(), s.y(), s.z());
+        });
+        assertEquals(0, to.pieceOf(w.at()), "still on the sofa");
+        assertEquals(seat.y(), w.at().y(), 1e-9, "on its seat");
+        assertFalse(to.collides(w.x(), w.y(), w.z()));
+    }
+
+    /** Challenge: an NPC must keep collecting; an easy one now and then ends a round without its star. */
+    @Test
+    void inAChallengeAnNpcWithoutItsStarsIsOut() {
+        int easyOut = 0;
+        int hardOut = 0;
+        for (int seed = 0; seed < 40; seed++) {
+            for (CpuLevel level : List.of(CpuLevel.EASY, CpuLevel.HARD)) {
+                Room room = new Room();
+                LavaNpcSim sim = new LavaNpcSim(room, new SplittableRandom(seed));
+                LavaNpcSim.Walker w = sim.add(A, level, new LavaSite.Stand(5, 4, 65), 0);
+                long t = 0;
+                for (int round = 1; round <= 3 && !w.out(); round++) {
+                    for (int i = 0; i < 300; i++) {
+                        LavaRound.Phase p = i < 150 ? LavaRound.Phase.SAFE : i < 200 ? LavaRound.Phase.WARNING
+                                : LavaRound.Phase.LAVA;
+                        for (LavaNpcSim.Touched touched : sim.step(t++, p, 0, 0, LavaMode.CHALLENGE, round, 1)) {
+                            assertTrue(touched.starless(), "out for want of a star (there is no lava here)");
+                        }
+                    }
+                }
+                sim.step(t, LavaRound.Phase.SAFE, 0, 0, LavaMode.CHALLENGE, 4, 1);
+                if (w.out()) {
+                    if (level == CpuLevel.EASY) {
+                        easyOut++;
+                    } else {
+                        hardOut++;
+                    }
+                }
+            }
+        }
+        assertTrue(easyOut > hardOut, "easy ones miss more: " + easyOut + " to " + hardOut);
+        assertTrue(easyOut > 0);
     }
 }

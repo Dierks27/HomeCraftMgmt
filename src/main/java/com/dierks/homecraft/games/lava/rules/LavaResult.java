@@ -13,9 +13,11 @@ import java.util.UUID;
  * @param rounds    how many times the lava came
  * @param standings Challenge: everyone who started, best first (the winner, or the winners, at place 1)
  * @param solo      Challenge: one player alone ("how many rounds can you last?")
+ * @param goals     0.57.0, Group: the rounds whose star goal was reached
+ * @param hearts    0.57.0, Group: the hearts left at the end
  */
 public record LavaResult(LavaMode mode, boolean calledOff, List<UUID> players, int stars, int rounds,
-                         List<Standing> standings, boolean solo) {
+                         List<Standing> standings, boolean solo, int goals, int hearts) {
 
     /**
      * One Challenge player's result.

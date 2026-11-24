@@ -51,7 +51,23 @@ public interface LavaHost {
         /** A second of the gathering's countdown. */
         COUNT,
         /** The round starts. */
-        START
+        START,
+        /** 0.57.0: the furniture is about to move: a low, wobbly hum. */
+        SHIFT,
+        /** 0.57.0: the furniture moved: a soft whoosh. */
+        MOVED,
+        /** 0.57.0: a piece wobbles and creaks: get off it! */
+        WOBBLE,
+        /** 0.57.0: a piece sank into the lava: a soft splash. */
+        SANK,
+        /** 0.57.0: a cushion turned bouncy: boing. */
+        BOING,
+        /** 0.57.0: a shower of stars: twinkles. */
+        SHOWER,
+        /** 0.57.0, Group: the round's star goal reached: a happy chord. */
+        GOAL,
+        /** 0.57.0, Group: the round's star goal missed: a heart gone (a soft low note, never a buzzer). */
+        MISSED
     }
 
     /** Something to see. */
@@ -63,7 +79,17 @@ public interface LavaHost {
         /** Embers rising from the floor: the lava is coming. */
         EMBERS,
         /** A burst of fireworks (sparks only: no bang). */
-        FIREWORKS
+        FIREWORKS,
+        /** 0.57.0: sparks over a piece that is about to move. */
+        SHIFT,
+        /** 0.57.0: a puff where a piece arrived. */
+        LANDED,
+        /** 0.57.0: crumbs falling from a piece that wobbles. */
+        WOBBLE,
+        /** 0.57.0: slime bubbles over a bouncy cushion. */
+        SLIME,
+        /** 0.57.0: a shower of sparkles from the ceiling. */
+        SHOWER
     }
 
     /** Now (epoch ms): the plugin's clock. */
@@ -71,6 +97,20 @@ public interface LavaHost {
 
     /** A monotonic clock for the build's time budget ({@code System.nanoTime()}). */
     long nanoTime();
+
+    /**
+     * 0.57.0: work out something pure (a room's next layout, tens of milliseconds) off the main thread; the tests do
+     * it at once. The result is only ever read on the main thread.
+     */
+    default <T> java.util.concurrent.CompletableFuture<T> offThread(java.util.function.Supplier<T> work) {
+        java.util.concurrent.CompletableFuture<T> f = new java.util.concurrent.CompletableFuture<>();
+        try {
+            f.complete(work.get());
+        } catch (RuntimeException e) {
+            f.completeExceptionally(e);
+        }
+        return f;
+    }
 
     Logger logger();
 
@@ -116,6 +156,14 @@ public interface LavaHost {
      * @return whether it was made
      */
     boolean teleport(UUID player, String world, LavaSite.Spot spot);
+
+    /**
+     * 0.57.0: move a player with the furniture (they rode a piece, or one landed where they stood): as
+     * {@link #teleport}, but they keep looking the way they were.
+     */
+    default boolean carry(UUID player, String world, LavaSite.Spot spot) {
+        return teleport(player, world, spot);
+    }
 
     /** Move someone who isn't in the room's session out of the box: the safe spot, or the spawn. */
     void toSafety(UUID player, String world);

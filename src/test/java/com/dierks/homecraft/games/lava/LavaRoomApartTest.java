@@ -68,9 +68,9 @@ class LavaRoomApartTest {
         LavaSettings lava = cfg.settings(FloorIsLava.SPEC);
         assertEquals(LavaSettings.defaults(), lava, "config.yml ships exactly the defaults");
         Box room = lava.box();
-        assertEquals(32, room.sizeX());
+        assertEquals(48, room.sizeX(), "0.57.0: the room grew");
         assertEquals(16, room.sizeY());
-        assertEquals(32, room.sizeZ());
+        assertEquals(48, room.sizeZ());
         DailySettings fresh = cfg.settings(DailyCourses.SPEC);
         FallingFloorsSettings ff = cfg.settings(FallingFloors.SPEC);
         ClubhouseSettings club = cfg.settings(Clubhouse.SPEC);

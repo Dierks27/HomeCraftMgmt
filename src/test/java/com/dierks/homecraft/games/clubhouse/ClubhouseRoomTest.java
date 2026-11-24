@@ -448,7 +448,7 @@ class ClubhouseRoomTest {
             chairs.addAll(ClubhousePlanner.arcadeSeats(BOX)); // plan 13: the viewing stools and the bean bags
             chairs.addAll(ClubhousePlanner.trophySeats(BOX)); // and the armchairs facing the Trophy Room's podium
             assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3), the side rooms' too");
-            assertEquals(13 + 7 + 2, chairs.size() - ClubhousePlanner.seats(BOX).size(), "the Parlor's thirteen, the"
+            assertEquals(17 + 7 + 2, chairs.size() - ClubhousePlanner.seats(BOX).size(), "the Parlor's seventeen, the"
                     + " Arcade Room's seven (three stools, four bean bags) and the Trophy Room's two");
         }
 

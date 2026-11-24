@@ -434,7 +434,8 @@ public final class GamesService {
             return false;
         }
         Game game = t.game();
-        if (kid && (t.playable() != null || game.kind() != GameKind.CABINET)) {
+        if (kid && (t.playable() != null
+                || !com.dierks.homecraft.games.clubhouse.KidSet.cabinet(game.id(), game.kind()))) { // 0.57.0
             tell(player, NOT_A_CABINET);
             return false;
         }

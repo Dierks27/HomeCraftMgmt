@@ -68,6 +68,70 @@ class ClubModelsTest {
         assertTrue(json.getAsJsonArray("elements").size() > 4, "the board's score lines are drawn on it");
     }
 
+    /**
+     * 0.57.0: Texas Hold'em's card table has its own placeholder (cards on a card table, like Twenty-One's: green felt,
+     * two face-down cards, a stack of chips), block-atlas textures only, and its Games-screen icon as the stand-in.
+     */
+    @Test
+    void holdemHasCardsOnATable() {
+        ClubModels.Model m = ClubModels.machineFor("holdem");
+        assertNotNull(m, "machine:holdem has a model");
+        assertEquals("hcm:machine_holdem", m.id());
+        assertEquals(ClubModels.Kind.TROPHY, m.kind(), "it lies on its card table, as Twenty-One's cards do");
+        assertEquals(Material.PAPER, m.fallback());
+        JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                .get("assets/hcm/models/item/placeholder/machine_holdem.json")).getAsJsonObject();
+        assertEquals("minecraft:block/green_wool", json.getAsJsonObject("textures").get("felt").getAsString());
+        assertTrue(json.getAsJsonArray("elements").size() >= 5, "felt, two cards and chips");
+    }
+
+    /**
+     * 0.57.0: Bingo Night's machine in the Game Parlor and Picture Bingo's cabinet in the Arcade Room have their own
+     * placeholders (a cabinet's size, block-atlas textures only) and a picture stand-in for a player without the pack.
+     */
+    @Test
+    void theBingosHaveTheirOwnMachineAndCabinet() {
+        ClubModels.Model m = ClubModels.machineFor("bingo");
+        assertNotNull(m, "machine:bingo has a model");
+        assertEquals("hcm:machine_bingo", m.id());
+        assertEquals(ClubModels.Kind.CABINET, m.kind());
+        assertEquals(Material.FILLED_MAP, m.fallback(), "a card stands in without the pack");
+        ClubModels.Model c = ClubModels.cabinetFor("kid_bingo");
+        assertEquals("hcm:cabinet_bingo", c.id(), "Picture Bingo's own cabinet, not the plain one");
+        assertEquals(Material.PIG_SPAWN_EGG, c.fallback(), "a picture stands in: the first animal");
+        for (String name : List.of("machine_bingo", "cabinet_bingo")) {
+            JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                    .get("assets/hcm/models/item/placeholder/" + name + ".json")).getAsJsonObject();
+            for (Map.Entry<String, com.google.gson.JsonElement> t : json.getAsJsonObject("textures").entrySet()) {
+                assertTrue(t.getValue().getAsString().startsWith("minecraft:block/"), name + ": " + t.getKey());
+            }
+            assertTrue(json.getAsJsonArray("elements").size() > 4, name + ": its card is drawn on its screen");
+        }
+    }
+
+    /**
+     * 0.57.0: Video Poker's and Creeper Fuse's machines in the Game Parlor have their own placeholders (a cabinet's
+     * size, block-atlas textures only) and stand-ins for a player without the pack: a card, and a creeper's head.
+     */
+    @Test
+    void videoPokerAndCreeperFuseHaveCabinetSizedMachines() {
+        for (String[] g : new String[][] {{"video_poker", "machine_video_poker"},
+                {"creeper_fuse", "machine_creeper_fuse"}}) {
+            ClubModels.Model m = ClubModels.machineFor(g[0]);
+            assertNotNull(m, "machine:" + g[0] + " has a model");
+            assertEquals("hcm:" + g[1], m.id());
+            assertEquals(ClubModels.Kind.CABINET, m.kind());
+            JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                    .get("assets/hcm/models/item/placeholder/" + g[1] + ".json")).getAsJsonObject();
+            for (Map.Entry<String, com.google.gson.JsonElement> t : json.getAsJsonObject("textures").entrySet()) {
+                assertTrue(t.getValue().getAsString().startsWith("minecraft:block/"), g[1] + " " + t.getKey());
+            }
+            assertTrue(json.getAsJsonArray("elements").size() > 4, g[1] + ": its screen is drawn on it");
+        }
+        assertEquals(Material.PAPER, ClubModels.machineFor("video_poker").fallback());
+        assertEquals(Material.CREEPER_HEAD, ClubModels.machineFor("creeper_fuse").fallback());
+    }
+
     /** Without the pack each model has a vanilla stand-in: an item every client draws (never the missing cube). */
     @Test
     void everyModelHasAVanillaStandIn() {

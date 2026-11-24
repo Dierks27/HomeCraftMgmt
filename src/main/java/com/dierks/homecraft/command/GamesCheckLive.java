@@ -593,7 +593,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         try {
             String c = new GenMetaDao(plugin.database()).get(com.dierks.homecraft.games.lava.LavaService.CLAIM_KEY);
             claim = c == null ? ArenaCheck.Claim.UNCLAIMED
-                    : c.equals(com.dierks.homecraft.games.lava.LavaService.claimText(world, box))
+                    : com.dierks.homecraft.games.lava.LavaService.claimedOrGrowing(c, world, box) // 0.57.0: it grows
                     ? ArenaCheck.Claim.CLAIMED : ArenaCheck.Claim.MOVED;
         } catch (SQLException | RuntimeException e) {
             claim = ArenaCheck.Claim.UNKNOWN;

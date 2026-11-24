@@ -131,6 +131,21 @@ public final class ClubModels {
         // 0.55.0, the Game Parlor's Sports Board (a cabinet's size, a placeholder until the owner's model): a dark
         // board with a lit screen of score lines. Its stand-in without the pack is a clock: tonight's games
         machine("sportsbook", "machine_sportsbook", Material.CLOCK, "minecraft:block/sea_lantern", Kind.CABINET);
+        // 0.57.0, Texas Hold'em: cards on a card table, like Twenty-One's (a placeholder until the owner's model): green
+        // felt, two face-down cards and a short stack of chips. Its stand-in without the pack is its Games-screen icon
+        machine("holdem", "machine_holdem", Material.PAPER, "minecraft:block/green_wool", Kind.TROPHY);
+        // 0.57.0, Bingo Night's machine in the Game Parlor (a cabinet's size, a placeholder until the owner's model): a
+        // white card on its screen with a few red daubs; its stand-in without the pack is a filled map (a card). And
+        // Picture Bingo's cabinet in the Arcade Room: a pink screen with a three-by-three card on it, some squares
+        // lit; its stand-in is a pig's spawn egg (the first picture)
+        machine("bingo", "machine_bingo", Material.FILLED_MAP, "minecraft:block/white_concrete", Kind.CABINET);
+        cabinet("kid_bingo", "cabinet_bingo", Material.PIG_SPAWN_EGG, "minecraft:block/pink_concrete");
+        // 0.57.0, the Game Parlor's Video Poker (five cards on a green felt screen; its stand-in is a card) and Creeper
+        // Fuse (a Creeper's face on a lit screen; its stand-in is a creeper head), a cabinet's size each, after every
+        // model there was
+        machine("video_poker", "machine_video_poker", Material.PAPER, "minecraft:block/green_wool", Kind.CABINET);
+        machine("creeper_fuse", "machine_creeper_fuse", Material.CREEPER_HEAD, "minecraft:block/lime_concrete",
+                Kind.CABINET);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -227,7 +242,8 @@ public final class ClubModels {
                 parts.add(box(1, 22, 1, 15, 24, 15, "top"));      // the lit marquee
                 parts.add(box(3, 8, 1, 13, 19, 2, "screen"));     // the screen, on the north side
                 parts.add(box(2, 2, 0, 14, 5, 2, "panel"));       // the control panel
-                if (m.name().equals("machine_mobs") || m.name().equals("cabinet_sweeper")) {
+                if (m.name().equals("machine_mobs") || m.name().equals("cabinet_sweeper")
+                        || m.name().equals("machine_creeper_fuse")) {
                     // a Creeper's face on the screen, in the body's black
                     parts.add(box(5, 14, 0, 7, 16, 1, "body"));  // the eyes
                     parts.add(box(9, 14, 0, 11, 16, 1, "body"));
@@ -249,6 +265,30 @@ public final class ClubModels {
                         parts.add(box(11, y + 1, 0, 13, y + 3, 1, "other"));
                     }
                 }
+                if (m.name().equals("machine_bingo")) { // red daubs on a white card: a line across and a few more
+                    tex += ",\"daub\":\"minecraft:block/red_concrete\"";
+                    int[][] daubs = {{4, 13}, {6, 13}, {8, 13}, {10, 13}, {6, 16}, {10, 10}, {4, 10}};
+                    for (int[] d : daubs) {
+                        parts.add(box(d[0], d[1], 0, d[0] + 1, d[1] + 1, 1, "daub"));
+                    }
+                }
+                if (m.name().equals("cabinet_bingo")) { // a three-by-three card: white squares, some lit green
+                    tex += ",\"square\":\"minecraft:block/white_concrete\",\"lit\":\"minecraft:block/lime_concrete\"";
+                    for (int row = 0; row < 3; row++) {
+                        for (int col = 0; col < 3; col++) {
+                            int x = 4 + col * 3;
+                            int y = 10 + row * 3;
+                            parts.add(box(x, y, 0, x + 2, y + 2, 1, (row + col) % 2 == 0 ? "lit" : "square"));
+                        }
+                    }
+                }
+                if (m.name().equals("machine_video_poker")) { // five white cards side by side on the green screen
+                    tex += ",\"card\":\"minecraft:block/white_concrete\",\"red\":\"minecraft:block/red_concrete\"";
+                    for (int x = 3; x <= 11; x += 2) {
+                        parts.add(box(x, 12, 0, x + 2, 16, 1, "card"));
+                        parts.add(box(x, 15, 0, x + 1, 16, 1, x % 4 == 1 ? "red" : "body")); // each card's corner
+                    }
+                }
                 if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it
                     tex += ",\"red\":\"minecraft:block/red_concrete\",\"yellow\":\"minecraft:block/yellow_concrete\"";
                     int[][] counters = {{4, 9, 0}, {6, 9, 1}, {8, 9, 0}, {6, 11, 0}, {8, 11, 1}, {10, 9, 1}, {8, 13, 1}};
@@ -258,6 +298,17 @@ public final class ClubModels {
                 }
             }
             case TROPHY -> {
+                if (m.name().equals("machine_holdem")) { // felt, two cards face down and a stack of chips
+                    tex = "\"felt\":\"" + m.screen() + "\",\"back\":\"minecraft:block/red_concrete\","
+                            + "\"chip\":\"minecraft:block/gold_block\",\"rim\":\"minecraft:block/white_concrete\"";
+                    parts.add(box(1, 0, 1, 15, 1, 15, "felt"));
+                    parts.add(box(3, 1, 4, 7, 2, 10, "back"));
+                    parts.add(box(8, 1, 5, 12, 2, 11, "back"));
+                    parts.add(box(11, 1, 11, 14, 3, 14, "chip"));
+                    parts.add(box(11, 3, 11, 14, 4, 14, "rim"));
+                    parts.add(box(11, 4, 11, 14, 5, 14, "chip"));
+                    break;
+                }
                 if (m.name().equals("machine_cards")) { // a stack of cards and one face up beside it
                     tex = "\"card\":\"" + m.screen() + "\",\"back\":\"minecraft:block/red_concrete\"";
                     parts.add(box(3, 0, 5, 9, 3, 13, "back"));

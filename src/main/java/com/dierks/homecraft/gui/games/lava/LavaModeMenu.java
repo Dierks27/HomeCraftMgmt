@@ -63,11 +63,13 @@ public final class LavaModeMenu extends GameMenu {
                     "&7Collect every star.", "&7Touch the lava? A sizzle, a puff of", "&7smoke, and you're back on"
                             + " the furniture.", "&eClick to play"), true);
             case GROUP -> Menus.icon(Material.LAVA_BUCKET, "&e&lGroup &7- play together",
-                    "&7Everyone shares one star count.", "&7The lava comes higher every round.",
-                    "&7A touch costs the group a star.", "&eClick to play");
+                    "&7One star count, a star goal every", "&7round and three hearts. The lava",
+                    "&7comes higher, the furniture moves,", "&7stars come out during the lava.",
+                    "&eClick to play");
             case CHALLENGE -> Menus.icon(Material.GOLDEN_HELMET, "&c&lChallenge &7- last one standing",
-                    "&7The lava keeps rising and never", "&7goes down. Touch it and you're out.",
-                    "&7Alone: how many rounds can you last?", "&eClick to play");
+                    "&7The lava keeps rising and never", "&7goes down. Touch it, or end a round",
+                    "&7without a star, and you're out.", "&7Alone: how many rounds can you last?",
+                    "&eClick to play");
         };
     }
 }

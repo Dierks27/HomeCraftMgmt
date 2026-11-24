@@ -28,8 +28,8 @@ public final class KidSet {
      * 0.57.0: the kid games played on a screen of their own that are not arcade cabinet games by kind (they are played
      * together, so their kind is the kid race's), and may still have a cabinet in the Arcade Room: listed in
      * {@code arcade_room.games}, or put where the owner stands ({@code /hcm games clubhouse cabinet kid_bingo}). Its tap
-     * starts them as a cabinet's does ({@link #cabinet}). None of them is in {@link #CABINET_GAMES}: they take no spare
-     * place of the generated room by themselves.
+     * starts them as a cabinet's does ({@link #cabinet}). None of them is in {@link #CABINET_GAMES}; since plan 14 the
+     * generated room still gives each one a spare place after those (the owner: every kid game gets a cabinet).
      */
     public static final Set<String> KID_SCREENS = Set.of("kid_bingo");
 

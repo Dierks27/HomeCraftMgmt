@@ -64,9 +64,11 @@ public final class ClubhousePlanner {
      * sitting in the hallway"). 13: the side rooms' wing grown 16 rows to the south (the owner: "make the place larger
      * so all these things can fit comfortably ... We want to fill the space"): a walled ball pit, a bean-bag nook, a
      * prize-and-plush corner, four spare cabinet places and a viewing area for the kid race downstairs; a lounge, room
-     * for two more card tables and the sportsbook's wall upstairs; the Trophy Room and the secret room longer.
+     * for two more card tables and the sportsbook's wall upstairs; the Trophy Room and the secret room longer. 14
+     * (0.57.0): Texas Hold'em's card table on the first spare table's place, and a mat under each of the three new
+     * machines on the Parlor's walls (Bingo Night, Video Poker, Creeper Fuse); a wing at its old size is unchanged.
      */
-    public static final int ALGO = 13;
+    public static final int ALGO = 14;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -1416,9 +1418,21 @@ public final class ClubhousePlanner {
     public static final String PARLOR_CARPET = "minecraft:red_carpet";
     /** The parlor's machines on its walls (x, z, yaw): two Ore Slots, the Wheel, Coin Flip. */
     static final int[][] PARLOR_WALL = {{1, 37, -90}, {1, 40, -90}, {14, 37, 90}, {14, 40, 90}};
-    /** The games those stand for, in order: the walls' four, then the two tables. */
+    /**
+     * The games those stand for, in order: the walls' four, then the two tables; then (plan 14, a grown wing only)
+     * {@link #PARLOR_WALL_MORE}'s three and Texas Hold'em's table ({@link #HOLDEM_TABLE}). New ones go at the END: a
+     * machine's place in this list is how its display is kept.
+     */
     public static final List<String> PARLOR_GAMES = List.of("ore_slots", "ore_slots", "wheel", "coin_flip",
-            "twenty_one", "higher_lower");
+            "twenty_one", "higher_lower", "bingo", "video_poker", "creeper_fuse", "holdem");
+    /**
+     * Plan 14 (0.57.0; the owner: "Let's do the games you mentioned next!"): three more machines on the grown Parlor's
+     * walls (x, z, yaw), north of the lounge on the west wall and of the sportsbook's counter on the east: Bingo Night
+     * and Video Poker facing east, Creeper Fuse facing west. Each has a mat, as the first four.
+     */
+    static final int[][] PARLOR_WALL_MORE = {{1, MAIN_Z + 12, -90}, {1, MAIN_Z + 15, -90}, {14, MAIN_Z + 12, 90}};
+    /** Plan 14: Texas Hold'em's card table, built on the first spare card table's place ({@link #PARLOR_SPARE_TABLE}). */
+    static final int[] HOLDEM_TABLE = {4, MAIN_Z + 14};
     public static final String FELT_BLOCK = "minecraft:green_wool";
     public static final String BRASS = "minecraft:waxed_cut_copper";
     public static final String LEDGE_SLAB = "minecraft:dark_oak_slab[type=top,waterlogged=false]";
@@ -1535,22 +1549,16 @@ public final class ClubhousePlanner {
             b.set(i, UP_FLOOR + 3, b.z1 + 1, BRASS); // a brass rail along the back wall
         }
         for (int[] t : PARLOR_TABLE) {
-            // a card table one block high (felt on the floor: no jumping), the cards in its middle, a chair either
-            // side of each row (0.44.2-0.49.0: one block of felt and two chairs)
-            int east = t[0] + PARLOR_TABLE_W;
-            int south = t[1] + PARLOR_TABLE_D - 1;
-            for (int k = t[1]; k <= south; k++) {
-                for (int i = t[0]; i < east; i++) {
-                    b.set(i, UP_FLOOR + 1, k, FELT_BLOCK);
-                }
-                if (k == t[1] || k == south) {
-                    b.seat(t[0] - 1, UP_FLOOR + 1, k, chair("west"), "GREEN");
-                    b.seat(east, UP_FLOOR + 1, k, chair("east"), "GREEN");
-                }
-            }
+            cardTable(b, t);
         }
         for (int[] m : PARLOR_WALL) {
             b.set(m[0], UP_FLOOR, m[1], MAT);
+        }
+        if (b.big) { // plan 14: Texas Hold'em's table and the three new wall machines' mats
+            cardTable(b, HOLDEM_TABLE);
+            for (int[] m : PARLOR_WALL_MORE) {
+                b.set(m[0], UP_FLOOR, m[1], MAT);
+            }
         }
         for (int i : new int[]{x0 + 4, x0 + 11}) {
             for (int k : upBeams(b)) {
@@ -1561,6 +1569,24 @@ public final class ClubhousePlanner {
         if (b.big) {
             lounge(b);
             sportsbook(b);
+        }
+    }
+
+    /**
+     * A card table one block high (felt on the floor: no jumping), its north-west felt block at {@code t}, the cards in
+     * its middle, a chair either side of its first and last rows (0.44.2-0.49.0: one block of felt and two chairs).
+     */
+    private static void cardTable(Builder b, int[] t) {
+        int east = t[0] + PARLOR_TABLE_W;
+        int south = t[1] + PARLOR_TABLE_D - 1;
+        for (int k = t[1]; k <= south; k++) {
+            for (int i = t[0]; i < east; i++) {
+                b.set(i, UP_FLOOR + 1, k, FELT_BLOCK);
+            }
+            if (k == t[1] || k == south) {
+                b.seat(t[0] - 1, UP_FLOOR + 1, k, chair("west"), "GREEN");
+                b.seat(east, UP_FLOOR + 1, k, chair("east"), "GREEN");
+            }
         }
     }
 
@@ -1802,15 +1828,29 @@ public final class ClubhousePlanner {
         return out;
     }
 
-    /** The Game Parlor's machines: {@link #PARLOR_GAMES}' places, the walls' four then the two tables' tops. */
+    /** Where a card table's cards lie: the middle of its felt. */
+    private static Place3 tableTop(Box box, int[] t) {
+        return new Place3(box.minX() + t[0] + PARLOR_TABLE_W / 2.0, box.minY() + UP_FLOOR + 2,
+                box.minZ() + t[1] + PARLOR_TABLE_D / 2.0, 0f);
+    }
+
+    /**
+     * The Game Parlor's machines: {@link #PARLOR_GAMES}' places, the walls' four then the two tables' tops; in a grown
+     * wing (plan 14) then the three more on the walls and Texas Hold'em's table top.
+     */
     public static List<Place3> parlorMachines(Box box) {
         List<Place3> out = new ArrayList<>();
         for (int[] m : PARLOR_WALL) {
             out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
         }
         for (int[] t : PARLOR_TABLE) { // the cards lie in the middle of the table
-            out.add(new Place3(box.minX() + t[0] + PARLOR_TABLE_W / 2.0, box.minY() + UP_FLOOR + 2,
-                    box.minZ() + t[1] + PARLOR_TABLE_D / 2.0, 0f));
+            out.add(tableTop(box, t));
+        }
+        if (grown(box)) { // plan 14
+            for (int[] m : PARLOR_WALL_MORE) {
+                out.add(new Place3(box.minX() + m[0] + 0.5, box.minY() + UP_FLOOR + 1, box.minZ() + m[1] + 0.5, m[2]));
+            }
+            out.add(tableTop(box, HOLDEM_TABLE));
         }
         return out;
     }

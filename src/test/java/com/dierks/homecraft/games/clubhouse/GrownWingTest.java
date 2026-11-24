@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -149,7 +150,8 @@ class GrownWingTest {
                 ClubhousePlanner.OLD_CABINETS), "the nine cabinet places, in their game order");
         assertEquals(ClubhousePlanner.arcadeTable(OLD), ClubhousePlanner.arcadeTable(BOX), "the kid race's table");
         assertEquals(ClubhousePlanner.raceTable(OLD), ClubhousePlanner.raceTable(BOX), "Mob Races' table");
-        assertEquals(ClubhousePlanner.parlorMachines(OLD), ClubhousePlanner.parlorMachines(BOX), "the Parlor's machines");
+        assertEquals(ClubhousePlanner.parlorMachines(OLD), ClubhousePlanner.parlorMachines(BOX).subList(0, 6),
+                "the Parlor's machines (plan 14 adds four after them)");
         assertEquals(ClubhousePlanner.parlorArrival(OLD), ClubhousePlanner.parlorArrival(BOX));
         assertEquals(ClubhousePlanner.secretArrival(OLD), ClubhousePlanner.secretArrival(BOX));
         assertEquals(ClubhousePlanner.door(OLD, true), ClubhousePlanner.door(BOX, true), "the archways' signs");
@@ -443,8 +445,18 @@ class GrownWingTest {
         for (int[] l : ClubhousePlanner.LOUNGE_LAMPS) {
             assertEquals(ClubhousePlanner.STANDING, at(x0 + l[0], UP_FEET + 1, BOX.minZ() + l[1]), "a floor lamp");
         }
-        // room for two more card tables: their felt's and their chairs' places plain carpet, lit, walked to
-        for (int[] t : ClubhousePlanner.PARLOR_SPARE_TABLE) {
+        // plan 14: Texas Hold'em's table on the first spare table's place: felt, four chairs, its cards on top
+        int[] h = ClubhousePlanner.HOLDEM_TABLE;
+        assertArrayEquals(ClubhousePlanner.PARLOR_SPARE_TABLE[0], h, "the first spare table's place");
+        for (int k = h[1]; k < h[1] + ClubhousePlanner.PARLOR_TABLE_D; k++) {
+            for (int i = h[0]; i < h[0] + ClubhousePlanner.PARLOR_TABLE_W; i++) {
+                assertEquals(ClubhousePlanner.FELT_BLOCK, at(x0 + i, UP_FEET, BOX.minZ() + k), "Hold'em's felt");
+            }
+        }
+        List<ClubhousePlanner.Place3> machines = ClubhousePlanner.parlorMachines(BOX);
+        assertEquals("holdem", ClubhousePlanner.PARLOR_GAMES.get(machines.size() - 1), "its cards are the last machine");
+        // room for one more card table: its felt's and its chairs' places plain carpet, lit, walked to
+        for (int[] t : java.util.List.of(ClubhousePlanner.PARLOR_SPARE_TABLE[1])) {
             for (int k = t[1]; k < t[1] + ClubhousePlanner.PARLOR_TABLE_D; k++) {
                 for (int i = t[0] - 1; i <= t[0] + ClubhousePlanner.PARLOR_TABLE_W; i++) {
                     int x = x0 + i;
@@ -453,7 +465,7 @@ class GrownWingTest {
                     standsAndIsReached(x, UP_FEET, z, up, "a spare table's place");
                 }
             }
-            for (ClubhousePlanner.Place3 m : ClubhousePlanner.parlorMachines(BOX)) {
+            for (ClubhousePlanner.Place3 m : machines) {
                 assertTrue(Math.abs(m.z() - (BOX.minZ() + t[1])) >= 3 || Math.abs(m.x() - (x0 + t[0])) >= 3,
                         "clear of the tables there are: " + m);
             }

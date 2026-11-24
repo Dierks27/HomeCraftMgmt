@@ -154,7 +154,8 @@ class ArcadeRoomTest {
             }
         }
         assertNotEquals(ClubhousePlanner.raceTable(BOX), f, "a second track: not the Parlor's");
-        assertEquals(13, ClubhousePlanner.ALGO, "a block change: every server builds the room once more");
+        assertEquals(14, ClubhousePlanner.ALGO, "a block change: every server builds the room once more (14: the Parlor's"
+                + " Hold'em table)");
         assertEquals("kidrace", RaceShow.KID_TAP, "its tap opens the kid race, never a machine of chance");
         assertFalse(RaceShow.KID_TAP.startsWith("machine:"));
     }

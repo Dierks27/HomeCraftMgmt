@@ -1076,6 +1076,37 @@ public final class Database {
             ALTER TABLE game_rounds ADD COLUMN money INTEGER NOT NULL DEFAULT 0;
             ALTER TABLE game_rounds ADD COLUMN owed INTEGER NOT NULL DEFAULT 0;
             CREATE INDEX IF NOT EXISTS idx_game_rounds_owed ON game_rounds (owed) WHERE owed > 0
+            """,
+            // v42 — the Game Parlor's Sports Board (0.55.0): one row per pick on a real game, kept until its market
+            //   is decided. stake is whole dollars (the chips); price is the side's chance in tenths of a cent (625 =
+            //   62.5c), locked when the pick was made; payout is the cents a win gives back, locked with it. status is
+            //   OPEN until settled, then WON, LOST, VOID (called off: the stake back) or LAPSED (undecided for
+            //   settle_days: the stake back); paid is the cents given back, settled_at when. A pick is settled by one
+            //   guarded UPDATE ... WHERE status = 'OPEN' before anything is paid, so it is never paid twice. day is
+            //   the local day it was made (the Parlor's day limit counts it); league, game, pick and starts_at are
+            //   what the pick screen showed, so My picks reads right after the game leaves the board.
+            """
+            CREATE TABLE IF NOT EXISTS sports_picks (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                ticker     TEXT    NOT NULL,
+                side       TEXT    NOT NULL,
+                stake      INTEGER NOT NULL,
+                price      INTEGER NOT NULL,
+                payout     INTEGER NOT NULL,
+                placed_at  INTEGER NOT NULL,
+                status     TEXT    NOT NULL DEFAULT 'OPEN',
+                settled_at INTEGER NOT NULL DEFAULT 0,
+                paid       INTEGER NOT NULL DEFAULT 0,
+                day        INTEGER NOT NULL,
+                starts_at  INTEGER NOT NULL DEFAULT 0,
+                league     TEXT    NOT NULL DEFAULT '',
+                game       TEXT    NOT NULL DEFAULT '',
+                pick       TEXT    NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_sports_picks_open ON sports_picks (status, ticker);
+            CREATE INDEX IF NOT EXISTS idx_sports_picks_player ON sports_picks (player, placed_at);
+            CREATE INDEX IF NOT EXISTS idx_sports_picks_day ON sports_picks (day)
             """
     };
 

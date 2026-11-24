@@ -77,10 +77,11 @@ class DailyCoursesTest {
                         com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC, com.dierks.homecraft.games.hub.Hub.SPEC,
                         com.dierks.homecraft.games.lava.FloorIsLava.SPEC,
                         com.dierks.homecraft.games.cpu.CpuPlayers.SPEC,
-                        com.dierks.homecraft.games.kidrace.KidRaces.SPEC),
-                specs.subList(specs.size() - 8, specs.size()),
+                        com.dierks.homecraft.games.kidrace.KidRaces.SPEC,
+                        com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC),
+                specs.subList(specs.size() - 9, specs.size()),
                 "then only Race Night, Falling Floors, the Clubhouse (WP-CH), the Hub (0.44.0), The Floor Is Lava and"
-                        + " the NPC players, then the Arcade Room's free kid race");
+                        + " the NPC players, then the Arcade Room's free kid race and the Game Parlor's Sports Board");
         assertEquals("fresh_courses", DailyCourses.SPEC.id(), "its id is fresh_courses");
         assertEquals(GameKind.TRIAL, DailyCourses.SPEC.kind(), "a course game");
         assertEquals(DailySettings.KEYS, DailyCourses.SPEC.keys(), "it ships its own keys");

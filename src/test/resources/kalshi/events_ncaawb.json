@@ -1,0 +1,645 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAWBGAME-26NOV23BELLSU",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-20T01:32:18.42833Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-26T01:00:00Z",
+     "created_time": "2026-11-20T01:06:35.496555Z",
+     "custom_strike": {
+      "basketball_team": "147fe7b0-9cf9-4ae7-8e33-adea6662c086"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV23BELLSU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-24T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.9900",
+     "latest_expiration_time": "2026-11-26T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.0100",
+     "no_bid_dollars": "0.0000",
+     "no_sub_title": "LSU",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-24T04:00:00Z",
+     "open_interest_fp": "882.00",
+     "open_time": "2026-11-20T01:08:00Z",
+     "previous_price_dollars": "0.9900",
+     "previous_yes_ask_dollars": "1.0000",
+     "previous_yes_bid_dollars": "0.9900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If LSU wins the Belmont vs LSU women's college basketball game originally scheduled for Nov 23, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV23BELLSU-LSU",
+     "title": "LSU wins",
+     "updated_time": "2026-11-20T01:08:01.006992Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "882.00",
+     "yes_ask_dollars": "1.0000",
+     "yes_ask_size_fp": "0.00",
+     "yes_bid_dollars": "0.9900",
+     "yes_bid_size_fp": "13399.00",
+     "yes_sub_title": "LSU"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-26T01:00:00Z",
+     "created_time": "2026-11-20T01:06:35.496555Z",
+     "custom_strike": {
+      "basketball_team": "f362c8b3-3207-4f1d-964e-dc48794737f9"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV23BELLSU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-24T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0100",
+     "latest_expiration_time": "2026-11-26T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "1.0000",
+     "no_bid_dollars": "0.9900",
+     "no_sub_title": "Belmont",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-24T04:00:00Z",
+     "open_interest_fp": "22960.38",
+     "open_time": "2026-11-20T01:08:00Z",
+     "previous_price_dollars": "0.0100",
+     "previous_yes_ask_dollars": "0.0100",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Belmont wins the Belmont vs LSU women's college basketball game originally scheduled for Nov 23, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV23BELLSU-BEL",
+     "title": "Belmont wins",
+     "updated_time": "2026-11-20T01:08:01.006992Z",
+     "volume_24h_fp": "22662.41",
+     "volume_fp": "23500.38",
+     "yes_ask_dollars": "0.0100",
+     "yes_ask_size_fp": "148792.67",
+     "yes_bid_dollars": "0.0000",
+     "yes_bid_size_fp": "0.00",
+     "yes_sub_title": "Belmont"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (W)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAWBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-women/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BEL vs LSU (Nov 23)",
+   "title": "Belmont vs LSU"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAWBGAME-26NOV24AMERYALE",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-20T16:05:59.594346Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-26T16:00:00Z",
+     "created_time": "2026-11-20T16:04:36.773397Z",
+     "custom_strike": {
+      "basketball_team": "cdb9632a-be84-4eb8-b166-eee12bdadcb4"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24AMERYALE",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-24T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.9000",
+     "latest_expiration_time": "2026-11-26T16:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.1600",
+     "no_bid_dollars": "0.0900",
+     "no_sub_title": "Yale",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-24T19:00:00Z",
+     "open_interest_fp": "65.02",
+     "open_time": "2026-11-20T16:08:00Z",
+     "previous_price_dollars": "0.8300",
+     "previous_yes_ask_dollars": "0.9400",
+     "previous_yes_bid_dollars": "0.8300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Yale wins the American vs Yale women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24AMERYALE-YALE",
+     "title": "Yale wins",
+     "updated_time": "2026-11-20T16:08:01.326421Z",
+     "volume_24h_fp": "66.02",
+     "volume_fp": "67.02",
+     "yes_ask_dollars": "0.9100",
+     "yes_ask_size_fp": "719.00",
+     "yes_bid_dollars": "0.8400",
+     "yes_bid_size_fp": "1.00",
+     "yes_sub_title": "Yale"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-26T16:00:00Z",
+     "created_time": "2026-11-20T16:04:36.773397Z",
+     "custom_strike": {
+      "basketball_team": "91e876ab-4cbf-4c08-97df-8918d8b4233b"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24AMERYALE",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-24T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0900",
+     "latest_expiration_time": "2026-11-26T16:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9100",
+     "no_bid_dollars": "0.8600",
+     "no_sub_title": "American",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-24T19:00:00Z",
+     "open_interest_fp": "6.09",
+     "open_time": "2026-11-20T16:08:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.1500",
+     "previous_yes_bid_dollars": "0.0500",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If American wins the American vs Yale women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24AMERYALE-AMER",
+     "title": "American wins",
+     "updated_time": "2026-11-20T16:08:01.326421Z",
+     "volume_24h_fp": "6.09",
+     "volume_fp": "6.09",
+     "yes_ask_dollars": "0.1400",
+     "yes_ask_size_fp": "2.00",
+     "yes_bid_dollars": "0.0900",
+     "yes_bid_size_fp": "140.00",
+     "yes_sub_title": "American"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (W)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAWBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-women/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "AMER vs YALE (Nov 24)",
+   "title": "American vs Yale"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAWBGAME-26NOV24BYUUVU",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-21T01:08:48.667892Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-27T01:00:00Z",
+     "created_time": "2026-11-21T01:05:54.233335Z",
+     "custom_strike": {
+      "basketball_team": "c24af279-af21-4a00-b1f1-782437e17747"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24BYUUVU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-25T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0700",
+     "latest_expiration_time": "2026-11-27T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9400",
+     "no_bid_dollars": "0.9300",
+     "no_sub_title": "Utah Valley",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-25T04:00:00Z",
+     "open_interest_fp": "2.00",
+     "open_time": "2026-11-21T01:08:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.1300",
+     "previous_yes_bid_dollars": "0.0600",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Utah Valley wins the BYU vs Utah Valley women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24BYUUVU-UVU",
+     "title": "Utah Valley wins",
+     "updated_time": "2026-11-21T01:08:01.128149Z",
+     "volume_24h_fp": "2.00",
+     "volume_fp": "2.00",
+     "yes_ask_dollars": "0.0700",
+     "yes_ask_size_fp": "6.05",
+     "yes_bid_dollars": "0.0600",
+     "yes_bid_size_fp": "396.00",
+     "yes_sub_title": "Utah Valley"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-27T01:00:00Z",
+     "created_time": "2026-11-21T01:05:54.233335Z",
+     "custom_strike": {
+      "basketball_team": "4bb61e0f-4284-43c1-b23a-c9eef55184b0"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24BYUUVU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-25T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.9400",
+     "latest_expiration_time": "2026-11-27T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.0900",
+     "no_bid_dollars": "0.0500",
+     "no_sub_title": "BYU",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-25T04:00:00Z",
+     "open_interest_fp": "115.74",
+     "open_time": "2026-11-21T01:08:00Z",
+     "previous_price_dollars": "0.9100",
+     "previous_yes_ask_dollars": "0.9200",
+     "previous_yes_bid_dollars": "0.8900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If BYU wins the BYU vs Utah Valley women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24BYUUVU-BYU",
+     "title": "BYU wins",
+     "updated_time": "2026-11-21T01:08:01.128149Z",
+     "volume_24h_fp": "112.69",
+     "volume_fp": "115.74",
+     "yes_ask_dollars": "0.9500",
+     "yes_ask_size_fp": "612.00",
+     "yes_bid_dollars": "0.9100",
+     "yes_bid_size_fp": "6.00",
+     "yes_sub_title": "BYU"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (W)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAWBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-women/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BYU vs UVU (Nov 24)",
+   "title": "BYU vs Utah Valley"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAWBGAME-26NOV24SCARCONN",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-21T01:06:32.76132Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-27T01:00:00Z",
+     "created_time": "2026-11-21T01:04:55.322707Z",
+     "custom_strike": {
+      "basketball_team": "c414bfb6-69c2-494b-b41a-726be63e8a6a"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24SCARCONN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-25T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2300",
+     "latest_expiration_time": "2026-11-27T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7400",
+     "no_bid_dollars": "0.7000",
+     "no_sub_title": "UConn",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-25T04:00:00Z",
+     "open_interest_fp": "527.08",
+     "open_time": "2026-11-21T01:08:00Z",
+     "previous_price_dollars": "0.3500",
+     "previous_yes_ask_dollars": "0.3200",
+     "previous_yes_bid_dollars": "0.2000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UConn wins the South Carolina vs UConn women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24SCARCONN-CONN",
+     "title": "UConn wins",
+     "updated_time": "2026-11-21T01:08:01.128149Z",
+     "volume_24h_fp": "427.23",
+     "volume_fp": "554.57",
+     "yes_ask_dollars": "0.3000",
+     "yes_ask_size_fp": "1.00",
+     "yes_bid_dollars": "0.2600",
+     "yes_bid_size_fp": "2.00",
+     "yes_sub_title": "UConn"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-27T01:00:00Z",
+     "created_time": "2026-11-21T01:04:55.322707Z",
+     "custom_strike": {
+      "basketball_team": "711f0b4f-b439-46ac-9afb-f1ac37605572"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAWBGAME-26NOV24SCARCONN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-25T04:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7400",
+     "latest_expiration_time": "2026-11-27T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3000",
+     "no_bid_dollars": "0.2600",
+     "no_sub_title": "South Carolina",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-25T04:00:00Z",
+     "open_interest_fp": "1722.00",
+     "open_time": "2026-11-21T01:08:00Z",
+     "previous_price_dollars": "0.7000",
+     "previous_yes_ask_dollars": "0.7400",
+     "previous_yes_bid_dollars": "0.6700",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If South Carolina wins the South Carolina vs UConn women's college basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAWBGAME-26NOV24SCARCONN-SCAR",
+     "title": "South Carolina wins",
+     "updated_time": "2026-11-21T01:08:01.128149Z",
+     "volume_24h_fp": "763.03",
+     "volume_fp": "1915.29",
+     "yes_ask_dollars": "0.7400",
+     "yes_ask_size_fp": "15.36",
+     "yes_bid_dollars": "0.7000",
+     "yes_bid_size_fp": "5.06",
+     "yes_sub_title": "South Carolina"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (W)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAWBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-women/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "SCAR vs CONN (Nov 24)",
+   "title": "South Carolina vs UConn"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "91e876ab-4cbf-4c08-97df-8918d8b4233b",
+    "home_team_id": "cdb9632a-be84-4eb8-b166-eee12bdadcb4",
+    "league": "NCAAWB",
+    "main_game_event_ticker": "KXNCAAWBGAME-26NOV24AMERYALE",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3024789",
+    "status": "scheduled",
+    "tier": "D"
+   },
+   "id": "ddcfd36c-e769-5c3b-a7fd-39915400c3c5",
+   "last_updated_ts": "2026-11-24T00:00:48.961639Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAWBGAME-26NOV24AMERYALE",
+    "KXNCAAWBSPREAD-26NOV24AMERYALE",
+    "KXNCAAWBTOTAL-26NOV24AMERYALE"
+   ],
+   "source_ids": {
+    "source_1_id": "3024789",
+    "source_2_id": "2026112407F39F68"
+   },
+   "start_date": "2026-11-24T16:00:00Z",
+   "title": "American at Yale",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "f362c8b3-3207-4f1d-964e-dc48794737f9",
+    "home_team_id": "147fe7b0-9cf9-4ae7-8e33-adea6662c086",
+    "league": "NCAAWB",
+    "main_game_event_ticker": "KXNCAAWBGAME-26NOV23BELLSU",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3015902",
+    "status": "scheduled",
+    "tier": "B"
+   },
+   "id": "ee511cf2-fabc-5392-8fb0-cfd1071b9a85",
+   "last_updated_ts": "2026-11-24T00:00:48.021529Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAWBGAME-26NOV23BELLSU",
+    "KXNCAAWBSPREAD-26NOV23BELLSU",
+    "KXNCAAWBTOTAL-26NOV23BELLSU"
+   ],
+   "source_ids": {
+    "source_1_id": "3015902",
+    "source_2_id": "2026112396D6699E",
+    "source_6_id": "18433664"
+   },
+   "start_date": "2026-11-24T01:00:00Z",
+   "title": "Belmont at LSU",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "4bb61e0f-4284-43c1-b23a-c9eef55184b0",
+    "home_team_id": "c24af279-af21-4a00-b1f1-782437e17747",
+    "league": "NCAAWB",
+    "main_game_event_ticker": "KXNCAAWBGAME-26NOV24BYUUVU",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3033457",
+    "status": "scheduled",
+    "tier": "C"
+   },
+   "id": "54fc4a3d-4ba5-5e02-a7a2-ba540212ad82",
+   "last_updated_ts": "2026-11-24T02:03:22.198646Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAWBGAME-26NOV24BYUUVU",
+    "KXNCAAWBSPREAD-26NOV24BYUUVU",
+    "KXNCAAWBTOTAL-26NOV24BYUUVU"
+   ],
+   "source_ids": {
+    "source_1_id": "3033457",
+    "source_2_id": "20261125D3625E09"
+   },
+   "start_date": "2026-11-25T01:00:00Z",
+   "title": "BYU at Utah Valley",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "711f0b4f-b439-46ac-9afb-f1ac37605572",
+    "home_team_id": "c414bfb6-69c2-494b-b41a-726be63e8a6a",
+    "league": "NCAAWB",
+    "main_game_event_ticker": "KXNCAAWBGAME-26NOV24SCARCONN",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3008826",
+    "status": "scheduled",
+    "tier": "A"
+   },
+   "id": "38adf63d-a8e0-56fd-80bc-02725f841851",
+   "last_updated_ts": "2026-11-24T01:17:31.73626Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAWBGAME-26NOV24SCARCONN",
+    "KXNCAAWBSPREAD-26NOV24SCARCONN",
+    "KXNCAAWBTOTAL-26NOV24SCARCONN"
+   ],
+   "source_ids": {
+    "source_1_id": "3008826",
+    "source_2_id": "202611245F24B2B9",
+    "source_6_id": "18420630"
+   },
+   "start_date": "2026-11-25T01:00:00Z",
+   "title": "South Carolina at UConn",
+   "type": "basketball_game"
+  }
+ ]
+}

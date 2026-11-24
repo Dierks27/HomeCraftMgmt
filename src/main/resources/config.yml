@@ -2954,3 +2954,27 @@ games:
     gather_seconds: 15
     # Seconds the winner takes to reach the finish (10-60).
     race_seconds: 20
+  # The Sports Board in the Clubhouse's Game Parlor: pick who wins tonight's real games, for money.
+  # Each side's chance is its game-winner market's price on Kalshi (public market data, no key),
+  # read every few minutes; your price is locked when you pick, and you are paid when the real game
+  # is decided. Only for players with hcm.games.money, only in the Parlor, and only while money play
+  # is on: the day's limit, the biggest stake, the chips and the biggest payout are the Parlor's
+  # own (/hcm games parlor). Admin: /hcm games sportsbook status|refresh|settle|off|on.
+  sportsbook:
+    # false = the Sports Board is closed (open picks are still settled and paid).
+    enabled: true
+    # The leagues on the board, by name: nfl, nba, nhl, mlb, ncaaf (college football), ncaamb
+    # (men's college basketball), ncaawb (women's college basketball), wnba; or any Kalshi series
+    # ticker like KXNBAGAME. A league out of season simply has no games.
+    leagues: [nfl, nba, nhl, mlb, ncaaf, ncaamb]
+    # Minutes between readings of the lines (2-60). Each also checks the open picks' games.
+    refresh_minutes: 5
+    # Hours ahead a game may start and still be on the board (1-72).
+    hours_ahead: 24
+    # Dollars given back per 100 put in over time (85-95): a pick on a side priced at a chance p
+    # pays (stake x rtp / p) if it wins. Sides under 5 or over 95 in 100 aren't offered.
+    rtp: 90
+    # Days after its game a pick with no result is given back (1-30).
+    settle_days: 7
+    # Kalshi's public API.
+    api_base: "https://api.elections.kalshi.com/trade-api/v2"

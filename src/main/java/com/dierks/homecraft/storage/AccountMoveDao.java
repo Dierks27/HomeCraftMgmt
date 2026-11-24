@@ -76,6 +76,7 @@ public final class AccountMoveDao {
         m.put("game_event_entries", "race nights and events: history");
         m.put("game_event_races", "race nights and events: history");
         m.put("trades", "the trade log: history");
+        m.put("sports_picks", "Sports Board picks are paid to the account that made them (open ones too)");
         return java.util.Collections.unmodifiableMap(m);
     }
 

@@ -42,12 +42,12 @@ class ClubhouseSettingsTest {
                 "0.38.2's six settings read 0.38.3's as shipped");
         assertEquals(32, d.box().sizeX(), "32 wide");
         assertEquals(16, d.box().sizeY(), "16 high");
-        assertEquals(62, d.box().sizeZ(), "plan 13: 62 deep, the side rooms' wing in its last 30 rows (48 before)");
+        assertEquals(64, d.box().sizeZ(), "plan 13: 64 deep, the side rooms' wing in its last 32 rows (48 before)");
         assertEquals(32, d.mainBox().sizeZ(), "the main room is 0.40.0's 32");
         assertEquals(d.box().minZ() + 32, d.annexBox().minZ(), "the side rooms south of it");
         assertEquals(16, d.annexBox().sizeZ(), "0.41.0's 16 rows, claimed as they were");
-        assertEquals(d.annexBox().maxZ() + 1, d.wingBox().minZ(), "plan 13's 14 rows right after them");
-        assertEquals(14, d.wingBox().sizeZ());
+        assertEquals(d.annexBox().maxZ() + 1, d.wingBox().minZ(), "plan 13's 16 rows right after them");
+        assertEquals(16, d.wingBox().sizeZ());
         assertEquals(d.box().maxZ(), d.wingBox().maxZ(), "to the box's south end");
         assertEquals(48, d.oldBox().sizeZ(), "the box at its old size: the main room and the first 16 rows");
         assertEquals(d.box().minZ(), d.oldBox().minZ());

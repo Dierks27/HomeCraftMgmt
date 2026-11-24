@@ -45,7 +45,7 @@ public final class ClubhouseRegions {
     }
 
     /**
-     * Plan 13: the box the Clubhouse may take where it is configured. Its whole box when the 14 rows its wing grew by
+     * Plan 13: the box the Clubhouse may take where it is configured. Its whole box when the 16 rows its wing grew by
      * ({@link ClubhouseSettings#wingBox}) keep clear of every other games area there could be: every Fresh Courses
      * slot and Classic (on or off), the kept courses' area, and {@code others} (the arena's box, the lava playroom's).
      * Otherwise its old box ({@link ClubhouseSettings#oldBox}): the room keeps its old size there, and nothing else has

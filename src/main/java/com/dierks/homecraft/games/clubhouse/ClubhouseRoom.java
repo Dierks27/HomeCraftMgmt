@@ -55,7 +55,7 @@ public final class ClubhouseRoom {
      */
     public static final String ANNEX_CLAIM_KEY = META_PREFIX + "annex.claim";
     /**
-     * Plan 13: the 14 rows the side rooms' wing grew by ({@link ClubhouseSettings#wingBox}) are claimed on their own
+     * Plan 13: the 16 rows the side rooms' wing grew by ({@link ClubhouseSettings#wingBox}) are claimed on their own
      * too, the same way, once the side rooms' first box is: kept clear of every other games area, scanned, claimed only
      * when empty. Until they are (or when they can't be), the side rooms keep their old size and the room says why; a
      * server that has its rooms already builds them once more, grown.
@@ -172,7 +172,7 @@ public final class ClubhouseRoom {
     private final Box box;
     private final Box annex;
     private final Box full;
-    /** Plan 13: the wing's 14 new rows, and the box at its old size (the main room and the first 16 rows). */
+    /** Plan 13: the wing's 16 new rows, and the box at its old size (the main room and the first 16 rows). */
     private final Box wing;
     private final Box old;
     private final ClubhousePlanner.Rooms rooms;
@@ -623,7 +623,7 @@ public final class ClubhouseRoom {
     }
 
     /**
-     * Plan 13: the side rooms' first box is claimed, the 14 rows their wing grew by next, the same way. Claimed before,
+     * Plan 13: the side rooms' first box is claimed, the 16 rows their wing grew by next, the same way. Claimed before,
      * they are built with the room (or cleared, rooms switched off); wanted and clear of every other games area, they
      * are scanned, and claimed only when empty. Anything in their way (another area too near, blocks that aren't the
      * Clubhouse's) keeps the side rooms at their old size, with one console line saying why; nothing else changes and
@@ -636,8 +636,9 @@ public final class ClubhouseRoom {
         try {
             claim = host.meta(WING_CLAIM_KEY);
         } catch (Exception e) {
-            wingOut = "their new rows' claim can't be read from the database";
-            startJob(port, JobKind.BUILD);
+            // never built small over rooms that may stand grown: wait for the database, as the main claim does
+            phase = Phase.WAITING;
+            waitingFor = "the side rooms' new rows' claim can't be read from the database";
             return;
         }
         boolean claimed = claimText(world, wing).equals(claim);
@@ -647,7 +648,7 @@ public final class ClubhouseRoom {
         }
         List<String> problems = host.regionProblems(wing, world);
         if (problems != null && !problems.isEmpty()) {
-            wingOut = "their 14 new rows (" + wing.describe() + ") can't be used: " + problems.get(0);
+            wingOut = "their 16 new rows (" + wing.describe() + ") can't be used: " + problems.get(0);
             keepOldSize(port);
             return;
         }
@@ -687,7 +688,7 @@ public final class ClubhouseRoom {
         }
         if (scan.found() > 0) {
             String first = scan.firstFound().isEmpty() ? "" : " (first at " + String.join(" ", scan.firstFound()) + ")";
-            wingOut = "their 14 new rows have " + scan.found() + " block" + (scan.found() == 1 ? "" : "s")
+            wingOut = "their 16 new rows have " + scan.found() + " block" + (scan.found() == 1 ? "" : "s")
                     + " that aren't the Clubhouse's" + first + " - /hcm games clubhouse rebuild confirm clears them";
             keepOldSize(port);
             return;
@@ -700,7 +701,7 @@ public final class ClubhouseRoom {
             keepOldSize(port);
             return;
         }
-        host.logger().info("Clubhouse: claimed the side rooms' 14 new rows (" + wing.describe() + "): the Arcade Room"
+        host.logger().info("Clubhouse: claimed the side rooms' 16 new rows (" + wing.describe() + "): the Arcade Room"
                 + " and the Game Parlor grow");
         wingIn = true;
         startJob(port, JobKind.BUILD);
@@ -2123,7 +2124,7 @@ public final class ClubhouseRoom {
         return annexOut;
     }
 
-    /** Plan 13: whether the wing's 14 new rows are part of the generated room, and why not when they are left out. */
+    /** Plan 13: whether the wing's 16 new rows are part of the generated room, and why not when they are left out. */
     public boolean wingIn() {
         return wingIn;
     }

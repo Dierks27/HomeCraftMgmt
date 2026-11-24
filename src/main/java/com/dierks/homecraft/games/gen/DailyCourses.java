@@ -391,7 +391,7 @@ public final class DailyCourses implements Game {
     /**
      * Plan 13: {@link #extraBoxes(FallingFloorsSettings, ClubhouseSettings, com.dierks.homecraft.games.lava.LavaSettings)}
      * with the Clubhouse as far as it may reach ({@link #clubhouseExtras}): its grown wing only where it crowds none
-     * of these, so a slot or the keep area its 14 new rows would crowd is never closed by them (the Clubhouse keeps its
+     * of these, so a slot or the keep area its 16 new rows would crowd is never closed by them (the Clubhouse keeps its
      * old size there instead).
      */
     public static List<Regions.Extra> extraBoxes(DailySettings fresh, FallingFloorsSettings ff,

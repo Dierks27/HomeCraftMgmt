@@ -61,7 +61,7 @@ public final class ClubhousePlanner {
      * Arcade Room filled out (the owner: "it looks very empty"): a second race table for the kid race, nine cabinet
      * mats (one for every kid game and The Floor Is Lava's), a bright rug round the table, a ball pit, a plush case,
      * bean bags and coloured lamps. 12: no ball pit (the owner: it "just sits on the floor ... a weird thing kind of
-     * sitting in the hallway"). 13: the side rooms' wing grown 14 rows to the south (the owner: "make the place larger
+     * sitting in the hallway"). 13: the side rooms' wing grown 16 rows to the south (the owner: "make the place larger
      * so all these things can fit comfortably ... We want to fill the space"): a walled ball pit, a bean-bag nook, a
      * prize-and-plush corner, four spare cabinet places and a viewing area for the kid race downstairs; a lounge, room
      * for two more card tables and the sportsbook's wall upstairs; the Trophy Room and the secret room longer.
@@ -72,10 +72,10 @@ public final class ClubhousePlanner {
 
     /** The main room's depth (z): the side rooms are south of it, in the box's last {@value #ANNEX_Z} rows. */
     public static final int MAIN_Z = 32;
-    /** Plan 13: the side rooms' wing, 30 rows deep (16 from 0.41.0 to plan 12). */
-    public static final int ANNEX_Z = 30;
+    /** Plan 13: the side rooms' wing, 32 rows deep (16 from 0.41.0 to plan 12). */
+    public static final int ANNEX_Z = 32;
     /**
-     * The wing's depth before plan 13. A server whose 14 new rows can't be claimed (another games area too near, or
+     * The wing's depth before plan 13. A server whose 16 new rows can't be claimed (another games area too near, or
      * blocks that aren't the Clubhouse's in them) keeps its side rooms at this depth: the same rooms as plan 12.
      */
     public static final int OLD_ANNEX_Z = 16;
@@ -136,7 +136,7 @@ public final class ClubhousePlanner {
     static final int[] TROPHY_BEAM_Z = {38, 44};
     static final int[] TROPHY_BANNER_Z = {35, 41};
     static final int[] GROWN_TROPHY_BEAM_Z = {38, 44, 50, 56};
-    static final int[] GROWN_TROPHY_BANNER_Z = {35, 41, 47, 53};
+    static final int[] GROWN_TROPHY_BANNER_Z = {35, 41, 47, 53, 59};
     /** Every cabinet place there can be (plan 13: nine and four spares), and a wing at its old size's. */
     public static final int CABINETS = 13;
     public static final int OLD_CABINETS = 9;
@@ -442,7 +442,8 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * The Clubhouse in {@code box}: 32 x 16 x 48 with both side rooms, or (0.41.0) 32 x 16 x 32, the main room alone.
+     * The Clubhouse in {@code box}: 32 x 16 x 64 with both side rooms (plan 13; 32 x 16 x 48, their old size, is
+     * plan 12's rooms), or (0.41.0) 32 x 16 x 32, the main room alone.
      *
      * @throws IllegalArgumentException when the box isn't one of the Clubhouse's sizes
      */
@@ -457,10 +458,10 @@ public final class ClubhousePlanner {
 
     /**
      * The Clubhouse in {@code box} with the side rooms {@code rooms} (0.41.0). The main room is the box's first
-     * {@value #MAIN_Z} rows; with a room, the box is {@value #ANNEX_Z} deeper (the annex). A 48-deep box with no room
-     * leaves the annex air (a room switched off is cleared).
+     * {@value #MAIN_Z} rows; with a room, the box is {@value #ANNEX_Z} deeper (the wing; {@value #OLD_ANNEX_Z} where
+     * the wing keeps its old size). A deeper box with no room leaves the wing air (a room switched off is cleared).
      *
-     * @param box the Clubhouse box: 32 x 16 x 62 (plan 13), 32 x 16 x 48 (its wing at the old size), or 32 x 16 x 32
+     * @param box the Clubhouse box: 32 x 16 x 64 (plan 13), 32 x 16 x 48 (its wing at the old size), or 32 x 16 x 32
      *            with no side room
      * @throws IllegalArgumentException when the box isn't the Clubhouse's size, or a 32-deep box is given a room
      */
@@ -1027,7 +1028,7 @@ public final class ClubhousePlanner {
      * of glass cases along the back wall and a claw machine either end of it (their prizes are displays), lanterns
      * hanging low. A soft arcade chime plays now and then while anyone is in.
      *
-     * <p>Plan 13, the grown wing (x 1-14, z 32-60): the old room's north part as it was (the nine cabinet places, the
+     * <p>Plan 13, the grown wing (x 1-14, z 32-62): the old room's north part as it was (the nine cabinet places, the
      * kid race's table and its rug), then a viewing area for the table, four spare cabinet places down the side walls,
      * a walled ball pit in the middle, a bean-bag nook in the south-west corner, the prize counter between its two claw
      * machines on the back wall and a prize-and-plush corner in the south-east, a bright tiled stripe across the floor
@@ -1200,7 +1201,7 @@ public final class ClubhousePlanner {
 
     /**
      * Plan 13, the bean-bag nook (the owner: the bean bags "just read as blocks"): the south-west corner, x 1-3 and z
-     * 56-60, on a pink rug. Four bean bags round a low table, each a bright stair (pink, teal, yellow, orange) a child
+     * 58-62, on a pink rug. Four bean bags round a low table, each a bright stair (pink, teal, yellow, orange) a child
      * sits in, its back away from the table, rounded off by wool displays ({@link #decor}); a cushion on each seat. Two
      * lamps on the wall over the bags and a coloured one hanging over the table; the corner behind the bags stays
      * open to walk round.
@@ -1262,8 +1263,8 @@ public final class ClubhousePlanner {
     static final int[] VIEW_STOOL_X = {5, 7, 9};
     static final String VIEW_STOOL = "minecraft:bamboo_slab[type=bottom,waterlogged=false]";
     /** Plan 13: the rows of the bright tiled stripe, and of the coloured lamps over the grown wing. */
-    static final int[] TILE_Z = {MAIN_Z + 15, MAIN_Z + 25};
-    static final int[] GROWN_LAMP_Z = {MAIN_Z + 15, MAIN_Z + 21};
+    static final int[] TILE_Z = {MAIN_Z + 15, MAIN_Z + 27};
+    static final int[] GROWN_LAMP_Z = {MAIN_Z + 15, MAIN_Z + 22};
     /** The plush case on the back row (x), between the prize counter and the east claw machine (a wing at its old size). */
     static final int[] PLUSH_X = {11, 12};
     /**
@@ -1276,8 +1277,8 @@ public final class ClubhousePlanner {
     /** Plan 13, the ball pit: its wall's corners (x, z offsets), the gap in its north side, its blocks and lights. */
     static final int PIT_X0 = 4;
     static final int PIT_X1 = 10;
-    static final int PIT_Z0 = MAIN_Z + 17;
-    static final int PIT_Z1 = MAIN_Z + 23;
+    static final int PIT_Z0 = MAIN_Z + 18;
+    static final int PIT_Z1 = MAIN_Z + 24;
     static final int PIT_GAP_X = 7;
     static final String[] PIT_WALL = {"minecraft:red_wool", "minecraft:yellow_wool", "minecraft:blue_wool",
             "minecraft:lime_wool"};
@@ -1285,19 +1286,19 @@ public final class ClubhousePlanner {
     static final String PIT_FLOOR = "minecraft:light_blue_carpet";
     static final int[][] PIT_LIGHTS = {{5, PIT_Z0 + 1}, {9, PIT_Z0 + 1}, {7, PIT_Z0 + 3}, {5, PIT_Z1 - 1},
             {9, PIT_Z1 - 1}};
-    /** Plan 13, the bean-bag nook: its corner (x 1-3 from z 56 to the back row), rug, low table and bags. */
+    /** Plan 13, the bean-bag nook: its corner (x 1-3 from z 58 to the back row), rug, low table and bags. */
     static final int NOOK_X0 = 1;
     static final int NOOK_X1 = 3;
-    static final int NOOK_Z0 = MAIN_Z + 24;
+    static final int NOOK_Z0 = MAIN_Z + 26;
     static final String NOOK_RUG = "minecraft:pink_carpet";
     /** The nook's two wall lamps (sconces on the west wall: their rows, and the arm's height). */
-    static final int[] NOOK_LAMP_Z = {MAIN_Z + 25, MAIN_Z + 27};
+    static final int[] NOOK_LAMP_Z = {MAIN_Z + 27, MAIN_Z + 29};
     static final int NOOK_LAMP_Y = 4;
-    static final int[] BEAN_TABLE = {2, MAIN_Z + 26};
+    static final int[] BEAN_TABLE = {2, MAIN_Z + 28};
     static final String BEAN_TABLE_BLOCK = "minecraft:birch_slab[type=bottom,waterlogged=false]";
     /** The bean bags (x, z, colour), round the low table: west, east, north, south. */
-    static final int[][] BEAN_BAGS = {{1, MAIN_Z + 26, 0}, {3, MAIN_Z + 26, 1}, {2, MAIN_Z + 25, 2},
-            {2, MAIN_Z + 27, 3}};
+    static final int[][] BEAN_BAGS = {{1, MAIN_Z + 28, 0}, {3, MAIN_Z + 28, 1}, {2, MAIN_Z + 27, 2},
+            {2, MAIN_Z + 29, 3}};
     static final String[] BAG_WOOD = {"cherry", "warped", "bamboo", "acacia"};
     static final String[] BAG_WOOL = {"PINK_WOOL", "CYAN_WOOL", "YELLOW_WOOL", "ORANGE_WOOL"};
     static final String[] BAG_DYE = {"PINK", "CYAN", "YELLOW", "ORANGE"};
@@ -1305,11 +1306,11 @@ public final class ClubhousePlanner {
      * Plan 13, the prize-and-plush corner: the display case's blocks (x, z: up the east wall, then along the back wall),
      * its lit cap, and the counter (x, at one row) in front of its back part.
      */
-    static final int[][] PLUSH_CASE = {{14, MAIN_Z + 23}, {14, MAIN_Z + 24}, {14, MAIN_Z + 25}, {14, MAIN_Z + 26},
-            {14, MAIN_Z + 27}, {14, MAIN_Z + 28}, {13, MAIN_Z + 28}, {12, MAIN_Z + 28}};
+    static final int[][] PLUSH_CASE = {{14, MAIN_Z + 25}, {14, MAIN_Z + 26}, {14, MAIN_Z + 27}, {14, MAIN_Z + 28},
+            {14, MAIN_Z + 29}, {14, MAIN_Z + 30}, {13, MAIN_Z + 30}, {12, MAIN_Z + 30}};
     static final String PLUSH_LIGHT = "minecraft:pearlescent_froglight[axis=y]";
     static final int[] PLUSH_COUNTER_X = {12, 13};
-    static final int PLUSH_COUNTER_Z = MAIN_Z + 26;
+    static final int PLUSH_COUNTER_Z = MAIN_Z + 28;
 
     /**
      * Plan 11: where the kid race's table stands in {@code box}: its north-east corner at the height of its top,
@@ -1385,10 +1386,10 @@ public final class ClubhousePlanner {
     static final int SECRET_CX = 23;
     static final int SECRET_CZ = 40;
     /** Plan 13: the centre pedestal in the middle of the longer room. */
-    static final int GROWN_SECRET_CZ = MAIN_Z + 14;
+    static final int GROWN_SECRET_CZ = MAIN_Z + 15;
     /** The upstairs rooms' beams (rows clear of the secret room's trophy places, which are on odd rows). */
     static final int[] UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12};
-    static final int[] GROWN_UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12, MAIN_Z + 20};
+    static final int[] GROWN_UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12, MAIN_Z + 20, MAIN_Z + 28};
 
     /** The secret room's centre pedestal's row in {@code box}. */
     static int secretCz(Box box) {
@@ -2219,7 +2220,7 @@ public final class ClubhousePlanner {
     public static List<Seat> parlorSeats(Box box) {
         Builder b = new Builder(box);
         parlor(b);
-        return b.seats; // the card tables' first (Twenty-One's four, then Higher or Lower's), then the lounge's
+        return b.seats; // the card tables' first (Twenty-One's four, Higher or Lower's), then the lounge's, the stools
     }
 
     /**

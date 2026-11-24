@@ -110,10 +110,10 @@ class ClubhouseRegionsTest {
         assertEquals(List.of("there is no box"), ClubhouseRegions.problems(null, null, null, null, null), "no box");
     }
 
-    // ---- plan 13: the wing's 14 new rows ----------------------------------------------------------------------------
+    // ---- plan 13: the wing's 16 new rows ----------------------------------------------------------------------------
 
     /**
-     * Shipped, the grown box (62 deep) overlaps nothing and is 32 or more from every shipped site: every Fresh Courses
+     * Shipped, the grown box (64 deep) overlaps nothing and is 32 or more from every shipped site: every Fresh Courses
      * slot and Classic (on or off), the kept courses' area, the arena and The Floor Is Lava's playroom. So it may
      * reach its whole box, and every other area keeps clear of all of it.
      */
@@ -135,11 +135,11 @@ class ClubhouseRegionsTest {
         assertEquals(club.box(), ClubhouseRegions.reach(club, shipped, others), "it may reach its whole box");
         assertEquals(List.of(new Regions.Extra(ClubhouseRegions.NAME, club.box())),
                 ClubhouseRegions.extras(club, shipped, others), "and the others keep clear of all of it");
-        assertEquals(62, club.box().sizeZ());
+        assertEquals(64, club.box().sizeZ());
     }
 
     /**
-     * Where the 14 new rows would crowd another area (a playroom set just south of the room, a slot moved near), the
+     * Where the 16 new rows would crowd another area (a playroom set just south of the room, a slot moved near), the
      * Clubhouse reaches only its old box: that area keeps clear of the old box alone, so the grown wing never closes it,
      * and the room (which asks the same and more before it claims the rows) keeps its old size.
      */
@@ -148,7 +148,7 @@ class ClubhouseRegionsTest {
         DailySettings shipped = DailySettings.defaults();
         ClubhouseSettings club = ClubhouseSettings.defaults();
         Box wing = club.wingBox();
-        // a playroom 40 blocks south of the old box: clear of it, but 26 from the grown box
+        // a playroom 40 blocks south of the old box: clear of it, but 24 from the grown box
         Box lava = Box.sized(club.box().minX(), club.box().minY(), club.oldBox().maxZ() + 41, 32, 16, 32);
         assertTrue(lava.gap(club.oldBox()) >= Regions.APART && lava.gap(club.box()) < Regions.APART, "the setup");
         List<Regions.Extra> others = List.of(new Regions.Extra("floor_is_lava", lava));

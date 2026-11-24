@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Plan 13, the side rooms' wing grown 14 rows to the south (the owner: the bean bags "just read as blocks, I think we
+ * Plan 13, the side rooms' wing grown 16 rows to the south (the owner: the bean bags "just read as blocks, I think we
  * need to make the place larger so all these things can fit comfortably", "Make it large enough that we can add more
  * things, but not so big it looks empty. We want to fill the space"): everything that was there kept where it was;
  * the ball pit walled, padded, lit and walked in and out of; bean bags that read as bean bags; a prize-and-plush corner
@@ -132,17 +132,17 @@ class GrownWingTest {
 
     @Test
     void theWingGrewFourteenRowsAndKeptEverythingThatWasThere() {
-        assertEquals(62, BOX.sizeZ(), "32 rows of main room, 30 of side rooms (16 before)");
-        assertEquals(14, ClubhousePlanner.WING_Z);
-        assertEquals(14, ClubhousePlanner.arcadeInside(BOX).maxZ() - ClubhousePlanner.arcadeInside(OLD).maxZ(),
-                "the Arcade Room is 14 rows deeper");
-        assertEquals(29, ClubhousePlanner.arcadeInside(BOX).maxZ() - ClubhousePlanner.arcadeInside(BOX).minZ() + 1,
-                "29 rows of air (15 before)");
+        assertEquals(64, BOX.sizeZ(), "32 rows of main room, 32 of side rooms (16 before): the chunk grid's");
+        assertEquals(16, ClubhousePlanner.WING_Z);
+        assertEquals(16, ClubhousePlanner.arcadeInside(BOX).maxZ() - ClubhousePlanner.arcadeInside(OLD).maxZ(),
+                "the Arcade Room is 16 rows deeper");
+        assertEquals(31, ClubhousePlanner.arcadeInside(BOX).maxZ() - ClubhousePlanner.arcadeInside(BOX).minZ() + 1,
+                "31 rows of air (15 before)");
         for (Box[] room : new Box[][]{{ClubhousePlanner.trophyInside(BOX), ClubhousePlanner.trophyInside(OLD)},
                 {ClubhousePlanner.parlorInside(BOX), ClubhousePlanner.parlorInside(OLD)},
                 {ClubhousePlanner.secretInside(BOX), ClubhousePlanner.secretInside(OLD)}}) {
             assertEquals(room[1].minZ(), room[0].minZ(), "from the same north wall");
-            assertEquals(14, room[0].maxZ() - room[1].maxZ(), "and grown the same: " + room[0]);
+            assertEquals(16, room[0].maxZ() - room[1].maxZ(), "and grown the same: " + room[0]);
         }
         // every place there was is where it was, in the same order
         assertEquals(ClubhousePlanner.cabinets(OLD), ClubhousePlanner.cabinets(BOX).subList(0,
@@ -157,13 +157,13 @@ class GrownWingTest {
         List<ClubhousePlanner.Place3> oldRow = ClubhousePlanner.parlorRow(OLD);
         for (int n = 0; n < row.size(); n++) {
             assertEquals(oldRow.get(n).x(), row.get(n).x(), "the back row's machines in their order");
-            assertEquals(oldRow.get(n).z() + 14, row.get(n).z(), 1e-9, "against the back wall, 14 rows back");
+            assertEquals(oldRow.get(n).z() + 16, row.get(n).z(), 1e-9, "against the back wall, 16 rows back");
         }
-        assertEquals(ClubhousePlanner.parlorTicket(OLD).z() + 14, ClubhousePlanner.parlorTicket(BOX).z(), 1e-9);
+        assertEquals(ClubhousePlanner.parlorTicket(OLD).z() + 16, ClubhousePlanner.parlorTicket(BOX).z(), 1e-9);
         List<ClubhousePlanner.Pedestal> ps = ClubhousePlanner.pedestals(BOX);
         List<ClubhousePlanner.Pedestal> oldPs = ClubhousePlanner.pedestals(OLD);
         for (int n = 0; n < ps.size(); n++) {
-            double dz = n < 3 ? 14 : 0;
+            double dz = n < 3 ? 16 : 0;
             assertEquals(oldPs.get(n).trophy().z() + dz, ps.get(n).trophy().z(), 1e-9, "the podium at the back, the"
                     + " records on the side walls where they were: " + n);
         }

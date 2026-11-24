@@ -43,7 +43,7 @@ class ClubhousePlannerTest {
     private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.SIZE_Z);
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
     /** Plan 13's room, pinned; and plan 12's, which a wing kept at its old size (48 deep) still is, block for block. */
-    static final String HASH = "75a99a62ac6b";
+    static final String HASH = "70da9c6b9423";
     static final String OLD_HASH = "f483b6018e6f";
     /** The box at its old size: the main room and the wing's first 16 rows. */
     static final Box OLD = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.OLD_SIZE_Z);
@@ -597,7 +597,7 @@ class ClubhousePlannerTest {
         Map<Long, String> a = blocks(alone.plan());
         Map<Long, String> b = blocks(SITE.plan());
         Map<Long, String> off = blocks(ClubhousePlanner.plan(BOX, ClubhousePlanner.Rooms.NONE).plan());
-        assertEquals(a, off, "a 62-deep box with both rooms off is the main room alone (the wing is air)");
+        assertEquals(a, off, "a 64-deep box with both rooms off is the main room alone (the wing is air)");
         assertEquals(a, blocks(ClubhousePlanner.plan(OLD, ClubhousePlanner.Rooms.NONE).plan()), "and a 48-deep one");
         Set<String> changed = new HashSet<>();
         for (int i = 0; i < 32; i++) {

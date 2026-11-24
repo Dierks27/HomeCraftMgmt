@@ -41,13 +41,17 @@ import java.util.Map;
 public final class Kalshi {
 
     /** The page size asked for. */
-    public static final int PAGE = 200;
+    public static final int PAGE = 100;
 
     private Kalshi() {
     }
 
-    /** One page of a league's games: the games read from it and the cursor for the next page ("" for the last). */
-    public record Page(List<Board.Game> games, String cursor, int events) {
+    /**
+     * One page of a league's games: the games read from it, the cursor for the next page ("" for the last), how many
+     * events it held, and the earliest start among them (epoch ms; {@link Long#MAX_VALUE} for none known): Kalshi
+     * lists a league's games soonest first, so a page that starts after the board's window ends the reading.
+     */
+    public record Page(List<Board.Game> games, String cursor, int events, long earliest) {
     }
 
     /** What a market says about how it ended. */
@@ -126,16 +130,21 @@ public final class Kalshi {
         }
         Map<String, Milestone> starts = milestones(array(root, "milestones"));
         List<Board.Game> out = new ArrayList<>();
+        long earliest = Long.MAX_VALUE;
         for (JsonElement e : events) {
             if (!e.isJsonObject()) {
                 continue;
+            }
+            Milestone ms = starts.get(text(e.getAsJsonObject(), "event_ticker"));
+            if (ms != null) {
+                earliest = Math.min(earliest, ms.startsAt());
             }
             Board.Game g = game(e.getAsJsonObject(), league, starts);
             if (g != null && g.startsAt() > now && g.startsAt() <= until && !g.sides().isEmpty()) {
                 out.add(g);
             }
         }
-        return new Page(out, text(root, "cursor"), events.size());
+        return new Page(out, text(root, "cursor"), events.size(), earliest);
     }
 
     /**

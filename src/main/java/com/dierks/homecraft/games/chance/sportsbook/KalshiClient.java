@@ -20,7 +20,7 @@ import java.util.Map;
  * <p>Plain {@code GET}s of public market data: no key, no cookie, nothing about any player. One {@link HttpClient}
  * (connect 10 s, each request 20 s, the JVM's own proxy settings), {@code User-Agent: HomeCraftManagement}, https
  * only, replies cut off at {@link #MAX_BODY_BYTES}. Requests go one after another, {@link #SPACING_MS} apart (Kalshi
- * limits how fast a reader may ask); a "too many requests" is asked again once, a little later.
+ * limits how fast a reader may ask); a "too many requests" is asked again twice, a little later each time.
  */
 public final class KalshiClient {
 
@@ -28,10 +28,12 @@ public final class KalshiClient {
     static final int MAX_BODY_BYTES = 8 * 1024 * 1024;
     /** Requests are this far apart. */
     static final long SPACING_MS = 1_100L;
-    /** A "too many requests" is asked again after this long, once. */
+    /** A "too many requests" is asked again after this long, then twice this long. */
     static final long RETRY_MS = 4_000L;
+    /** How many times a "too many requests" is asked again. */
+    static final int RETRIES = 2;
     /** The most pages of one league's games read in one refresh. */
-    static final int MAX_PAGES = 5;
+    static final int MAX_PAGES = 4;
     /** The most markets asked about in one request. */
     static final int TICKERS_A_REQUEST = 20;
     static final String USER_AGENT = "HomeCraftManagement";
@@ -85,8 +87,8 @@ public final class KalshiClient {
                                 l.key(), now, until);
                         games.addAll(p.games());
                         cursor = p.cursor();
-                        if (cursor == null || cursor.isBlank() || p.events() < Kalshi.PAGE) {
-                            break;
+                        if (cursor == null || cursor.isBlank() || p.events() < Kalshi.PAGE || p.earliest() > until) {
+                            break; // the last page, or one whose games all start after the board's window
                         }
                     }
                 }
@@ -116,13 +118,17 @@ public final class KalshiClient {
         return new Result(games, markets, error);
     }
 
-    /** One GET, asked again once after a "too many requests". */
-    private static String get(Fetcher fetcher, Sleeper sleeper, String path) throws IOException, InterruptedException {
-        try {
-            return check(fetcher.get(path));
-        } catch (TooMany e) {
-            sleeper.sleep(RETRY_MS);
-            return check(fetcher.get(path));
+    /** One GET, asked again up to {@link #RETRIES} times, each a little later, after a "too many requests". */
+    static String get(Fetcher fetcher, Sleeper sleeper, String path) throws IOException, InterruptedException {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return check(fetcher.get(path));
+            } catch (TooMany e) {
+                if (attempt >= RETRIES) {
+                    throw e;
+                }
+                sleeper.sleep(RETRY_MS * (attempt + 1));
+            }
         }
     }
 

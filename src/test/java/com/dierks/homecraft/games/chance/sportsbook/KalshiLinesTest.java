@@ -150,9 +150,9 @@ class KalshiLinesTest {
     @Test
     void whatIsAskedNamesOnlyTheLeagueOrTheMarkets() {
         assertEquals("/events?series_ticker=KXNBAGAME&status=open&with_nested_markets=true&with_milestones=true"
-                + "&limit=200", Kalshi.eventsPath("KXNBAGAME", ""));
+                + "&limit=100", Kalshi.eventsPath("KXNBAGAME", ""));
         assertTrue(Kalshi.eventsPath("KXNBAGAME", "abc=").endsWith("&cursor=abc%3D"));
-        assertEquals("/markets?tickers=A-1%2CB-2&limit=200", Kalshi.marketsPath(List.of("A-1", "B-2")));
+        assertEquals("/markets?tickers=A-1%2CB-2&limit=100", Kalshi.marketsPath(List.of("A-1", "B-2")));
     }
 
     // ---- prices and pays ------------------------------------------------------------------------------------

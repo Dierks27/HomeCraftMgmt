@@ -3,19 +3,25 @@ package com.dierks.homecraft.games.lava.rules;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.SplittableRandom;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The Floor Is Lava's rules as a pure state machine: the phase clock (safe, warning, lava, drain) for each mode, and
- * what each mode means. Little can't be lost and ends exactly when every star is collected; Group's shared count and
- * its cost for a touch, never below zero; Challenge's rising lava, who is out and who wins; and one player alone in
- * each.
+ * what each mode means. Little can't be lost and ends exactly when every star is collected; Group's shared count, its
+ * star goals and hearts; Challenge's rising lava, who is out (a touch, or a round without stars) and who wins. And
+ * 0.57.0's changes: phases drawn from ranges by the round's own seed, stars during the lava a few at a time, the
+ * furniture's warning and move, and a surprise most rounds.
  */
 class LavaRoundTest {
 
@@ -23,9 +29,21 @@ class LavaRoundTest {
     private static final UUID B = UUID.nameUUIDFromBytes("b".getBytes());
     private static final UUID C = UUID.nameUUIDFromBytes("c".getBytes());
 
-    /** 3 stars; safe 10, warning 4, lava 6, drain 2 ticks; 3 rounds; dry ground up to level 4, flooded at 5. */
+    /**
+     * 3 floor stars and 4 lava stars; safe 10, warning 4, lava 6, drain 2 ticks (fixed); 3 rounds; dry ground up to
+     * level 4, flooded at 5; 4 players; no furniture moves; 3 hearts; no surprises.
+     */
     private static LavaRound.Rules rules(int gather) {
-        return new LavaRound.Rules(3, 10, 4, 6, 2, 3, 4, 5, 4, gather);
+        return rules(gather, 0, false);
+    }
+
+    private static LavaRound.Rules rules(int gather, int shift, boolean surprises) {
+        return new LavaRound.Rules(3, 4, LavaRound.Span.of(10), LavaRound.Span.of(4), LavaRound.Span.of(6), 2, 3, 4,
+                5, 4, gather, shift, 3, surprises);
+    }
+
+    private static LavaRound round(LavaMode mode, LavaRound.Rules rules) {
+        return new LavaRound(mode, rules, 42L);
     }
 
     private static List<LavaEvent> run(LavaRound r, int ticks) {
@@ -33,6 +51,16 @@ class LavaRoundTest {
         for (int i = 0; i < ticks; i++) {
             out.addAll(r.tick());
         }
+        return out;
+    }
+
+    /** Tick until {@code phase} (within a few thousand ticks), returning everything that happened. */
+    private static List<LavaEvent> until(LavaRound r, LavaRound.Phase phase) {
+        List<LavaEvent> out = new ArrayList<>();
+        for (int i = 0; i < 5000 && r.phase() != phase; i++) {
+            out.addAll(r.tick());
+        }
+        assertEquals(phase, r.phase(), "reached " + phase);
         return out;
     }
 
@@ -52,11 +80,20 @@ class LavaRoundTest {
         return e.get(0).result();
     }
 
+    /** Collect every star out now for {@code p}. */
+    private static List<LavaEvent> collectAll(LavaRound r, UUID p) {
+        List<LavaEvent> out = new ArrayList<>();
+        for (int guard = 0; guard < 50 && !r.starsOut().isEmpty() && !r.over(); guard++) {
+            out.addAll(r.collected(p, r.starsOut().get(0)));
+        }
+        return out;
+    }
+
     // ---- the clock ----------------------------------------------------------------------------------
 
     @Test
     void thePhasesGoSafeWarningLavaDrainAndRoundAgain() {
-        LavaRound r = new LavaRound(LavaMode.LITTLE, rules(0));
+        LavaRound r = round(LavaMode.LITTLE, rules(0));
         assertEquals(LavaRound.Phase.GATHER, r.phase());
         assertEquals(List.of(), r.tick(), "nobody here: nothing begins");
         assertEquals(LavaRound.Join.JOINED, r.join(A));
@@ -65,7 +102,9 @@ class LavaRoundTest {
         assertEquals(LavaRound.Phase.SAFE, r.phase());
         assertEquals(1, r.round());
         assertEquals(0, r.level(), "a dry floor");
-        assertEquals(List.of(0, 1, 2), of(first, LavaEvent.StarsOut.class).get(0).ids(), "every star is out");
+        LavaEvent.StarsOut out = of(first, LavaEvent.StarsOut.class).get(0);
+        assertEquals(List.of(0, 1, 2), out.ids(), "every star is out");
+        assertFalse(out.lava(), "on the floor");
 
         assertEquals(List.of(), run(r, 9), "nine quiet ticks of safe");
         List<LavaEvent> warn = r.tick();
@@ -76,25 +115,28 @@ class LavaRoundTest {
         List<LavaEvent> lava = run(r, 4);
         assertEquals(LavaRound.Phase.LAVA, r.phase());
         assertEquals(1, r.level(), "Little's lava is always one block deep");
-        assertEquals(1, of(lava, LavaEvent.StarsIn.class).size(), "the stars are put away when the lava comes");
-        assertEquals(List.of(), r.starsOut());
+        assertEquals(1, of(lava, LavaEvent.StarsIn.class).size(), "the floor's stars are put away when the lava comes");
+        LavaEvent.StarsOut up = of(lava, LavaEvent.StarsOut.class).get(0);
+        assertTrue(up.lava(), "0.57.0: and two wait on the furniture during the lava");
+        assertEquals(List.of(0, 1), up.ids(), "two of the ones still to collect");
+        assertTrue(r.lavaStarsOut());
 
         List<LavaEvent> drain = run(r, 6);
         assertEquals(LavaRound.Phase.DRAIN, r.phase());
         assertEquals(0, r.level(), "it drains to nothing");
-        assertEquals(new LavaEvent.PhaseChanged(LavaRound.Phase.DRAIN, 1, 0, 2), drain.get(0));
+        assertEquals(1, of(drain, LavaEvent.StarsIn.class).size(), "the lava's stars go with it");
         assertEquals(1, r.lavaCame());
 
         List<LavaEvent> again = run(r, 2);
         assertEquals(LavaRound.Phase.SAFE, r.phase(), "and the floor is safe again");
         assertEquals(2, r.round());
         assertEquals(List.of(0, 1, 2), of(again, LavaEvent.StarsOut.class).get(0).ids(), "the same stars, out again");
-        assertEquals(2, of(again, LavaEvent.StarsOut.class).get(0).set(), "a new set: they are put somewhere new");
+        assertEquals(3, of(again, LavaEvent.StarsOut.class).get(0).set(), "a new set: they are put somewhere new");
     }
 
     @Test
     void groupAndChallengeWaitForPlayersAndAnyoneMayStartSooner() {
-        LavaRound r = new LavaRound(LavaMode.GROUP, rules(5));
+        LavaRound r = round(LavaMode.GROUP, rules(5));
         assertEquals(List.of(), run(r, 20), "the wait begins with the first player");
         r.join(A);
         assertEquals(List.of(), run(r, 4));
@@ -104,358 +146,565 @@ class LavaRoundTest {
         assertEquals(List.of(A, B), of(go, LavaEvent.Started.class).get(0).players());
         assertEquals(LavaRound.Phase.SAFE, r.phase());
 
-        LavaRound alone = new LavaRound(LavaMode.CHALLENGE, rules(500));
+        LavaRound alone = round(LavaMode.CHALLENGE, rules(500));
         alone.join(A);
         assertEquals(List.of(), alone.tick());
         List<LavaEvent> now = alone.startNow();
         assertEquals(LavaRound.Phase.SAFE, alone.phase(), "Start now: it can be started alone");
         assertEquals(1, of(now, LavaEvent.Started.class).size());
         assertEquals(List.of(), alone.startNow(), "once");
-        assertEquals(List.of(), new LavaRound(LavaMode.GROUP, rules(5)).startNow(), "never with nobody in it");
+        assertEquals(List.of(), round(LavaMode.GROUP, rules(5)).startNow(), "never with nobody in it");
+    }
+
+    /**
+     * The owner: "Maybe a bit more random on the lava". Every phase is drawn from its range by the round's own random
+     * numbers: never outside it, not the same every round, and the same seed gives the same round.
+     */
+    @Test
+    void thePhasesAreDrawnFromTheirRangesSoTheLavaCantBeCounted() {
+        LavaRound.Rules rules = new LavaRound.Rules(3, 4, new LavaRound.Span(100, 200), new LavaRound.Span(30, 60),
+                new LavaRound.Span(80, 120), 2, 5, 4, 5, 4, 0, 0, 3, false);
+        Set<Integer> safes = new HashSet<>();
+        Set<Integer> warns = new HashSet<>();
+        Set<Integer> lavas = new HashSet<>();
+        List<Integer> first = null;
+        for (long seed = 1; seed <= 12; seed++) {
+            for (int pass = 0; pass < 2; pass++) {
+                LavaRound r = new LavaRound(LavaMode.GROUP, rules, seed);
+                r.join(A);
+                r.startNow();
+                List<Integer> lengths = new ArrayList<>();
+                List<LavaEvent> ev = new ArrayList<>();
+                for (int i = 0; i < 4000 && !r.over(); i++) {
+                    ev.addAll(r.tick());
+                }
+                for (LavaEvent.PhaseChanged p : of(ev, LavaEvent.PhaseChanged.class)) {
+                    lengths.add(p.ticks());
+                    switch (p.phase()) {
+                        case SAFE -> {
+                            assertTrue(p.ticks() >= 100 && p.ticks() <= 200, "safe in range: " + p);
+                            safes.add(p.ticks());
+                        }
+                        case WARNING -> {
+                            assertTrue(p.ticks() >= 30 && p.ticks() <= 60, "warning in range: " + p);
+                            warns.add(p.ticks());
+                        }
+                        case LAVA -> {
+                            assertTrue(p.ticks() >= 80 && p.ticks() <= 120, "lava in range: " + p);
+                            lavas.add(p.ticks());
+                        }
+                        default -> {
+                        }
+                    }
+                }
+                if (seed == 1 && pass == 0) {
+                    first = lengths;
+                } else if (seed == 1) {
+                    assertEquals(first, lengths, "the same seed, the same round");
+                }
+            }
+        }
+        assertTrue(safes.size() > 10 && warns.size() > 8 && lavas.size() > 8, "lengths vary: " + safes + " " + warns
+                + " " + lavas);
     }
 
     @Test
-    void challengesClimbingTimeShrinksAndItsLavaNeverDrains() {
-        LavaRound.Rules rules = new LavaRound.Rules(3, 200, 4, 6, 2, 3, 4, 5, 4, 0);
-        assertEquals(200, rules.safeTicks(LavaMode.LITTLE, 4), "Little and Group keep the time they were given");
-        assertEquals(200, rules.safeTicks(LavaMode.GROUP, 4));
-        assertEquals(200, rules.safeTicks(LavaMode.CHALLENGE, 1));
-        assertEquals(160, rules.safeTicks(LavaMode.CHALLENGE, 2), "a fifth shorter every round");
-        assertEquals(128, rules.safeTicks(LavaMode.CHALLENGE, 3));
-        assertEquals(LavaRound.MIN_CLIMB_TICKS, rules.safeTicks(LavaMode.CHALLENGE, 30), "never under four seconds");
+    void challengesFloorTimeShrinksAndItsLavaNeverDrains() {
+        LavaRound.Rules rules = new LavaRound.Rules(3, 0, LavaRound.Span.of(200), LavaRound.Span.of(4),
+                LavaRound.Span.of(6), 2, 3, 4, 5, 4, 0, 0, 3, false);
+        SplittableRandom rng = new SplittableRandom(1);
+        assertEquals(200, rules.safeTicks(LavaMode.LITTLE, 4, rng), "Little and Group keep the time drawn");
+        assertEquals(200, rules.safeTicks(LavaMode.GROUP, 4, rng));
+        assertEquals(200, rules.safeTicks(LavaMode.CHALLENGE, 1, rng));
+        assertEquals(180, rules.safeTicks(LavaMode.CHALLENGE, 2, rng), "a tenth shorter every round");
+        assertEquals(162, rules.safeTicks(LavaMode.CHALLENGE, 3, rng));
+        assertEquals(LavaRound.MIN_CLIMB_TICKS, rules.safeTicks(LavaMode.CHALLENGE, 60, rng), "never under four seconds");
 
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(0));
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
         r.tick();
         assertEquals(0, r.level());
-        run(r, 10 + 4);
-        assertEquals(LavaRound.Phase.LAVA, r.phase());
+        collectAll(r, A);
+        until(r, LavaRound.Phase.LAVA);
         assertEquals(1, r.level());
-        List<LavaEvent> next = run(r, 6);
-        assertEquals(LavaRound.Phase.SAFE, r.phase(), "no drain: straight to the next climb");
+        collectAll(r, A);
+        List<LavaEvent> next = until(r, LavaRound.Phase.SAFE);
+        assertEquals(1, r.level(), "the lava stays where it is");
+        assertEquals(List.of(), of(next, LavaEvent.PhaseChanged.class).stream()
+                .filter(p -> p.phase() == LavaRound.Phase.DRAIN).toList(), "Challenge never drains");
         assertEquals(2, r.round());
-        assertEquals(1, r.level(), "the lava stays where it reached");
-        assertEquals(new LavaEvent.PhaseChanged(LavaRound.Phase.SAFE, 2, 1, 10), next.get(0),
-                "a climb already under four seconds isn't cut shorter");
-        assertEquals(0, of(next, LavaEvent.StarsOut.class).size(), "Challenge has no stars");
-        assertEquals(1, r.survived(A));
     }
 
     @Test
     void theLavaLevelsPerMode() {
         LavaRound.Rules rules = rules(0);
-        for (int round = 1; round <= 9; round++) {
-            assertEquals(1, rules.level(LavaMode.LITTLE, round), "Little: one block, always");
-            assertEquals(Math.min(round, 4), rules.level(LavaMode.GROUP, round), "Group: a block higher each round,"
-                    + " never over the highest level with dry ground");
-            assertEquals(Math.min(round, 5), rules.level(LavaMode.CHALLENGE, round), "Challenge: up to the flood");
-        }
+        assertEquals(1, rules.level(LavaMode.LITTLE, 7, false), "Little: always one");
+        assertEquals(1, rules.level(LavaMode.LITTLE, 7, true), "even in a quick rise");
+        assertEquals(2, rules.level(LavaMode.GROUP, 2, false), "Group: a block a round");
+        assertEquals(3, rules.level(LavaMode.GROUP, 2, true), "and one more in a quick rise");
+        assertEquals(4, rules.level(LavaMode.GROUP, 9, true), "never over the safe top");
+        assertEquals(3, rules.level(LavaMode.CHALLENGE, 3, true), "Challenge: a block a round, quick or not");
+        assertEquals(5, rules.level(LavaMode.CHALLENGE, 9, false), "up to the flood");
     }
 
-    // ---- Little -------------------------------------------------------------------------------------
+    // ---- Little ------------------------------------------------------------------------------------
 
     @Test
     void littleCannotBeLostAndEndsExactlyWhenEveryStarIsCollected() {
-        LavaRound r = new LavaRound(LavaMode.LITTLE, rules(0));
+        LavaRound r = round(LavaMode.LITTLE, rules(0));
         r.join(A);
         r.tick();
         assertEquals(3, r.goal());
-        List<LavaEvent> one = r.collected(A, 0);
-        assertEquals(new LavaEvent.StarTaken(A, 0, 1, 3), one.get(0));
-        assertEquals(List.of(), r.collected(A, 0), "a star is collected once");
-        assertEquals(List.of(), r.collected(A, 7), "and only a star that is out");
-
-        // she stands still through the whole round: the lava comes, she is touched again and again, and nothing is lost
-        run(r, 10 + 4);
-        assertEquals(LavaRound.Phase.LAVA, r.phase());
+        // touches never end it, never cost anything
+        until(r, LavaRound.Phase.LAVA);
         for (int i = 0; i < 5; i++) {
-            List<LavaEvent> touch = r.touched(List.of(A));
-            assertEquals(List.of(new LavaEvent.PutBack(A, false, 1)), touch, "a touch puts her back and costs nothing");
+            List<LavaEvent> t = r.touched(List.of(A));
+            assertEquals(List.of(new LavaEvent.PutBack(A, false, 0)), t, "a touch: back, nothing lost");
         }
-        assertEquals(List.of(), r.collected(A, 1), "no star is collected while the floor is lava");
-        assertEquals(1, r.stars(), "what she collected stays collected");
-        run(r, 6 + 2);
-        assertEquals(LavaRound.Phase.SAFE, r.phase());
-        assertEquals(List.of(1, 2), r.starsOut(), "the two she hasn't got are out again");
-
-        // however many rounds it takes: no clock ends it
-        run(r, 5 * (10 + 4 + 6 + 2));
-        assertFalse(r.over(), "Little never ends by time");
+        // a star on the furniture during the lava counts
+        int up = r.starsOut().get(0);
+        List<LavaEvent> got = r.collected(A, up);
+        assertEquals(1, of(got, LavaEvent.StarTaken.class).size());
         assertEquals(1, r.stars());
-        while (r.phase() != LavaRound.Phase.SAFE) {
-            r.tick();
+        assertEquals(1, r.starsOut().size(), "one more waits up there");
+        List<LavaEvent> more = r.collected(A, r.starsOut().get(0));
+        assertEquals(1, of(more, LavaEvent.StarsOut.class).size(), "the next comes out when those are collected");
+        assertEquals(1, r.starsOut().size(), "the last one");
+        // many rounds pass; it waits
+        for (int round = 0; round < 4; round++) {
+            until(r, LavaRound.Phase.SAFE);
+            until(r, LavaRound.Phase.DRAIN);
         }
-        r.collected(A, 1);
-        assertFalse(r.over(), "one star left: not over");
-        LavaResult result = ended(r.collected(A, 2));
-        assertTrue(r.over(), "the last star ends it, at once");
-        assertEquals(LavaMode.LITTLE, result.mode());
-        assertFalse(result.calledOff());
-        assertEquals(3, result.stars(), "a finished round is the full count");
-        assertEquals(List.of(A), result.players());
-        assertEquals(List.of(), r.tick(), "an ended round does nothing more");
-        assertEquals(LavaRound.Join.OVER, r.join(B), "and takes nobody: a new round is needed");
+        assertFalse(r.over(), "there is no clock to beat");
+        until(r, LavaRound.Phase.SAFE);
+        assertEquals(1, r.starsOut().size(), "only the one still to collect comes out");
+        List<LavaEvent> last = r.collected(A, r.starsOut().get(0));
+        LavaResult res = ended(last);
+        assertEquals(3, res.stars(), "every star");
+        assertFalse(res.calledOff());
+        assertTrue(r.over());
+    }
+
+    @Test
+    void littlesSurprisesAreOnlyTheFriendlyOnesAndOnlyNowAndThen() {
+        Set<LavaRound.Surprise> seen = new HashSet<>();
+        int rounds = 0;
+        int none = 0;
+        for (long seed = 1; seed <= 30; seed++) {
+            LavaRound r = new LavaRound(LavaMode.LITTLE, new LavaRound.Rules(40, 0, LavaRound.Span.of(3),
+                    LavaRound.Span.of(2), LavaRound.Span.of(2), 1, 3, 4, 5, 4, 0, 0, 3, true), seed);
+            r.join(A);
+            List<LavaEvent> ev = run(r, 200);
+            List<LavaEvent.SurpriseComing> s = of(ev, LavaEvent.SurpriseComing.class);
+            for (LavaEvent.SurpriseComing c : s) {
+                assertTrue(c.surprise().gentle(), "Little's surprises are friendly: " + c);
+                assertTrue(c.round() >= 2, "never in the first round");
+                seen.add(c.surprise());
+            }
+            rounds += r.round() - 1;
+            none += r.round() - 1 - s.size();
+        }
+        assertEquals(Set.of(LavaRound.Surprise.STAR_SHOWER, LavaRound.Surprise.BOUNCY), seen);
+        assertTrue(none > rounds / 4, "now and then, not every round: " + none + " of " + rounds);
     }
 
     @Test
     void aSecondChildJoinsLittleAtAnyTimeAndTheyShareTheStars() {
-        LavaRound r = new LavaRound(LavaMode.LITTLE, rules(0));
+        LavaRound r = round(LavaMode.LITTLE, rules(0));
         r.join(A);
         r.tick();
         r.collected(A, 0);
-        run(r, 12);
-        assertEquals(LavaRound.Phase.WARNING, r.phase());
-        assertEquals(LavaRound.Join.JOINED, r.join(B), "a second child joins the round going");
+        until(r, LavaRound.Phase.LAVA);
+        assertEquals(LavaRound.Join.JOINED, r.join(B), "during the lava too");
+        r.collected(B, r.starsOut().get(0));
+        assertEquals(2, r.stars(), "one count, together");
         assertEquals(LavaRound.Join.ALREADY_IN, r.join(B));
-        assertEquals(1, r.collected(B, 1).size(), "a star can be collected during the warning too");
-        LavaResult result = ended(r.collected(B, 2));
-        assertEquals(List.of(A, B), result.players(), "both finished it");
-        assertEquals(3, result.stars());
     }
 
-    @Test
-    void theRoomTakesOnlySoMany() {
-        LavaRound r = new LavaRound(LavaMode.LITTLE, new LavaRound.Rules(3, 10, 4, 6, 2, 3, 4, 5, 2, 0));
-        assertEquals(LavaRound.Join.JOINED, r.join(A));
-        assertEquals(LavaRound.Join.JOINED, r.join(B));
-        assertEquals(LavaRound.Join.FULL, r.join(C));
-        r.leave(B);
-        assertEquals(LavaRound.Join.JOINED, r.join(C), "a place is free again");
-    }
-
-    // ---- Group --------------------------------------------------------------------------------------
+    // ---- Group -------------------------------------------------------------------------------------
 
     @Test
-    void groupSharesOneCountATouchCostsOneStarAndNeverGoesBelowZero() {
-        LavaRound r = new LavaRound(LavaMode.GROUP, rules(0));
+    void groupHasAStarGoalEachRoundAndAMissedGoalCostsAHeart() {
+        LavaRound.Rules rules = rules(0);
+        assertEquals(5, rules.goal(1, 1), "one player, round 1: 5 of the 7");
+        assertEquals(5, rules.goal(4, 1), "never more than all but two");
+        assertEquals(5, rules.goal(1, 3), "more players: more, never all");
+        LavaRound.Rules big = new LavaRound.Rules(10, 4, LavaRound.Span.of(10), LavaRound.Span.of(4),
+                LavaRound.Span.of(6), 2, 5, 4, 5, 4, 0, 0, 3, false);
+        assertEquals(List.of(5, 6, 7, 8, 9), List.of(big.goal(1, 1), big.goal(2, 1), big.goal(3, 1), big.goal(4, 1),
+                big.goal(5, 1)), "one more each round");
+        assertEquals(7, big.goal(1, 2), "two more for a second player");
+        assertEquals(12, big.goal(5, 6), "a full room: all but two");
+
+        LavaRound r = round(LavaMode.GROUP, rules);
         r.join(A);
-        r.join(B);
-        r.tick();
-        assertEquals(List.of(new LavaEvent.PutBack(A, false, 0)), r.touched(List.of(A)),
-                "nothing collected yet: a touch costs nothing, and the count stays at zero");
-        assertEquals(0, r.stars());
-        r.collected(A, 0);
-        r.collected(B, 1);
-        assertEquals(2, r.stars(), "one count for everyone");
-        assertEquals(0, r.goal(), "no goal: the group collects what it can");
-        run(r, 10 + 4);
-        assertEquals(1, r.level(), "round 1: one deep");
-        assertEquals(List.of(new LavaEvent.PutBack(B, true, 1)), r.touched(List.of(B)), "a touch costs the group a star");
-        assertEquals(List.of(new LavaEvent.PutBack(A, true, 0), new LavaEvent.PutBack(B, false, 0)),
-                r.touched(List.of(A, B)), "the last star goes, and after it nothing: never below zero");
-        assertEquals(0, r.stars());
-        assertTrue(r.playing(A) && r.playing(B), "nobody is ever out of a Group round");
+        r.startNow();
+        assertEquals(3, r.hearts());
+        assertEquals(5, r.roundGoal());
+        collectAll(r, A); // the floor's three
+        assertEquals(3, r.roundStars());
+        until(r, LavaRound.Phase.LAVA);
+        assertEquals(2, r.starsOut().size(), "the lava's stars, two at a time");
+        collectAll(r, A); // the lava's four, wave after wave
+        assertEquals(7, r.roundStars());
+        r.touched(List.of(A));
+        assertEquals(6, r.roundStars(), "a touch costs a star of the round's too");
+        assertEquals(6, r.stars(), "and of the shared count");
+        List<LavaEvent> made = until(r, LavaRound.Phase.DRAIN);
+        assertEquals(List.of(new LavaEvent.Goal(1, 6, 5, true, 3)), of(made, LavaEvent.Goal.class), "goal reached");
+
+        until(r, LavaRound.Phase.SAFE);
+        assertEquals(0, r.roundStars(), "a new round counts from nothing");
+        List<LavaEvent> missed = until(r, LavaRound.Phase.DRAIN);
+        assertEquals(List.of(new LavaEvent.Goal(2, 0, 5, false, 2)), of(missed, LavaEvent.Goal.class),
+                "nothing collected: a heart goes");
+        until(r, LavaRound.Phase.SAFE);
+        List<LavaEvent> rest = new ArrayList<>();
+        for (int i = 0; i < 400 && !r.over(); i++) {
+            rest.addAll(r.tick());
+        }
+        LavaResult res = ended(rest);
+        assertEquals(3, res.rounds(), "its three rounds");
+        assertEquals(1, res.goals(), "one goal reached");
+        assertEquals(1, res.hearts(), "a heart left");
+        assertEquals(6, res.stars());
     }
 
     @Test
-    void groupPlaysItsRoundsWithNewStarsAndTheLavaABlockHigherEachTime() {
-        LavaRound r = new LavaRound(LavaMode.GROUP, rules(0));
+    void groupWithNoHeartsLeftIsOver() {
+        LavaRound.Rules rules = new LavaRound.Rules(3, 4, LavaRound.Span.of(10), LavaRound.Span.of(4),
+                LavaRound.Span.of(6), 2, 9, 4, 5, 4, 0, 0, 2, false);
+        LavaRound r = round(LavaMode.GROUP, rules);
         r.join(A);
-        r.tick();
-        int total = 0;
-        for (int round = 1; round <= 3; round++) {
-            assertEquals(round, r.round());
-            assertEquals(LavaRound.Phase.SAFE, r.phase());
-            assertEquals(List.of(0, 1, 2), r.starsOut(), "a new set of stars every round");
-            r.collected(A, 0);
-            r.collected(A, 2);
-            total += 2;
-            run(r, 10 + 4);
-            assertEquals(round, r.level(), "round " + round + ": the lava is " + round + " deep");
-            assertEquals(List.of(), r.starsOut(), "the star nobody reached is gone");
-            List<LavaEvent> end = run(r, 6 + 2);
-            if (round < 3) {
-                assertFalse(r.over());
-            } else {
-                LavaResult result = ended(end);
-                assertEquals(LavaMode.GROUP, result.mode());
-                assertEquals(total, result.stars(), "the group's total");
-                assertEquals(3, result.rounds());
-                assertEquals(List.of(A), result.players());
+        r.startNow();
+        r.collected(A, r.starsOut().get(0));
+        List<LavaEvent> all = new ArrayList<>();
+        for (int i = 0; i < 2000 && !r.over(); i++) {
+            all.addAll(r.tick());
+        }
+        LavaResult res = ended(all);
+        assertEquals(2, res.rounds(), "two missed goals, two hearts: over after the second of nine rounds");
+        assertEquals(0, res.hearts());
+        assertEquals(1, res.stars(), "what was collected still counts");
+        assertFalse(res.calledOff());
+    }
+
+    @Test
+    void groupATouchNeverTakesTheCountBelowZero() {
+        LavaRound r = round(LavaMode.GROUP, rules(0));
+        r.join(A);
+        r.startNow();
+        List<LavaEvent> t = r.touched(List.of(A));
+        assertEquals(List.of(new LavaEvent.PutBack(A, false, 0)), t);
+        assertEquals(0, r.stars());
+        r.collected(A, r.starsOut().get(0));
+        assertEquals(List.of(new LavaEvent.PutBack(A, true, 0)), r.touched(List.of(A)));
+    }
+
+    @Test
+    void groupsLavaStarsComeInWavesAndAShowerDoublesThem() {
+        LavaRound r = round(LavaMode.GROUP, rules(0));
+        r.join(A);
+        r.startNow();
+        List<LavaEvent> lava = until(r, LavaRound.Phase.LAVA);
+        List<LavaEvent.StarsOut> outs = of(lava, LavaEvent.StarsOut.class);
+        assertTrue(outs.get(outs.size() - 1).lava());
+        assertEquals(2, r.starsOut().size(), "a wave of two");
+        List<LavaEvent> got = collectAll(r, A);
+        assertEquals(1, of(got, LavaEvent.StarsOut.class).size(), "one more wave: four in all");
+        assertEquals(List.of(), r.starsOut(), "and then no more this round");
+        assertEquals(4, r.stars());
+
+        // the star shower: twice as many, three at a time
+        int showered = 0;
+        for (long seed = 1; seed < 80 && showered == 0; seed++) {
+            LavaRound s = new LavaRound(LavaMode.GROUP, rules(0, 0, true), seed);
+            s.join(A);
+            s.startNow();
+            until(s, LavaRound.Phase.DRAIN);
+            until(s, LavaRound.Phase.SAFE);
+            if (s.surprise() == LavaRound.Surprise.STAR_SHOWER) {
+                until(s, LavaRound.Phase.LAVA);
+                assertEquals(3, s.starsOut().size());
+                int before = s.stars();
+                collectAll(s, A);
+                showered = s.stars() - before;
             }
         }
-        assertTrue(r.over(), "after its last round's drain");
+        assertEquals(8, showered, "a shower: twice the lava's stars");
     }
 
     @Test
     void aPlayerMayJoinAGroupRoundGoingAndLeaveItWithoutEndingIt() {
-        LavaRound r = new LavaRound(LavaMode.GROUP, rules(0));
+        LavaRound r = round(LavaMode.GROUP, rules(0));
         r.join(A);
-        r.tick();
-        r.collected(A, 0);
-        assertEquals(LavaRound.Join.JOINED, r.join(B), "Group takes players at any time");
-        r.collected(B, 1);
-        assertEquals(List.of(), r.leave(A), "one leaves: the round goes on");
+        r.startNow();
+        until(r, LavaRound.Phase.LAVA);
+        assertEquals(LavaRound.Join.JOINED, r.join(B));
+        assertEquals(List.of(), r.leave(A));
         assertFalse(r.over());
-        assertEquals(2, r.stars(), "and the count stays");
         assertEquals(List.of(B), r.members());
     }
 
-    // ---- Challenge ----------------------------------------------------------------------------------
+    // ---- Challenge ---------------------------------------------------------------------------------
 
     @Test
     void challengeTheLavaRisesATouchPutsYouOutAndTheLastOneStandingWins() {
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(3));
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
         r.join(B);
         r.join(C);
         r.startNow();
-        assertEquals(List.of(A, B, C), r.alive());
-        assertEquals(LavaRound.Join.TOO_LATE, r.join(UUID.randomUUID()), "nobody joins a Challenge that has started");
-        run(r, 10 + 4);
-        assertEquals(1, r.level());
-        List<LavaEvent> out = r.touched(List.of(C));
-        assertEquals(List.of(new LavaEvent.Out(C, 3, 0, false)), out, "third of three, and no round lasted");
-        assertFalse(r.playing(C));
-        assertTrue(r.isMember(C), "out, but still in the room: a watcher");
-        assertEquals(List.of(new LavaEvent.PutBack(C, false, 0)), r.touched(List.of(C)),
-                "a watcher who gets into the lava is only put back");
-        run(r, 6);
-        assertEquals(2, r.round());
+        assertEquals(LavaRound.Join.TOO_LATE, r.join(UUID.randomUUID()), "nobody joins a Challenge going");
+        assertEquals(5, r.starsOut().size(), "a star each and two more");
+        r.collected(A, r.starsOut().get(0));
+        r.collected(B, r.starsOut().get(0));
+        r.collected(C, r.starsOut().get(0));
+        until(r, LavaRound.Phase.LAVA);
+        List<LavaEvent> t = r.touched(List.of(C));
+        assertEquals(List.of(new LavaEvent.Out(C, 3, 0, false, false)), t, "out, third");
+        assertEquals(List.of(A, B), r.alive());
+        assertEquals(List.of(), r.collected(C, r.starsOut().get(0)), "who is out collects nothing");
+        until(r, LavaRound.Phase.SAFE);
         assertEquals(1, r.survived(A));
-        assertEquals(0, r.survived(C), "a round only counts for whoever was still standing at its end");
-        run(r, 10 + 4);
-        assertEquals(2, r.level(), "a block higher");
-        List<LavaEvent> last = r.touched(List.of(B));
-        assertEquals(new LavaEvent.Out(B, 2, 1, false), last.get(0));
-        LavaResult result = ended(last);
-        assertTrue(r.over(), "one left standing: it ends at once");
-        assertEquals(List.of(A), result.winners());
-        assertFalse(result.solo());
-        assertEquals(new LavaResult.Standing(A, 1, 1), result.standings().get(0));
-        assertEquals(new LavaResult.Standing(B, 2, 1), result.standings().get(1));
-        assertEquals(new LavaResult.Standing(C, 3, 0), result.standings().get(2));
-        assertEquals(new LavaResult.Standing(C, 3, 0), result.standing(C));
-        assertNull(result.standing(UUID.randomUUID()));
+        r.collected(A, r.starsOut().get(0));
+        r.collected(B, r.starsOut().get(0));
+        until(r, LavaRound.Phase.LAVA);
+        List<LavaEvent> end = r.touched(List.of(B));
+        LavaResult res = ended(end);
+        assertEquals(List.of(A), res.winners(), "the last one standing");
+        assertEquals(new LavaResult.Standing(B, 2, 1), res.standing(B));
+        assertEquals(new LavaResult.Standing(C, 3, 0), res.standing(C));
+        assertFalse(res.solo());
     }
 
+    /** The owner: "it seems like all you have to do is get the stars and wait now". In Challenge you must keep collecting. */
     @Test
-    void twoWhoGoUnderAtTheSameMomentShareThePlace() {
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(3));
+    void challengeARoundWithoutItsStarsPutsYouOut() {
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
         r.join(B);
         r.startNow();
-        run(r, 10 + 4);
-        LavaResult result = ended(r.touched(List.of(A, B)));
-        assertEquals(List.of(A, B), result.winners(), "nobody outlasted the other: both are the last ones standing");
-        assertEquals(1, result.standing(A).place());
-        assertEquals(1, result.standing(B).place());
+        assertEquals(1, r.need());
+        r.collected(A, r.starsOut().get(0));
+        assertEquals(1, r.starsThisRound(A));
+        List<LavaEvent> ev = until(r, LavaRound.Phase.LAVA);
+        assertTrue(r.lavaStarsOut(), "stars on the furniture while the lava is up");
+        assertEquals(2, r.starsOut().size(), "one for each standing");
+        ev = new ArrayList<>();
+        for (int i = 0; i < 100 && !r.over(); i++) {
+            ev.addAll(r.tick());
+        }
+        LavaResult res = ended(ev);
+        assertEquals(List.of(new LavaEvent.Out(B, 2, 0, false, true)), of(ev, LavaEvent.Out.class),
+                "B ended the round without a star: out");
+        assertEquals(List.of(A), res.winners());
+        assertEquals(1, res.standing(A).survived());
+
+        LavaRound.Rules rules = rules(0);
+        assertEquals(List.of(1, 1, 1, 2, 2), List.of(rules.need(1), rules.need(2), rules.need(3), rules.need(4),
+                rules.need(5)), "two stars a round from the fourth");
     }
 
     @Test
     void aloneInChallengeItIsHowManyRoundsYouLast() {
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(0));
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
-        r.tick();
-        int rounds = 0;
-        while (r.round() < 4) { // three whole rounds
-            int was = r.round();
-            while (r.round() == was) {
-                r.tick();
+        r.startNow();
+        for (int round = 1; round <= 3; round++) {
+            collectAll(r, A);
+            until(r, LavaRound.Phase.LAVA);
+            collectAll(r, A);
+            if (round < 3) {
+                until(r, LavaRound.Phase.SAFE);
             }
-            rounds++;
         }
-        assertEquals(3, rounds);
-        assertFalse(r.over(), "alone, it goes on while you stand");
-        assertEquals(3, r.survived(A));
-        while (r.phase() != LavaRound.Phase.LAVA) {
-            r.tick();
-        }
-        LavaResult result = ended(r.touched(List.of(A)));
-        assertTrue(result.solo());
-        assertEquals(3, result.standing(A).survived(), "the rounds lasted, not the one that got you");
-        assertEquals(List.of(A), result.winners());
+        LavaResult res = ended(r.touched(List.of(A)));
+        assertTrue(res.solo());
+        assertEquals(2, res.standing(A).survived(), "two rounds lasted");
     }
 
     @Test
     void theFloodEndsAChallengeAtTheLatest() {
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(0));
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
-        r.tick();
+        r.startNow();
         List<LavaEvent> all = new ArrayList<>();
-        for (int i = 0; i < 10_000 && !r.over(); i++) {
+        for (int i = 0; i < 5000 && !r.over(); i++) {
+            all.addAll(collectAll(r, A));
             all.addAll(r.tick());
         }
-        LavaResult result = ended(all);
-        assertEquals(5, result.rounds(), "the lava came up to the flood level, round by round");
-        assertEquals(5, result.standing(A).survived());
-        int highest = 0;
-        for (LavaEvent.PhaseChanged p : of(all, LavaEvent.PhaseChanged.class)) {
-            highest = Math.max(highest, p.level());
-        }
-        assertEquals(5, highest, "never over the flood");
+        LavaResult res = ended(all);
+        assertEquals(5, res.standing(A).survived(), "every round up to the flood");
+        assertEquals(List.of(A), res.winners());
     }
 
-    // ---- leaving ------------------------------------------------------------------------------------
+    @Test
+    void twoWhoGoUnderAtTheSameMomentShareThePlace() {
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
+        r.join(A);
+        r.join(B);
+        r.join(C);
+        r.startNow();
+        until(r, LavaRound.Phase.LAVA);
+        List<LavaEvent> t = r.touched(List.of(B, C));
+        assertEquals(2, of(t, LavaEvent.Out.class).size());
+        for (LavaEvent.Out o : of(t, LavaEvent.Out.class)) {
+            assertEquals(2, o.place(), "they share second");
+        }
+        assertTrue(r.over(), "A is left standing");
+    }
+
+    // ---- the furniture moves, and the surprises -------------------------------------------------------------
+
+    @Test
+    void fromTheSecondRoundTheFurnitureWarnsThenMovesAndTheStarsComeOutAfter() {
+        LavaRound r = round(LavaMode.GROUP, rules(0, 6, false));
+        r.join(A);
+        List<LavaEvent> first = r.startNow();
+        assertEquals(List.of(), of(first, LavaEvent.ShiftComing.class), "round 1: the room as the game began");
+        assertFalse(r.shifting());
+        assertEquals(1, of(first, LavaEvent.StarsOut.class).size());
+        until(r, LavaRound.Phase.DRAIN);
+        List<LavaEvent> second = until(r, LavaRound.Phase.SAFE);
+        LavaEvent.ShiftComing coming = of(second, LavaEvent.ShiftComing.class).get(0);
+        assertEquals(2, coming.round());
+        assertEquals(6, coming.ticks());
+        assertTrue(r.shifting());
+        assertEquals(List.of(), r.starsOut(), "no stars while it moves");
+        assertEquals(16, ((LavaEvent.PhaseChanged) second.get(second.size() - 2)).ticks(),
+                "the safe time and the move's warning together");
+        List<LavaEvent> wait = run(r, 5);
+        assertEquals(List.of(), of(wait, LavaEvent.Shift.class));
+        List<LavaEvent> moved = r.tick();
+        assertEquals(new LavaEvent.Shift(2, coming.seed()), moved.get(0), "then it moves, to the layout it warned of");
+        assertEquals(1, of(moved, LavaEvent.StarsOut.class).size(), "and the stars come out");
+        assertFalse(r.shifting());
+        assertEquals(10, r.left(), "the whole safe time is left for them");
+
+        LavaRound little = round(LavaMode.LITTLE, rules(0, 0, false));
+        little.join(A);
+        List<LavaEvent> l = run(little, 200);
+        assertEquals(List.of(), of(l, LavaEvent.ShiftComing.class), "Little's room moves only between games");
+    }
+
+    @Test
+    void groupAndChallengeHaveASurpriseMostRoundsNeverTheSameTwiceRunning() {
+        for (LavaMode mode : new LavaMode[]{LavaMode.GROUP, LavaMode.CHALLENGE}) {
+            Set<LavaRound.Surprise> seen = new HashSet<>();
+            for (long seed = 1; seed <= 40; seed++) {
+                LavaRound r = new LavaRound(mode, new LavaRound.Rules(3, 4, LavaRound.Span.of(6),
+                        LavaRound.Span.of(2), LavaRound.Span.of(3), 1, 5, 4, 5, 4, 0, 0, 9, true), seed);
+                r.join(A);
+                r.startNow();
+                LavaRound.Surprise last = null;
+                List<LavaEvent> ev = new ArrayList<>();
+                for (int i = 0; i < 400 && !r.over(); i++) {
+                    ev.addAll(collectAll(r, A));
+                    ev.addAll(r.tick());
+                }
+                List<LavaEvent.SurpriseComing> s = of(ev, LavaEvent.SurpriseComing.class);
+                assertTrue(s.size() >= 3, mode + ": every round after the first: " + s);
+                for (LavaEvent.SurpriseComing c : s) {
+                    assertTrue(c.round() >= 2);
+                    assertNotEquals(last, c.surprise(), "never the same twice running");
+                    last = c.surprise();
+                    seen.add(c.surprise());
+                    if (mode == LavaMode.CHALLENGE) {
+                        assertNotEquals(LavaRound.Surprise.BOUNCY, c.surprise(), "no cushion is up in a Challenge");
+                    }
+                }
+            }
+            assertEquals(mode == LavaMode.GROUP ? 5 : 4, seen.size(), mode + ": every kind turns up: " + seen);
+        }
+        LavaRound off = round(LavaMode.GROUP, rules(0, 0, false));
+        off.join(A);
+        off.startNow();
+        assertEquals(List.of(), of(run(off, 300), LavaEvent.SurpriseComing.class), "surprises: false");
+    }
+
+    @Test
+    void aQuickRiseHasAShortWarningAndComesABlockHigherInGroup() {
+        LavaRound.Rules rules = new LavaRound.Rules(3, 4, LavaRound.Span.of(6), LavaRound.Span.of(40),
+                LavaRound.Span.of(3), 1, 5, 4, 5, 4, 0, 0, 9, true);
+        boolean seen = false;
+        for (long seed = 1; seed <= 60 && !seen; seed++) {
+            LavaRound r = new LavaRound(LavaMode.GROUP, rules, seed);
+            r.join(A);
+            r.startNow();
+            for (int i = 0; i < 400 && !r.over(); i++) {
+                List<LavaEvent> ev = r.tick();
+                for (LavaEvent.PhaseChanged p : of(ev, LavaEvent.PhaseChanged.class)) {
+                    if (r.surprise() == LavaRound.Surprise.FAST_RISE) {
+                        if (p.phase() == LavaRound.Phase.WARNING) {
+                            assertEquals(20, p.ticks(), "half the warning");
+                        }
+                        if (p.phase() == LavaRound.Phase.LAVA) {
+                            assertEquals(Math.min(4, p.round() + 1), p.level(), "a block higher");
+                            seen = true;
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(seen);
+    }
+
+    // ---- leaving and the room's size ------------------------------------------------------------------
 
     @Test
     void theLastPlayerLeavingEndsTheRoundCalledOffInEveryModeAndPhase() {
         for (LavaMode mode : LavaMode.values()) {
-            for (int ticks : new int[]{0, 1, 5, 12, 16, 21}) {
-                LavaRound r = new LavaRound(mode, rules(3));
+            for (LavaRound.Phase phase : new LavaRound.Phase[]{LavaRound.Phase.SAFE, LavaRound.Phase.WARNING,
+                    LavaRound.Phase.LAVA}) {
+                LavaRound r = round(mode, rules(0, 4, true));
                 r.join(A);
-                r.join(B);
-                run(r, ticks);
-                String at = mode + " after " + ticks + " ticks (" + r.phase() + ")";
-                List<LavaEvent> first = r.leave(A);
-                if (mode == LavaMode.CHALLENGE && r.over()) {
-                    assertEquals(List.of(B), ended(first).winners(), "the one left standing wins: " + at);
-                    assertFalse(r.result().calledOff());
-                    continue;
-                }
-                assertFalse(r.over(), "one player is still in: " + at);
-                LavaResult result = ended(r.leave(B));
-                assertTrue(result.calledOff(), "nobody left: called off, " + at);
-                assertEquals(List.of(), result.players());
+                r.startNow();
+                r.tick();
+                until(r, phase);
+                LavaResult res = ended(r.leave(A));
+                assertTrue(res.calledOff(), mode + " " + phase);
                 assertTrue(r.over());
-                assertEquals(0, r.level(), "no lava is wanted any more: " + at);
-                assertEquals(List.of(), r.starsOut());
-                assertEquals(List.of(), r.leave(B), "leaving twice is nothing");
             }
         }
     }
 
     @Test
     void leavingAChallengeIsGoingOut() {
-        LavaRound r = new LavaRound(LavaMode.CHALLENGE, rules(3));
+        LavaRound r = round(LavaMode.CHALLENGE, rules(0));
         r.join(A);
         r.join(B);
         r.join(C);
         r.startNow();
-        List<LavaEvent> left = r.leave(B);
-        assertEquals(List.of(new LavaEvent.Out(B, 3, 0, true)), left, "out, and nobody to move to the gallery");
+        List<LavaEvent> ev = r.leave(C);
+        assertEquals(List.of(new LavaEvent.Out(C, 3, 0, true, false)), ev);
         assertFalse(r.over());
-        LavaResult result = ended(r.leave(C));
-        assertEquals(List.of(A), result.winners(), "the others left: the one who stayed is the last one standing");
-        assertEquals(List.of(A), result.players());
+        LavaResult res = ended(r.leave(B));
+        assertEquals(List.of(A), res.winners());
     }
 
     @Test
-    void onePlayerAloneInEachMode() {
-        // Little alone: every star, then it ends
-        LavaRound little = new LavaRound(LavaMode.LITTLE, rules(0));
-        little.join(A);
-        little.tick();
-        little.collected(A, 0);
-        little.collected(A, 1);
-        assertEquals(3, ended(little.collected(A, 2)).stars());
-        // Group alone: its rounds, then the total
-        LavaRound group = new LavaRound(LavaMode.GROUP, rules(500));
-        group.join(A);
-        group.startNow();
-        group.collected(A, 1);
-        List<LavaEvent> all = new ArrayList<>();
-        for (int i = 0; i < 1_000 && !group.over(); i++) {
-            all.addAll(group.tick());
+    void theRoomTakesOnlySoMany() {
+        LavaRound r = round(LavaMode.GROUP, rules(0));
+        for (int i = 0; i < 4; i++) {
+            assertEquals(LavaRound.Join.JOINED, r.join(UUID.randomUUID()));
         }
-        assertEquals(1, ended(all).stars());
-        // Challenge alone: see aloneInChallengeItIsHowManyRoundsYouLast
-        assertEquals("lava:little", LavaMode.LITTLE.board());
-        assertEquals("lava:group", LavaMode.GROUP.board());
-        assertEquals("lava:challenge", LavaMode.CHALLENGE.board());
-        assertEquals(LavaMode.GROUP, LavaMode.of(" Group "));
-        assertNull(LavaMode.of("family"), "the owner renamed it: it is Group");
-        assertEquals(List.of("Little", "Group", "Challenge"),
-                java.util.Arrays.stream(LavaMode.values()).map(LavaMode::label).toList(), "the owner's three names");
+        assertEquals(LavaRound.Join.FULL, r.join(UUID.randomUUID()));
+    }
+
+    @Test
+    void aStarCountsOnlyWhenItIsOutAndForSomeoneInTheRound() {
+        LavaRound r = round(LavaMode.GROUP, rules(0));
+        r.join(A);
+        r.startNow();
+        assertEquals(List.of(), r.collected(B, r.starsOut().get(0)), "not in the round");
+        assertEquals(List.of(), r.collected(A, 999), "not out");
+        int id = r.starsOut().get(0);
+        assertEquals(1, r.collected(A, id).size());
+        assertEquals(List.of(), r.collected(A, id), "once");
+        until(r, LavaRound.Phase.DRAIN);
+        assertEquals(List.of(), r.starsOut(), "none while it drains");
+        assertNotNull(r.rules());
+        assertEquals(42L, r.seed());
     }
 }

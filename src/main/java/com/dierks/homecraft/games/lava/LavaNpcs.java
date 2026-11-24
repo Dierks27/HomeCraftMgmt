@@ -38,10 +38,12 @@ import java.util.function.Predicate;
  * most, at easy, never competing (Little can't be lost), and only while every player in the room has NPCs on and
  * set to easy; otherwise Little stays NPC-free. Anyone in the room with NPCs off sends them all away.
  *
- * <p><b>Playing</b> ({@link LavaNpcSim}): they walk the room by its own rule, climb for dry ground when the warning
- * starts (easy ones later and slower), and touch the lava when they don't make it: put back on dry ground in Group
- * and Little (costing nobody a star), out to the gallery in Challenge. Everyone in the round reads how an NPC did
- * ("Ozzie ⚙ NPC lasted 5 rounds").
+ * <p><b>Playing</b> ({@link LavaNpcSim}): they walk the room by its own rule (0.57.0: medium and hard ones hop from
+ * piece to piece too), go after stars of their own (pretend ones, a sparkle where they get to: never the round's),
+ * climb for dry ground when the warning starts (easy ones later and slower), and touch the lava when they don't make
+ * it: put back on dry ground in Group and Little (costing nobody a star), out to the gallery in Challenge, where an
+ * NPC that ends a round without its stars is out too. When the furniture moves they ride along or are lifted, as a
+ * player is ({@link LavaShift}). Everyone in the round reads how an NPC did ("Ozzie ⚙ NPC lasted 5 rounds").
  *
  * <p><b>Nothing real.</b> The round never knows an NPC is there: never a member, never touching its count, its stars,
  * its lava or its scores ({@link LavaScores}), and no NPC writes a block. A real player's round is exactly what it
@@ -124,8 +126,10 @@ public final class LavaNpcs implements WorldNpcs {
                 bodies.remove(key(gone));
             }
         }
-        if (round != simRound || site != simSite) {
+        if (round != simRound) {
             newSim(round, site);
+        } else if (site != simSite) {
+            moveSim(site, svc.lavaNow());
         }
         long now = game.games().clock().nowMillis();
         boolean alone = reals.size() == 1;
@@ -162,6 +166,22 @@ public final class LavaNpcs implements WorldNpcs {
         }
     }
 
+    /**
+     * 0.57.0: the furniture moved (or a piece sank, or a cushion went bouncy): every NPC where a player would be now,
+     * riding its piece or lifted onto one, else where it stood.
+     */
+    private void moveSim(LavaSite to, int level) {
+        LavaSite from = simSite;
+        simSite = to;
+        if (sim == null || from == null) {
+            return;
+        }
+        sim.moveRoom(LavaNpcSim.Room.of(to), w -> {
+            LavaSite.Spot s = LavaShift.carry(from, to, w.x(), w.y(), w.z(), level);
+            return s == null ? to.standUnder(w.x(), w.y(), w.z()) : to.standUnder(s.x(), s.y(), s.z());
+        });
+    }
+
     /** {@code p} walks into the room: on the floor, or the nearest dry stand while the lava is up. */
     private void enter(CpuPlayers c, LavaRound round, CpuPlayer p, List<UUID> reals) {
         if (sim == null) {
@@ -192,10 +212,18 @@ public final class LavaNpcs implements WorldNpcs {
         }
         if (round.phase() != LavaRound.Phase.OVER) {
             for (LavaNpcSim.Touched t : sim.step(ticks, round.phase(), round.level(), round.nextLevel(), round.mode(),
-                    round.round())) {
+                    round.round(), round.need())) {
                 String name = CpuRoster.tagged(c.name(CpuRoster.byId(t.npc())));
-                tell(reals, t.out() ? "&7" + name + " touched the lava - out! Lasted " + rounds(t.lasted()) + "."
+                tell(reals, t.starless() ? "&7" + name + " didn't get a star - out! Lasted " + rounds(t.lasted()) + "."
+                        : t.out() ? "&7" + name + " touched the lava - out! Lasted " + rounds(t.lasted()) + "."
                         : "&7" + name + " touched the lava - back to a dry spot!");
+            }
+            for (double[] at : sim.sparkled()) { // a pretend star: a sparkle, never one of the round's
+                try {
+                    w.spawnParticle(org.bukkit.Particle.WAX_ON, at[0], at[1], at[2], 8, 0.3, 0.3, 0.3, 0.0);
+                } catch (RuntimeException | LinkageError ignored) {
+                    // a sparkle is decoration
+                }
             }
         }
         Set<UUID> placed = new HashSet<>();

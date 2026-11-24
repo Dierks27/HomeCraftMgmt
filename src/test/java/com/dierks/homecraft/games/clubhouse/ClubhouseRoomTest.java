@@ -38,6 +38,9 @@ class ClubhouseRoomTest {
     /** 0.41.0: the main room's box (the claim's) and the side rooms'. */
     private static final Box MAIN = SETTINGS.mainBox();
     private static final Box ANNEX = SETTINGS.annexBox();
+    /** Plan 13: the wing's 14 new rows (claimed on their own) and the box at its old size. */
+    private static final Box WING = SETTINGS.wingBox();
+    private static final Box OLD = SETTINGS.oldBox();
 
     /** The server as the room sees it: a fake world, a meta map, and who was moved out of the way. */
     static class Host implements RoomHost {
@@ -65,7 +68,30 @@ class ClubhouseRoomTest {
 
         @Override
         public Logger logger() {
-            return Logger.getAnonymousLogger();
+            return log;
+        }
+
+        /** What the room told the console (plan 13: why its side rooms keep their old size). */
+        final List<String> logged = new ArrayList<>();
+        final Logger log = logger(logged);
+
+        private static Logger logger(List<String> into) {
+            Logger l = Logger.getAnonymousLogger();
+            l.addHandler(new java.util.logging.Handler() {
+                @Override
+                public void publish(java.util.logging.LogRecord r) {
+                    into.add(r.getLevel() + " " + r.getMessage());
+                }
+
+                @Override
+                public void flush() {
+                }
+
+                @Override
+                public void close() {
+                }
+            });
+            return l;
         }
 
         @Override
@@ -121,8 +147,16 @@ class ClubhouseRoomTest {
 
         @Override
         public List<String> regionProblems(Box box, String world) {
+            asked.add(box);
+            if (WING.equals(box) && !wingProblems.isEmpty()) {
+                return wingProblems;
+            }
             return ANNEX.equals(box) && !annexProblems.isEmpty() ? annexProblems : problems;
         }
+
+        /** Plan 13: what is in the way of the wing's 14 new rows alone, and every box the room asked about. */
+        final List<String> wingProblems = new ArrayList<>();
+        final List<Box> asked = new ArrayList<>();
 
         @Override
         public List<Person> people() {
@@ -194,6 +228,8 @@ class ClubhouseRoomTest {
         assertEquals(ClubhouseRoom.claimText("games", MAIN), r.claimText(), "the main room's claim is 0.40.0's");
         assertEquals(ClubhouseRoom.claimText("games", ANNEX), host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY),
                 "and the side rooms' box is claimed on its own");
+        assertEquals(ClubhouseRoom.claimText("games", WING), host.meta.get(ClubhouseRoom.WING_CLAIM_KEY),
+                "and (plan 13) the wing's 14 new rows on their own");
         assertTrue(r.annexIn() && r.site().box().equals(BOX), "built with its side rooms");
         assertEquals(r.site().plan().ops().size(), host.world.count(BOX), "every block of the plan is there");
         assertNotNull(r.spawn(0), "arrival spots are handed out");
@@ -224,6 +260,7 @@ class ClubhouseRoomTest {
     void aVerifyThatFailsClosesTheClubhouse() {
         host.meta.put(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.claimText("games", MAIN));
         host.meta.put(ClubhouseRoom.ANNEX_CLAIM_KEY, ClubhouseRoom.claimText("games", ANNEX));
+        host.meta.put(ClubhouseRoom.WING_CLAIM_KEY, ClubhouseRoom.claimText("games", WING)); // plan 13: all claimed
         host.world.sticky.add(FakeWorldPort.pos(BOX.minX(), BOX.minY(), BOX.minZ())); // it never changes
         ClubhouseRoom r = room();
         assertEquals(ClubhouseRoom.Phase.BUILDING, r.phase(), "claimed: straight to the build");
@@ -408,7 +445,11 @@ class ClubhouseRoomTest {
             assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3)");
         } else {
             chairs.addAll(ClubhousePlanner.parlorSeats(BOX)); // 0.50.0: the Parlor's chairs too, while it is built
-            assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3), the Parlor's too");
+            chairs.addAll(ClubhousePlanner.arcadeSeats(BOX)); // plan 13: the viewing stools and the bean bags
+            chairs.addAll(ClubhousePlanner.trophySeats(BOX)); // and the armchairs facing the Trophy Room's podium
+            assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3), the side rooms' too");
+            assertEquals(13 + 7 + 2, chairs.size() - ClubhousePlanner.seats(BOX).size(), "the Parlor's thirteen, the"
+                    + " Arcade Room's seven (three stools, four bean bags) and the Trophy Room's two");
         }
 
         ClubhouseRoom r = room();
@@ -623,9 +664,111 @@ class ClubhouseRoomTest {
         r.start();
         until(r, ClubhouseRoom.Phase.READY, 5_000);
         assertNull(host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY), "nothing claimed");
+        assertNull(host.meta.get(ClubhouseRoom.WING_CLAIM_KEY), "nor the wing's new rows");
         assertEquals(MAIN, r.site().box());
         assertFalse(r.builtWith(SETTINGS, "games"), "switching a room on starts the room again");
         assertTrue(r.builtWith(SETTINGS.withRooms(false, false), "games"));
+    }
+
+    // ---- plan 13: the wing's 14 new rows --------------------------------------------------------------------
+
+    /** A server whose side rooms stand (plan 12, claimed): only the 14 new rows are asked about and counted. */
+    private void plan12Stands() {
+        host.meta.put(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.claimText("games", MAIN));
+        host.meta.put(ClubhouseRoom.ANNEX_CLAIM_KEY, ClubhouseRoom.claimText("games", ANNEX));
+        ClubhouseSite was = ClubhousePlanner.plan(OLD, SETTINGS.rooms());
+        for (com.dierks.homecraft.games.gen.api.BlockOp op : was.plan().ops()) {
+            host.world.put(op.x(), op.y(), op.z(), was.plan().blockOf(op));
+        }
+    }
+
+    /**
+     * An existing server grows its side rooms once: its claims stay as they were, the 14 new rows are checked against
+     * every other games area, counted (empty: they are sky), claimed on their own and built with the room; the next
+     * start writes nothing.
+     */
+    @Test
+    void aServerWithItsSideRoomsGrowsThemOnceClaimingOnlyTheNewRows() {
+        plan12Stands();
+        ClubhouseRoom r = room();
+        assertEquals(ClubhouseRoom.Phase.SCANNING, r.phase(), "the new rows are counted first");
+        until(r, ClubhouseRoom.Phase.READY, 6_000);
+        assertEquals(ClubhouseRoom.claimText("games", MAIN), host.meta.get(ClubhouseRoom.CLAIM_KEY), "unchanged");
+        assertEquals(ClubhouseRoom.claimText("games", ANNEX), host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY), "unchanged");
+        assertEquals(ClubhouseRoom.claimText("games", WING), host.meta.get(ClubhouseRoom.WING_CLAIM_KEY),
+                "the new rows claimed on their own");
+        assertTrue(host.asked.contains(WING), "asked whether the new rows are clear of every other area first");
+        assertTrue(r.annexIn() && r.wingIn() && r.wingOut() == null);
+        assertEquals(BOX, r.site().box(), "grown: 32 x 16 x 62");
+        assertEquals(r.site().plan().ops().size(), host.world.count(BOX), "every block of plan 13 is there");
+        assertEquals(ClubhousePlanner.CABINETS, r.generatedCabinetPlaces().size(), "the four spare places too");
+        assertEquals(1, r.parlorBoards().size(), "the sportsbook's board has its place");
+        assertTrue(r.inArcadeRoom("games", BOX.minX() + 7.5, BOX.minY() + 1, BOX.minZ() + 55.5), "the new floor is in");
+        assertTrue(host.logged.stream().anyMatch(l -> l.contains("claimed the side rooms' 14 new rows")), host.logged
+                .toString());
+        long writes = host.world.writes;
+        ClubhouseRoom again = room();
+        assertEquals(ClubhouseRoom.Phase.BUILDING, again.phase(), "all claimed: straight to the check");
+        until(again, ClubhouseRoom.Phase.READY, 6_000);
+        assertEquals(writes, host.world.writes, "built once: the next start writes nothing");
+    }
+
+    /**
+     * Anything in the 14 new rows keeps the side rooms at their old size: plan 12's rooms, nothing of anyone's touched,
+     * nothing claimed, a console line and the status saying why; {@code rebuild confirm} claims the rows and grows them.
+     */
+    @Test
+    void blocksInTheNewRowsKeepTheOldSizeTouchingNothingUntilRebuildConfirm() {
+        plan12Stands();
+        host.world.put(WING.minX() + 5, WING.minY() + 3, WING.minZ() + 5, "minecraft:oak_planks");
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 6_000);
+        assertTrue(r.annexIn() && !r.wingIn(), "the side rooms stand, at their old size");
+        assertTrue(r.wingOut().contains("1 block") && r.wingOut().contains("rebuild confirm"), r.wingOut());
+        assertEquals(OLD, r.site().box(), "32 x 16 x 48, as before");
+        assertEquals(ClubhousePlanner.plan(OLD, SETTINGS.rooms()).plan().hash(), r.site().plan().hash(),
+                "the rooms at their old size (plan 12's, block for block: ClubhousePlannerTest)");
+        assertEquals("minecraft:oak_planks", host.world.at(WING.minX() + 5, WING.minY() + 3, WING.minZ() + 5),
+                "nothing of anyone's was touched");
+        assertEquals(1, host.world.count(WING), "nothing else written there");
+        assertNull(host.meta.get(ClubhouseRoom.WING_CLAIM_KEY), "nor claimed");
+        assertTrue(host.logged.stream().anyMatch(l -> l.startsWith("WARNING Clubhouse: the side rooms keep their old"
+                + " size - their 14 new rows have 1 block")), host.logged.toString());
+        assertTrue(r.statusLines().stream().anyMatch(l -> l.contains("at their old size")), r.statusLines().toString());
+        assertEquals(ClubhousePlanner.OLD_CABINETS, r.generatedCabinetPlaces().size(), "the nine places");
+        assertTrue(r.parlorBoards().isEmpty(), "no room for the sportsbook's board at the old size");
+        assertTrue(r.open(), "open all the same");
+        r.rebuild(true);
+        until(r, ClubhouseRoom.Phase.READY, 6_000);
+        assertTrue(r.wingIn(), "confirmed: claimed and grown");
+        assertEquals("minecraft:air", host.world.at(WING.minX() + 5, WING.minY() + 3, WING.minZ() + 5), "cleared");
+        assertEquals(BOX, r.site().box());
+        assertEquals(ClubhousePlanner.CABINETS, r.generatedCabinetPlaces().size());
+    }
+
+    /**
+     * The 14 new rows too near another games area (a lava playroom set a little south, say): the side rooms keep their
+     * old size, the rows are never written nor claimed, even by {@code rebuild confirm}, and nothing breaks.
+     */
+    @Test
+    void newRowsTooNearAnotherAreaKeepTheOldSizeAndAreNeverWritten() {
+        host.wingProblems.add("clubhouse is only 12 blocks from floor_is_lava (they must be 32 apart)");
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 6_000);
+        assertTrue(r.annexIn() && !r.wingIn() && r.open(), "a fresh server: built at the old size, open");
+        assertTrue(r.wingOut().contains("floor_is_lava"), r.wingOut());
+        assertEquals(OLD, r.site().box());
+        assertEquals(0, host.world.count(WING), "not a block written there");
+        assertNull(host.meta.get(ClubhouseRoom.WING_CLAIM_KEY));
+        assertEquals(ClubhouseRoom.claimText("games", ANNEX), host.meta.get(ClubhouseRoom.ANNEX_CLAIM_KEY),
+                "the first 16 rows are claimed as before");
+        assertTrue(host.logged.stream().anyMatch(l -> l.contains("keep their old size") && l.contains("floor_is_lava")),
+                host.logged.toString());
+        r.rebuild(true);
+        until(r, ClubhouseRoom.Phase.READY, 6_000);
+        assertFalse(r.wingIn(), "rebuild confirm never claims past another area");
+        assertEquals(0, host.world.count(WING));
+        assertNull(host.meta.get(ClubhouseRoom.WING_CLAIM_KEY));
     }
 
     /**

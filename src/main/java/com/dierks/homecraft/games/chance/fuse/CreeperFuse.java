@@ -285,7 +285,7 @@ public final class CreeperFuse implements Game {
             }
         }
         if (show != null) {
-            show.clear();
+            showing(f -> f.clear());
         }
         reset();
         changed();
@@ -300,7 +300,7 @@ public final class CreeperFuse implements Game {
         UUID id = player.getUniqueId();
         screens.remove(id);
         if (show != null) {
-            show.forget(id);
+            showing(f -> f.forget(id));
         }
         Entry e = entries.get(id);
         if (e == null) {
@@ -597,7 +597,7 @@ public final class CreeperFuse implements Game {
             }
         }
         if (show != null) {
-            show.tick();
+            showing(f -> f.tick());
         }
     }
 
@@ -640,7 +640,7 @@ public final class CreeperFuse implements Game {
         phase = Phase.LIT;
         litAt = now();
         if (show != null) {
-            show.lit();
+            showing(f -> f.lit());
         }
         changed();
         burn(litAt); // a fuse that goes off at once goes off now
@@ -739,9 +739,32 @@ public final class CreeperFuse implements Game {
         phase = Phase.OVER;
         overUntil = now() + OVER_MS;
         if (show != null) {
-            show.over(burnedOut);
+            showing(f -> f.over(burnedOut));
         }
         changed();
+    }
+
+    /**
+     * Run {@code step} on the room's show. The show's trouble is never the fuse's: anything it throws takes the show
+     * down for this run with one WARN, and the fuse, its rounds and its screens go on without it.
+     */
+    private void showing(java.util.function.Consumer<FuseShow> step) {
+        FuseShow s = show;
+        if (s == null) {
+            return;
+        }
+        try {
+            step.accept(s);
+        } catch (RuntimeException | LinkageError e) {
+            show = null;
+            try {
+                s.clear();
+            } catch (RuntimeException | LinkageError ignored) {
+                // already in trouble
+            }
+            games().logger().log(java.util.logging.Level.WARNING, NAME + "'s show in the room failed - the fuse"
+                    + " goes on without it until the next start", e);
+        }
     }
 
     private void reset() {
@@ -755,7 +778,7 @@ public final class CreeperFuse implements Game {
             quietly(r);
         }
         if (show != null) {
-            show.changed();
+            showing(f -> f.changed());
         }
     }
 

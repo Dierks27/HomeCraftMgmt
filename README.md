@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.55.0-sports-board`
+- **Version:** `0.56.0-bigger-rooms`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -252,9 +252,21 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**0.56.0: a bigger Arcade Room and Game Parlor, filled.** The owner: "make it large enough that we can add more
+things, but not so big it looks empty". The side rooms' wing is 16 rows deeper (the Clubhouse box is 32 x 16 x 64,
+was 48; it stays on the chunk grid). The Arcade Room gets a walled ball pit with balls in it, a bean-bag nook (real
+bags: a base, a back and a roll), a prize-and-plush case with a counter, a viewing area with stools for the kid race,
+and four spare cabinet places (13 in all). The Parlor gets a lounge, room for two more card tables, and the **Sports
+Board on its east wall**: tonight's games and what $10 pays, kept up to date, with a counter and stools in front.
+The Trophy Room gets armchairs and planters. **The Clubhouse rebuilds once** (plan 13). The new rows have their own
+claim (`gen.clubhouse.wing.claim`), taken only when they are clear of every other area and empty; otherwise the side
+rooms keep their old size, the console says why, and `/hcm games clubhouse rebuild confirm` claims rows that are only
+blocked by blocks. Nothing else changes: no schema, no config revision. **Back to 0.55.0:** the jar alone; the
+Clubhouse rebuilds once at its old size, and the new rows' blocks stay standing outside it.
+
 **0.55.0: the Sports Board, picks on tonight's real games.** The owner: "can we make a betting area in the parlor
 for sports ... Kalshi is open api that we could get the games, scores and lines from". In the Game Parlor,
-`/hcm play sportsbook` (its wall board comes with the bigger Parlor) shows tonight's NFL, NBA, NHL, MLB and college
+`/hcm play sportsbook` (its wall board came in 0.56.0) shows tonight's NFL, NBA, NHL, MLB and college
 games from Kalshi's public markets, each side with its chance and what $10 pays. Money only, with the Parlor's money
 play rules. See [The Sports Board](#the-sports-board-0550). **Schema v42** (a `sports_picks` table, added at the first
 start); a new `games.sportsbook` config section (no config revision). **Back to 0.54.1:** the jar alone is not
@@ -5026,6 +5038,10 @@ glass roof. Nothing she needs is words.
 Picks on tonight's real games, in dollars, in the Game Parlor. Behind the same doors as all money play: the Parlor,
 `hcm.games.money`, money play on, the day's money limit (picks count toward it), the most a play may put in and the
 most it may pay. No child ever sees it.
+
+- **The wall board (0.56.0).** On the Parlor's east wall, 7 blocks wide: the next 5 games to start and what $10 on
+  each side gives back, kept up to date ("Lines are updating" while they are; "No games in the next 24 hours" when
+  there are none). Tap it (either click) to open the board. A counter and three stools stand in front of it.
 
 - **The lines.** Every `refresh_minutes` (5) HCM reads Kalshi's public market data (no account, nothing about any
   player is sent) for the games starting in the next `hours_ahead` (24) in `leagues` (shipped: nfl, nba, nhl, mlb,

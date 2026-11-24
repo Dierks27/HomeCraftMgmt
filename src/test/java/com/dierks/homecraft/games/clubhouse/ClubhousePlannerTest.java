@@ -43,7 +43,7 @@ class ClubhousePlannerTest {
     private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.SIZE_Z);
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
     /** Plan 13's room, pinned; and plan 12's, which a wing kept at its old size (48 deep) still is, block for block. */
-    static final String HASH = "4ec2e9c88197";
+    static final String HASH = "75a99a62ac6b";
     static final String OLD_HASH = "f483b6018e6f";
     /** The box at its old size: the main room and the wing's first 16 rows. */
     static final Box OLD = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.OLD_SIZE_Z);

@@ -1201,8 +1201,9 @@ public final class ClubhousePlanner {
     /**
      * Plan 13, the bean-bag nook (the owner: the bean bags "just read as blocks"): the south-west corner, x 1-3 and z
      * 56-60, on a pink rug. Four bean bags round a low table, each a bright stair (pink, teal, yellow, orange) a child
-     * sits in, its back away from the table, rounded off by wool displays ({@link #decor}); a cushion on each seat. A
-     * lamp stands in each back corner and a coloured one hangs over the table.
+     * sits in, its back away from the table, rounded off by wool displays ({@link #decor}); a cushion on each seat. Two
+     * lamps on the wall over the bags and a coloured one hanging over the table; the corner behind the bags stays
+     * open to walk round.
      */
     private static void beanNook(Builder b) {
         for (int i = NOOK_X0; i <= NOOK_X1; i++) {
@@ -1214,9 +1215,8 @@ public final class ClubhousePlanner {
         for (int[] bag : BEAN_BAGS) {
             b.seat(ARCADE_X0 + bag[0], 1, bag[1], beanBag(bag), BAG_DYE[bag[2]]);
         }
-        for (int i : new int[]{NOOK_X0, NOOK_X1}) {
-            b.set(ARCADE_X0 + i, 1, b.z1, FENCE);
-            b.set(ARCADE_X0 + i, 2, b.z1, STANDING);
+        for (int k : NOOK_LAMP_Z) { // lamps on the west wall over the bags (on the floor they shut the corner in)
+            sconce(b, ARCADE_X0 + NOOK_X0, NOOK_LAMP_Y, k);
         }
         b.set(ARCADE_X0 + BEAN_TABLE[0], SIDE_TOP, BEAN_TABLE[1], CHAIN);
         b.set(ARCADE_X0 + BEAN_TABLE[0], SIDE_TOP - 1, BEAN_TABLE[1], "minecraft:pearlescent_froglight[axis=y]");
@@ -1290,6 +1290,9 @@ public final class ClubhousePlanner {
     static final int NOOK_X1 = 3;
     static final int NOOK_Z0 = MAIN_Z + 24;
     static final String NOOK_RUG = "minecraft:pink_carpet";
+    /** The nook's two wall lamps (sconces on the west wall: their rows, and the arm's height). */
+    static final int[] NOOK_LAMP_Z = {MAIN_Z + 25, MAIN_Z + 27};
+    static final int NOOK_LAMP_Y = 4;
     static final int[] BEAN_TABLE = {2, MAIN_Z + 26};
     static final String BEAN_TABLE_BLOCK = "minecraft:birch_slab[type=bottom,waterlogged=false]";
     /** The bean bags (x, z, colour), round the low table: west, east, north, south. */

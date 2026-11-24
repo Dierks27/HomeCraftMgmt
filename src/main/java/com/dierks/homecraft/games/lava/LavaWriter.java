@@ -88,7 +88,6 @@ public final class LavaWriter {
     private int ta;
     private int tb;
     private Side side;
-    private int highest;
     private int wait;
     private int glowStage;
     private boolean dirty;
@@ -253,9 +252,6 @@ public final class LavaWriter {
                 written++;
             }
         }
-        if (state.equals(lava)) {
-            highest = Math.max(highest, layer);
-        }
         dirty = true;
     }
 
@@ -401,7 +397,6 @@ public final class LavaWriter {
         b = 0;
         side = null;
         glowSide = null;
-        highest = 0;
         glowStage = 0;
         dirty = false;
         moved.clear();

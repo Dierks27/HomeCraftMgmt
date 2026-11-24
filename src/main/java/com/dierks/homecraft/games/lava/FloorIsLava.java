@@ -60,6 +60,12 @@ import java.util.logging.Logger;
  * <b>Little</b> (nobody can lose; collect every star), <b>Group</b> (one shared count, the lava higher every round)
  * and <b>Challenge</b> (the lava keeps rising; the last one standing wins).
  *
+ * <p><b>0.57.0: harder, and never the same twice</b> (the owner: "the floor is lava game is WAY too easy ... it would
+ * be a lot more fun if I didn't have to [pretend I can't keep up]"). The room is bigger and its furniture moves: a new
+ * layout every game, and every round of Group and Challenge ({@link LavaLayout}, {@link LavaShift}); the lava's timing
+ * is drawn from ranges; stars come out on the furniture during the lava; Group has a star goal a round and hearts,
+ * Challenge needs stars every round; most rounds bring a surprise. Little stays unlosable. See {@link LavaService}.
+ *
  * <p>Id {@code floor_is_lava}, alias {@code lava}; kind {@link GameKind#TRIAL} (a free skill game, as Falling
  * Floors is); never a game of chance, never behind {@code hcm.games.chance}, and <b>it moves no tokens at all</b>:
  * its only rewards are the bests it records ({@link LavaScores}), which the secret trophy room shows as trophies.

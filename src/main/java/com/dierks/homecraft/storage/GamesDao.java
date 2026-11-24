@@ -120,7 +120,8 @@ public final class GamesDao {
     /**
      * The ledger sources that count as "tokens put into games of chance" for the day's limit
      * (R1.10): the Scratch Ticket, Crates, Card Packs bought with tokens, and the games of chance
-     * (the first five, the three more slot machines, Deep Mine and Mob Slots, then Mob Races). Only their NEGATIVE
+     * (the first five, the three more slot machines, Deep Mine and Mob Slots, then Mob Races, then Texas Hold'em's
+     * buy-ins). Only their NEGATIVE
      * ledger lines count.
      */
     public static final List<String> CHANCE_SOURCES = List.of(
@@ -130,7 +131,8 @@ public final class GamesDao {
             TokenService.Source.ARCADE_COIN_FLIP.name(), TokenService.Source.ARCADE_NETHER_SLOTS.name(),
             TokenService.Source.ARCADE_MOTHERLODE.name(), TokenService.Source.ARCADE_FARM_SLOTS.name(),
             TokenService.Source.ARCADE_DEEP_MINE.name(), TokenService.Source.ARCADE_MOB_SLOTS.name(),
-            TokenService.Source.ARCADE_MOB_RACES.name());
+            TokenService.Source.ARCADE_MOB_RACES.name(),
+            TokenService.Source.ARCADE_HOLDEM.name()); // 0.57.0: a Hold'em buy-in for tokens
 
     /** The game a reward that is once a day across games is stored under. */
     public static final String ACROSS_GAMES = "*";
@@ -1809,5 +1811,40 @@ public final class GamesDao {
     /** Ledger details are stored as plain words (colour codes stripped), as TokenService does. */
     private static String plain(String s) {
         return s == null ? "" : COLOUR.matcher(s).replaceAll("").trim();
+    }
+
+    // ---- 0.57.0: Texas Hold'em's tables ----------------------------------------------------------------
+
+    /**
+     * Write several OPEN rounds' data in one transaction: every one of them, or none. A Hold'em table keeps each
+     * seat's chips in its seat's round, and chips only ever move between seats, so a hand's result (or a player's
+     * chips left in the pot when they get up) is written to every seat it touches at once: the chips across the table
+     * add up the same before and after, whenever the server stops.
+     *
+     * @param data the new data by round id
+     * @return false when one of them is no longer OPEN (finished somewhere else); nothing is written then
+     */
+    public boolean updateRounds(Map<Long, String> data, long now) throws SQLException {
+        try {
+            return database.transaction(c -> {
+                for (Map.Entry<Long, String> e : data.entrySet()) {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "UPDATE game_rounds SET data = ?, touched_at = ? WHERE id = ? AND state = 'OPEN'")) {
+                        ps.setString(1, e.getValue());
+                        ps.setLong(2, now);
+                        ps.setLong(3, e.getKey());
+                        if (ps.executeUpdate() != 1) {
+                            throw new Refused(); // one was finished elsewhere: undo the others
+                        }
+                    }
+                }
+                return true;
+            });
+        } catch (Refused r) {
+            if (!database.connection().getAutoCommit()) {
+                throw r; // inside a caller's transaction: the rollback has to reach it
+            }
+            return false;
+        }
     }
 }

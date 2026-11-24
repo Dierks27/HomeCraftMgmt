@@ -131,6 +131,9 @@ public final class ClubModels {
         // 0.55.0, the Game Parlor's Sports Board (a cabinet's size, a placeholder until the owner's model): a dark
         // board with a lit screen of score lines. Its stand-in without the pack is a clock: tonight's games
         machine("sportsbook", "machine_sportsbook", Material.CLOCK, "minecraft:block/sea_lantern", Kind.CABINET);
+        // 0.57.0, Texas Hold'em: cards on a card table, like Twenty-One's (a placeholder until the owner's model): green
+        // felt, two face-down cards and a short stack of chips. Its stand-in without the pack is its Games-screen icon
+        machine("holdem", "machine_holdem", Material.PAPER, "minecraft:block/green_wool", Kind.TROPHY);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -258,6 +261,17 @@ public final class ClubModels {
                 }
             }
             case TROPHY -> {
+                if (m.name().equals("machine_holdem")) { // felt, two cards face down and a stack of chips
+                    tex = "\"felt\":\"" + m.screen() + "\",\"back\":\"minecraft:block/red_concrete\","
+                            + "\"chip\":\"minecraft:block/gold_block\",\"rim\":\"minecraft:block/white_concrete\"";
+                    parts.add(box(1, 0, 1, 15, 1, 15, "felt"));
+                    parts.add(box(3, 1, 4, 7, 2, 10, "back"));
+                    parts.add(box(8, 1, 5, 12, 2, 11, "back"));
+                    parts.add(box(11, 1, 11, 14, 3, 14, "chip"));
+                    parts.add(box(11, 3, 11, 14, 4, 14, "rim"));
+                    parts.add(box(11, 4, 11, 14, 5, 14, "chip"));
+                    break;
+                }
                 if (m.name().equals("machine_cards")) { // a stack of cards and one face up beside it
                     tex = "\"card\":\"" + m.screen() + "\",\"back\":\"minecraft:block/red_concrete\"";
                     parts.add(box(3, 0, 5, 9, 3, 13, "back"));

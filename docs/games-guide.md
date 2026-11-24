@@ -1776,6 +1776,11 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - In Connect Four and Tic-Tac-Toe you can pick "Play an NPC". Easy ones are good for little players. Games against NPCs give no tokens.
 - Your NPC setting is on the Games screen (or /hcm play npc): on or off, and easy, matched or any. A parent or admin can set and lock it for you.
 
+### Whack-a-Zombie with a controller (0.54.1)
+
+- On Bedrock the nine holes sit side by side, so one press moves you to the next.
+- The Arcade Room's cabinet, and Classic on Bedrock, play gentle: one zombie at a time, and it waits up to five seconds for you. No villagers. Gentle rounds have their own high scores.
+
 ### Mob Races for kids (0.54.0)
 
 - The Clubhouse's Arcade Room has its own little race track. Tap the table, then tap a mob. It's free.

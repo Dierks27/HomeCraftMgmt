@@ -39,6 +39,14 @@ import java.util.List;
 public final class WhackAZombiePlayMenu extends GameMenu {
 
     private static final int[] HOLES = {11, 13, 15, 20, 22, 24, 29, 31, 33};
+    /**
+     * 0.54.1: Bedrock's holes side by side, so a controller's cursor goes from one to the next in one press (spaced
+     * out, every move was two presses).
+     */
+    private static final int[] HOLES_PAD = {12, 13, 14, 21, 22, 23, 30, 31, 32};
+    private final int[] holes;
+    /** 0.54.1: one zombie at a time that waits (the kid cabinet, and Bedrock's Classic). */
+    private final boolean gentle;
     /** Server ticks of "Get ready" before the round starts. */
     private static final int READY = 60;
 
@@ -75,7 +83,10 @@ public final class WhackAZombiePlayMenu extends GameMenu {
         this.whack = game;
         this.daily = daily;
         this.bedrock = Bedrock.is(viewer);
-        this.engine = new WhackEngine(seed, game.settings().seconds(), bedrock);
+        this.holes = bedrock ? HOLES_PAD : HOLES;
+        this.gentle = this.kid || (bedrock && daily == null);
+        this.engine = gentle ? WhackEngine.gentle(seed, game.settings().seconds())
+                : new WhackEngine(seed, game.settings().seconds(), bedrock);
         this.hole = Menus.icon(Material.COARSE_DIRT, "&8Empty hole");
         this.zombie = Menus.icon(Material.ZOMBIE_HEAD, "&a&lWhack it! &7+1");
         this.villager = Menus.icon(Material.VILLAGER_SPAWN_EGG, "&c&lVillager! &7Don't bonk!");
@@ -100,9 +111,9 @@ public final class WhackAZombiePlayMenu extends GameMenu {
         for (int h = 0; h < WhackEngine.HOLES; h++) {
             int at = h;
             drawn[h] = engine.at(h);
-            set(HOLES[h], itemFor(drawn[h]), engine.over() ? null : e -> whack(at));
+            set(holes[h], itemFor(drawn[h]), engine.over() ? null : e -> whack(at));
         }
-        Long best = whack.best(viewer);
+        Long best = whack.best(viewer, gentle);
         set(46, Menus.icon(Material.GOLD_NUGGET,
                 best == null || best == 0 ? "&7No best yet" : "&eYour best: &f" + best + " points"), null);
         set(48, rulesTile(whack.rules()), null);
@@ -112,7 +123,8 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             set(50, Menus.icon(Material.LIME_CONCRETE, daily != null
                     ? "&e" + CabinetGame.dailyAgain("round", whack.triedToday(viewer)) : "&ePlay again"), e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
-                    e -> whack.scores(viewer, daily == null ? Scores.CLASSIC : whack.todayBoard(), back));
+                    e -> whack.scores(viewer, daily == null ? (gentle ? WhackAZombie.GENTLE : Scores.CLASSIC)
+                            : whack.todayBoard(), back));
             if (kid) {
                 bigAgain(slots(9, 53), this::again); // everything under the score: one big Play again
                 kidExit(); // 0.45.0: and a door out
@@ -138,7 +150,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             engine.tick();
         }
         if (engine.over()) {
-            finish = whack.finish(viewer, daily, engine.score());
+            finish = whack.finish(viewer, daily, engine.score(), gentle);
             if (kid) {
                 hold(KID_SETTLE_MS); // 0.45.0: the holes turn into Play again under a tapping finger: a pause first
             }
@@ -149,7 +161,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             WhackEngine.Kind now = engine.at(h);
             if (now != drawn[h]) {
                 drawn[h] = now;
-                getInventory().setItem(HOLES[h], itemFor(now));
+                getInventory().setItem(holes[h], itemFor(now));
             }
         }
         paintClock();
@@ -174,7 +186,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             }
         }
         drawn[h] = engine.at(h);
-        getInventory().setItem(HOLES[h], itemFor(drawn[h]));
+        getInventory().setItem(holes[h], itemFor(drawn[h]));
         getInventory().setItem(3, pointsTile());
     }
 
@@ -194,6 +206,10 @@ public final class WhackAZombiePlayMenu extends GameMenu {
     }
 
     private ItemStack modeTile() {
+        if (daily == null && gentle) {
+            return Menus.icon(Material.ZOMBIE_HEAD, "&bGentle", "&7One zombie at a time: it waits for you.",
+                    "&7No villagers. Its own high scores.");
+        }
         if (daily == null) {
             return Menus.icon(Material.ZOMBIE_HEAD, "&bClassic", "&7A new round every time.");
         }

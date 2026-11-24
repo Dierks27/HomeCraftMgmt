@@ -109,6 +109,29 @@ class ClubModelsTest {
         }
     }
 
+    /**
+     * 0.57.0: Video Poker's and Creeper Fuse's machines in the Game Parlor have their own placeholders (a cabinet's
+     * size, block-atlas textures only) and stand-ins for a player without the pack: a card, and a creeper's head.
+     */
+    @Test
+    void videoPokerAndCreeperFuseHaveCabinetSizedMachines() {
+        for (String[] g : new String[][] {{"video_poker", "machine_video_poker"},
+                {"creeper_fuse", "machine_creeper_fuse"}}) {
+            ClubModels.Model m = ClubModels.machineFor(g[0]);
+            assertNotNull(m, "machine:" + g[0] + " has a model");
+            assertEquals("hcm:" + g[1], m.id());
+            assertEquals(ClubModels.Kind.CABINET, m.kind());
+            JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                    .get("assets/hcm/models/item/placeholder/" + g[1] + ".json")).getAsJsonObject();
+            for (Map.Entry<String, com.google.gson.JsonElement> t : json.getAsJsonObject("textures").entrySet()) {
+                assertTrue(t.getValue().getAsString().startsWith("minecraft:block/"), g[1] + " " + t.getKey());
+            }
+            assertTrue(json.getAsJsonArray("elements").size() > 4, g[1] + ": its screen is drawn on it");
+        }
+        assertEquals(Material.PAPER, ClubModels.machineFor("video_poker").fallback());
+        assertEquals(Material.CREEPER_HEAD, ClubModels.machineFor("creeper_fuse").fallback());
+    }
+
     /** Without the pack each model has a vanilla stand-in: an item every client draws (never the missing cube). */
     @Test
     void everyModelHasAVanillaStandIn() {

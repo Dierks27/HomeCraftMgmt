@@ -109,7 +109,11 @@ public final class TokenService {
         // 0.57.0: Bingo Night in the Game Parlor (cards bought, prizes shared) and the Arcade Room's free Picture Bingo
         // for kids (a few tokens when your card gets three in a row: a skill game's reward, never a game of chance's).
         ARCADE_BINGO("Bingo Night"),
-        GAMES_KID_BINGO("Picture Bingo");
+        GAMES_KID_BINGO("Picture Bingo"),
+        // 0.57.0, the Game Parlor's Video Poker (Jacks or Better) and Creeper Fuse (a rising multiple, everyone in the
+        // Parlor in the same fuse)
+        ARCADE_VIDEO_POKER("Video Poker"),
+        ARCADE_CREEPER_FUSE("Creeper Fuse");
 
         private final String label;
 

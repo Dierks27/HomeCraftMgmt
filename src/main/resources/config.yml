@@ -3057,3 +3057,55 @@ games:
     gather_seconds: 10
     # Seconds between animals (2-10).
     call_seconds: 3
+  # Video Poker in the Clubhouse's Game Parlor (0.57.0): Jacks or Better. Put in, five cards are dealt
+  # from a fresh 52-card deck, tap the ones to keep (they say HELD), Draw once; the hand is paid by the
+  # pay table on the screen. Every stake's return is the best play's, counted exactly over every deal,
+  # hold and draw for the prizes it really pays (each hand's multiple of the stake, held under
+  # max_payout); a stake whose best play can't give back 85-95 of every 100 is left out with a WARN.
+  # The shipped table gives back exactly 93.47 of every 100 (93.39 at 5 tokens, where the Royal Flush
+  # is held to max_payout). Any other table is counted when config is read (a second or two, once).
+  video_poker:
+    # false = Video Poker is closed.
+    enabled: true
+    # The tokens a player can put in per hand.
+    stakes: [1, 2, 5]
+    # Hands per player per day.
+    daily_limit: 50
+    # How many times the tokens put in each hand pays (0-10000). A pair of 10s or lower pays nothing;
+    # Jacks or Better at 1 gives your tokens back (never called a win).
+    pays:
+      royal_flush: 100
+      straight_flush: 50
+      four_of_a_kind: 25
+      full_house: 6
+      flush: 5
+      straight: 4
+      three_of_a_kind: 3
+      two_pair: 2
+      jacks_or_better: 1
+  # Creeper Fuse in the Clubhouse's Game Parlor (0.57.0): everyone in the same fuse. The first put-in
+  # starts a short wait for others; then a creeper hisses while a multiple climbs from 1.00x, faster
+  # and faster. Cash out any time for your stake times the multiple (whole tokens, rounded down);
+  # when the creeper goes off (a bang and smoke only: nothing is broken, nobody is hurt) anyone still
+  # in gets nothing. Where it goes off is drawn before it is lit, so that the chance it is still
+  # burning past a multiple m is rtp/m: cashing out anywhere gives back rtp of every 100 (and it goes
+  # off at once 100 - rtp times in 100). A stake where the rounding down could give back under 85 is
+  # left out with a WARN (5 tokens at rtp 94: 5 x 1.19 pays 5).
+  creeper_fuse:
+    # false = Creeper Fuse is closed.
+    enabled: true
+    # The tokens a player can put in per fuse.
+    stakes: [10, 20, 50]
+    # Fuses a player can put in for per day.
+    daily_limit: 30
+    # Tokens given back per 100 put in, wherever you cash out (85-95).
+    rtp: 94
+    # Seconds the first put-in waits for others before the fuse is lit (5-60).
+    gather_seconds: 10
+    # Seconds the multiple takes to double: 1.00x to 2.00x, 2.00x to 4.00x ... (2-30).
+    double_seconds: 6
+    # The most the multiple climbs to (2-100): the fuse burns out there, and everyone still in is
+    # paid there. A stake whose pay would pass max_payout first is cashed out at that point.
+    top: 20
+    # The auto cash-out choices on the screen (up to 5, each above 1 and under the top).
+    auto_cash_out: [1.5, 2, 3, 5, 10]

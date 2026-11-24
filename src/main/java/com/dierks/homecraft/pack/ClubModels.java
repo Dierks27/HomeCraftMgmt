@@ -140,6 +140,12 @@ public final class ClubModels {
         // lit; its stand-in is a pig's spawn egg (the first picture)
         machine("bingo", "machine_bingo", Material.FILLED_MAP, "minecraft:block/white_concrete", Kind.CABINET);
         cabinet("kid_bingo", "cabinet_bingo", Material.PIG_SPAWN_EGG, "minecraft:block/pink_concrete");
+        // 0.57.0, the Game Parlor's Video Poker (five cards on a green felt screen; its stand-in is a card) and Creeper
+        // Fuse (a Creeper's face on a lit screen; its stand-in is a creeper head), a cabinet's size each, after every
+        // model there was
+        machine("video_poker", "machine_video_poker", Material.PAPER, "minecraft:block/green_wool", Kind.CABINET);
+        machine("creeper_fuse", "machine_creeper_fuse", Material.CREEPER_HEAD, "minecraft:block/lime_concrete",
+                Kind.CABINET);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -236,7 +242,8 @@ public final class ClubModels {
                 parts.add(box(1, 22, 1, 15, 24, 15, "top"));      // the lit marquee
                 parts.add(box(3, 8, 1, 13, 19, 2, "screen"));     // the screen, on the north side
                 parts.add(box(2, 2, 0, 14, 5, 2, "panel"));       // the control panel
-                if (m.name().equals("machine_mobs") || m.name().equals("cabinet_sweeper")) {
+                if (m.name().equals("machine_mobs") || m.name().equals("cabinet_sweeper")
+                        || m.name().equals("machine_creeper_fuse")) {
                     // a Creeper's face on the screen, in the body's black
                     parts.add(box(5, 14, 0, 7, 16, 1, "body"));  // the eyes
                     parts.add(box(9, 14, 0, 11, 16, 1, "body"));
@@ -273,6 +280,13 @@ public final class ClubModels {
                             int y = 10 + row * 3;
                             parts.add(box(x, y, 0, x + 2, y + 2, 1, (row + col) % 2 == 0 ? "lit" : "square"));
                         }
+                    }
+                }
+                if (m.name().equals("machine_video_poker")) { // five white cards side by side on the green screen
+                    tex += ",\"card\":\"minecraft:block/white_concrete\",\"red\":\"minecraft:block/red_concrete\"";
+                    for (int x = 3; x <= 11; x += 2) {
+                        parts.add(box(x, 12, 0, x + 2, 16, 1, "card"));
+                        parts.add(box(x, 15, 0, x + 1, 16, 1, x % 4 == 1 ? "red" : "body")); // each card's corner
                     }
                 }
                 if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it

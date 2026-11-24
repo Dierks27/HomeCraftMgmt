@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.54.1-gentle-whack`
+- **Version:** `0.55.0-sports-board`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,14 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.55.0: the Sports Board, picks on tonight's real games.** The owner: "can we make a betting area in the parlor
+for sports ... Kalshi is open api that we could get the games, scores and lines from". In the Game Parlor,
+`/hcm play sportsbook` (its wall board comes with the bigger Parlor) shows tonight's NFL, NBA, NHL, MLB and college
+games from Kalshi's public markets, each side with its chance and what $10 pays. Money only, with the Parlor's money
+play rules. See [The Sports Board](#the-sports-board-0550). **Schema v42** (a `sports_picks` table, added at the first
+start); a new `games.sportsbook` config section (no config revision). **Back to 0.54.1:** the jar alone is not
+enough while picks are open (0.54.1 doesn't know them): let them settle first, or keep 0.55.0.
 
 **0.54.1: Whack-a-Zombie for controllers, and no ball pit.** The owner: "Whack-a-Zombie is just not controller
 friendly at all!" Bedrock players now get the nine holes side by side (one press from one to the next), and the
@@ -5012,6 +5020,35 @@ glass roof. Nothing she needs is words.
   6, `stars` 10, `safe_seconds` 25, `lava_seconds` 12, `rounds` 5.
 - **Not seen on a server yet:** the room's look, the climbs with a Bedrock controller, the sounds' loudness, and the
   orange tint of standing in lava (fire resistance doesn't take it away).
+
+##### The Sports Board (0.55.0)
+
+Picks on tonight's real games, in dollars, in the Game Parlor. Behind the same doors as all money play: the Parlor,
+`hcm.games.money`, money play on, the day's money limit (picks count toward it), the most a play may put in and the
+most it may pay. No child ever sees it.
+
+- **The lines.** Every `refresh_minutes` (5) HCM reads Kalshi's public market data (no account, nothing about any
+  player is sent) for the games starting in the next `hours_ahead` (24) in `leagues` (shipped: nfl, nba, nhl, mlb,
+  ncaaf, ncaamb; ncaawb, wnba or any Kalshi `KX...GAME` series can be added). Each game's "who wins" market gives each
+  side's chance (the midpoint of its bid and ask, or the last trade). Sides under 5 or over 95 in 100, or that would
+  pay back less than 1% over the stake, aren't offered.
+- **What a pick pays:** `stake x rtp / chance`, so every pick gives back about `rtp` (90) of every 100 over time: a
+  longshot at 15 in 100 pays about $60 for $10, a favourite at 79 in 100 about $11.40. Never over the Parlor's biggest
+  payout (a side that would is offered only up to the amount that fits).
+- **Making one:** pick a league, a side, chips, then a confirm screen that says exactly what is locked in. **The price
+  is locked when you confirm**, whatever the market does after. Picks close when the game starts.
+- **Results:** when Kalshi settles the market the winners are paid (online or not; if the bank refuses, it is kept
+  and paid within a minute of working again), each pick once. A game called off gives the money back; a market still
+  unsettled `settle_days` (7) after the game gives it back too. You're told in chat, or at your next join. **My
+  picks** shows your open picks and how the last ones went.
+- **If Kalshi can't be reached** the board says "Lines are updating" and takes no picks (one console WARN per
+  outage); open picks wait. After a restart the last board shows at once but takes picks only after a fresh read.
+- **Admin:** `/hcm games sportsbook status|refresh|settle <ticker> yes|no|void|off|on` (`settle` for a stuck market,
+  logged; `off` stops new picks, settling goes on). `/hcm games parlor` counts picks in the day's money.
+- **Settings** (`games.sportsbook`): `enabled`, `leagues`, `refresh_minutes` (2-60), `hours_ahead` (1-72), `rtp`
+  (85-95), `settle_days` (1-30), `api_base` (https only).
+- **Seen on the test server:** 86 games read live from Kalshi; the board's NBA/NHL/college tabs; a $10 pick on
+  Detroit locked at $16.51 and shown in the status. Not yet seen: a real game settling (that takes a real game).
 
 ##### Lilah's Mob Races (0.54.0)
 

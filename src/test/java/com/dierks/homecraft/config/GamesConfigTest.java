@@ -275,8 +275,8 @@ class GamesConfigTest {
         assertEquals(2000, cf.top());
         assertEquals(List.of(150, 200, 300, 500, 1000), cf.autoChoices());
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals(List.of("sportsbook", "video_poker", "creeper_fuse"), blocks.subList(blocks.size() - 3,
-                blocks.size()), "appended at the end of games:");
+        assertEquals(List.of("kid_bingo", "video_poker", "creeper_fuse"), blocks.subList(blocks.size() - 3,
+                blocks.size()), "appended at the end of games: (after 0.57.0's Hold'em and the bingos)");
         assertTrue(com.dierks.homecraft.games.chance.poker.VideoPoker.SPEC.kind().chance());
         assertTrue(com.dierks.homecraft.games.chance.fuse.CreeperFuse.SPEC.kind().chance());
         List<String> warns = new ArrayList<>();
@@ -356,7 +356,8 @@ class GamesConfigTest {
         assertTrue(com.dierks.homecraft.games.chance.holdem.Holdem.SPEC.kind().chance(),
                 "a game of chance: the play gate, Take a break and the Parlor's money rules all apply");
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals("holdem", blocks.get(blocks.size() - 1), "appended at the end of games:");
+        assertEquals("holdem", blocks.get(blocks.indexOf("sportsbook") + 1),
+                "appended at the end of games: (right after the Sports Board; 0.57.0's other games after it)");
         assertEquals(List.of("enabled", "buy_ins", "small_blind", "big_blind", "friendly_chips", "daily_limit",
                 "npc_seats", "away_seconds", "pause_seconds"),
                 com.dierks.homecraft.games.chance.holdem.HoldemSettings.KEYS);

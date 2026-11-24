@@ -60,9 +60,10 @@ public final class ClubhousePlanner {
      * Mob Races' table in the middle of the Game Parlor, the Parlor's red carpet and its bigger card tables. 11: the
      * Arcade Room filled out (the owner: "it looks very empty"): a second race table for the kid race, nine cabinet
      * mats (one for every kid game and The Floor Is Lava's), a bright rug round the table, a ball pit, a plush case,
-     * bean bags and coloured lamps.
+     * bean bags and coloured lamps. 12: no ball pit (the owner: it "just sits on the floor ... a weird thing kind of
+     * sitting in the hallway").
      */
-    public static final int ALGO = 11;
+    public static final int ALGO = 12;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -1051,19 +1052,14 @@ public final class ClubhousePlanner {
     }
 
     /**
-     * Plan 11, the Arcade Room's play things, all on floor nobody needs to walk on: a ball pit in the south-east corner
-     * (a confetti of coloured carpet, its balls are displays: {@link #decor}), a glass plush case behind it on the back
-     * row, and a bean-bag nook in the south-west (two bean bags either side of the claw machine's corner and two on the
+     * Plan 11, the Arcade Room's play things, all on floor nobody needs to walk on: a glass plush case on the back row
+     * (plan 11's ball pit before it went in plan 12), and a bean-bag nook in the south-west (two bean bags either side of the claw machine's corner and two on the
      * west wall between its last two cabinets). Nothing to climb into: the case is glass to the top, a bean bag is one
      * block high, and every top is lit.
      */
     private static void playThings(Builder b) {
-        int n = 0;
-        for (int i = BALL_PIT[0]; i <= BALL_PIT[1]; i++) {
-            for (int k = BALL_PIT[2]; k <= BALL_PIT[3]; k++) {
-                b.set(ARCADE_X0 + i, 1, k, BALL_CARPET[n++ % BALL_CARPET.length]);
-            }
-        }
+        // plan 12 (the owner: "The 'Ball Pit' just sits on the floor and doesn't read like a ball pit ... just a weird
+        // thing kind of sitting in the hallway ... you need a bigger space"): no ball pit; that floor is plain again
         for (int i : PLUSH_X) {
             b.set(ARCADE_X0 + i, 1, SIDE_Z1, CABINET);
             b.set(ARCADE_X0 + i, 2, SIDE_Z1, ROOF_GLASS);
@@ -1080,10 +1076,6 @@ public final class ClubhousePlanner {
     static final String[] KID_RUG = {"minecraft:yellow_carpet", "minecraft:light_blue_carpet"};
     static final String[] KID_LAMPS = {"minecraft:pearlescent_froglight[axis=y]",
             "minecraft:verdant_froglight[axis=y]", "minecraft:ochre_froglight[axis=y]", "minecraft:shroomlight"};
-    /** The ball pit: x 11-12, z 44-45 (x0, x1, z0, z1), and its carpet's colours. */
-    static final int[] BALL_PIT = {11, 12, SIDE_Z1 - 2, SIDE_Z1 - 1};
-    static final String[] BALL_CARPET = {"minecraft:red_carpet", "minecraft:lime_carpet", "minecraft:orange_carpet",
-            "minecraft:pink_carpet"};
     /** The plush case on the back row (x), between the prize counter and the east claw machine. */
     static final int[] PLUSH_X = {11, 12};
     /** The bean bags (x, z, colour): either side of the west claw's corner, and on the west wall. */
@@ -1691,21 +1683,6 @@ public final class ClubhousePlanner {
                             "face"));
                 }
             }
-            // and the ball pit's balls: little coloured cubes lying on its carpet
-            String[] balls = {"RED_CONCRETE", "YELLOW_CONCRETE", "LIME_CONCRETE", "LIGHT_BLUE_CONCRETE",
-                    "ORANGE_CONCRETE", "PINK_CONCRETE", "MAGENTA_CONCRETE", "CYAN_CONCRETE"};
-            int n = 0;
-            for (int i = BALL_PIT[0]; i <= BALL_PIT[1]; i++) {
-                for (int k = BALL_PIT[2]; k <= BALL_PIT[3]; k++) {
-                    for (int m = 0; m < 4; m++) {
-                        double bx = x0 + ARCADE_X0 + i + 0.12 + 0.45 * (m % 2) + 0.06 * (n % 3);
-                        double bz = z0 + k + 0.12 + 0.45 * (m / 2) + 0.05 * (n % 2);
-                        out.add(new Prop("arcade.ball." + n, balls[n % balls.length], true, bx,
-                                y0 + 1 + 1.0 / 16 + (m == 3 ? BALL : 0), bz, 0f, BALL, BALL, BALL, "block"));
-                        n++;
-                    }
-                }
-            }
         }
         return out;
     }
@@ -1720,9 +1697,6 @@ public final class ClubhousePlanner {
         }
         return out;
     }
-
-    /** The size of a ball in the ball pit (blocks). */
-    static final float BALL = 0.3f;
 
     /** The Feast Pot's size on the cloth (blocks). */
     static final float POT_SIZE = 0.6f;

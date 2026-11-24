@@ -67,9 +67,24 @@ public final class WhackEngine {
         }
     }
 
+    /**
+     * Gentle play (0.54.1; the owner: "Whack-a-Zombie is just not controller friendly at all!"): one zombie at a time,
+     * no villagers, and it waits for you, up to {@value #GENTLE_WINDOW} steps, so a controller's cursor (or a small
+     * child) has time to get there. The next comes {@value #GENTLE_GAP} steps after it goes. Played by the Arcade
+     * Room's kid cabinet and by Bedrock players in Classic; it has its own high-score board.
+     */
+    static final int GENTLE_WINDOW = 50;
+    static final int GENTLE_GAP = 4;
+
     private final List<Pop> pops;
     private final boolean[] whacked;
     private final boolean bedrock;
+    private final boolean gentle;
+    private final SplittableRandom gentleRng;
+    private int up = -1;
+    private int upAt;
+    private int nextAt = START;
+    private int lastHole = -1;
     private final int steps;
     private int now;
     private int score;
@@ -81,10 +96,26 @@ public final class WhackEngine {
      * @param bedrock whether the player gets the longer Bedrock windows
      */
     public WhackEngine(long seed, int seconds, boolean bedrock) {
+        this(seed, seconds, bedrock, false);
+    }
+
+    private WhackEngine(long seed, int seconds, boolean bedrock, boolean gentle) {
         this.steps = Math.max(1, seconds) * STEPS_PER_SECOND;
         this.bedrock = bedrock;
-        this.pops = schedule(seed, steps, HOLES);
+        this.gentle = gentle;
+        this.pops = gentle ? List.of() : schedule(seed, steps, HOLES);
         this.whacked = new boolean[pops.size()];
+        this.gentleRng = gentle ? new SplittableRandom(seed) : null;
+    }
+
+    /** A gentle round (see {@link #GENTLE_WINDOW}): one zombie at a time that waits, no villagers. */
+    public static WhackEngine gentle(long seed, int seconds) {
+        return new WhackEngine(seed, seconds, true, true);
+    }
+
+    /** Whether this round is gentle. */
+    public boolean isGentle() {
+        return gentle;
     }
 
     /**
@@ -125,16 +156,45 @@ public final class WhackEngine {
         if (now < steps) {
             now++;
         }
+        if (!gentle || over()) {
+            return;
+        }
+        if (up < 0 && now >= nextAt) {
+            int hole = gentleRng.nextInt(HOLES - (lastHole < 0 ? 0 : 1));
+            if (lastHole >= 0 && hole >= lastHole) {
+                hole++; // never the same hole twice in a row
+            }
+            up = hole;
+            upAt = now;
+        } else if (up >= 0 && now - upAt >= GENTLE_WINDOW) {
+            lastHole = up;
+            up = -1;
+            nextAt = now + GENTLE_GAP;
+        }
     }
 
     /** What is up in {@code hole} right now, or {@code null} for nothing. */
     public Kind at(int hole) {
+        if (gentle) {
+            return !over() && hole == up ? Kind.ZOMBIE : null;
+        }
         int i = showing(hole);
         return i < 0 ? null : pops.get(i).kind();
     }
 
     /** Whack {@code hole}: a zombie is +1, a villager -1 (never below zero), an empty hole nothing. */
     public Hit whack(int hole) {
+        if (gentle) {
+            if (over() || hole != up) {
+                return Hit.EMPTY;
+            }
+            zombies++;
+            score++;
+            lastHole = up;
+            up = -1;
+            nextAt = now + GENTLE_GAP;
+            return Hit.ZOMBIE;
+        }
         int i = showing(hole);
         if (i < 0) {
             return Hit.EMPTY;

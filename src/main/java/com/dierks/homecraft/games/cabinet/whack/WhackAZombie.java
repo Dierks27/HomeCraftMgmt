@@ -133,9 +133,17 @@ public final class WhackAZombie extends CabinetGame {
         return ThreadLocalRandom.current().nextLong();
     }
 
+    /** The gentle rounds' own board (0.54.1): never mixed with Classic's quick ones. */
+    public static final String GENTLE = "gentle";
+
     /** The player's best Classic score, or {@code null}. */
     public Long best(Player player) {
-        return games().scores().best(player.getUniqueId(), id(), Scores.CLASSIC);
+        return best(player, false);
+    }
+
+    /** The player's best on Classic's board or the gentle one, or {@code null}. */
+    public Long best(Player player, boolean gentle) {
+        return games().scores().best(player.getUniqueId(), id(), gentle ? GENTLE : Scores.CLASSIC);
     }
 
     /** Whether the player has had today's scored try (their next daily is practice). */
@@ -164,9 +172,14 @@ public final class WhackAZombie extends CabinetGame {
      * @param daily the daily start, or {@code null} for Classic
      */
     public Finish finish(Player player, DailyStart daily, int points) {
+        return finish(player, daily, points, false);
+    }
+
+    /** As {@link #finish(Player, DailyStart, int)}; a gentle round (never a daily) goes on its own board. */
+    public Finish finish(Player player, DailyStart daily, int points, boolean gentle) {
         boolean goal = points >= DAILY_GOAL;
         Finish f = daily == null
-                ? finishClassic(player, Scores.CLASSIC, points, LOWER_IS_BETTER)
+                ? finishClassic(player, gentle ? GENTLE : Scores.CLASSIC, points, LOWER_IS_BETTER)
                 : finishDaily(player, daily, points, LOWER_IS_BETTER, goal);
         String score = points + " point" + (points == 1 ? "" : "s");
         String best = points <= 0 ? "" : daily == null ? standing(f.result()) : dayStanding(f.result());

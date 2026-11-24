@@ -154,7 +154,7 @@ class ArcadeRoomTest {
             }
         }
         assertNotEquals(ClubhousePlanner.raceTable(BOX), f, "a second track: not the Parlor's");
-        assertEquals(11, ClubhousePlanner.ALGO, "a block change: every server builds the room once more");
+        assertEquals(12, ClubhousePlanner.ALGO, "a block change: every server builds the room once more");
         assertEquals("kidrace", RaceShow.KID_TAP, "its tap opens the kid race, never a machine of chance");
         assertFalse(RaceShow.KID_TAP.startsWith("machine:"));
     }
@@ -291,17 +291,9 @@ class ArcadeRoomTest {
     void theRoomHasItsPlayThingsAndNothingToClimbInto() {
         Map<Long, Integer> light = light();
         int ax = BOX.minX() + ClubhousePlanner.ARCADE_X0;
-        // the ball pit: coloured carpet on the floor, its balls drawn as displays
-        int[] pit = ClubhousePlanner.BALL_PIT;
-        for (int i = pit[0]; i <= pit[1]; i++) {
-            for (int k = pit[2]; k <= pit[3]; k++) {
-                String c = at(ax + i, FEET, BOX.minZ() + k);
-                assertTrue(c != null && c.endsWith("_carpet"), "the pit's carpet at " + i + "," + k);
-                assertNull(at(ax + i, FEET + 1, BOX.minZ() + k), "nothing over it");
-            }
-        }
         List<ClubhousePlanner.Prop> decor = ClubhousePlanner.decor(BOX, ClubhousePlanner.Rooms.BOTH);
-        assertTrue(decor.stream().filter(p -> p.key().startsWith("arcade.ball.")).count() >= 12, "a pit full of balls");
+        assertEquals(0, decor.stream().filter(p -> p.key().startsWith("arcade.ball.")).count(),
+                "plan 12: no ball pit (the owner: it read as a weird thing in the hallway)");
         assertTrue(decor.stream().filter(p -> p.key().startsWith("arcade.plush.")).count() >= 4, "plushies on show");
         // the plush case: glass to its top, so nothing stands on it
         for (int i : ClubhousePlanner.PLUSH_X) {

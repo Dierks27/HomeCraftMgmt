@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.54.0-kid-races`
+- **Version:** `0.54.1-gentle-whack`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,13 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.54.1: Whack-a-Zombie for controllers, and no ball pit.** The owner: "Whack-a-Zombie is just not controller
+friendly at all!" Bedrock players now get the nine holes side by side (one press from one to the next), and the
+Arcade Room's cabinet and Bedrock's Classic play **gentle**: one zombie at a time that waits up to five seconds for
+you, no villagers, with its own high-score board (`gentle`), so quick Java rounds and gentle ones never share a
+board. The daily board is unchanged for everyone. And the Arcade Room's ball pit is gone ("a weird thing kind of
+sitting in the hallway"): **plan 12, the Clubhouse rebuilds once.** **Back to 0.54.0:** the jar alone (plan 11 again).
 
 **0.54.0: Lilah's Mob Races, and an Arcade Room with every kid game.** The owner: "take the mob race and plop it
 into the arcade ... make it for my daughter" ("Free, prize only if she wins"), and "There were two Simon Says in the
@@ -5025,7 +5032,7 @@ the Luck tab.
 - **The Arcade Room** now has a cabinet place for every kid game, with no repeats: the five before, The Floor Is
   Lava's, and new cabinets for **Snake, Connect Four, Creeper Sweeper and Ore Merge** (models `cabinet_sweeper`,
   `cabinet_merge`, `cabinet_connect`; without the pack a creeper head, a diamond and red concrete). It is dressed with
-  coloured lamps on chains, a ball pit, a glass case of mob plushies and wool bean bags.
+  coloured lamps on chains, a glass case of mob plushies and wool bean bags (0.54.0's ball pit went in 0.54.1).
 - **Settings** (`games.kid_races`): `enabled`, `prize` (2), `daily_cap` (10), `gather_seconds` (15), `race_seconds`
   (20). In an owner-built or edited room, build a table and use `/hcm games clubhouse arcade mob_races [clear]`.
 - **Seen on the test server:** the Clubhouse rebuilt to plan 11; every kid game's cabinet once; the table's screen;

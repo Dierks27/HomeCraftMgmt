@@ -181,16 +181,25 @@ class LiveArenaHost implements ArenaHost {
      */
     private List<Regions.Extra> clubhouse() {
         List<Regions.Extra> out = new ArrayList<>();
+        com.dierks.homecraft.games.lava.LavaSettings lava = null;
         try {
-            out.addAll(ClubhouseRegions.extras(games().settings(Clubhouse.SPEC)));
+            lava = games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC);
         } catch (RuntimeException e) {
             // unreadable: nothing to keep apart from
         }
         try {
-            out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(
-                    games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC)));
+            // plan 13: the Clubhouse as far as it may reach (its grown wing only where it crowds nothing, this arena too)
+            out.addAll(com.dierks.homecraft.games.gen.DailyCourses.clubhouseExtras(fresh(),
+                    games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC), lava));
         } catch (RuntimeException e) {
-            // as above
+            try {
+                out.addAll(ClubhouseRegions.extras(games().settings(Clubhouse.SPEC)));
+            } catch (RuntimeException again) {
+                // unreadable: nothing to keep apart from
+            }
+        }
+        if (lava != null) {
+            out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(lava));
         }
         return out;
     }

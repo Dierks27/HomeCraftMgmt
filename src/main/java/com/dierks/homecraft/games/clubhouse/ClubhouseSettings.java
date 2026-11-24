@@ -65,13 +65,17 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
     public static final int FIRST_SECONDS = 5;
 
     /**
-     * The box's size (§1): 32 x 16 x 48, fixed by the plan (0.41.0; it was 32 x 16 x 32). The main room is its first
-     * 32 rows ({@link #mainBox}), the side rooms its last 16 ({@link #annexBox}). Every other games area keeps clear of
-     * the whole box, rooms on or off.
+     * The box's size (§1): 32 x 16 x 62, fixed by the plan (plan 13; 0.41.0 to plan 12 it was 32 x 16 x 48, before that
+     * 32 x 16 x 32). The main room is its first 32 rows ({@link #mainBox}), the side rooms' wing its last 30: the 16
+     * rows 0.41.0 claimed ({@link #annexBox}) and the 14 plan 13 added, claimed on their own ({@link #wingBox}). Every
+     * other games area keeps clear of the whole box, rooms on or off, unless those 14 rows would crowd it: then the
+     * Clubhouse keeps its old size ({@link #oldBox}; {@link ClubhouseRegions#reach}).
      */
     public static final int SIZE_X = 32;
     public static final int SIZE_Y = 16;
     public static final int SIZE_Z = ClubhousePlanner.MAIN_Z + ClubhousePlanner.ANNEX_Z;
+    /** The box's depth before plan 13 (the main room and a 16-row wing). */
+    public static final int OLD_SIZE_Z = ClubhousePlanner.MAIN_Z + ClubhousePlanner.OLD_ANNEX_Z;
 
     /**
      * The shipped corner (LAYOUT-SPEC §1.5): south of the courses' west column, 576 blocks from every
@@ -196,9 +200,20 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
                 ? line.substring(0, line.length() - closes.length()) + " - using its shipped value" : line));
     }
 
-    /** The whole box (§1): 32 x 16 x 48 from {@link #origin}, the main room and the side rooms. */
+    /** The whole box (§1): 32 x 16 x 62 from {@link #origin}, the main room and the side rooms' grown wing. */
     public Box box() {
         return Box.sized(origin.get(0), origin.get(1), origin.get(2), SIZE_X, SIZE_Y, SIZE_Z);
+    }
+
+    /** Plan 13: the box at its old size, 32 x 16 x 48 (the wing's first 16 rows): a room that can't take its new rows. */
+    public Box oldBox() {
+        return Box.sized(origin.get(0), origin.get(1), origin.get(2), SIZE_X, SIZE_Y, OLD_SIZE_Z);
+    }
+
+    /** Plan 13: the 14 rows the wing grew by, south of {@link #annexBox}: claimed on their own. */
+    public Box wingBox() {
+        return Box.sized(origin.get(0), origin.get(1), origin.get(2) + OLD_SIZE_Z, SIZE_X, SIZE_Y,
+                ClubhousePlanner.WING_Z);
     }
 
     /** The main room's box (0.41.0): the box's first 32 rows, 32 x 16 x 32, what the Clubhouse was before. */
@@ -206,10 +221,13 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
         return Box.sized(origin.get(0), origin.get(1), origin.get(2), SIZE_X, SIZE_Y, ClubhousePlanner.MAIN_Z);
     }
 
-    /** The side rooms' box (0.41.0): the box's last 16 rows, south of the main room. */
+    /**
+     * The side rooms' first box (0.41.0): the 16 rows south of the main room, claimed on their own then and still (its
+     * claim is unchanged by plan 13, whose 14 more rows are {@link #wingBox}).
+     */
     public Box annexBox() {
         return Box.sized(origin.get(0), origin.get(1), origin.get(2) + ClubhousePlanner.MAIN_Z, SIZE_X, SIZE_Y,
-                ClubhousePlanner.ANNEX_Z);
+                ClubhousePlanner.OLD_ANNEX_Z);
     }
 
     /** Whether the Clubhouse is on after anything at all (for the check's summary). */

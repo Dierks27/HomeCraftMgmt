@@ -61,15 +61,26 @@ public final class ClubhousePlanner {
      * Arcade Room filled out (the owner: "it looks very empty"): a second race table for the kid race, nine cabinet
      * mats (one for every kid game and The Floor Is Lava's), a bright rug round the table, a ball pit, a plush case,
      * bean bags and coloured lamps. 12: no ball pit (the owner: it "just sits on the floor ... a weird thing kind of
-     * sitting in the hallway").
+     * sitting in the hallway"). 13: the side rooms' wing grown 14 rows to the south (the owner: "make the place larger
+     * so all these things can fit comfortably ... We want to fill the space"): a walled ball pit, a bean-bag nook, a
+     * prize-and-plush corner, four spare cabinet places and a viewing area for the kid race downstairs; a lounge, room
+     * for two more card tables and the sportsbook's wall upstairs; the Trophy Room and the secret room longer.
      */
-    public static final int ALGO = 12;
+    public static final int ALGO = 13;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
     /** The main room's depth (z): the side rooms are south of it, in the box's last {@value #ANNEX_Z} rows. */
     public static final int MAIN_Z = 32;
-    public static final int ANNEX_Z = 16;
+    /** Plan 13: the side rooms' wing, 30 rows deep (16 from 0.41.0 to plan 12). */
+    public static final int ANNEX_Z = 30;
+    /**
+     * The wing's depth before plan 13. A server whose 14 new rows can't be claimed (another games area too near, or
+     * blocks that aren't the Clubhouse's in them) keeps its side rooms at this depth: the same rooms as plan 12.
+     */
+    public static final int OLD_ANNEX_Z = 16;
+    /** The rows plan 13 added to the wing, claimed on their own ({@code ClubhouseRoom#WING_CLAIM_KEY}). */
+    public static final int WING_Z = ANNEX_Z - OLD_ANNEX_Z;
     /** The side rooms' walls stand up to here; their glass roof is on top (they are lower than the main room). */
     public static final int SIDE_TOP = 7;
     public static final int SIDE_ROOF = 8;
@@ -86,27 +97,54 @@ public final class ClubhousePlanner {
     /** The side rooms' west walls (x offsets): the Arcade Room's at 0, the Trophy Room's at 16; each 16 wide. */
     static final int ARCADE_X0 = 0;
     static final int TROPHY_X0 = 16;
-    /** The side rooms' first and last rows of air (z offsets). */
+    /** The side rooms' first and last rows of air (z offsets): plan 13's wing; {@link #z1} for a given box. */
     static final int SIDE_Z0 = MAIN_Z;
     static final int SIDE_Z1 = MAIN_Z + ANNEX_Z - 2;
+    /** The last row of air of a wing kept at its old size (plan 12's {@code SIDE_Z1}). */
+    static final int OLD_SIDE_Z1 = MAIN_Z + OLD_ANNEX_Z - 2;
+
+    /** The side rooms' last row of air in {@code box} (z offset): its south wall is the row after. */
+    static int z1(Box box) {
+        return box.sizeZ() - 2;
+    }
+
+    /** Whether {@code box} has plan 13's grown wing (a box of the old depth keeps plan 12's rooms). */
+    static boolean grown(Box box) {
+        return box.sizeZ() == MAIN_Z + ANNEX_Z;
+    }
+
     /**
      * The Arcade Room's cabinet places (x, z offsets, yaw), {@value #CABINETS} (0.42.0): two facing rows down the side
      * walls, the east row facing west and the west row facing east, taken in turn from the archway's end. Nothing of a
      * cabinet is in the plan but its coloured mat in the floor: the cabinet is a model (an entity) you can walk up to.
      * Plan 11 adds three places after the first six (whose order and places stay as they were): the west wall's
      * north end and both walls' south ends, so every kid game has a cabinet of its own and The Floor Is Lava one more.
-     * The east wall's north end stays free: it is the archway's way in.
+     * The east wall's north end stays free: it is the archway's way in. Plan 13 adds four spare places after those
+     * nine, down the grown wing's side walls (a mat waits on each until a game takes it); a wing kept at its old size
+     * has the first {@value #OLD_CABINETS}.
      */
     static final int[][] CABINET_AT = {{14, 36, 90}, {1, 36, -90}, {14, 39, 90}, {1, 39, -90}, {14, 42, 90},
-            {1, 42, -90}, {1, 33, -90}, {14, 45, 90}, {1, 45, -90}};
+            {1, 42, -90}, {1, 33, -90}, {14, 45, 90}, {1, 45, -90}, {14, 48, 90}, {1, 48, -90}, {14, 51, 90},
+            {1, 51, -90}};
     /** 0.42.0: the Arcade Room's prize counter (x 5-10) and claw machines (x 2 and 13) on its back row. */
     static final int PRIZE_X0 = 5;
     static final int PRIZE_X1 = 10;
     static final int[] CLAW_X = {2, 13};
-    /** 0.42.0: the Trophy Room's beams (across, at these rows) and banners (on the side walls). */
+    /** Plan 13: in the grown wing the claw machines flank the prize counter (the corners are the nooks'). */
+    static final int[] GROWN_CLAW_X = {4, 11};
+    /** 0.42.0: the Trophy Room's beams (across, at these rows) and banners (on the side walls); plan 13's longer room. */
     static final int[] TROPHY_BEAM_Z = {38, 44};
     static final int[] TROPHY_BANNER_Z = {35, 41};
-    public static final int CABINETS = 9;
+    static final int[] GROWN_TROPHY_BEAM_Z = {38, 44, 50, 56};
+    static final int[] GROWN_TROPHY_BANNER_Z = {35, 41, 47, 53};
+    /** Every cabinet place there can be (plan 13: nine and four spares), and a wing at its old size's. */
+    public static final int CABINETS = 13;
+    public static final int OLD_CABINETS = 9;
+
+    /** The claw machines' columns in {@code box}. */
+    static int[] clawX(Box box) {
+        return grown(box) ? GROWN_CLAW_X : CLAW_X;
+    }
     /**
      * The Trophy Room's pedestals: the podium for last week's top three at the back (2 x 1 plinths, 1st in the middle
      * and highest, gold, iron and copper as the hall's; the trophy on the west block, the holder's head on the east),
@@ -115,8 +153,13 @@ public final class ClubhousePlanner {
      */
     static final int[] ROOM_PODIUM_X = {23, 26, 20};
     static final int[] ROOM_PODIUM_HEIGHT = {3, 2, 1};
-    static final int ROOM_PODIUM_Z = 46;
+    static final int ROOM_PODIUM_Z = OLD_SIDE_Z1;
     static final int[] RECORD_Z = {33, 36, 39, 42};
+
+    /** The podium's row in {@code box}: the Trophy Room's back row (plan 13: it moved back with the wall). */
+    static int podiumZ(Box box) {
+        return z1(box);
+    }
     static final int RECORD_WEST_X = 17;
     static final int RECORD_EAST_X = 30;
     public static final int RECORD_PEDESTALS = 8;
@@ -404,7 +447,12 @@ public final class ClubhousePlanner {
      * @throws IllegalArgumentException when the box isn't one of the Clubhouse's sizes
      */
     public static ClubhouseSite plan(Box box) {
-        return plan(box, box != null && box.sizeZ() == ClubhouseSettings.SIZE_Z ? Rooms.BOTH : Rooms.NONE);
+        return plan(box, box != null && box.sizeZ() > MAIN_Z ? Rooms.BOTH : Rooms.NONE);
+    }
+
+    /** Whether {@code depth} is one the Clubhouse's box can have: the main room alone, or with its wing (either size). */
+    static boolean depthOk(int depth) {
+        return depth == MAIN_Z || depth == MAIN_Z + OLD_ANNEX_Z || depth == MAIN_Z + ANNEX_Z;
     }
 
     /**
@@ -412,17 +460,19 @@ public final class ClubhousePlanner {
      * {@value #MAIN_Z} rows; with a room, the box is {@value #ANNEX_Z} deeper (the annex). A 48-deep box with no room
      * leaves the annex air (a room switched off is cleared).
      *
-     * @param box the Clubhouse box: 32 x 16 x 48, or 32 x 16 x 32 with no side room
+     * @param box the Clubhouse box: 32 x 16 x 62 (plan 13), 32 x 16 x 48 (its wing at the old size), or 32 x 16 x 32
+     *            with no side room
      * @throws IllegalArgumentException when the box isn't the Clubhouse's size, or a 32-deep box is given a room
      */
     public static ClubhouseSite plan(Box box, Rooms rooms) {
         Rooms r = rooms == null ? Rooms.NONE : rooms;
-        boolean annex = box != null && box.sizeZ() == ClubhouseSettings.SIZE_Z;
+        boolean annex = box != null && box.sizeZ() > MAIN_Z;
         if (box == null || box.sizeX() != ClubhouseSettings.SIZE_X || box.sizeY() != ClubhouseSettings.SIZE_Y
-                || (box.sizeZ() != ClubhouseSettings.SIZE_Z && box.sizeZ() != MAIN_Z)) {
+                || !depthOk(box.sizeZ())) {
             throw new IllegalArgumentException("the Clubhouse box is " + ClubhouseSettings.SIZE_X + " x "
-                    + ClubhouseSettings.SIZE_Y + " x " + ClubhouseSettings.SIZE_Z + " (or " + MAIN_Z + " deep without"
-                    + " its side rooms), not "
+                    + ClubhouseSettings.SIZE_Y + " x " + ClubhouseSettings.SIZE_Z + " (or "
+                    + (MAIN_Z + OLD_ANNEX_Z) + " deep with its side rooms at their old size, or " + MAIN_Z
+                    + " deep without them), not "
                     + (box == null ? "missing" : box.sizeX() + " x " + box.sizeY() + " x " + box.sizeZ()));
         }
         if (!annex && r.any()) {
@@ -495,16 +545,16 @@ public final class ClubhousePlanner {
                 box.minY() + ARCH_H, box.minZ() + MAIN_Z - 1);
     }
 
-    /** The Arcade Room's air in {@code box} (a 48-deep box). */
+    /** The Arcade Room's air in {@code box} (a box with its wing). */
     public static Box arcadeInside(Box box) {
         return new Box(box.minX() + ARCADE_X0 + 1, box.minY() + 1, box.minZ() + SIDE_Z0, box.minX() + ARCADE_X0 + 14,
-                box.minY() + SIDE_TOP, box.minZ() + SIDE_Z1);
+                box.minY() + SIDE_TOP, box.minZ() + z1(box));
     }
 
-    /** The Trophy Room's air in {@code box} (a 48-deep box). */
+    /** The Trophy Room's air in {@code box} (a box with its wing). */
     public static Box trophyInside(Box box) {
         return new Box(box.minX() + TROPHY_X0 + 1, box.minY() + 1, box.minZ() + SIDE_Z0, box.minX() + TROPHY_X0 + 14,
-                box.minY() + SIDE_TOP, box.minZ() + SIDE_Z1);
+                box.minY() + SIDE_TOP, box.minZ() + z1(box));
     }
 
     // ---- the shell -------------------------------------------------------------------------------
@@ -809,13 +859,18 @@ public final class ClubhousePlanner {
 
     /** An armchair at (i, k): a chair, its back to {@code facing}, an arm each side (along the other axis). */
     private static void armchair(Builder b, int i, int k, String facing, String color) {
-        b.seat(i, 1, k, chair(facing), color);
+        armchair(b, i, 1, k, facing, color);
+    }
+
+    /** An armchair standing on the floor whose top is {@code j} (plan 13: the Parlor's lounge has them too). */
+    private static void armchair(Builder b, int i, int j, int k, String facing, String color) {
+        b.seat(i, j, k, chair(facing), color);
         if (facing.equals("east") || facing.equals("west")) {
-            armOver(b, i, k - 1, arm("north"));
-            armOver(b, i, k + 1, arm("south"));
+            armOver(b, i, j, k - 1, arm("north"));
+            armOver(b, i, j, k + 1, arm("south"));
         } else {
-            armOver(b, i - 1, k, arm("west"));
-            armOver(b, i + 1, k, arm("east"));
+            armOver(b, i - 1, j, k, arm("west"));
+            armOver(b, i + 1, j, k, arm("east"));
         }
     }
 
@@ -824,12 +879,12 @@ public final class ClubhousePlanner {
      * a rug, the floor under it becomes the rug's colour as a whole block (and a hidden light there goes: it showed as
      * a white strip beside the east wing's armchairs).
      */
-    private static void armOver(Builder b, int i, int k, String arm) {
-        String under = b.get(i, 1, k);
+    private static void armOver(Builder b, int i, int j, int k, String arm) {
+        String under = b.get(i, j, k);
         if (id(under).endsWith("_carpet")) {
-            b.set(i, 0, k, underCarpet(id(under)));
+            b.set(i, j - 1, k, underCarpet(id(under)));
         }
-        b.set(i, 1, k, arm);
+        b.set(i, j, k, arm);
     }
 
     /** The whole block that looks like a carpet from above: its wool (moss carpet: moss). */
@@ -935,7 +990,7 @@ public final class ClubhousePlanner {
      * own walls at y 6 when {@code neon}.
      */
     private static void sideShell(Builder b, int x0, String floor, String roof, boolean neon) {
-        int z1 = MAIN_Z + ANNEX_Z - 1; // the south wall
+        int z1 = b.z1 + 1; // the south wall
         for (int i = x0; i <= x0 + 15; i++) {
             for (int k = MAIN_Z; k <= z1; k++) {
                 boolean edgeX = i == x0 || i == x0 + 15;
@@ -968,43 +1023,69 @@ public final class ClubhousePlanner {
     /**
      * The Arcade Room (the south-west; 0.42.0, the owner: "this thing needs to look much more like an arcade"): dim
      * under a tinted-glass roof, a neon strip of coloured froglights round its walls, an arcade carpet (black with
-     * coloured confetti and lit squares), six cabinets in two facing rows down the walls on dark mats, a prize counter
-     * of glass cases along the back wall and a claw machine in each back corner (their prizes are displays), lanterns
+     * coloured confetti and lit squares), cabinets in two facing rows down the walls on dark mats, a prize counter
+     * of glass cases along the back wall and a claw machine either end of it (their prizes are displays), lanterns
      * hanging low. A soft arcade chime plays now and then while anyone is in.
+     *
+     * <p>Plan 13, the grown wing (x 1-14, z 32-60): the old room's north part as it was (the nine cabinet places, the
+     * kid race's table and its rug), then a viewing area for the table, four spare cabinet places down the side walls,
+     * a walled ball pit in the middle, a bean-bag nook in the south-west corner, the prize counter between its two claw
+     * machines on the back wall and a prize-and-plush corner in the south-east, a bright tiled stripe across the floor
+     * and coloured lamps over it all. The east side (x 11-13) stays open from the archway to the plush counter, and a
+     * lane runs round the pit.
      */
     private static void arcadeRoom(Builder b) {
         int x0 = ARCADE_X0;
         sideShell(b, x0, ARCADE_FLOOR, TINTED, true);
         for (int i = x0 + 1; i <= x0 + 14; i++) {
-            for (int k = SIDE_Z0; k <= SIDE_Z1; k++) {
+            for (int k = SIDE_Z0; k <= b.z1; k++) {
                 if (Math.floorMod(i * 5 + k * 3, 7) == 0) {
                     b.set(i, 0, k, CONFETTI[Math.floorMod(i + 2 * k, CONFETTI.length)]);
                 }
             }
         }
+        if (b.big) {
+            // plan 13: a bright tiled stripe across the floor north of the pit and in front of the back row
+            for (int k : TILE_Z) {
+                for (int i = x0 + 2; i <= x0 + 13; i++) {
+                    b.set(i, 0, k, CONFETTI[Math.floorMod(i, CONFETTI.length)]);
+                }
+            }
+        }
         for (int i = x0 + 2; i <= x0 + 13; i += 4) {
-            for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k += 4) {
+            for (int k = SIDE_Z0 + 1; k <= b.z1; k += 4) {
                 b.set(i, 0, k, LIGHT);
             }
         }
-        for (int[] c : CABINET_AT) {
-            b.set(c[0], 0, c[1], MAT);
+        int places = b.big ? CABINETS : OLD_CABINETS;
+        for (int n = 0; n < places; n++) {
+            b.set(CABINET_AT[n][0], 0, CABINET_AT[n][1], MAT);
         }
         // the prize counter along the back wall: a counter with glass cases on it
         for (int i = PRIZE_X0; i <= PRIZE_X1; i++) {
-            b.set(i, 1, SIDE_Z1, CABINET);
-            b.set(i, 2, SIDE_Z1, ROOF_GLASS);
+            b.set(i, 1, b.z1, CABINET);
+            b.set(i, 2, b.z1, ROOF_GLASS);
         }
-        // a claw machine in each back corner: a red base and top, a glass box between
-        for (int i : CLAW_X) {
-            b.set(i, 1, SIDE_Z1, CLAW);
-            b.set(i, 2, SIDE_Z1, ROOF_GLASS);
-            b.set(i, 3, SIDE_Z1, ROOF_GLASS);
-            b.set(i, 4, SIDE_Z1, CLAW);
+        // a claw machine either end of the back row: a red base and top, a glass box between
+        for (int i : b.big ? GROWN_CLAW_X : CLAW_X) {
+            b.set(i, 1, b.z1, CLAW);
+            b.set(i, 2, b.z1, ROOF_GLASS);
+            b.set(i, 3, b.z1, ROOF_GLASS);
+            b.set(i, 4, b.z1, CLAW);
         }
         for (int i : new int[]{x0 + 4, x0 + 11}) {
             for (int k : new int[]{SIDE_Z0 + 3, SIDE_Z0 + 9}) {
                 b.set(i, SIDE_TOP, k, HANGING);
+            }
+        }
+        if (b.big) {
+            // coloured lamps on chains over the new floor
+            int n = 0;
+            for (int k : GROWN_LAMP_Z) {
+                for (int i : new int[]{x0 + 4, x0 + 11}) {
+                    b.set(i, SIDE_TOP, k, CHAIN);
+                    b.set(i, SIDE_TOP - 1, k, NEON[n++ % NEON.length]);
+                }
             }
         }
         kidTable(b);
@@ -1022,6 +1103,9 @@ public final class ClubhousePlanner {
      *
      * <p>The same treatment as the Parlor's: a plain dark-wood table one block high, an invisible light where the racers
      * run, an invisible barrier over that (nobody stands or jumps onto the track), nothing in the way of seeing it.
+     *
+     * <p>Plan 13 gives it a viewing area south of its rug (the grown wing): a red carpet two rows deep with three bright
+     * stools facing the table, and a coloured lamp over each end.
      */
     private static void kidTable(Builder b) {
         for (int i = KID_TRACK_X0; i < KID_TRACK_X0 + RaceTrack.DEPTH; i++) {
@@ -1049,23 +1133,119 @@ public final class ClubhousePlanner {
                 b.set(ARCADE_X0 + i, SIDE_TOP - 1, k, KID_LAMPS[n++]);
             }
         }
+        if (!b.big) {
+            return;
+        }
+        // plan 13: the viewing area, the rug's width, two rows south of it, stools in the second row facing the table
+        for (int i = KID_TRACK_X0 - 2; i <= KID_TRACK_X0 + RaceTrack.DEPTH + 1; i++) {
+            for (int k = VIEW_Z0; k <= VIEW_Z0 + 1; k++) {
+                b.set(ARCADE_X0 + i, 1, k, VIEW_RUG);
+            }
+        }
+        for (int i : VIEW_STOOL_X) {
+            b.seat(ARCADE_X0 + i, 1, VIEW_Z0 + 1, VIEW_STOOL, "YELLOW", 180f);
+        }
+        for (int i : new int[]{KID_TRACK_X0 - 2, KID_TRACK_X0 + RaceTrack.DEPTH + 1}) {
+            b.set(ARCADE_X0 + i, SIDE_TOP, VIEW_Z0, CHAIN);
+            b.set(ARCADE_X0 + i, SIDE_TOP - 1, VIEW_Z0, KID_LAMPS[n++ % KID_LAMPS.length]);
+        }
     }
 
     /**
-     * Plan 11, the Arcade Room's play things, all on floor nobody needs to walk on: a glass plush case on the back row
-     * (plan 11's ball pit before it went in plan 12), and a bean-bag nook in the south-west (two bean bags either side of the claw machine's corner and two on the
-     * west wall between its last two cabinets). Nothing to climb into: the case is glass to the top, a bean bag is one
-     * block high, and every top is lit.
+     * The Arcade Room's play things, all on floor nobody needs to walk on. Plan 11/12 (a wing at its old size): a glass
+     * plush case on the back row and four wool bean bags. Plan 13 (the grown wing): {@link #ballPit}, {@link #beanNook}
+     * and {@link #plushCorner}. Nothing to climb into: a case is glass to its top, and every top is lit.
      */
     private static void playThings(Builder b) {
-        // plan 12 (the owner: "The 'Ball Pit' just sits on the floor and doesn't read like a ball pit ... just a weird
-        // thing kind of sitting in the hallway ... you need a bigger space"): no ball pit; that floor is plain again
-        for (int i : PLUSH_X) {
-            b.set(ARCADE_X0 + i, 1, SIDE_Z1, CABINET);
-            b.set(ARCADE_X0 + i, 2, SIDE_Z1, ROOF_GLASS);
+        if (b.big) {
+            ballPit(b);
+            beanNook(b);
+            plushCorner(b);
+            return;
         }
+        // plan 12 (the owner: "The 'Ball Pit' just sits on the floor and doesn't read like a ball pit ... just a weird
+        // thing kind of sitting in the hallway ... you need a bigger space"): no ball pit in the room at its old size
+        for (int i : PLUSH_X) {
+            b.set(ARCADE_X0 + i, 1, b.z1, CABINET);
+            b.set(ARCADE_X0 + i, 2, b.z1, ROOF_GLASS);
+        }
+        for (int[] bag : OLD_BEAN_BAGS) {
+            b.set(ARCADE_X0 + bag[0], 1, b.z1 - bag[1], BEAN_BAG[bag[2]]);
+        }
+    }
+
+    /**
+     * Plan 13, the ball pit (the owner: "doesn't read like a ball pit ... you need a bigger space"): in the middle of
+     * the grown wing, x {@value #PIT_X0}-{@value #PIT_X1} and z {@value #PIT_Z0}-{@value #PIT_Z1}, a low padded wall one
+     * block high (wool in four colours, a white carpet rim on top) with a gap in the middle of its north side to walk
+     * in, a light blue carpet floor over hidden lights, and full of coloured balls ({@link #decor}: small displays two
+     * and three deep, nothing to stand on or be stuck in). A lane goes all round it.
+     */
+    private static void ballPit(Builder b) {
+        for (int i = PIT_X0; i <= PIT_X1; i++) {
+            for (int k = PIT_Z0; k <= PIT_Z1; k++) {
+                boolean wall = i == PIT_X0 || i == PIT_X1 || k == PIT_Z0 || k == PIT_Z1;
+                if (wall && !(k == PIT_Z0 && i == PIT_GAP_X)) {
+                    b.set(ARCADE_X0 + i, 1, k, PIT_WALL[Math.floorMod(i + k, PIT_WALL.length)]);
+                    b.set(ARCADE_X0 + i, 2, k, PIT_RIM);
+                } else {
+                    b.set(ARCADE_X0 + i, 1, k, PIT_FLOOR);
+                }
+            }
+        }
+        for (int[] l : PIT_LIGHTS) {
+            b.set(ARCADE_X0 + l[0], 0, l[1], LIGHT);
+        }
+    }
+
+    /**
+     * Plan 13, the bean-bag nook (the owner: the bean bags "just read as blocks"): the south-west corner, x 1-3 and z
+     * 56-60, on a pink rug. Four bean bags round a low table, each a bright stair (pink, teal, yellow, orange) a child
+     * sits in, its back away from the table, rounded off by wool displays ({@link #decor}); a cushion on each seat. A
+     * lamp stands in each back corner and a coloured one hangs over the table.
+     */
+    private static void beanNook(Builder b) {
+        for (int i = NOOK_X0; i <= NOOK_X1; i++) {
+            for (int k = NOOK_Z0; k <= b.z1; k++) {
+                b.set(ARCADE_X0 + i, 1, k, NOOK_RUG);
+            }
+        }
+        b.set(ARCADE_X0 + BEAN_TABLE[0], 1, BEAN_TABLE[1], BEAN_TABLE_BLOCK);
         for (int[] bag : BEAN_BAGS) {
-            b.set(ARCADE_X0 + bag[0], 1, bag[1], BEAN_BAG[bag[2]]);
+            b.seat(ARCADE_X0 + bag[0], 1, bag[1], beanBag(bag), BAG_DYE[bag[2]]);
+        }
+        for (int i : new int[]{NOOK_X0, NOOK_X1}) {
+            b.set(ARCADE_X0 + i, 1, b.z1, FENCE);
+            b.set(ARCADE_X0 + i, 2, b.z1, STANDING);
+        }
+        b.set(ARCADE_X0 + BEAN_TABLE[0], SIDE_TOP, BEAN_TABLE[1], CHAIN);
+        b.set(ARCADE_X0 + BEAN_TABLE[0], SIDE_TOP - 1, BEAN_TABLE[1], "minecraft:pearlescent_froglight[axis=y]");
+    }
+
+    /** A bean bag's block: a bright bottom stair, its back away from the table ("facing" the way its back is). */
+    static String beanBag(int[] bag) {
+        String facing = bag[0] < BEAN_TABLE[0] ? "west" : bag[0] > BEAN_TABLE[0] ? "east"
+                : bag[1] < BEAN_TABLE[1] ? "north" : "south";
+        return "minecraft:" + BAG_WOOD[bag[2]] + "_stairs[facing=" + facing
+                + ",half=bottom,shape=straight,waterlogged=false]";
+    }
+
+    /**
+     * Plan 13, the prize-and-plush corner (the owner: "Case is cool, but could certainly be a bit more detail"): the
+     * south-east corner. A glass display case in an L along the east wall and the back wall, on a dark-wood base, two
+     * glass high, a lit froglight cap on every block of it: the plushies (mob heads below, soft toys on a shelf above),
+     * each over a ribbon of its prize colour, are displays ({@link #decor}). A counter stands in front of the case's
+     * back part, with price tags and a bell on it.
+     */
+    private static void plushCorner(Builder b) {
+        for (int[] c : PLUSH_CASE) {
+            b.set(ARCADE_X0 + c[0], 1, c[1], CABINET);
+            b.set(ARCADE_X0 + c[0], 2, c[1], ROOF_GLASS);
+            b.set(ARCADE_X0 + c[0], 3, c[1], ROOF_GLASS);
+            b.set(ARCADE_X0 + c[0], 4, c[1], PLUSH_LIGHT);
+        }
+        for (int i : PLUSH_COUNTER_X) {
+            b.set(ARCADE_X0 + i, 1, PLUSH_COUNTER_Z, CABINET);
         }
     }
 
@@ -1076,12 +1256,57 @@ public final class ClubhousePlanner {
     static final String[] KID_RUG = {"minecraft:yellow_carpet", "minecraft:light_blue_carpet"};
     static final String[] KID_LAMPS = {"minecraft:pearlescent_froglight[axis=y]",
             "minecraft:verdant_froglight[axis=y]", "minecraft:ochre_froglight[axis=y]", "minecraft:shroomlight"};
-    /** The plush case on the back row (x), between the prize counter and the east claw machine. */
+    /** Plan 13: the kid table's viewing area (its first row, two deep), its rug, and its stools (x) in the second row. */
+    static final int VIEW_Z0 = KID_TRACK_Z0 + RaceTrack.LENGTH + 2;
+    static final String VIEW_RUG = "minecraft:red_carpet";
+    static final int[] VIEW_STOOL_X = {5, 7, 9};
+    static final String VIEW_STOOL = "minecraft:bamboo_slab[type=bottom,waterlogged=false]";
+    /** Plan 13: the rows of the bright tiled stripe, and of the coloured lamps over the grown wing. */
+    static final int[] TILE_Z = {MAIN_Z + 15, MAIN_Z + 25};
+    static final int[] GROWN_LAMP_Z = {MAIN_Z + 15, MAIN_Z + 21};
+    /** The plush case on the back row (x), between the prize counter and the east claw machine (a wing at its old size). */
     static final int[] PLUSH_X = {11, 12};
-    /** The bean bags (x, z, colour): either side of the west claw's corner, and on the west wall. */
-    static final int[][] BEAN_BAGS = {{3, SIDE_Z1, 0}, {4, SIDE_Z1, 1}, {1, SIDE_Z1 - 3, 2}, {1, SIDE_Z1 - 2, 3}};
+    /**
+     * The old size's bean bags (x, rows in from the back row, colour): either side of the west claw's corner, and on
+     * the west wall.
+     */
+    static final int[][] OLD_BEAN_BAGS = {{3, 0, 0}, {4, 0, 1}, {1, 3, 2}, {1, 2, 3}};
     static final String[] BEAN_BAG = {"minecraft:lime_wool", "minecraft:light_blue_wool", "minecraft:pink_wool",
             "minecraft:yellow_wool"};
+    /** Plan 13, the ball pit: its wall's corners (x, z offsets), the gap in its north side, its blocks and lights. */
+    static final int PIT_X0 = 4;
+    static final int PIT_X1 = 10;
+    static final int PIT_Z0 = MAIN_Z + 17;
+    static final int PIT_Z1 = MAIN_Z + 23;
+    static final int PIT_GAP_X = 7;
+    static final String[] PIT_WALL = {"minecraft:red_wool", "minecraft:yellow_wool", "minecraft:blue_wool",
+            "minecraft:lime_wool"};
+    static final String PIT_RIM = "minecraft:white_carpet";
+    static final String PIT_FLOOR = "minecraft:light_blue_carpet";
+    static final int[][] PIT_LIGHTS = {{5, PIT_Z0 + 1}, {9, PIT_Z0 + 1}, {7, PIT_Z0 + 3}, {5, PIT_Z1 - 1},
+            {9, PIT_Z1 - 1}};
+    /** Plan 13, the bean-bag nook: its corner (x 1-3 from z 56 to the back row), rug, low table and bags. */
+    static final int NOOK_X0 = 1;
+    static final int NOOK_X1 = 3;
+    static final int NOOK_Z0 = MAIN_Z + 24;
+    static final String NOOK_RUG = "minecraft:pink_carpet";
+    static final int[] BEAN_TABLE = {2, MAIN_Z + 26};
+    static final String BEAN_TABLE_BLOCK = "minecraft:birch_slab[type=bottom,waterlogged=false]";
+    /** The bean bags (x, z, colour), round the low table: west, east, north, south. */
+    static final int[][] BEAN_BAGS = {{1, MAIN_Z + 26, 0}, {3, MAIN_Z + 26, 1}, {2, MAIN_Z + 25, 2},
+            {2, MAIN_Z + 27, 3}};
+    static final String[] BAG_WOOD = {"cherry", "warped", "bamboo", "acacia"};
+    static final String[] BAG_WOOL = {"PINK_WOOL", "CYAN_WOOL", "YELLOW_WOOL", "ORANGE_WOOL"};
+    static final String[] BAG_DYE = {"PINK", "CYAN", "YELLOW", "ORANGE"};
+    /**
+     * Plan 13, the prize-and-plush corner: the display case's blocks (x, z: up the east wall, then along the back wall),
+     * its lit cap, and the counter (x, at one row) in front of its back part.
+     */
+    static final int[][] PLUSH_CASE = {{14, MAIN_Z + 23}, {14, MAIN_Z + 24}, {14, MAIN_Z + 25}, {14, MAIN_Z + 26},
+            {14, MAIN_Z + 27}, {14, MAIN_Z + 28}, {13, MAIN_Z + 28}, {12, MAIN_Z + 28}};
+    static final String PLUSH_LIGHT = "minecraft:pearlescent_froglight[axis=y]";
+    static final int[] PLUSH_COUNTER_X = {12, 13};
+    static final int PLUSH_COUNTER_Z = MAIN_Z + 26;
 
     /**
      * Plan 11: where the kid race's table stands in {@code box}: its north-east corner at the height of its top,
@@ -1101,12 +1326,12 @@ public final class ClubhousePlanner {
     private static void trophyRoom(Builder b) {
         int x0 = TROPHY_X0;
         sideShell(b, x0, PLANKS);
-        rug(b, x0 + 1, x0 + 14, SIDE_Z0, SIDE_Z1, TROPHY_RUG, 3);
+        rug(b, x0 + 1, x0 + 14, SIDE_Z0, b.z1, TROPHY_RUG, 3);
         String[] top = {GOLD, IRON, COPPER};
         for (int n = 0; n < 3; n++) {
             for (int dx = 0; dx < 2; dx++) {
                 for (int j = 1; j <= ROOM_PODIUM_HEIGHT[n]; j++) {
-                    b.set(ROOM_PODIUM_X[n] + dx, j, ROOM_PODIUM_Z, j < ROOM_PODIUM_HEIGHT[n] ? PLANKS : top[n]);
+                    b.set(ROOM_PODIUM_X[n] + dx, j, b.z1, j < ROOM_PODIUM_HEIGHT[n] ? PLANKS : top[n]);
                 }
             }
         }
@@ -1116,21 +1341,36 @@ public final class ClubhousePlanner {
                 b.set(x, 1, z + 1, PEDESTAL);
             }
         }
+        int[] banners = b.big ? GROWN_TROPHY_BANNER_Z : TROPHY_BANNER_Z;
         for (int i : new int[]{x0 + 4, x0 + 11}) {
-            for (int k : new int[]{SIDE_Z0 + 3, SIDE_Z0 + 9}) {
+            for (int k : banners) { // the lanterns hang on the banners' rows (plan 12: z 35 and 41)
                 b.set(i, SIDE_TOP, k, HANGING);
             }
         }
-        for (int k : TROPHY_BEAM_Z) {
+        for (int k : b.big ? GROWN_TROPHY_BEAM_Z : TROPHY_BEAM_Z) {
             for (int i = x0 + 1; i <= x0 + 14; i++) {
                 b.set(i, SIDE_TOP, k, log("x"));
             }
         }
-        for (int k : TROPHY_BANNER_Z) {
+        for (int k : banners) {
             b.set(x0 + 1, 5, k, banner("east"));
             b.set(x0 + 14, 5, k, banner("west"));
         }
+        if (b.big) {
+            // plan 13, the longer room: two armchairs facing the podium, and a planter in each back corner
+            for (int i : TROPHY_ARMCHAIR_X) {
+                armchair(b, i, 1, TROPHY_ARMCHAIR_Z, "north", "RED");
+            }
+            for (int i : new int[]{x0 + 1, x0 + 14}) {
+                b.set(i, 1, b.z1, PLANTER);
+                b.set(i, 2, b.z1, SHRUB);
+            }
+        }
     }
+
+    /** Plan 13: the Trophy Room's armchairs (x; at one row), facing the podium from the room's new middle. */
+    static final int[] TROPHY_ARMCHAIR_X = {20, 27};
+    static final int TROPHY_ARMCHAIR_Z = MAIN_Z + 20;
 
     // ---- 0.43.0: upstairs, reached by a tap (a teleport), never by a passage --------------------------------
 
@@ -1141,8 +1381,21 @@ public final class ClubhousePlanner {
     static final int[] LEDGE_Y = {11, 13};
     static final int SECRET_CX = 23;
     static final int SECRET_CZ = 40;
+    /** Plan 13: the centre pedestal in the middle of the longer room. */
+    static final int GROWN_SECRET_CZ = MAIN_Z + 14;
     /** The upstairs rooms' beams (rows clear of the secret room's trophy places, which are on odd rows). */
     static final int[] UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12};
+    static final int[] GROWN_UP_BEAM_Z = {MAIN_Z + 4, MAIN_Z + 12, MAIN_Z + 20};
+
+    /** The secret room's centre pedestal's row in {@code box}. */
+    static int secretCz(Box box) {
+        return grown(box) ? GROWN_SECRET_CZ : SECRET_CZ;
+    }
+
+    /** The upstairs beams' rows in a room of this size. */
+    private static int[] upBeams(Builder b) {
+        return b.big ? GROWN_UP_BEAM_Z : UP_BEAM_Z;
+    }
     /**
      * The Game Parlor's two card tables (x, z offsets of each table's north-west felt block): Twenty-One and Higher or
      * Lower. Since plan 10 (the owner: "maybe we can make the 4 person tables a bit larger") each is
@@ -1169,7 +1422,7 @@ public final class ClubhousePlanner {
     /** An upstairs room's air in {@code box}: x0 + 1 .. x0 + 14, over the side room. */
     static Box upInside(Box box, int x0) {
         return new Box(box.minX() + x0 + 1, box.minY() + UP_FLOOR + 1, box.minZ() + MAIN_Z + 1, box.minX() + x0 + 14,
-                box.minY() + UP_TOP, box.minZ() + SIDE_Z1);
+                box.minY() + UP_TOP, box.minZ() + z1(box));
     }
 
     /** The secret room's air in {@code box}. */
@@ -1189,7 +1442,7 @@ public final class ClubhousePlanner {
      */
     private static void upShell(Builder b, int x0, String floor) {
         int z0 = MAIN_Z;
-        int z1 = MAIN_Z + ANNEX_Z - 1;
+        int z1 = b.z1 + 1;
         for (int i = x0; i <= x0 + 15; i++) {
             for (int k = z0; k <= z1; k++) {
                 b.set(i, UP_FLOOR, k, (i == x0 || i == x0 + 15 || k == z0 || k == z1) ? PLANKS : floor);
@@ -1215,7 +1468,7 @@ public final class ClubhousePlanner {
                 }
             }
         }
-        for (int k : UP_BEAM_Z) {
+        for (int k : upBeams(b)) {
             for (int i = x0 + 1; i <= x0 + 14; i++) {
                 b.set(i, UP_TOP, k, log("x"));
             }
@@ -1232,7 +1485,7 @@ public final class ClubhousePlanner {
         int x0 = TROPHY_X0;
         upShell(b, x0, PLANKS);
         for (int i = x0 + 1; i <= x0 + 14; i++) {
-            for (int k = SIDE_Z0 + 1; k <= SIDE_Z1; k++) {
+            for (int k = SIDE_Z0 + 1; k <= b.z1; k++) {
                 b.set(i, UP_FLOOR + 1, k, RUG);
                 if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
                     b.set(i, UP_FLOOR, k, LIGHT);
@@ -1240,17 +1493,17 @@ public final class ClubhousePlanner {
             }
         }
         for (int y : LEDGE_Y) {
-            for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
+            for (int k = SIDE_Z0 + 2; k <= b.z1 - 1; k++) {
                 b.set(x0 + 1, y, k, LEDGE_SLAB);
                 b.set(x0 + 14, y, k, LEDGE_SLAB);
             }
             for (int i = x0 + 2; i <= x0 + 13; i++) {
-                b.set(i, y, SIDE_Z1, LEDGE_SLAB);
+                b.set(i, y, b.z1, LEDGE_SLAB);
             }
         }
-        b.set(SECRET_CX, UP_FLOOR + 1, SECRET_CZ, PEDESTAL);
+        b.set(SECRET_CX, UP_FLOOR + 1, secretCz(b.box), PEDESTAL);
         for (int i : new int[]{x0 + 4, x0 + 11}) {
-            for (int k : UP_BEAM_Z) {
+            for (int k : upBeams(b)) {
                 b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
             }
         }
@@ -1267,7 +1520,7 @@ public final class ClubhousePlanner {
         int x0 = ARCADE_X0;
         upShell(b, x0, PLANKS);
         for (int i = x0 + 2; i <= x0 + 13; i++) {
-            for (int k = SIDE_Z0 + 2; k <= SIDE_Z1 - 1; k++) {
+            for (int k = SIDE_Z0 + 2; k <= b.z1 - 1; k++) {
                 b.set(i, UP_FLOOR + 1, k, PARLOR_CARPET);
                 if (Math.floorMod(i - x0, 3) == 2 && Math.floorMod(k - SIDE_Z0, 3) == 2) {
                     b.set(i, UP_FLOOR, k, LIGHT);
@@ -1275,7 +1528,7 @@ public final class ClubhousePlanner {
             }
         }
         for (int i = x0 + 1; i <= x0 + 14; i++) {
-            b.set(i, UP_FLOOR + 3, SIDE_Z1 + 1, BRASS); // a brass rail along the back wall
+            b.set(i, UP_FLOOR + 3, b.z1 + 1, BRASS); // a brass rail along the back wall
         }
         for (int[] t : PARLOR_TABLE) {
             // a card table one block high (felt on the floor: no jumping), the cards in its middle, a chair either
@@ -1296,12 +1549,87 @@ public final class ClubhousePlanner {
             b.set(m[0], UP_FLOOR, m[1], MAT);
         }
         for (int i : new int[]{x0 + 4, x0 + 11}) {
-            for (int k : UP_BEAM_Z) {
+            for (int k : upBeams(b)) {
                 b.set(i, UP_TOP - 1, k, HANGING); // hung from the beams
             }
         }
         raceTable(b);
+        if (b.big) {
+            lounge(b);
+            sportsbook(b);
+        }
     }
+
+    /**
+     * Plan 13, the Parlor's lounge (the south-west of its grown floor): a black velvet rug, two armchairs facing east
+     * across the room to the sportsbook's board, a side table beside each (a dark-oak post with a white top), and a
+     * floor lamp at either end. The two spare card tables' places ({@link #PARLOR_SPARE_TABLE}) north of it are left
+     * as plain carpet.
+     */
+    private static void lounge(Builder b) {
+        int floor = UP_FLOOR + 1;
+        for (int i = LOUNGE_X0; i <= LOUNGE_X1; i++) {
+            for (int k = LOUNGE_Z0; k <= LOUNGE_Z1; k++) {
+                b.set(ARCADE_X0 + i, floor, k, LOUNGE_RUG);
+            }
+        }
+        for (int k : LOUNGE_CHAIR_Z) {
+            armchair(b, ARCADE_X0 + LOUNGE_CHAIR_X, floor, k, "west", "RED");
+        }
+        for (int[] t : LOUNGE_TABLES) {
+            b.set(ARCADE_X0 + t[0], floor, t[1], FENCE);
+            b.set(ARCADE_X0 + t[0], floor + 1, t[1], SIDE_TABLE_TOP);
+        }
+        for (int[] l : LOUNGE_LAMPS) {
+            b.set(ARCADE_X0 + l[0], floor, l[1], FENCE);
+            b.set(ARCADE_X0 + l[0], floor + 1, l[1], STANDING);
+        }
+    }
+
+    /**
+     * Plan 13, the sportsbook's place ({@value #SPORTSBOOK_GAME}): its big board is a display on the Parlor's east
+     * wall ({@link #parlorBoards}, drawn by {@code SideRooms} only while that game is there and open), {@value
+     * #BOARD_W} wide over z {@value #BOARD_Z0} to 57; in front of it a counter one block high and three stools facing
+     * it, an aisle between the counter and the wall.
+     */
+    private static void sportsbook(Builder b) {
+        int floor = UP_FLOOR + 1;
+        for (int k = BOOK_COUNTER_Z0; k <= BOOK_COUNTER_Z1; k++) {
+            b.set(ARCADE_X0 + BOOK_COUNTER_X, floor, k, CABINET);
+        }
+        for (int k : BOOK_STOOL_Z) {
+            b.seat(ARCADE_X0 + BOOK_COUNTER_X - 1, floor, k, STOOL, "RED", -90f);
+        }
+    }
+
+    /** Plan 13: the lounge's rug (x 2-6, z 50-57), its armchairs (x; rows), side tables and floor lamps (x, z). */
+    static final int LOUNGE_X0 = 2;
+    static final int LOUNGE_X1 = 6;
+    static final int LOUNGE_Z0 = MAIN_Z + 18;
+    static final int LOUNGE_Z1 = MAIN_Z + 25;
+    static final String LOUNGE_RUG = "minecraft:black_carpet";
+    static final int LOUNGE_CHAIR_X = 3;
+    static final int[] LOUNGE_CHAIR_Z = {MAIN_Z + 19, MAIN_Z + 23};
+    static final int[][] LOUNGE_TABLES = {{3, MAIN_Z + 21}, {3, MAIN_Z + 25}};
+    static final int[][] LOUNGE_LAMPS = {{2, MAIN_Z + 18}, {2, MAIN_Z + 25}};
+    static final String SIDE_TABLE_TOP = "minecraft:white_carpet";
+    /**
+     * Plan 13: the places for two more card tables later (x, z of each one's north-west felt block, as {@link
+     * #PARLOR_TABLE}): the same size, south of the two there are, their chairs' places kept free.
+     */
+    static final int[][] PARLOR_SPARE_TABLE = {{4, MAIN_Z + 14}, {10, MAIN_Z + 14}};
+    /** Plan 13, the sportsbook: its game, its board's place (x, z, yaw: the board's middle at the wall's foot). */
+    public static final String SPORTSBOOK_GAME = "sportsbook";
+    static final int[] SPORTSBOOK = {14, MAIN_Z + 22, 90};
+    /** The board's first row (z) and its size (blocks): it hangs on the wall over the counter. */
+    static final int BOARD_Z0 = MAIN_Z + 19;
+    public static final int BOARD_W = 7;
+    public static final int BOARD_H = 3;
+    /** The counter in front of the board (x; from row to row) and its stools' rows (one column further in). */
+    static final int BOOK_COUNTER_X = 13;
+    static final int BOOK_COUNTER_Z0 = MAIN_Z + 20;
+    static final int BOOK_COUNTER_Z1 = MAIN_Z + 24;
+    static final int[] BOOK_STOOL_Z = {MAIN_Z + 20, MAIN_Z + 22, MAIN_Z + 24};
 
     /**
      * Mob Races' table (plan 10; the owner: "I hope you make a mini track and you literally see the tiny mobs running
@@ -1363,7 +1691,8 @@ public final class ClubhousePlanner {
 
     /** The secret room's centre pedestal top (the visitor's head stands there). */
     public static Place3 secretCentre(Box box) {
-        return new Place3(box.minX() + SECRET_CX + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + SECRET_CZ + 0.5, 180f);
+        return new Place3(box.minX() + SECRET_CX + 0.5, box.minY() + UP_FLOOR + 2, box.minZ() + secretCz(box) + 0.5,
+                180f);
     }
 
     /**
@@ -1374,13 +1703,13 @@ public final class ClubhousePlanner {
         List<Place3> out = new ArrayList<>();
         for (int y : LEDGE_Y) {
             double top = box.minY() + y + 1;
-            for (int k = SIDE_Z0 + 3; k <= SIDE_Z1 - 1; k += 2) {
+            for (int k = SIDE_Z0 + 3; k <= z1(box) - 1; k += 2) {
                 out.add(new Place3(box.minX() + TROPHY_X0 + 1.5, top, box.minZ() + k + 0.5, -90f));
             }
             for (int i = TROPHY_X0 + 3; i <= TROPHY_X0 + 12; i += 2) {
-                out.add(new Place3(box.minX() + i + 0.5, top, box.minZ() + SIDE_Z1 + 0.5, 180f));
+                out.add(new Place3(box.minX() + i + 0.5, top, box.minZ() + z1(box) + 0.5, 180f));
             }
-            for (int k = SIDE_Z1 - 1; k >= SIDE_Z0 + 3; k -= 2) {
+            for (int k = z1(box) - 1; k >= SIDE_Z0 + 3; k -= 2) {
                 out.add(new Place3(box.minX() + TROPHY_X0 + 14.5, top, box.minZ() + k + 0.5, 90f));
             }
         }
@@ -1393,11 +1722,11 @@ public final class ClubhousePlanner {
      * where its visitor returns. (0.43.0-0.44.2: a gold star on that wall.)
      */
     public static Place3 secretDoor(Box box) {
-        return new Place3(box.minX() + TROPHY_X0 + 13, box.minY() + 1, box.minZ() + SIDE_Z1, 180f);
+        return new Place3(box.minX() + TROPHY_X0 + 13, box.minY() + 1, box.minZ() + z1(box), 180f);
     }
 
     public static ClubhouseSite.Spot secretReturn(Box box) {
-        return new ClubhouseSite.Spot(box.minX() + TROPHY_X0 + 13.5, box.minY() + 1, box.minZ() + SIDE_Z1 - 1.5, 0f);
+        return new ClubhouseSite.Spot(box.minX() + TROPHY_X0 + 13.5, box.minY() + 1, box.minZ() + z1(box) - 1.5, 0f);
     }
 
     /**
@@ -1434,13 +1763,16 @@ public final class ClubhousePlanner {
 
     /** The Scratch Ticket's booth (0.46.1): what a Parlor machine is called when it is the ticket's, not a game's. */
     public static final String TICKET = "ticket";
-    /** The booth's place (x, z, yaw): the middle of the Parlor's back wall, facing the room. No block is its own. */
+    /**
+     * The booth's place (x, z, yaw): the middle of the Parlor's back wall, facing the room. No block is its own. Its z
+     * is the grown wing's back row: the place is always the box's back row ({@link #z1}), as the slot machines' are.
+     */
     static final int[] PARLOR_TICKET = {7, SIDE_Z1, 180};
 
     /** Where the Scratch Ticket's booth stands in the Game Parlor (0.46.1): a display on the floor, like a machine. */
     public static Place3 parlorTicket(Box box) {
         return new Place3(box.minX() + PARLOR_TICKET[0] + 0.5, box.minY() + UP_FLOOR + 1,
-                box.minZ() + PARLOR_TICKET[1] + 0.5, PARLOR_TICKET[2]);
+                box.minZ() + z1(box) + 0.5, PARLOR_TICKET[2]);
     }
 
     /**
@@ -1461,7 +1793,7 @@ public final class ClubhousePlanner {
         List<Place3> out = new ArrayList<>();
         for (int[] m : PARLOR_ROW) {
             out.add(new Place3(box.minX() + ARCADE_X0 + m[0] + 0.5, box.minY() + UP_FLOOR + 1,
-                    box.minZ() + m[1] + 0.5, m[2]));
+                    box.minZ() + z1(box) + 0.5, m[2]));
         }
         return out;
     }
@@ -1480,6 +1812,30 @@ public final class ClubhousePlanner {
     }
 
     /**
+     * A big board on a Parlor wall that a game is played at (plan 13): its game, its place (the middle of the board's
+     * foot, on the floor against the wall, facing the room, as a machine's place is), and its size in blocks (along the
+     * wall, and up). {@code SideRooms} draws it from this alone: the game's model if there is one, a plain dark board
+     * if not, and a tap on it opens {@code machine:<game>}.
+     */
+    public record Board(String game, Place3 at, int width, int height) {
+    }
+
+    /** The games with a board on a Parlor wall, in order (new ones at the END, as the back row's). */
+    public static final List<String> PARLOR_BOARD_GAMES = List.of(SPORTSBOOK_GAME);
+
+    /**
+     * The Parlor's wall boards in {@code box} (plan 13): the sportsbook's on the east wall. None in a wing kept at its
+     * old size (there is no room for one there).
+     */
+    public static List<Board> parlorBoards(Box box) {
+        if (!grown(box)) {
+            return List.of();
+        }
+        return List.of(new Board(SPORTSBOOK_GAME, new Place3(box.minX() + ARCADE_X0 + SPORTSBOOK[0] + 0.5,
+                box.minY() + UP_FLOOR + 1, box.minZ() + SPORTSBOOK[1] + 0.5, SPORTSBOOK[2]), BOARD_W, BOARD_H));
+    }
+
+    /**
      * Where "Photo time!" stands on the Trophy Room's podium (0.42.0): 1st, 2nd, 3rd, each in the middle of its
      * 2 x 1 plinth (its cup and head are taken down for the photo), facing the archway.
      */
@@ -1487,7 +1843,7 @@ public final class ClubhousePlanner {
         List<ClubhouseSite.Spot> out = new ArrayList<>();
         for (int n = 0; n < 3; n++) {
             out.add(new ClubhouseSite.Spot(box.minX() + ROOM_PODIUM_X[n] + 1.0, box.minY() + ROOM_PODIUM_HEIGHT[n] + 1,
-                    box.minZ() + ROOM_PODIUM_Z + 0.5, 180f));
+                    box.minZ() + podiumZ(box) + 0.5, 180f));
         }
         return out;
     }
@@ -1557,12 +1913,15 @@ public final class ClubhousePlanner {
     static final int FEAST_LINE_WIDTH = 200;
 
     /**
-     * The Arcade Room's cabinet places in {@code box} (0.41.0), {@value #CABINETS} of them in the order the kid set
-     * fills them: each the middle of its mat at the floor's top, facing into the room.
+     * The Arcade Room's cabinet places in {@code box} (0.41.0), in the order the kid set fills them: each the middle of
+     * its mat at the floor's top, facing into the room. Plan 13's grown wing has {@value #CABINETS} (four of them
+     * spares, after the nine there were); any other box the first {@value #OLD_CABINETS}.
      */
     public static List<Place3> cabinets(Box box) {
         List<Place3> out = new ArrayList<>();
-        for (int[] c : CABINET_AT) {
+        int places = grown(box) ? CABINETS : OLD_CABINETS;
+        for (int n = 0; n < places; n++) {
+            int[] c = CABINET_AT[n];
             out.add(new Place3(box.minX() + c[0] + 0.5, box.minY() + 1, box.minZ() + c[1] + 0.5, c[2]));
         }
         return out;
@@ -1577,7 +1936,7 @@ public final class ClubhousePlanner {
         List<Pedestal> out = new ArrayList<>();
         for (int n = 0; n < 3; n++) {
             double y = box.minY() + ROOM_PODIUM_HEIGHT[n] + 1;
-            double z = box.minZ() + ROOM_PODIUM_Z + 0.5;
+            double z = box.minZ() + podiumZ(box) + 0.5;
             out.add(new Pedestal(new Place3(box.minX() + ROOM_PODIUM_X[n] + 0.5, y, z, 180f),
                     new Place3(box.minX() + ROOM_PODIUM_X[n] + 1.5, y, z, 180f)));
         }
@@ -1613,7 +1972,8 @@ public final class ClubhousePlanner {
      * @param what  the item's or block's material name ({@code GLASS_BOTTLE}, {@code RED_WOOL})
      * @param block a block display (its corner at x, y, z) rather than an item display (its middle at x, y, z)
      * @param look  for an item: {@code face} (turns to whoever looks), {@code flat} (lying on the table), {@code
-     *              wall} (flat against the wall, facing {@code yaw}), {@code lean} (leaning, facing {@code yaw})
+     *              wall} (flat against the wall, facing {@code yaw}), {@code lean} (leaning, facing {@code yaw}), {@code
+     *              ball} (plan 13: turned wholly to whoever looks, from above too)
      */
     public record Prop(String key, String what, boolean block, double x, double y, double z, float yaw, float sx,
                        float sy, float sz, String look) {
@@ -1657,34 +2017,144 @@ public final class ClubhousePlanner {
         out.add(Prop.item("green.ball", "SNOWBALL", x0 + GREEN_CUP_X - 0.7, y0 + 1.18, z0 + GREEN_CUP_Z + 0.9, 0f,
                 0.3f, "face"));
         out.add(Prop.item("green.putter", "IRON_HOE", x0 + 29.6, y0 + 1.55, z0 + 1.8, 90f, 0.9f, "lean"));
-        if (rooms != null && rooms.arcade()) {
+        if (rooms != null && rooms.arcade() && box.sizeZ() > MAIN_Z) {
+            int back = z1(box);
             String[] prizes = {"CAKE", "GOLDEN_APPLE", "DIAMOND", "TOTEM_OF_UNDYING", "MUSIC_DISC_PIGSTEP",
                     "FIREWORK_ROCKET"};
             for (int i = PRIZE_X0; i <= PRIZE_X1; i++) {
                 out.add(Prop.item("arcade.prize." + i, prizes[(i - PRIZE_X0) % prizes.length], x0 + i + 0.5,
-                        y0 + 2.5, z0 + SIDE_Z1 + 0.5, 0f, 0.55f, "face"));
+                        y0 + 2.5, z0 + back + 0.5, 0f, 0.55f, "face"));
             }
             String[] plush = {"SLIME_BALL", "COOKIE", "EMERALD", "PUFFERFISH"};
-            for (int c = 0; c < CLAW_X.length; c++) {
+            int[] claws = clawX(box);
+            for (int c = 0; c < claws.length; c++) {
                 for (int m = 0; m < 3; m++) {
                     out.add(Prop.item("arcade.claw." + c + "." + m, plush[(c + m) % plush.length],
-                            x0 + CLAW_X[c] + 0.3 + m * 0.2, y0 + 2.2 + (m % 2) * 0.15, z0 + SIDE_Z1 + 0.35 + m * 0.15,
+                            x0 + claws[c] + 0.3 + m * 0.2, y0 + 2.2 + (m % 2) * 0.15, z0 + back + 0.35 + m * 0.15,
                             0f, 0.35f, "face"));
                 }
-                out.add(Prop.item("arcade.claw." + c + ".hook", "CHAIN", x0 + CLAW_X[c] + 0.5, y0 + 3.5,
-                        z0 + SIDE_Z1 + 0.5, 0f, 0.6f, "face"));
+                out.add(Prop.item("arcade.claw." + c + ".hook", "CHAIN", x0 + claws[c] + 0.5, y0 + 3.5,
+                        z0 + back + 0.5, 0f, 0.6f, "face"));
             }
-            // plan 11: the plush case's plushies, two to a glass case
-            String[] plushies = {"CREEPER_HEAD", "PIGLIN_HEAD", "ZOMBIE_HEAD", "DRAGON_HEAD"};
-            for (int c = 0; c < PLUSH_X.length; c++) {
-                for (int m = 0; m < 2; m++) {
-                    out.add(Prop.item("arcade.plush." + c + "." + m, plushies[(2 * c + m) % plushies.length],
-                            x0 + ARCADE_X0 + PLUSH_X[c] + 0.3 + 0.4 * m, y0 + 2.35, z0 + SIDE_Z1 + 0.5, 0f, 0.4f,
-                            "face"));
+            if (grown(box)) {
+                ballPit(out, box);
+                beanBags(out, box);
+                plushCase(out, box);
+            } else {
+                // plan 11: the plush case's plushies, two to a glass case
+                String[] plushies = {"CREEPER_HEAD", "PIGLIN_HEAD", "ZOMBIE_HEAD", "DRAGON_HEAD"};
+                for (int c = 0; c < PLUSH_X.length; c++) {
+                    for (int m = 0; m < 2; m++) {
+                        out.add(Prop.item("arcade.plush." + c + "." + m, plushies[(2 * c + m) % plushies.length],
+                                x0 + ARCADE_X0 + PLUSH_X[c] + 0.3 + 0.4 * m, y0 + 2.35, z0 + back + 0.5, 0f, 0.4f,
+                                "face"));
+                    }
                 }
             }
         }
         return out;
+    }
+
+    /** Plan 13: what the balls in the pit are (round, bright items, each drawn turned to whoever looks). */
+    static final String[] BALLS = {"SNOWBALL", "SLIME_BALL", "MAGMA_CREAM", "HEART_OF_THE_SEA", "CHORUS_FRUIT",
+            "APPLE", "ENDER_PEARL"};
+    /** A ball's size (its display's scale), and where the four of each block lie in it (x, z, a layer). */
+    static final float BALL_SIZE = 0.5f;
+    static final double[][] BALL_AT = {{0.27, 0.3, 0}, {0.74, 0.27, 1}, {0.3, 0.73, 1}, {0.72, 0.7, 0}};
+    /** The height of each layer of balls over the pit's floor block (its carpet is a sixteenth). */
+    static final double[] BALL_LAYER = {0.24, 0.44, 0.64};
+
+    /**
+     * Plan 13, the ball pit's balls: four over each block of its floor, two layers deep,
+     * and a third layer heaped in its middle, every colour mixed. Item displays turned to whoever looks, so each
+     * reads as a ball from any side.
+     */
+    private static void ballPit(List<Prop> out, Box box) {
+        int n = 0;
+        for (int i = PIT_X0 + 1; i <= PIT_X1 - 1; i++) {
+            for (int k = PIT_Z0 + 1; k <= PIT_Z1 - 1; k++) {
+                boolean middle = Math.abs(i - (PIT_X0 + PIT_X1) / 2) <= 1 && Math.abs(k - (PIT_Z0 + PIT_Z1) / 2) <= 1;
+                for (int m = 0; m < BALL_AT.length; m++) {
+                    double[] at = BALL_AT[m];
+                    int layer = (int) at[2];
+                    String what = BALLS[Math.floorMod(i * 3 + k * 5 + m * 2, BALLS.length)];
+                    out.add(Prop.item("arcade.ball." + n++, what, box.minX() + ARCADE_X0 + i + at[0],
+                            box.minY() + 1 + BALL_LAYER[layer], box.minZ() + k + at[1], 0f, BALL_SIZE, "ball"));
+                }
+                if (middle) { // the heap in the middle
+                    String what = BALLS[Math.floorMod(i + k, BALLS.length)];
+                    out.add(Prop.item("arcade.ball." + n++, what, box.minX() + ARCADE_X0 + i + 0.5,
+                            box.minY() + 1 + BALL_LAYER[2], box.minZ() + k + 0.5, 0f, BALL_SIZE, "ball"));
+                }
+            }
+        }
+    }
+
+    /**
+     * Plan 13, the bean bags' soft sides: each bag's stair wrapped in its wool, a little wider than its block so it
+     * bulges (its seat's top left showing for the cushion and the sitter), a padded back, and a rolled top on the back.
+     */
+    private static void beanBags(List<Prop> out, Box box) {
+        for (int n = 0; n < BEAN_BAGS.length; n++) {
+            int[] bag = BEAN_BAGS[n];
+            String wool = BAG_WOOL[bag[2]];
+            double x = box.minX() + ARCADE_X0 + bag[0];
+            double y = box.minY() + 1;
+            double z = box.minZ() + bag[1];
+            out.add(new Prop("arcade.bag." + n + ".base", wool, true, x - 0.06, y, z - 0.06, 0f, 1.12f, 0.42f, 1.12f,
+                    "block"));
+            // its back: the half of the block away from the table (the stair's "facing" side)
+            double bx = bag[0] < BEAN_TABLE[0] ? x - 0.06 : bag[0] > BEAN_TABLE[0] ? x + 0.46 : x - 0.06;
+            double bz = bag[1] < BEAN_TABLE[1] ? z - 0.06 : bag[1] > BEAN_TABLE[1] ? z + 0.46 : z - 0.06;
+            boolean alongX = bag[0] != BEAN_TABLE[0]; // a bag west or east of the table has its back along z
+            float sx = alongX ? 0.6f : 1.12f;
+            float sz = alongX ? 1.12f : 0.6f;
+            out.add(new Prop("arcade.bag." + n + ".back", wool, true, bx, y + 0.42, bz, 0f, sx, 0.5f, sz, "block"));
+            out.add(new Prop("arcade.bag." + n + ".roll", wool, true, bx + (alongX ? 0.06 : 0.1), y + 0.92,
+                    bz + (alongX ? 0.1 : 0.06), 0f, alongX ? 0.48f : 0.92f, 0.12f, alongX ? 0.92f : 0.48f, "block"));
+        }
+    }
+
+    /** Plan 13: the plush case's toys, below (mob heads) and above (soft toys), and their ribbons' colours. */
+    static final String[] PLUSH_LOW = {"CREEPER_HEAD", "PIGLIN_HEAD", "ZOMBIE_HEAD", "DRAGON_HEAD", "SKELETON_SKULL",
+            "PLAYER_HEAD"};
+    static final String[] PLUSH_HIGH = {"PUFFERFISH", "TROPICAL_FISH", "TURTLE_EGG", "RABBIT_FOOT", "SLIME_BALL",
+            "COOKIE", "HONEYCOMB", "CAKE"};
+    static final String[] RIBBONS = {"BLUE_WOOL", "RED_WOOL", "YELLOW_WOOL", "LIME_WOOL", "MAGENTA_WOOL"};
+
+    /**
+     * Plan 13, the prize-and-plush case's insides: in each of its glass blocks a mob-head plush on the base, a thin
+     * white shelf a block up with a soft toy on it, and a ribbon of its prize colour along the base's front edge; on
+     * the counter, price tags lying flat and a bell.
+     */
+    private static void plushCase(List<Prop> out, Box box) {
+        double x0 = box.minX() + ARCADE_X0;
+        double y0 = box.minY();
+        double z0 = box.minZ();
+        for (int n = 0; n < PLUSH_CASE.length; n++) {
+            int[] c = PLUSH_CASE[n];
+            boolean side = c[0] == 14 && c[1] < PLUSH_CASE[PLUSH_CASE.length - 1][1]; // on the east wall, facing west
+            float yaw = side ? 90f : 180f;
+            double cx = x0 + c[0] + 0.5;
+            double cz = z0 + c[1] + 0.5;
+            out.add(Prop.item("arcade.plush." + n + ".low", PLUSH_LOW[n % PLUSH_LOW.length], cx, y0 + 2.25, cz, yaw,
+                    0.5f, "face"));
+            out.add(new Prop("arcade.shelf." + n, "WHITE_CONCRETE", true, x0 + c[0] + 0.04, y0 + 3.0, z0 + c[1] + 0.04,
+                    0f, 0.92f, 0.05f, 0.92f, "block"));
+            out.add(Prop.item("arcade.plush." + n + ".high", PLUSH_HIGH[n % PLUSH_HIGH.length], cx, y0 + 3.3, cz, yaw,
+                    0.45f, "face"));
+            // the ribbon along the front edge of the base: the west face on the east wall, the north face at the back
+            double rx = side ? x0 + c[0] + 0.02 : x0 + c[0] + 0.05;
+            double rz = side ? z0 + c[1] + 0.05 : z0 + c[1] + 0.02;
+            out.add(new Prop("arcade.ribbon." + n, RIBBONS[n % RIBBONS.length], true, rx, y0 + 2.0, rz, 0f,
+                    side ? 0.05f : 0.9f, 0.08f, side ? 0.9f : 0.05f, "block"));
+        }
+        double top = y0 + 2.02;
+        double cz = z0 + PLUSH_COUNTER_Z + 0.5;
+        out.add(Prop.item("arcade.tag.0", "NAME_TAG", x0 + PLUSH_COUNTER_X[0] + 0.45, top, cz - 0.1, 30f, 0.4f, "flat"));
+        out.add(Prop.item("arcade.tag.1", "NAME_TAG", x0 + PLUSH_COUNTER_X[0] + 0.85, top, cz + 0.15, -20f, 0.4f,
+                "flat"));
+        out.add(Prop.item("arcade.bell", "BELL", x0 + PLUSH_COUNTER_X[1] + 0.5, y0 + 2.2, cz, 180f, 0.45f, "fixed"));
     }
 
     /** The back bar's shelves in {@code box} (0.44.2), {x, y, z} each: two rows along the bar's wall. */
@@ -1704,12 +2174,12 @@ public final class ClubhousePlanner {
     /**
      * The planner's regions in {@code box} with {@code rooms} (0.42.0), by name: what a save says it covers, so a room
      * added in a later release (a region the save doesn't name) is built from HCM's plan into the owner's saved room
-     * ({@link ClubSave#merged}). The main room, then each side room's 16 x 16 half of the annex.
+     * ({@link ClubSave#merged}). The main room, then each side room's half of the wing (16 wide, its whole depth).
      */
     public static Map<String, Box> regions(Box box, Rooms rooms) {
         Map<String, Box> out = new java.util.LinkedHashMap<>();
         out.put("main", new Box(box.minX(), box.minY(), box.minZ(), box.minX() + 31, box.maxY(), box.minZ() + MAIN_Z - 1));
-        if (box.sizeZ() == ClubhouseSettings.SIZE_Z) {
+        if (box.sizeZ() > MAIN_Z) {
             if (rooms.arcade()) {
                 out.put("arcade", new Box(box.minX() + ARCADE_X0, box.minY(), box.minZ() + MAIN_Z,
                         box.minX() + ARCADE_X0 + 15, box.minY() + SIDE_ROOF, box.maxZ()));
@@ -1746,6 +2216,23 @@ public final class ClubhousePlanner {
     public static List<Seat> parlorSeats(Box box) {
         Builder b = new Builder(box);
         parlor(b);
+        return b.seats; // the card tables' first (Twenty-One's four, then Higher or Lower's), then the lounge's
+    }
+
+    /**
+     * Plan 13: the Arcade Room's seats' cushions, only while it is built: the kid race's viewing stools and the bean
+     * bags. None in a wing at its old size.
+     */
+    public static List<Seat> arcadeSeats(Box box) {
+        Builder b = new Builder(box);
+        arcadeRoom(b);
+        return b.seats;
+    }
+
+    /** Plan 13: the Trophy Room's armchairs' cushions, only while it is built. None in a wing at its old size. */
+    public static List<Seat> trophySeats(Box box) {
+        Builder b = new Builder(box);
+        trophyRoom(b);
         return b.seats;
     }
 
@@ -1758,9 +2245,14 @@ public final class ClubhousePlanner {
         final List<BlockOp> ops = new ArrayList<>();
         final Map<Long, Integer> at = new HashMap<>();
         final List<Seat> seats = new ArrayList<>();
+        /** The side rooms' last row of air (z offset), and whether the wing is plan 13's grown one. */
+        final int z1;
+        final boolean big;
 
         Builder(Box box) {
             this.box = box;
+            this.z1 = z1(box);
+            this.big = grown(box);
         }
 
         void set(int i, int j, int k, String block) {
@@ -1806,6 +2298,12 @@ public final class ClubhousePlanner {
                     default -> -90f;
                 };
             }
+            seats.add(new Seat(box.minX() + i + 0.5, box.minY() + j + 0.5, box.minZ() + k + 0.5, yaw, color));
+        }
+
+        /** A stool facing {@code yaw} (plan 13: the kid race's viewing stools, the sportsbook's). */
+        void seat(int i, int j, int k, String block, String color, float yaw) {
+            set(i, j, k, block);
             seats.add(new Seat(box.minX() + i + 0.5, box.minY() + j + 0.5, box.minZ() + k + 0.5, yaw, color));
         }
 
@@ -1865,5 +2363,5 @@ public final class ClubhousePlanner {
             "minecraft:ochre_froglight", "minecraft:verdant_froglight", "minecraft:pearlescent_froglight", CLAW,
             "minecraft:cyan_concrete", "minecraft:lime_concrete", "minecraft:orange_concrete",
             "minecraft:light_blue_concrete", "minecraft:lime_wool", "minecraft:light_blue_wool", "minecraft:pink_wool",
-            "minecraft:yellow_wool", "minecraft:shroomlight");
+            "minecraft:yellow_wool", "minecraft:shroomlight", "minecraft:blue_wool", "minecraft:black_wool");
 }

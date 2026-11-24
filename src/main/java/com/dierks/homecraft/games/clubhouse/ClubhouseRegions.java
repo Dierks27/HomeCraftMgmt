@@ -45,6 +45,35 @@ public final class ClubhouseRegions {
     }
 
     /**
+     * Plan 13: the box the Clubhouse may take where it is configured. Its whole box when the 14 rows its wing grew by
+     * ({@link ClubhouseSettings#wingBox}) keep clear of every other games area there could be: every Fresh Courses
+     * slot and Classic (on or off), the kept courses' area, and {@code others} (the arena's box, the lava playroom's).
+     * Otherwise its old box ({@link ClubhouseSettings#oldBox}): the room keeps its old size there, and nothing else has
+     * to keep clear of rows it will never build. The room asks the live server the same before it claims those rows,
+     * and more (the hand-built courses, the world's edges), so it never takes rows another area was told were free.
+     */
+    public static Box reach(ClubhouseSettings s, DailySettings fresh, List<Regions.Extra> others) {
+        if (s == null) {
+            return null;
+        }
+        return problems(s.wingBox(), fresh, others, null, null).isEmpty() ? s.box() : s.oldBox();
+    }
+
+    /**
+     * The Clubhouse's box as an extra for another area's checks (plan 13): {@link #reach}, so an area the grown wing
+     * would crowd is never closed by it (the Clubhouse keeps its old size instead). None when the settings can't be
+     * read.
+     */
+    public static List<Regions.Extra> extras(ClubhouseSettings s, DailySettings fresh, List<Regions.Extra> others) {
+        try {
+            Box r = reach(s, fresh, others);
+            return r == null ? List.of() : List.of(new Regions.Extra(NAME, r));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+    }
+
+    /**
      * Why the box can't be used, in admin words; empty when it can.
      *
      * @param settings  Fresh Courses' settings (its slots, Classics slots and keep area), or {@code null}

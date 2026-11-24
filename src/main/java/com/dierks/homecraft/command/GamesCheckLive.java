@@ -200,7 +200,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 new BukkitWorldPort(plugin, w).spawn(), st.safeSpot());
         List<GamesCheck.Region> regions = new ArrayList<>();
         // WP-D fix, and WP-CH: the arena's box and the Clubhouse's, as Fresh Courses' vet and keep see them
-        List<Regions.Extra> extraBoxes = DailyCourses.extraBoxes(cfg.settings(FallingFloors.SPEC),
+        List<Regions.Extra> extraBoxes = DailyCourses.extraBoxes(st, cfg.settings(FallingFloors.SPEC),
                 cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC),
                 cfg.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC));
         for (DailySettings.SlotConfig c : all) {
@@ -541,8 +541,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (w != null) {
             BukkitWorldPort port = new BukkitWorldPort(plugin, w);
             boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
-            problems = ArenaRegions.problems(box, st, com.dierks.homecraft.games.clubhouse.ClubhouseRegions.extras(
-                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC)), // WP-CH: apart from the Clubhouse
+            problems = ArenaRegions.problems(box, st, DailyCourses.clubhouseExtras(st, ff,
+                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC),
+                    cfg.settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC)), // WP-CH: apart from the Clubhouse
                     Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(),
                             w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
         }
@@ -581,8 +582,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
             BukkitWorldPort port = new BukkitWorldPort(plugin, w);
             boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
             // apart from the arena and the Clubhouse, as its own host checks before it builds
-            List<Regions.Extra> others = new ArrayList<>(DailyCourses.extraBoxes(cfg.settings(FallingFloors.SPEC),
-                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC)));
+            List<Regions.Extra> others = new ArrayList<>(DailyCourses.arenaExtras(cfg.settings(FallingFloors.SPEC)));
+            others.addAll(DailyCourses.clubhouseExtras(st, cfg.settings(FallingFloors.SPEC),
+                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC), ls));
             problems = com.dierks.homecraft.games.lava.LavaRegions.problems(box, st, others, Regions.handBuilt(rows()),
                     new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(), w.getMaxHeight(), port.border(),
                             port.spawn(), st.safeSpot()));

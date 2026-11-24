@@ -145,6 +145,10 @@ final class ClubhouseCheck {
             if (s != null && s.startsWith("left out")) {
                 out.add(Line.warn("The Clubhouse's side rooms are " + s, s.contains("rebuild confirm")
                         ? "/hcm games clubhouse rebuild confirm" : "see /hcm games clubhouse status"));
+            } else if (s != null && s.contains("at their old size")) {
+                // plan 13: the rooms stand, but their 14 new rows can't be claimed here
+                out.add(Line.warn("The Clubhouse's side rooms: " + s, s.contains("rebuild confirm")
+                        ? "/hcm games clubhouse rebuild confirm" : ORIGIN));
             } else {
                 out.add(Line.ok("The Clubhouse's side rooms: " + (s == null ? "built with the room" : s)));
             }

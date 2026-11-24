@@ -176,9 +176,27 @@ final class LiveLavaHost implements LavaHost {
             // its settings can't be read: nothing to keep apart from
         }
         try {
-            out.addAll(ClubhouseRegions.extras(g.settings(Clubhouse.SPEC)));
+            // plan 13: the Clubhouse as far as it may reach (its grown wing only where it crowds nothing, this room too)
+            DailySettings fresh = null;
+            try {
+                fresh = g.settings(DailyCourses.SPEC);
+            } catch (RuntimeException e) {
+                // unreadable: no slots to ask about
+            }
+            com.dierks.homecraft.games.arena.FallingFloorsSettings ff = null;
+            try {
+                ff = g.settings(FallingFloors.SPEC);
+            } catch (RuntimeException e) {
+                // unreadable: nothing to keep apart from
+            }
+            out.addAll(DailyCourses.clubhouseExtras(fresh, ff, g.settings(Clubhouse.SPEC),
+                    g.settings(FloorIsLava.SPEC)));
         } catch (RuntimeException e) {
-            // as above
+            try {
+                out.addAll(ClubhouseRegions.extras(g.settings(Clubhouse.SPEC)));
+            } catch (RuntimeException again) {
+                // as above
+            }
         }
         return out;
     }

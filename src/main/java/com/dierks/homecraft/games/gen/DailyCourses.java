@@ -388,6 +388,38 @@ public final class DailyCourses implements Game {
         return List.copyOf(out);
     }
 
+    /**
+     * Plan 13: {@link #extraBoxes(FallingFloorsSettings, ClubhouseSettings, com.dierks.homecraft.games.lava.LavaSettings)}
+     * with the Clubhouse as far as it may reach ({@link #clubhouseExtras}): its grown wing only where it crowds none
+     * of these, so a slot or the keep area its 16 new rows would crowd is never closed by them (the Clubhouse keeps its
+     * old size there instead).
+     */
+    public static List<Regions.Extra> extraBoxes(DailySettings fresh, FallingFloorsSettings ff,
+                                                 ClubhouseSettings clubhouse,
+                                                 com.dierks.homecraft.games.lava.LavaSettings lava) {
+        List<Regions.Extra> out = new ArrayList<>(arenaExtras(ff));
+        out.addAll(clubhouseExtras(fresh, ff, clubhouse, lava));
+        out.addAll(com.dierks.homecraft.games.lava.LavaRegions.extras(lava));
+        return List.copyOf(out);
+    }
+
+    /**
+     * Plan 13: the Clubhouse's box as every other games area keeps apart from it ({@link ClubhouseRegions#reach}):
+     * its whole box when its grown wing keeps clear of Fresh Courses ({@code fresh}), the arena and the lava playroom
+     * as configured, else its old box. Any of these whose settings can't be read ({@code null}) is left out.
+     */
+    public static List<Regions.Extra> clubhouseExtras(DailySettings fresh, FallingFloorsSettings ff,
+                                                      ClubhouseSettings clubhouse,
+                                                      com.dierks.homecraft.games.lava.LavaSettings lava) {
+        List<Regions.Extra> others = new ArrayList<>(arenaExtras(ff));
+        try {
+            others.addAll(lava == null ? List.of() : com.dierks.homecraft.games.lava.LavaRegions.extras(lava));
+        } catch (RuntimeException e) {
+            // unreadable: nothing to keep apart from
+        }
+        return ClubhouseRegions.extras(clubhouse, fresh, others);
+    }
+
     /** The running engine, or {@code null} while Fresh Courses is off. */
     public GenService engine() {
         return engine;
@@ -564,8 +596,8 @@ public final class DailyCourses implements Game {
 
         @Override
         public List<Regions.Extra> extras() {
-            return extraBoxes(games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC),
-                    games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC));
+            return extraBoxes(DailyCourses.this.settings(), games().settings(FallingFloors.SPEC),
+                    games().settings(Clubhouse.SPEC), games().settings(com.dierks.homecraft.games.lava.FloorIsLava.SPEC));
         }
 
         @Override

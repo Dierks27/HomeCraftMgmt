@@ -178,10 +178,10 @@ class GamesConfigTest {
                 "motherlode", "farm_slots", "deep_mine", "mob_slots", "mob_races", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
                 "trials", "golf", "cup", "fresh_courses", "race_night", "falling_floors", "clubhouse",
-                "hub", "floor_is_lava", "cpu", "kid_races", "sportsbook"), ids);
-        assertEquals(12, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
-                "twelve games of chance: the first five, the three more slot machines after them, Deep Mine and"
-                        + " Mob Slots, then Mob Races; and the Sports Board, last");
+                "hub", "floor_is_lava", "cpu", "kid_races", "sportsbook", "holdem"), ids);
+        assertEquals(13, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
+                "thirteen games of chance: the first five, the three more slot machines after them, Deep Mine and"
+                        + " Mob Slots, then Mob Races; then the Sports Board and Texas Hold'em, last");
         for (String reserved : GameCatalog.RESERVED) {
             assertTrue(GameCatalog.taken(reserved), reserved + " is reserved for /hcm play");
         }
@@ -205,8 +205,8 @@ class GamesConfigTest {
         assertTrue(k.dailyCap() <= parsed.common().skillDailyCap(), "inside the server's skill cap");
         assertFalse(com.dierks.homecraft.games.kidrace.KidRaces.SPEC.kind().chance(), "never a game of chance");
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals("kid_races", blocks.get(blocks.size() - 2),
-                "appended at the end of games: (0.55.0's Sports Board was appended after it)");
+        assertEquals("kid_races", blocks.get(blocks.size() - 3),
+                "appended at the end of games: (0.55.0's Sports Board and 0.57.0's Hold'em were appended after it)");
         assertEquals(List.of("enabled", "prize", "daily_cap", "gather_seconds", "race_seconds"),
                 com.dierks.homecraft.games.kidrace.KidRacesSettings.KEYS);
         List<String> warns = new ArrayList<>();
@@ -243,7 +243,8 @@ class GamesConfigTest {
         assertTrue(com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC.kind().chance(),
                 "a game of chance: the play gate, Take a break and the Parlor's money rules all apply");
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
-        assertEquals("sportsbook", blocks.get(blocks.size() - 1), "appended at the end of games:");
+        assertEquals("sportsbook", blocks.get(blocks.size() - 2),
+                "appended at the end of games: (0.57.0's Hold'em was appended after it)");
         assertEquals(List.of("enabled", "leagues", "refresh_minutes", "hours_ahead", "rtp", "settle_days", "api_base"),
                 com.dierks.homecraft.games.chance.sportsbook.SportsbookSettings.KEYS);
         List<String> warns = new ArrayList<>();
@@ -257,6 +258,45 @@ class GamesConfigTest {
         assertEquals(95.0, read.rtp(), "held to the band's top");
         assertEquals(s.apiBase(), read.apiBase(), "https only");
         assertEquals(4, warns.size(), "one WARN each (curling, refresh, rtp, api_base): " + warns);
+    }
+
+    /**
+     * 0.57.0: Texas Hold'em ships on, last in the {@code games:} block (where the backfill appends it on an upgraded
+     * server, with no config revision): 20, 50 or 100 tokens in, blinds of 1 and 2, 200 play chips at the friendly
+     * table, 10 buy-ins a day, NPCs filling the friendly table to 4. No rtp: the players play each other. Out-of-range
+     * values are clamped with one WARN each, and a big blind under the small one is raised to it.
+     */
+    @Test
+    void holdemShipsAtTheEndOfTheBlock() throws Exception {
+        GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
+        com.dierks.homecraft.games.chance.holdem.HoldemSettings h =
+                parsed.settings(com.dierks.homecraft.games.chance.holdem.Holdem.SPEC);
+        assertEquals(com.dierks.homecraft.games.chance.holdem.HoldemSettings.defaults(), h);
+        assertTrue(h.enabled());
+        assertEquals(List.of(20, 50, 100), h.buyIns());
+        assertEquals("1/2", h.blinds());
+        assertEquals(200, h.friendlyChips());
+        assertEquals(10, h.dailyLimit());
+        assertEquals(4, h.npcSeats());
+        assertEquals("holdem", com.dierks.homecraft.games.chance.holdem.Holdem.SPEC.id(),
+                "the id the Parlor's card table is tapped as (machine:holdem)");
+        assertTrue(com.dierks.homecraft.games.chance.holdem.Holdem.SPEC.kind().chance(),
+                "a game of chance: the play gate, Take a break and the Parlor's money rules all apply");
+        List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
+        assertEquals("holdem", blocks.get(blocks.size() - 1), "appended at the end of games:");
+        assertEquals(List.of("enabled", "buy_ins", "small_blind", "big_blind", "friendly_chips", "daily_limit",
+                "npc_seats", "away_seconds", "pause_seconds"),
+                com.dierks.homecraft.games.chance.holdem.HoldemSettings.KEYS);
+        List<String> warns = new ArrayList<>();
+        com.dierks.homecraft.games.chance.holdem.HoldemSettings read =
+                com.dierks.homecraft.games.chance.holdem.HoldemSettings.parse(new GamesConfig.Node("games.holdem",
+                        Map.of("small_blind", 5, "big_blind", 2, "npc_seats", 9, "away_seconds", 1,
+                                "buy_ins", List.of(100, 20, 20)), warns::add), h);
+        assertEquals(5, read.bigBlind(), "a big blind under the small one is raised to it");
+        assertEquals(6, read.npcSeats(), "clamped to the table's six");
+        assertEquals(3, read.awaySeconds());
+        assertEquals(List.of(20, 100), read.buyIns(), "sorted, once each");
+        assertEquals(3, warns.size(), "one WARN each (big_blind, npc_seats, away_seconds): " + warns);
     }
 
     @Test

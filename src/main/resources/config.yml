@@ -2978,3 +2978,31 @@ games:
     settle_days: 7
     # Kalshi's public API.
     api_base: "https://api.elections.kalshi.com/trade-api/v2"
+  # Texas Hold'em in the Clubhouse's Game Parlor (0.57.0): 2 to 6 players play each other at a
+  # card table; the Arcade only deals and keeps nothing. Three tables: the friendly table plays
+  # free play chips (NPC players join in), the tokens table is 1 chip = 1 token, and the money
+  # table (players with hcm.games.money, while the Parlor's money play is on) is 1 chip = $1,
+  # its buy-in built from the Parlor's chips up to its biggest stake. Chips are paid back when you
+  # get up; if the server stops mid-hand, that hand is called off and everyone gets the chips they
+  # had before it. Admin: /hcm games holdem status|stop.
+  holdem:
+    # false = Texas Hold'em is closed.
+    enabled: true
+    # The tokens a player can sit down with at the tokens table (one each time; a player with
+    # no chips left can buy in again).
+    buy_ins: [20, 50, 100]
+    # The blinds, in chips, at every table. They move one seat round the table every hand.
+    small_blind: 1
+    big_blind: 2
+    # Free play chips a player gets at the friendly table (and again when they run out).
+    friendly_chips: 200
+    # Buy-ins per player per day at the tokens and money tables.
+    daily_limit: 10
+    # NPC players sit in at the friendly table, one every games.cpu.join_after_seconds, until it
+    # has this many players (0-6; 0 = no NPCs there). They never sit at the other tables.
+    npc_seats: 4
+    # Seconds the table waits on a player who closed its screen mid-hand before it checks or
+    # folds for them (3-120). Everyone else is never on a clock until someone taps Hurry Up.
+    away_seconds: 10
+    # Seconds a hand's result stays on the table before the next hand is dealt (2-30).
+    pause_seconds: 5

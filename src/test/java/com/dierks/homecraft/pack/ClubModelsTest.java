@@ -68,6 +68,23 @@ class ClubModelsTest {
         assertTrue(json.getAsJsonArray("elements").size() > 4, "the board's score lines are drawn on it");
     }
 
+    /**
+     * 0.57.0: Texas Hold'em's card table has its own placeholder (cards on a card table, like Twenty-One's: green felt,
+     * two face-down cards, a stack of chips), block-atlas textures only, and its Games-screen icon as the stand-in.
+     */
+    @Test
+    void holdemHasCardsOnATable() {
+        ClubModels.Model m = ClubModels.machineFor("holdem");
+        assertNotNull(m, "machine:holdem has a model");
+        assertEquals("hcm:machine_holdem", m.id());
+        assertEquals(ClubModels.Kind.TROPHY, m.kind(), "it lies on its card table, as Twenty-One's cards do");
+        assertEquals(Material.PAPER, m.fallback());
+        JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                .get("assets/hcm/models/item/placeholder/machine_holdem.json")).getAsJsonObject();
+        assertEquals("minecraft:block/green_wool", json.getAsJsonObject("textures").get("felt").getAsString());
+        assertTrue(json.getAsJsonArray("elements").size() >= 5, "felt, two cards and chips");
+    }
+
     /** Without the pack each model has a vanilla stand-in: an item every client draws (never the missing cube). */
     @Test
     void everyModelHasAVanillaStandIn() {

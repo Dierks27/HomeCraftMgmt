@@ -102,7 +102,10 @@ public final class TokenService {
         GAMES_KID_RACES("Arcade Room races"),
         // The Game Parlor's Sports Board (0.55.0): played for money only, so no token line is ever written under it;
         // it is the game's name in the games' own lists.
-        ARCADE_SPORTSBOOK("Sports Board");
+        ARCADE_SPORTSBOOK("Sports Board"),
+        // 0.57.0, Texas Hold'em in the Game Parlor: a buy-in at a tokens table goes in under it, and the chips a player
+        // gets up with come back under it. The players play each other, so it keeps nothing.
+        ARCADE_HOLDEM("Texas Hold'em");
 
         private final String label;
 

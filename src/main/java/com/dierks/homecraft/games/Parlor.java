@@ -337,13 +337,14 @@ public final class Parlor {
     }
 
     /**
-     * Dollars the player put in today (the games, and Scratch Tickets bought for money), or -1 when it can't be read
-     * (money play then fails closed).
+     * Dollars the player put in today (the games, Scratch Tickets bought for money, and the Sports Board's picks), or
+     * -1 when it can't be read (money play then fails closed).
      */
     public int inToday(UUID player) {
         try {
             long day = games.host().clock().dayKey();
-            return games.dao().moneyInToday(player, day) + (int) dayTally(games.dao().pref(player, PREF_TICKETS), day)[0];
+            return games.dao().moneyInToday(player, day) + (int) dayTally(games.dao().pref(player, PREF_TICKETS), day)[0]
+                    + games.dao().sports().inToday(player, day);
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not read a player's Game Parlor money today", e);
             return -1;
@@ -435,6 +436,19 @@ public final class Parlor {
         }
         tally(day, price, 0);
         return null;
+    }
+
+    /**
+     * The Sports Board (0.55.0): take a pick's stake from the player's balance, after {@link #check} said yes (the
+     * caller writes the pick next, and gives the stake back with {@link #giveCents} if it can't).
+     *
+     * @return why not, or {@code null} when the dollars were taken
+     */
+    public Refusal takeStake(UUID player, int dollars) {
+        if (dollars <= 0 || !games.host().bank().on()) {
+            return MONEY_CLOSED;
+        }
+        return games.host().bank().take(player, dollars) ? null : needMore(dollars);
     }
 
     /**

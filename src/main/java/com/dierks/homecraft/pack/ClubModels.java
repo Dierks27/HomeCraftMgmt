@@ -128,6 +128,9 @@ public final class ClubModels {
         cabinet("creeper_sweeper", "cabinet_sweeper", Material.CREEPER_HEAD, "minecraft:block/lime_concrete");
         cabinet("ore_merge", "cabinet_merge", Material.DIAMOND, "minecraft:block/diamond_ore");
         cabinet("connect_four", "cabinet_connect", Material.RED_CONCRETE, "minecraft:block/blue_concrete");
+        // 0.55.0, the Game Parlor's Sports Board (a cabinet's size, a placeholder until the owner's model): a dark
+        // board with a lit screen of score lines. Its stand-in without the pack is a clock: tonight's games
+        machine("sportsbook", "machine_sportsbook", Material.CLOCK, "minecraft:block/sea_lantern", Kind.CABINET);
     }
 
     private static void machine(String game, String name, Material icon, String screen, Kind kind) {
@@ -232,6 +235,19 @@ public final class ClubModels {
                     parts.add(box(6, 11, 0, 10, 13, 1, "body")); // the mouth
                     parts.add(box(6, 10, 0, 7, 11, 1, "body"));  // and its two corners
                     parts.add(box(9, 10, 0, 10, 11, 1, "body"));
+                }
+                if (m.name().equals("machine_sportsbook")) {
+                    // a dark board: the screen stands taller, with three dark score lines across it and a lit
+                    // team mark at each end of each
+                    tex = "\"body\":\"minecraft:block/black_concrete\",\"panel\":\"minecraft:block/gray_concrete\","
+                            + "\"top\":\"minecraft:block/redstone_lamp_on\",\"screen\":\"" + m.screen() + "\","
+                            + "\"mark\":\"minecraft:block/lime_concrete\",\"other\":\"minecraft:block/orange_concrete\"";
+                    parts.set(2, box(2, 6, 1, 14, 21, 2, "screen"));
+                    for (int y : new int[] {8, 13, 18}) {
+                        parts.add(box(3, y, 0, 13, y + 1, 1, "body"));
+                        parts.add(box(3, y + 1, 0, 5, y + 3, 1, "mark"));
+                        parts.add(box(11, y + 1, 0, 13, y + 3, 1, "other"));
+                    }
                 }
                 if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it
                     tex += ",\"red\":\"minecraft:block/red_concrete\",\"yellow\":\"minecraft:block/yellow_concrete\"";

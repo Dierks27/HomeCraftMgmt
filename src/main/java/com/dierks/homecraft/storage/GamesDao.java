@@ -159,6 +159,11 @@ public final class GamesDao {
         return new CupDao(database);
     }
 
+    /** The Game Parlor's Sports Board picks (schema v42), on the same connection. */
+    public SportsPicksDao sports() {
+        return new SportsPicksDao(database);
+    }
+
     // ---- rounds -------------------------------------------------------------------------------
 
     /**

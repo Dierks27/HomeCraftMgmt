@@ -99,7 +99,10 @@ public final class TokenService {
         ARCADE_MOB_RACES("Mob Races"),
         // The Arcade Room's free Mob Races for kids: a few tokens when your racer wins, under a daily cap. A skill
         // game's reward: nothing is ever put in, so it is never a line of a game of chance.
-        GAMES_KID_RACES("Arcade Room races");
+        GAMES_KID_RACES("Arcade Room races"),
+        // The Game Parlor's Sports Board (0.55.0): played for money only, so no token line is ever written under it;
+        // it is the game's name in the games' own lists.
+        ARCADE_SPORTSBOOK("Sports Board");
 
         private final String label;
 

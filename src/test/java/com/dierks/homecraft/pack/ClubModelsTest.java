@@ -46,6 +46,28 @@ class ClubModelsTest {
         assertEquals("hcm:door_trophy", ClubModels.door(false).id());
     }
 
+    /**
+     * 0.55.0: the Game Parlor's Sports Board has its own placeholder (a cabinet's size: a dark board with a lit screen,
+     * block-atlas textures only, so never purple-black) and a picture stand-in for a player without the pack.
+     */
+    @Test
+    void theSportsBoardHasACabinetSizedPlaceholder() {
+        ClubModels.Model m = ClubModels.machineFor("sportsbook");
+        assertNotNull(m, "machine:sportsbook has a model");
+        assertEquals("hcm:machine_sportsbook", m.id());
+        assertEquals(ClubModels.Kind.CABINET, m.kind(), "a cabinet's size");
+        assertEquals(Material.CLOCK, m.fallback(), "a clock stands in without the pack: tonight's games");
+        JsonObject json = JsonParser.parseString(ClubModels.placeholderFiles(Set.of())
+                .get("assets/hcm/models/item/placeholder/machine_sportsbook.json")).getAsJsonObject();
+        JsonObject tex = json.getAsJsonObject("textures");
+        assertEquals("minecraft:block/black_concrete", tex.get("body").getAsString(), "a dark board");
+        assertEquals("minecraft:block/sea_lantern", tex.get("screen").getAsString(), "a lit screen");
+        for (Map.Entry<String, com.google.gson.JsonElement> t : tex.entrySet()) {
+            assertTrue(t.getValue().getAsString().startsWith("minecraft:block/"), t.getKey());
+        }
+        assertTrue(json.getAsJsonArray("elements").size() > 4, "the board's score lines are drawn on it");
+    }
+
     /** Without the pack each model has a vanilla stand-in: an item every client draws (never the missing cube). */
     @Test
     void everyModelHasAVanillaStandIn() {

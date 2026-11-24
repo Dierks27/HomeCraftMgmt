@@ -107,6 +107,31 @@ class GamesCommandTest {
                 + "on a player (it only looks)\n"), "plugin.yml's /hcm games movement line");
     }
 
+    /**
+     * 0.55.0: the Sports Board's admin commands ({@code /hcm games sportsbook ...}, its own {@code GameAdmin}) each have
+     * a usage line in plugin.yml and a help line.
+     */
+    @Test
+    void theSportsBoardsAdminCommandsHaveTheirUsageLines() throws Exception {
+        String yml = Files.readString(Path.of("src", "main", "resources", "plugin.yml"), StandardCharsets.UTF_8);
+        for (String line : List.of(
+                "/hcm games sportsbook status  - admin: the Sports Board: last refresh, games loaded, open picks, money"
+                        + " in and out today",
+                "/hcm games sportsbook refresh  - admin: read Kalshi's lines and the open picks' games now",
+                "/hcm games sportsbook settle <ticker> yes|no|void  - admin: settle a stuck market's picks by hand"
+                        + " (logged)",
+                "/hcm games sportsbook off|on  - admin: stop or start new Sports Board picks (open picks are still"
+                        + " settled)")) {
+            assertTrue(yml.contains("\n      " + line + "\n"), "plugin.yml: " + line);
+        }
+        List<String> help = com.dierks.homecraft.games.chance.sportsbook.Sportsbook.HELP;
+        assertEquals(4, help.size());
+        for (String verb : List.of("status", "refresh", "settle <ticker> yes|no|void", "off|on")) {
+            assertTrue(help.stream().anyMatch(h -> h.startsWith("&e/hcm games sportsbook " + verb + " &7- ")),
+                    "a help line for " + verb + ": " + help);
+        }
+    }
+
     @Test
     void adminNumbersAreWholeAndInRange() {
         assertEquals(7, GamesCommand.parse("7", 1, 365), "a pause of 7 days");

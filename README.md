@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.57.1-stand-up`
+- **Version:** `0.58.0-card-faces`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,20 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.58.0: playing cards you can read at a glance.** The owner: "Can we make it so Jacks show a J, Queens are Q and such
+on the cards? Any way we can make a bit of art for the cards to show what the cards are a bit better than a paper?"
+Every card in the Parlor's card games (Twenty-One, Higher or Lower, Video Poker, Texas Hold'em) is named with its short
+form first, in its suit's colour: "J♠ Jack of Spades", "10♥ 10 of Hearts". In Twenty-One a card's number is still
+what it counts (a King 10, "Counts as 10"); in the other games it is the card's rank with Aces high (J 11, Q 12, K 13,
+A 14). With CraftBridge running, HCM adds pictures of all 52 cards and a card back to the server's pack (drawn by the
+plugin: pips, a big Ace, two-headed Jacks, Queens and Kings in gold frames, a blue back): Java players who accept the
+pack see real cards (and no number on them in the poker games and Higher or Lower). Bedrock players and anyone
+without the pack see the plain cards with the new names. Your own art: a 32 x 32 PNG at
+`assets/hcm/textures/item/cards/<rank>_<suit>.png` (`queen_hearts.png`, `10_spades.png`, `back.png`) in a
+CraftBridge drop-in; a whole card: `assets/hcm/items/card_<rank>_<suit>.json`. `/hcm games clubhouse models` counts
+yours. Not yet seen in a real 26.2 client: the flat card pictures (they are built like vanilla's own item pictures).
+**Back to 0.57.1:** the jar alone.
 
 **0.57.1: getting up from a seat leaves you where you are; the Sports Board's wall turns its pages; Twenty-One's totals.** The owner: "when you stand up, it auto warps you to
 the location you come into the clubhouse. Even if you are in the parlor". Standing up from a chair, stool or cushion

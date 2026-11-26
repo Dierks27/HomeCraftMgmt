@@ -44,7 +44,6 @@ import java.util.List;
  */
 public final class TwentyOneTableMenu extends GameMenu {
 
-    private static final ItemStack FACE_DOWN = Menus.icon(Material.MAP, "&8Face-down card");
     private static final int ARCADE_ROW = 0;
     private static final int CHIPS_BACK = 45;
     private static final int[] STAKES = {46, 47, 48};
@@ -283,10 +282,10 @@ public final class TwentyOneTableMenu extends GameMenu {
             set(slot++, Menus.icon(Material.BOOK, "&f" + cards.size() + " cards &8· &ftotal "
                     + TwentyOneHand.best(cards)), null);
         }
+        boolean art = CardGameTiles.art(plugin, viewer);
         for (int i = from; i < cards.size(); i++) {
             Card c = cards.get(i);
-            set(slot++, i == hidden ? FACE_DOWN : CardGameTiles.card(c.name(), c.red(), c.value(),
-                    c.rank() == 1 ? "&7Counts as 1 or 11" : "&7Counts as " + c.value()), null);
+            set(slot++, i == hidden ? CardGameTiles.faceDown(art) : CardGameTiles.twentyOne(art, c), null);
         }
     }
 

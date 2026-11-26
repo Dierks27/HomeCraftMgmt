@@ -303,11 +303,11 @@ public final class MyLooksMenu extends Menu {
         fill(TRAIL_SLOTS, trails, p, now, "&7No trails yet");
 
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new MyLooksMenu(plugin, player, back, p - 1).open(player));
         }
         if (p < pageCount - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new MyLooksMenu(plugin, player, back, p + 1).open(player));
         }
         hideTile();

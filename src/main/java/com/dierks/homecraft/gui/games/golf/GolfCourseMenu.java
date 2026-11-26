@@ -32,8 +32,8 @@ import java.util.List;
  * <pre>
  *  4  the course: holes and par, each hole's par
  *  10 your best     11 high scores (the record)     12 Play with friends (golf together, D4)
- *  13 Start     15 Pick your ball     16 How to play
- *  18 Admin tools (WP-ADM: an admin, on Golf of the Week or Tiny Golf)     22 Back/Close
+ *  13 Start     14 your stars (a Fresh course)     15 Pick your ball
+ *  18 Admin tools (WP-ADM: an admin, on Golf of the Week or Tiny Golf)     21 How to play     22 Back/Close
  * </pre>
  *
  * Start takes the player into the game (their things are kept safe until they come back), so it
@@ -51,7 +51,8 @@ public final class GolfCourseMenu extends GameMenu {
     private static final int SCORES = 11;
     private static final int START = 13;
     private static final int BALL = 15;
-    private static final int RULES = 16;
+    /** 0.59.0: beside the way out, as on every games screen (it was 16, at the end of the course's row). */
+    private static final int RULES = 21;
     private static final int STARS = 14;
     /** Golf together (EVENTS-OWNER-DECISIONS D4). */
     private static final int FRIENDS = 12;

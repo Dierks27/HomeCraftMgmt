@@ -140,7 +140,7 @@ final class SoundListMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -157,7 +157,7 @@ final class SoundListMenu extends Menu {
         set(51, Menus.icon(Material.PAPER, "&8" + keys.size() + " sound" + (keys.size() == 1 ? "" : "s")
                 + (pages > 1 ? " · page " + (page + 1) + "/" + pages : "")), null);
         if (page + 1 < pages) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

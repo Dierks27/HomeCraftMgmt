@@ -29,6 +29,19 @@ import java.util.List;
  * either side, Cash out underneath, the run's cards along the top, and the stakes, Start and "How
  * it pays" along the bottom.
  *
+ * <pre>
+ *  row 0   0 this run (how many right) · 1-8 its cards so far
+ *  row 1   9 how to play · 11 what it gives back · 13 the run now · 15 today
+ *  row 2   20 Lower · 22 the card on show · 24 Higher
+ *  row 3   31 Cash out
+ *  row 4   36-44 more stakes, when there are more than three
+ *  row 5   45 the chips' total · 46-48 stakes or chips · 49 Back · 50 Start · 51 your balance · 52 how it pays
+ *          53 tokens or money
+ * </pre>
+ *
+ * <p>0.59.0: this map, which the screen never had. Like every game of chance its How to play stays in its own info
+ * row (9), not beside the way out: row 5 is the stake row.
+ *
  * <p>Each button that can be used names what it does in tokens: Higher reads "right: 15 tokens",
  * Cash out reads "15 tokens". A side that could not grow the pot is never offered (it stays grey,
  * saying why), so a right guess is always worth more than what you had. The screen only draws

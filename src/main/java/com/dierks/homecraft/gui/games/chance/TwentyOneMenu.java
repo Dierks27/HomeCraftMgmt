@@ -29,6 +29,19 @@ import java.util.List;
  * The Twenty-One table (spec §5.4): the Arcade's cards on the top row, yours two rows down, Hit /
  * Stand / Double between, and the stakes, Deal and "How it pays" along the bottom.
  *
+ * <pre>
+ *  row 0   0 the Arcade (its total) · 1-8 its cards (the hole card face down until it plays)
+ *  row 1   9 how to play · 11 what it gives back · 13 the hand now · 15 today
+ *  row 2   18 you (your total) · 19-26 your cards
+ *  row 3   29 Hit · 31 Stand · 33 Double
+ *  row 4   36-44 more stakes, when there are more than three
+ *  row 5   45 the chips' total · 46-48 stakes or chips · 49 Back · 50 Deal · 51 your balance · 52 how it pays
+ *          53 tokens or money
+ * </pre>
+ *
+ * <p>0.59.0: this map, which the screen never had. Like every game of chance its How to play stays in its own info
+ * row (9), not beside the way out: row 5 is the stake row.
+ *
  * <p>The screen only draws the engine's state and forwards clicks. Every token move goes through
  * {@link ChanceRounds}: Deal opens the round (the gate runs there), a Hit is written to the round
  * BEFORE its card is painted, a Double asks {@link ChanceRounds#raise} for the extra tokens (the

@@ -157,11 +157,11 @@ public final class PrizeCounterMenu extends Menu {
             set(GRID_START + i, tile(p, tokens), e -> click(p));
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new PrizeCounterMenu(plugin, player, back, tab, page - 1).open(player));
         }
         if (from + GRID_SIZE < rows.size()) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new PrizeCounterMenu(plugin, player, back, tab, page + 1).open(player));
         }
         setWayOut();

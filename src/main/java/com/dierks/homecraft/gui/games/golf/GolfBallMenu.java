@@ -144,11 +144,11 @@ public final class GolfBallMenu extends GameMenu {
                     "&7can be your ball."), null);
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new GolfBallMenu(plugin, golf, viewer, p - 1, back).open(viewer));
         }
         if (p < pages - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new GolfBallMenu(plugin, golf, viewer, p + 1, back).open(viewer));
         }
     }

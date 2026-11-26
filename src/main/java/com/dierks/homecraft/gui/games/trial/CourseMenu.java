@@ -32,7 +32,7 @@ import java.util.List;
 /**
  * One course (27, spec §11): what to know before you start.
  *
- * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
+ * <p>4 the course ("River Run (Boat · Medium)"); 21 how to play (0.59.0: beside the way out; it was 10); 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
  * first finish's amount, or that it's done, in the name); 19 Challenge someone (0.38.4: a party race of two
  * with anyone online, never on a Dropper); 20 Race with friends (a party race, D4;
@@ -58,7 +58,7 @@ public final class CourseMenu extends GameMenu {
     /** "Challenge someone" (0.38.4): left of Race with friends. */
     public static final int CHALLENGE_SLOT = 19;
     /** The slots every course screen fills whatever the course (the way out is 22). */
-    public static final List<Integer> FIXED_SLOTS = List.of(4, 10, 11, 12, 13, 14, 15, 16, 22);
+    public static final List<Integer> FIXED_SLOTS = List.of(4, 11, 12, 13, 14, 15, 16, 21, 22);
 
     private final TimeTrials trials;
     private final Course course;
@@ -90,7 +90,7 @@ public final class CourseMenu extends GameMenu {
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(TimeTrials.rulesFor(course));
         rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
-        set(10, rulesTile(rules), null);
+        helpTile(rules); // 0.59.0: beside the way out (21), as on every games screen (it was 10)
         Long best = trials.best(viewer, course.id());
         set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time yet" : "&eYour best: &f" + TrialText.time(best)),
                 null);
@@ -199,7 +199,7 @@ public final class CourseMenu extends GameMenu {
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(TimeTrials.rulesFor(course));
         rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
-        set(10, rulesTile(rules), null);
+        helpTile(rules); // 0.59.0: beside the way out (21), as on every games screen (it was 10)
         String board = TimeTrials.board(course);
         Long best = trials.bestOn(viewer, board);
         set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time " + GenCopy.when(cadence) + " yet"

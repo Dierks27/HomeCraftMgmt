@@ -79,11 +79,11 @@ public final class ChallengePickerMenu extends GameMenu {
             set(GRID_START + i, icon, note == null ? e -> pick(id) : null);
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new ChallengePickerMenu(plugin, trials, viewer, back, p - 1).open(viewer));
         }
         if (p < pages(people.size()) - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new ChallengePickerMenu(plugin, trials, viewer, back, p + 1).open(viewer));
         }
         exitTile();

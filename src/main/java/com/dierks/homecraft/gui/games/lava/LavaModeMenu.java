@@ -19,7 +19,7 @@ import org.bukkit.inventory.ItemStack;
  *
  * <pre>
  *  rows 0-1  Little (0-2, 9-11) | Group (3-5, 12-14) | Challenge (6-8, 15-17)
- *  row 2     18 How to play                22 Back / Close
+ *  row 2     21 How to play · 22 Back / Close
  * </pre>
  * A mode that can't be played right now (the room is in use for another, a Challenge has started, the room is being
  * tidied) is grey and says why; it is checked again when it is tapped.
@@ -27,7 +27,8 @@ import org.bukkit.inventory.ItemStack;
 public final class LavaModeMenu extends GameMenu {
 
     private static final int[][] SLOTS = {{0, 1, 2, 9, 10, 11}, {3, 4, 5, 12, 13, 14}, {6, 7, 8, 15, 16, 17}};
-    static final int RULES = 18;
+    /** 0.59.0: beside the way out, as on every games screen (it was 18, the bottom row's far left). */
+    static final int RULES = 21;
 
     private final FloorIsLava lava;
 

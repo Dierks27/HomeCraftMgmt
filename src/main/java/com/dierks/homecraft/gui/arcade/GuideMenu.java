@@ -80,11 +80,11 @@ public final class GuideMenu extends Menu {
             default -> arcade();
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious: " + TITLES[page - 1]),
+            set(45, Menus.icon(Material.ARROW, "&f◀ " + TITLES[page - 1]),
                     e -> new GuideMenu(plugin, player, page - 1, back).open(player));
         }
         if (page < TITLES.length - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext: " + TITLES[page + 1]),
+            set(53, Menus.icon(Material.ARROW, "&f" + TITLES[page + 1] + " ▶"),
                     e -> new GuideMenu(plugin, player, page + 1, back).open(player));
         }
         set(49, Menus.icon(Material.BARRIER, back != null ? "&cBack" : "&cClose"), e -> {

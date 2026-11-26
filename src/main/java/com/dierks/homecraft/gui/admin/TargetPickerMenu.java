@@ -60,7 +60,7 @@ public final class TargetPickerMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -80,7 +80,7 @@ public final class TargetPickerMenu extends Menu {
             }
         });
         if ((page + 1) * PAGE_SIZE < names.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

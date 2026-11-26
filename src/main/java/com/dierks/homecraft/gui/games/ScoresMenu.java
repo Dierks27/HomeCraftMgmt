@@ -371,11 +371,11 @@ public final class ScoresMenu extends GameMenu {
                         en.board(), en.lowerIsBetter(), this::reopen).open(viewer));
             }
             if (p > 0) {
-                set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+                set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                         e -> new Boards(plugin, viewer, p - 1, back).open(viewer));
             }
             if (p < GamesMenu.pages(entries.size()) - 1) {
-                set(53, Menus.icon(Material.ARROW, "&fNext page"),
+                set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                         e -> new Boards(plugin, viewer, p + 1, back).open(viewer));
             }
         }

@@ -75,7 +75,7 @@ public final class AuctionMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -85,7 +85,7 @@ public final class AuctionMenu extends Menu {
                 e -> new AuctionCreateMenu(plugin, player, this::reopen).open(player));
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
         if ((page + 1) * PAGE_SIZE < list.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

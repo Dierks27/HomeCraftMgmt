@@ -106,11 +106,11 @@ public final class PackDetailMenu extends Menu {
             set(22, Menus.icon(Material.PAPER, "&7Nothing in this pack yet"), null);
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new PackDetailMenu(plugin, player, packId, onBack, page - 1).open(player));
         }
         if (from + GRID_SIZE < all.size()) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new PackDetailMenu(plugin, player, packId, onBack, page + 1).open(player));
         }
 

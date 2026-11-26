@@ -90,7 +90,7 @@ public final class SourceCreateMenu extends Menu {
 
         set(39, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Create source",
                 "&7trigger + target → list @ chance"), e -> create());
-        set(36, Menus.icon(Material.ARROW, "&cBack"), e -> back());
+        set(36, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private void setTrigger(Loot.Trigger t) {

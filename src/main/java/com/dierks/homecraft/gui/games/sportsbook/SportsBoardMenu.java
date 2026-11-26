@@ -99,13 +99,13 @@ public final class SportsBoardMenu extends GameMenu {
             game(ROW_STARTS[i], games.get(at), now);
         }
         if (page > 0) {
-            set(PREV, Menus.icon(Material.ARROW, "&ePage " + page), e -> {
+            set(PREV, Menus.icon(Material.ARROW, "&f◀ Page " + page), e -> {
                 page--;
                 refresh();
             });
         }
         if (page < pages - 1) {
-            set(NEXT, Menus.icon(Material.ARROW, "&ePage " + (page + 2)), e -> {
+            set(NEXT, Menus.icon(Material.ARROW, "&fPage " + (page + 2) + " ▶"), e -> {
                 page++;
                 refresh();
             });

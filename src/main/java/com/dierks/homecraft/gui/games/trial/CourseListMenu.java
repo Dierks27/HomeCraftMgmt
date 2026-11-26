@@ -64,11 +64,11 @@ public final class CourseListMenu extends GameMenu {
                     this::reopen).open(viewer));
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new CourseListMenu(plugin, trials, viewer, back, p - 1).open(viewer));
         }
         if (p < pages - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new CourseListMenu(plugin, trials, viewer, back, p + 1).open(viewer));
         }
         set(48, rulesTile(trials.rules()), null);

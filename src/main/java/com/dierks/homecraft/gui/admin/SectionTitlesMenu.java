@@ -51,7 +51,7 @@ public final class SectionTitlesMenu extends Menu {
         set(16, titleIcon(Material.COMPASS, "Store URL (display only)", store.displayUrl()),
                 e -> prompt("store.display_url", "Enter the store display URL (e.g. www.Crate.com):"));
 
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

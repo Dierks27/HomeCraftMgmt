@@ -99,11 +99,11 @@ public final class AchievementsMenu extends Menu {
             set(22, Menus.icon(Material.PAPER, "&7No achievements yet"), null);
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new AchievementsMenu(plugin, player, back, page - 1).open(player));
         }
         if (from + ROWS_PER_PAGE < rows.size()) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new AchievementsMenu(plugin, player, back, page + 1).open(player));
         }
         set(49, Menus.icon(Material.BARRIER, back != null ? "&cBack" : "&cClose"), e -> {

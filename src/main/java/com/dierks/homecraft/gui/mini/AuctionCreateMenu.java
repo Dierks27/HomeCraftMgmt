@@ -79,7 +79,7 @@ public final class AuctionCreateMenu extends Menu {
             }
         });
 
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> back());
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private double parse(String s, double fallback) {

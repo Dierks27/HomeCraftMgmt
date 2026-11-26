@@ -167,11 +167,11 @@ public final class GiftPickerMenu extends Menu {
             set(slots[i], presentTile(row, balance), e -> pickPresent(row.id()));
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new GiftPickerMenu(plugin, giver, back, null, p - 1).open(giver));
         }
         if (p < pages(rows.size()) - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new GiftPickerMenu(plugin, giver, back, null, p + 1).open(giver));
         }
         // Slot 49 is the way out and never an arrow (NavAnchorTest).
@@ -318,11 +318,11 @@ public final class GiftPickerMenu extends Menu {
             set(GRID_START + i, icon, note == null ? e -> pickPerson(id) : null);
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new GiftPickerMenu(plugin, giver, back, present, p - 1).open(giver));
         }
         if (p < pages(people.size()) - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new GiftPickerMenu(plugin, giver, back, present, p + 1).open(giver));
         }
         // Slot 49 is the way out and never an arrow (NavAnchorTest).

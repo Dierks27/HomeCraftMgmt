@@ -326,7 +326,7 @@ to 0.52.1:** the jar alone (a race entry left open settles by its own data eithe
 
 **0.52.1: the Game Parlor's way in is a secret book.** The owner: their four-year-old "walked right up to that lever
 and boom straight into the parlor" ("lets make it much harder to find the secret parlor"). The lever is gone: the way
-in is the top row's second book from the fireplace end of the 19th Hole's wall of books, and only a **crouched** tap
+in is the top row's second book from the left (as you face it) of the 19th Hole's wall of books, and only a **crouched** tap
 opens it. Nothing is drawn, and a plain tap does nothing. (To keep a child out for good, take the permission away:
 `/lp user <name> permission set hcm.clubhouse.parlor false`; then nothing happens even crouched.) **Back to
 0.52.0:** the jar alone (the lever comes back).

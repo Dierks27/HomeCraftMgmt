@@ -1804,7 +1804,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 ### Little things to do in the Clubhouse (0.50.0)
 
 - The bottles on the 19th Hole's back bar can be drunk: tap one (either click, or a controller tap) and you take three gulps, then something silly happens for 20 seconds: you go tiny, super bouncy, floaty, zoomy or glowing, or you burp and hiccup, or hearts, a rainbow trail or music follow you around. Nothing hurts, and it all ends when you leave the Clubhouse. The bottle comes back on the shelf a few seconds later.
-- The way up to the Game Parlor is a secret: one book in the 19th Hole's wall of books (the top row, second from the end nearest the fireplace). Crouch and tap it; a plain tap does nothing. Only players who may use the Parlor see it.
+- The way up to the Game Parlor is a secret: one book in the 19th Hole's wall of books (the top row, second from the left as you face the shelf). Crouch and tap it; a plain tap does nothing. Only players who may use the Parlor see it.
 
 ## The older Arcade games
 

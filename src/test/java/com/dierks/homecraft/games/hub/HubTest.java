@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,6 +19,14 @@ class HubTest {
 
     private static HubSettings parse(Map<String, Object> raw, List<String> warns) {
         return HubSettings.parse(new GamesConfig.Node("games.hub", raw, warns::add), HubSettings.defaults());
+    }
+
+    /** 0.57.1: only feet under the world's floor are a fall; getting up from a seat or off a horse is not. */
+    @Test
+    void onlyARealFallSendsYouBack() {
+        assertTrue(Hub.fellOut(-65, -64), "under the floor");
+        assertFalse(Hub.fellOut(-64, -64), "on the floor's level");
+        assertFalse(Hub.fellOut(72.5, -64), "stood up from a seat");
     }
 
     @Test

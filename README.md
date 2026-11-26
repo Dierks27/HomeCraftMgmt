@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.57.0-family-games`
+- **Version:** `0.57.1-stand-up`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,13 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.57.1: getting up from a seat leaves you where you are.** The owner: "when you stand up, it auto warps you to
+the location you come into the clubhouse. Even if you are in the parlor". Standing up from a chair, stool or cushion
+(26.3) is a small "dismount" teleport, which the games read as a nudge and answered by sending a Clubhouse visitor
+back to an arrival spot. Now only a visitor who is out of the room (fallen through, or moved out) goes back. The Hub
+had the same rule for getting off a horse, out of a boat or out of bed: now only a real fall (under the world's floor)
+sends a Hub visitor back. Nothing else changes. **Back to 0.57.0:** the jar alone.
 
 **0.57.0: four new games, a free Picture Bingo, and a harder Floor Is Lava.** The owner: "Let's do the games you
 mentioned next!" and "the floor is lava game is WAY too easy... when you get in through the arcade machine you should

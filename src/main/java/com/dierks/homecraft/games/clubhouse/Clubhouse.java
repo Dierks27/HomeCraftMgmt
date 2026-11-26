@@ -711,6 +711,11 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
      * Fell out of the world (or was nudged): back to an arrival spot. A watcher is never sent to the
      * Clubhouse from here (they are still watching, in spectator mode): they are put back inside the
      * area they watch, by the session's own teleport (review #1).
+     *
+     * <p>0.57.1 (the owner: "when you stand up, it auto warps you to the location you come into the clubhouse. Even if
+     * you are in the parlor"): standing up from a chair's cushion (26.3) is a small DISMOUNT teleport, which the
+     * session hands here the next tick as a "nudge". A visitor still in the room stays exactly where they stood up;
+     * only one who is out of it (fallen through, or moved out) goes back to an arrival spot.
      */
     @Override
     public void onVoid(Player player) {
@@ -718,9 +723,15 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             watch.putBack(player);
             return;
         }
-        if (visits.in(player.getUniqueId())) {
+        if (visits.in(player.getUniqueId()) && sendBackAfterNudge(room, player.getWorld().getName(), player.getX(),
+                player.getY(), player.getZ())) {
             toSpawn(player);
         }
+    }
+
+    /** Whether a visitor nudged (or fallen) to feet at (x, y, z) goes back to an arrival spot: only out of the room. */
+    static boolean sendBackAfterNudge(ClubhouseRoom room, String world, double x, double y, double z) {
+        return room == null || !room.contains(world, x, y, z);
     }
 
     @Override

@@ -325,6 +325,34 @@ class ClubhouseRoomTest {
                 "a room in a Games world is fine");
     }
 
+    /**
+     * 0.57.1 (the owner: "when you stand up, it auto warps you to the location you come into the clubhouse. Even if you
+     * are in the parlor"): standing up from any chair, stool or cushion (26.3: a small DISMOUNT teleport the session
+     * hands the Clubhouse as a nudge) leaves the visitor where they are; only feet out of the room go back to an arrival
+     * spot.
+     */
+    @Test
+    void standingUpFromAnySeatKeepsYouWhereYouAre() {
+        ClubhouseRoom r = room();
+        until(r, ClubhouseRoom.Phase.READY, 3_000);
+        String w = r.world();
+        List<ClubhousePlanner.Seat> all = new ArrayList<>(ClubhousePlanner.seats(BOX));
+        all.addAll(ClubhousePlanner.parlorSeats(BOX));
+        all.addAll(ClubhousePlanner.arcadeSeats(BOX));
+        all.addAll(ClubhousePlanner.trophySeats(BOX));
+        assertTrue(all.size() > 40, "the bar's stools, the tables' chairs, the Parlor's, the side rooms'");
+        for (ClubhousePlanner.Seat seat : all) {
+            for (double up : new double[]{0.5, 0.6, 1.0}) { // where a rider lands when they get up
+                assertFalse(Clubhouse.sendBackAfterNudge(r, w, seat.x(), seat.y() + up, seat.z()),
+                        "stands up where they sat: " + seat + " +" + up);
+            }
+        }
+        ClubhouseSite.Spot in = r.spawn(0);
+        assertTrue(Clubhouse.sendBackAfterNudge(r, w, in.x(), BOX.minY() - 10, in.z()), "fell under the floor: back");
+        assertTrue(Clubhouse.sendBackAfterNudge(r, "world", in.x(), in.y(), in.z()), "another world: back");
+        assertTrue(Clubhouse.sendBackAfterNudge(null, w, in.x(), in.y(), in.z()), "no room: an arrival spot");
+    }
+
     @Test
     void offClosesItUntilGeneratedAndStaysOffAcrossARestart() {
         ClubhouseRoom r = room();

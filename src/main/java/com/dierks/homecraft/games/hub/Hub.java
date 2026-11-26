@@ -326,9 +326,17 @@ public final class Hub implements Game {
         }
     }
 
-    /** Fell out of the world: back to the arrival spot. */
+    /**
+     * Fell out of the world: back to the arrival spot. 0.57.1: only a real fall (feet under the world's floor). The
+     * session also calls this the tick after a harmless nudge (getting up from a seat, off a horse, out of a bed or a
+     * boat: a DISMOUNT or EXIT_BED teleport), and that leaves the visitor exactly where they are (it sent them back to
+     * the arrival spot, as the Clubhouse did).
+     */
     @Override
     public void onVoid(Player player) {
+        if (!fellOut(player.getLocation().getY(), player.getWorld().getMinHeight())) {
+            return;
+        }
         Location at = arrival();
         if (at != null && games().sessions().teleport(player, at)) {
             // the session's own teleport (0.45.0): a plain one read as someone else's, which asked for this again
@@ -340,6 +348,11 @@ public final class Hub implements Game {
     @Override
     public void onSessionEnd(Player player, EndReason reason) {
         kitted.remove(player.getUniqueId());
+    }
+
+    /** Whether feet at {@code y} have fallen out of a world whose floor is {@code minHeight} (pure). */
+    static boolean fellOut(double y, int minHeight) {
+        return y < minHeight;
     }
 
     @Override

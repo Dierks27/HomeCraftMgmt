@@ -252,12 +252,14 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
-**0.57.1: getting up from a seat leaves you where you are.** The owner: "when you stand up, it auto warps you to
+**0.57.1: getting up from a seat leaves you where you are; the Sports Board's wall turns its pages.** The owner: "when you stand up, it auto warps you to
 the location you come into the clubhouse. Even if you are in the parlor". Standing up from a chair, stool or cushion
 (26.3) is a small "dismount" teleport, which the games read as a nudge and answered by sending a Clubhouse visitor
 back to an arrival spot. Now only a visitor who is out of the room (fallen through, or moved out) goes back. The Hub
 had the same rule for getting off a horse, out of a boat or out of bed: now only a real fall (under the world's floor)
-sends a Hub visitor back. Nothing else changes. **Back to 0.57.0:** the jar alone.
+sends a Hub visitor back. **The Sports Board's wall turns its pages** (the owner: "The games should rotate through,
+they only show the first 4-5 games"): every game on the board, five at a time, the next five every 8 seconds, the
+heading saying which page ("2/7"). **Back to 0.57.0:** the jar alone.
 
 **0.57.0: four new games, a free Picture Bingo, and a harder Floor Is Lava.** The owner: "Let's do the games you
 mentioned next!" and "the floor is lava game is WAY too easy... when you get in through the arcade machine you should
@@ -5126,8 +5128,9 @@ Picks on tonight's real games, in dollars, in the Game Parlor. Behind the same d
 `hcm.games.money`, money play on, the day's money limit (picks count toward it), the most a play may put in and the
 most it may pay. No child ever sees it.
 
-- **The wall board (0.56.0).** On the Parlor's east wall, 7 blocks wide: the next 5 games to start and what $10 on
-  each side gives back, kept up to date ("Lines are updating" while they are; "No games in the next 24 hours" when
+- **The wall board (0.56.0).** On the Parlor's east wall, 7 blocks wide: the games to start and what $10 on
+  each side gives back, five at a time (0.57.1: every game on the board, the page turning every 8 seconds), kept up
+  to date ("Lines are updating" while they are; "No games in the next 24 hours" when
   there are none). Tap it (either click) to open the board. A counter and three stools stand in front of it.
 
 - **The lines.** Every `refresh_minutes` (5) HCM reads Kalshi's public market data (no account, nothing about any

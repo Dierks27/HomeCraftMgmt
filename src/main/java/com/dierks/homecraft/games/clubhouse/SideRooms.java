@@ -413,7 +413,10 @@ final class SideRooms {
                 String sig = bd + (label.equals(g.name()) ? "" : "#" + label);
                 put(w, key, sig, bd.at(), () -> wallBoard(w, bd.game(), bd.at(), bd.width(), bd.height()));
                 if (g instanceof Sportsbook sb) { // 0.56.0: tonight's games on the board, kept up to date
-                    liveLines(bd.game(), bd.at(), club.games().guard(g, () -> sb.wallText(WALL_GAMES), List.<String>of()));
+                    // 0.57.1 (the owner: "The games should rotate through, they only show the first 4-5 games"): every
+                    // game on the board, WALL_GAMES at a time, the next page every WALL_PAGE_SECONDS
+                    List<String> every = club.games().guard(g, () -> sb.wallText(WALL_ALL), List.<String>of());
+                    liveLines(bd.game(), bd.at(), wallPage(every, (int) (boardSeconds++ / WALL_PAGE_SECONDS), WALL_GAMES));
                 }
             }
             ClubhousePlanner.Place3 booth = room.parlorTicket(); // 0.46.1: the Scratch Ticket is the Parlor's
@@ -569,6 +572,30 @@ final class SideRooms {
 
     /** 0.56.0: how many of tonight's games the Sports Board's wall shows, the text's size and its widest line. */
     static final int WALL_GAMES = 5;
+    /** 0.57.1: the most games the wall pages through, and the seconds each page stays up. */
+    static final int WALL_ALL = 60;
+    static final int WALL_PAGE_SECONDS = 8;
+    /** 0.57.1: seconds the Sports Board's wall has been drawn (its page turns with them). */
+    private long boardSeconds;
+
+    /**
+     * 0.57.1: page {@code page} (round and round) of the wall's {@code lines} ({@link Sportsbook#wallText}: a heading,
+     * then two lines a game), {@code per} games a page, the heading saying which page it is ("2/7") when there is more
+     * than one. A board with no games (one line, "No games ...") is shown as it is (pure).
+     */
+    static List<String> wallPage(List<String> lines, int page, int per) {
+        if (lines == null || lines.size() <= 1 + 2 * per) {
+            return lines;
+        }
+        int games = (lines.size() - 1) / 2;
+        int pages = (games + per - 1) / per;
+        int p = Math.floorMod(page, pages);
+        List<String> out = new ArrayList<>();
+        out.add(lines.get(0) + "  (" + (p + 1) + "/" + pages + ")");
+        int from = 1 + 2 * per * p;
+        out.addAll(lines.subList(from, Math.min(lines.size(), from + 2 * per)));
+        return out;
+    }
     static final float BOARD_TEXT_SCALE = 0.5f;
     static final int BOARD_LINE_WIDTH = 520;
     /** About how tall one line of the board's text is, in blocks, at size 1. */

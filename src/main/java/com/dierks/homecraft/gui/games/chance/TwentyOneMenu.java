@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.chance.twentyone.TwentyOneHand;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneHand.Card;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneMath;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -90,7 +91,7 @@ public final class TwentyOneMenu extends GameMenu {
             this.hand = TwentyOneHand.replay(resume.seed(), saved);
             onTable(resume, saved);
         }
-        init(54, Text.of("&2Twenty-One"));
+        init(54, Text.of(MenuStyle.title("Twenty-One")));
     }
 
     /** A resumed hand that was already over (a crash between its last card and its payout) settles now. */

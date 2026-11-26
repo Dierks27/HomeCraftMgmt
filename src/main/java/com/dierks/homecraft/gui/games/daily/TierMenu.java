@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -39,7 +40,7 @@ public final class TierMenu extends GameMenu {
 
     public TierMenu(HomeCraftManagement plugin, Game daily, Player viewer, Runnable back) {
         super(plugin, daily, viewer, back);
-        init(27, Text.of("&e" + NAME));
+        init(27, Text.of(MenuStyle.title(NAME)));
     }
 
     @Override

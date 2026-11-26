@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.mini;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.MiniAuctionDao;
 import com.dierks.homecraft.trade.AuctionService;
@@ -36,7 +37,7 @@ public final class AuctionMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&6Mini Auction House"));
+        init(54, Text.of(MenuStyle.title("Mini Auction House")));
     }
 
     @Override

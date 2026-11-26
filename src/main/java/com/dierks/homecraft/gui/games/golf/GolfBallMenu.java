@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.golf;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.mini.MiniDef;
@@ -47,7 +48,7 @@ public final class GolfBallMenu extends GameMenu {
         super(plugin, golf, viewer, back);
         this.golf = golf;
         this.page = Math.max(0, page);
-        init(54, Text.of("&dPick your ball"));
+        init(54, Text.of(MenuStyle.title("Pick your ball")));
     }
 
     /**

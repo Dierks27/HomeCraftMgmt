@@ -36,7 +36,7 @@ public final class MailboxMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&eMailbox"));
+        init(54, Text.of(MenuStyle.title("Mailbox")));
     }
 
     @Override

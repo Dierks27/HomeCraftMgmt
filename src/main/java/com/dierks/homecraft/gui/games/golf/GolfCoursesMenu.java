@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.golf;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -38,7 +39,7 @@ public final class GolfCoursesMenu extends GameMenu {
         super(plugin, golf, viewer, back);
         this.golf = golf;
         this.page = Math.max(0, page);
-        init(54, Text.of("&d" + golf.name()));
+        init(54, Text.of(MenuStyle.title(golf.name())));
     }
 
     @Override

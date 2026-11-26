@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.marketplace;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.marketplace.PalletService;
 import com.dierks.homecraft.storage.PalletDao;
@@ -33,7 +34,7 @@ public final class PalletMenu extends Menu {
         this.player = player;
         this.loc = loc;
         this.owner = owner;
-        init(27, Text.of("&6Pallet"));
+        init(27, Text.of(MenuStyle.title("Pallet")));
     }
 
     @Override
@@ -59,7 +60,7 @@ public final class PalletMenu extends Menu {
                             reopen();
                         }));
             } else {
-                set(13, Menus.icon(Material.BARRIER, "&7Empty Pallet"), null);
+                set(13, Menus.icon(Material.GRAY_DYE, "&7Empty Pallet"), null);
             }
             set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
             return;

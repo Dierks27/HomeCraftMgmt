@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLowerRun;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Card;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Side;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -84,7 +85,7 @@ public final class HigherLowerMenu extends GameMenu {
             this.run = HigherLowerRun.replay(resume.seed(), saved.terms(), saved.actions());
             onTable(resume, saved);
         }
-        init(54, Text.of("&3Higher or Lower"));
+        init(54, Text.of(MenuStyle.title("Higher or Lower")));
     }
 
     /** A resumed run that was already over (a crash between its card and its payout) settles now. */

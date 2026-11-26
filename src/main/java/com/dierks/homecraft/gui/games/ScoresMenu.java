@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenService;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
@@ -72,7 +73,7 @@ public final class ScoresMenu extends GameMenu {
         super(plugin, game, viewer, back);
         this.board = board;
         this.lowerIsBetter = lowerIsBetter;
-        init(54, Text.of("&b" + game.name() + " &8· &3Scores"));
+        init(54, Text.of(MenuStyle.title(game.name(), "Scores")));
     }
 
     // ---- the words (pure, tested) ---------------------------------------------------------
@@ -348,7 +349,7 @@ public final class ScoresMenu extends GameMenu {
         public Boards(HomeCraftManagement plugin, Player viewer, int page, Runnable back) {
             super(plugin, null, viewer, back);
             this.page = Math.max(0, page);
-            init(54, Text.of("&bHigh scores"));
+            init(54, Text.of(MenuStyle.title("High scores")));
         }
 
         @Override

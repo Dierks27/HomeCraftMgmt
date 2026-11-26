@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.MarketLabels;
 import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketDraft;
 import com.dierks.homecraft.market.MarketItem;
@@ -35,7 +36,7 @@ public final class MarketAdminMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&aMarket Catalog"));
+        init(54, Text.of(MenuStyle.title("Market Catalog")));
     }
 
     @Override

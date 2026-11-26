@@ -9,6 +9,7 @@ import com.dierks.homecraft.arcade.RemoteRules;
 import com.dierks.homecraft.arcade.RemoteService;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
@@ -45,7 +46,7 @@ public final class MyShowMenu extends Menu {
     public MyShowMenu(HomeCraftManagement plugin, Player player) {
         super(plugin);
         this.player = player;
-        init(54, Text.of("&5My Show"));
+        init(54, Text.of(MenuStyle.title("My Show")));
     }
 
     @Override

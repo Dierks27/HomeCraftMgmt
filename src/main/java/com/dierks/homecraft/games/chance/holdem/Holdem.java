@@ -104,7 +104,8 @@ public final class Holdem implements Game {
         }
         lore.add("&7Blinds " + s.blinds() + " · tokens table: " + buyInText(s) + " tokens in");
         lore.add("&e" + s.dailyLimit() + " buy-ins a day");
-        return Menus.icon(Material.PAPER, "&aTexas Hold'em &7- 2 to 6 players", lore.toArray(new String[0]));
+        // 0.59.0: a picture of its own (it was the same paper as Twenty-One and Video Poker on the Games screen)
+        return Menus.icon(Material.EMERALD, "&aTexas Hold'em &7- 2 to 6 players", lore.toArray(new String[0]));
     }
 
     static String buyInText(HoldemSettings s) {

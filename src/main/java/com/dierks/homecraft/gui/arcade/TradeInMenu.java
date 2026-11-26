@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.util.Sounds;
@@ -37,7 +38,7 @@ public final class TradeInMenu extends Menu {
         super(plugin);
         this.player = player;
         this.back = back;
-        init(54, Text.of("&5Trade In Cards"));
+        init(54, Text.of(MenuStyle.title("Trade In Cards")));
     }
 
     @Override

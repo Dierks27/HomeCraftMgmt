@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfGroup;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -63,7 +64,7 @@ public final class GolfCourseMenu extends GameMenu {
         this.golf = golf;
         this.courseId = courseId;
         GolfCourse c = golf.course(courseId);
-        init(27, Text.of("&d" + (c == null ? golf.name() : c.name())));
+        init(27, Text.of(MenuStyle.title((c == null ? golf.name() : c.name()))));
     }
 
     @Override

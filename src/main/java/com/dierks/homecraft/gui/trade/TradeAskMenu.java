@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.trade.TradeRequests;
 import com.dierks.homecraft.trade.TradeService;
@@ -31,7 +32,7 @@ public final class TradeAskMenu extends Menu implements TradeService.AskScreen {
         this.trades = trades;
         this.to = to;
         this.request = request;
-        init(27, Text.of("&5Trade?"));
+        init(27, Text.of(MenuStyle.title("Trade?")));
     }
 
     @Override

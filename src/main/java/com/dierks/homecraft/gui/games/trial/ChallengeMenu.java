@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -30,7 +31,7 @@ public final class ChallengeMenu extends GameMenu {
     public ChallengeMenu(HomeCraftManagement plugin, TimeTrials trials, Player viewer, Runnable back) {
         super(plugin, trials, viewer, back);
         this.trials = trials;
-        init(27, Text.of("&6Challenge: pick a course"));
+        init(27, Text.of(MenuStyle.title("Challenge: pick a course")));
     }
 
     @Override

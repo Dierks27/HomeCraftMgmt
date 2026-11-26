@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.whack.WhackAZombie;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -21,9 +22,9 @@ import java.util.List;
  * gone the Daily tile reads "practice".
  *
  * <pre>
- *   .  .  .  .  ?  .  .  .  .      4 how to play
+ *   .  .  .  .  G  .  .  .  .      4 the game's own tile (0.59.0: How to play moved beside the way out)
  *   .  .  P  .  D  .  H  T  .      11 play · 13 daily · 15 high scores · 16 today's round
- *   .  .  .  .  X  .  .  .  .      22 back / close
+ *   .  .  .  ?  X  .  .  .  .      21 how to play · 22 back / close
  * </pre>
  */
 public final class WhackAZombieMenu extends GameMenu {
@@ -33,7 +34,7 @@ public final class WhackAZombieMenu extends GameMenu {
     public WhackAZombieMenu(HomeCraftManagement plugin, WhackAZombie game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.whack = game;
-        init(27, Text.of("&bWhack-a-Zombie"));
+        init(27, Text.of(MenuStyle.title("Whack-a-Zombie")));
     }
 
     @Override
@@ -41,7 +42,8 @@ public final class WhackAZombieMenu extends GameMenu {
         fill();
         List<String> rules = new ArrayList<>(whack.rules());
         rules.add("Closing a round ends it: no score.");
-        set(4, rulesTile(rules), null);
+        headerTile(); // 0.59.0: the tile that was tapped, as the header; How to play beside the way out
+        helpTile(rules);
 
         Long best = whack.best(viewer);
         set(11, Menus.icon(Material.LIME_CONCRETE,

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invite;
 import com.dierks.homecraft.games.Invites;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -41,7 +42,7 @@ public final class InviteAskMenu extends GameMenu implements Invites.AskScreen {
         this.invite = invite;
         this.from = from;
         this.seconds = seconds;
-        init(27, Text.of("&5Play?"));
+        init(27, Text.of(MenuStyle.title("Play?")));
     }
 
     @Override

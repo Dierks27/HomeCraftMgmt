@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.lava.FloorIsLava;
 import com.dierks.homecraft.games.lava.LavaText;
 import com.dierks.homecraft.games.lava.rules.LavaMode;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -33,7 +34,7 @@ public final class LavaModeMenu extends GameMenu {
     public LavaModeMenu(HomeCraftManagement plugin, FloorIsLava lava, Player viewer, Runnable back) {
         super(plugin, lava, viewer, back);
         this.lava = lava;
-        init(27, Text.of("&6" + LavaText.NAME));
+        init(27, Text.of(MenuStyle.title(LavaText.NAME)));
     }
 
     @Override

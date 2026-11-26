@@ -5,6 +5,7 @@ import com.dierks.homecraft.graves.Grave;
 import com.dierks.homecraft.graves.GraveItems;
 import com.dierks.homecraft.graves.GraveService;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Sounds;
@@ -41,7 +42,7 @@ public final class GraveMenu extends Menu {
         this.viewer = viewer;
         this.id = id;
         Grave g = graves.openGrave(id);
-        init(54, Text.of("&8" + (g == null ? "Grave" : g.ownerName() + "'s grave") + " &7#" + id));
+        init(54, Text.of(MenuStyle.title(g == null ? "Grave" : g.ownerName() + "'s grave", "#" + id)));
     }
 
     /** The grave this screen shows. */
@@ -61,7 +62,7 @@ public final class GraveMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         if (g == null || !g.open()) {
-            set(22, Menus.icon(Material.BARRIER, "&7This grave is empty now"), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&7This grave is empty now"), null);
             set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> viewer.closeInventory());
             return;
         }

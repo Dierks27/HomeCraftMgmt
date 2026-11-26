@@ -10,7 +10,10 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Small helpers for building GUI icons and formatting. */
+/**
+ * Small helpers for building GUI icons and formatting. The house style they follow (titles, where Back, How to play
+ * and the page arrows go, lore width) is {@link MenuStyle} (0.59.0).
+ */
 public final class Menus {
 
     public static final ItemStack FILLER = icon(Material.GRAY_STAINED_GLASS_PANE, " ");
@@ -39,22 +42,83 @@ public final class Menus {
         return "&6" + plugin.economy().format(amount);
     }
 
-    /** An icon with an '&amp;'-coded name and lore lines. */
+    /**
+     * An icon with an '&amp;'-coded name and lore lines. 0.59.0: each lore line is wrapped at
+     * {@link MenuStyle#LORE_WIDTH} letters ({@link #lore}), so a long rule never runs across the screen.
+     */
     public static ItemStack icon(Material material, String name, String... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Text.of(name));
             if (lore.length > 0) {
-                List<net.kyori.adventure.text.Component> lines = new ArrayList<>(lore.length);
-                for (String line : lore) {
-                    lines.add(Text.of(line));
-                }
-                meta.lore(lines);
+                meta.lore(lore(lore));
             }
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /** 0.59.0: lore lines as components, each wrapped at {@link MenuStyle#LORE_WIDTH} ({@link MenuStyle#wrap}). */
+    public static List<net.kyori.adventure.text.Component> lore(String... lore) {
+        List<net.kyori.adventure.text.Component> lines = new ArrayList<>(lore.length);
+        for (String line : lore) {
+            for (String part : MenuStyle.wrap(line, MenuStyle.LORE_WIDTH)) {
+                lines.add(Text.of(part));
+            }
+        }
+        return lines;
+    }
+
+    /**
+     * 0.59.0: an icon made elsewhere (a game's own tile) with its lore re-wrapped at {@link MenuStyle#LORE_WIDTH}: a
+     * copy, the original untouched. Lines already short enough come back exactly as they were.
+     */
+    public static ItemStack tidy(ItemStack icon) {
+        if (icon == null) {
+            return null;
+        }
+        ItemStack out = icon.clone();
+        ItemMeta meta = out.getItemMeta();
+        if (meta == null || meta.lore() == null) {
+            return out;
+        }
+        net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer amp =
+                net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand();
+        List<net.kyori.adventure.text.Component> lines = new ArrayList<>();
+        boolean changed = false;
+        for (net.kyori.adventure.text.Component c : meta.lore()) {
+            String legacy = amp.serialize(c);
+            List<String> parts = MenuStyle.wrap(legacy, MenuStyle.LORE_WIDTH);
+            if (parts.size() == 1) {
+                lines.add(c);
+            } else {
+                changed = true;
+                for (String part : parts) {
+                    lines.add(Text.of(part));
+                }
+            }
+        }
+        if (changed) {
+            meta.lore(lines);
+            out.setItemMeta(meta);
+        }
+        return out;
+    }
+
+    /** 0.59.0: the way-out tile: "&amp;cBack" when there is somewhere to go back to, else "&amp;cClose". */
+    public static ItemStack exit(boolean back) {
+        return icon(Material.BARRIER, back ? "&cBack" : "&cClose");
+    }
+
+    /** 0.59.0: the previous-page arrow ({@link MenuStyle#PREV}), saying which page it goes to (1-based). */
+    public static ItemStack prevPage(int page, int pages) {
+        return icon(Material.ARROW, "&f◀ Previous page", "&7Page " + page + " of " + pages);
+    }
+
+    /** 0.59.0: the next-page arrow ({@link MenuStyle#NEXT}), saying which page it goes to (1-based). */
+    public static ItemStack nextPage(int page, int pages) {
+        return icon(Material.ARROW, "&fNext page ▶", "&7Page " + page + " of " + pages);
     }
 
     /**

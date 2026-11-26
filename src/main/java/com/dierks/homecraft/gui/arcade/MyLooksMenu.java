@@ -12,6 +12,7 @@ import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.LookDao;
 import com.dierks.homecraft.storage.LookDao.Look;
@@ -79,7 +80,7 @@ public final class MyLooksMenu extends Menu {
         this.player = player;
         this.back = back;
         this.page = Math.max(0, page);
-        init(54, Text.of("&dMy Looks"));
+        init(54, Text.of(MenuStyle.title("My Looks")));
     }
 
     // ---- what a tile is ---------------------------------------------------------------------

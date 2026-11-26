@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.chance.poker.PokerDeal;
 import com.dierks.homecraft.games.chance.poker.PokerHand;
 import com.dierks.homecraft.games.chance.poker.VideoPoker;
 import com.dierks.homecraft.games.chance.poker.VideoPokerSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -102,7 +103,7 @@ public final class VideoPokerMenu extends GameMenu {
                 stake = saved.stake();
             }
         }
-        init(54, Text.of("&2Video Poker"));
+        init(54, Text.of(MenuStyle.title("Video Poker")));
     }
 
     private static List<Integer> toList(int[] a) {

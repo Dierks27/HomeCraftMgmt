@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.util.Text;
@@ -28,7 +29,7 @@ public final class MiniPickerMenu extends Menu {
         this.player = player;
         this.onPick = onPick;
         this.onBack = onBack;
-        init(54, Text.of("&aPick a Mini"));
+        init(54, Text.of(MenuStyle.title("Pick a Mini")));
     }
 
     @Override

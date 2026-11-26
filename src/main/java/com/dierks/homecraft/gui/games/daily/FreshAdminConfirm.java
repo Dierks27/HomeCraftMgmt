@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.games.daily;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -36,7 +37,7 @@ final class FreshAdminConfirm extends GameMenu {
     FreshAdminConfirm(HomeCraftManagement plugin, Game fresh, Player viewer, FreshAdmin.Tool tool, Runnable back) {
         super(plugin, fresh, viewer, back);
         this.tool = tool;
-        init(27, Text.of("&dSure? " + tool.name().replaceFirst("^&.", "").replace("Admin: ", "")));
+        init(27, Text.of(MenuStyle.title("Sure? " + tool.name().replaceFirst("^&.", "").replace("Admin: ", ""))));
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.simon.SimonEngine;
 import com.dierks.homecraft.games.cabinet.simon.SimonSays;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -92,7 +93,7 @@ public final class SimonSaysPlayMenu extends GameMenu {
             dark[p] = Menus.icon(DARK[p], COLOUR[p] + NAME[p]);
             lit[p] = Menus.glint(Menus.icon(LIT[p], COLOUR[p] + "&l★ " + NAME[p] + " ★"), true);
         }
-        init(54, Text.of("&bSimon Says"));
+        init(54, Text.of(MenuStyle.title("Simon Says")));
     }
 
     @Override

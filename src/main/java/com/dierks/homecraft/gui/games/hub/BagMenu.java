@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.hub;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.world.KitItems;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -33,7 +34,7 @@ public final class BagMenu extends GameMenu {
 
     public BagMenu(HomeCraftManagement plugin, Game hub, Player viewer) {
         super(plugin, hub, viewer, null);
-        init(36, Text.of("&6Your Bag"));
+        init(36, Text.of(MenuStyle.title("Your Bag")));
     }
 
     /** Everything the visitor carries but the kit (the Bag's contents), in inventory order. */

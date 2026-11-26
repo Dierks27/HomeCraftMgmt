@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ScoresMenu;
 import com.dierks.homecraft.trade.ItemFacts;
@@ -90,7 +91,7 @@ public final class TradeMenu extends Menu implements TradeService.Window {
         this.me = me;
         this.viewer = trade.player(me);
         this.closer = p -> trade.service().closed(trade, p);
-        init(54, Text.of("&5Trade with " + trade.name(me.other())));
+        init(54, Text.of(MenuStyle.title("Trade with " + trade.name(me.other()))));
     }
 
     /**

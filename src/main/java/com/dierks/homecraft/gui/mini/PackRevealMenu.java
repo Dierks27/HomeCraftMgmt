@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.Rarity;
@@ -49,7 +50,7 @@ public final class PackRevealMenu extends Menu {
         this.cardIds = cardIds;
         this.onBack = onBack;
         this.bedrock = Bedrock.is(player);
-        init(27, Text.of("&5Opening: &f" + Text.plain(packName)));
+        init(27, Text.of(MenuStyle.title("Opening", Text.plain(packName))));
     }
 
     @Override

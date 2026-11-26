@@ -17,6 +17,7 @@ import com.dierks.homecraft.games.chance.slots.SlotsEngine.LineOdds;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.Spin;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.StakeOdds;
 import com.dierks.homecraft.games.chance.slots.Symbol;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -109,7 +110,7 @@ public final class DeepMineMenu extends GameMenu {
         for (int r = 0; r < DeepMineEngine.LINES; r++) {
             shown.add(blank());
         }
-        init(54, Text.of("&6" + game.name()));
+        init(54, Text.of(MenuStyle.title(game.name())));
     }
 
     /** What goes on each row for the next spin: the tokens picked, or the chips' dollars. */

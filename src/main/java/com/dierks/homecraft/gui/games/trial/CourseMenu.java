@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -66,7 +67,7 @@ public final class CourseMenu extends GameMenu {
         super(plugin, trials, viewer, back);
         this.trials = trials;
         this.course = course;
-        init(27, Text.of("&b" + course.name()));
+        init(27, Text.of(MenuStyle.title(course.name())));
     }
 
     @Override

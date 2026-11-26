@@ -5,6 +5,7 @@ import com.dierks.homecraft.arcade.feast.FeastRules;
 import com.dierks.homecraft.arcade.feast.FeastService;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -33,7 +34,7 @@ public final class FeastPotMenu extends GameMenu {
     public FeastPotMenu(HomeCraftManagement plugin, Game clubhouse, Player viewer, FeastService feast) {
         super(plugin, clubhouse, viewer, null);
         this.feast = feast;
-        init(27, Text.of("&6Feast Pot"));
+        init(27, Text.of(MenuStyle.title("Feast Pot")));
     }
 
     @Override

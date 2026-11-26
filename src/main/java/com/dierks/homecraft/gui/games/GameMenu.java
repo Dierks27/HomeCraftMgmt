@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -144,7 +145,7 @@ public abstract class GameMenu extends Menu implements GameScreen {
      * "&amp;cBack" when there is somewhere to go back to, else "&amp;cClose".
      */
     protected void exitTile() {
-        set(getInventory().getSize() - 5, Menus.icon(Material.BARRIER, back != null ? "&cBack" : "&cClose"), e -> {
+        set(MenuStyle.exitSlot(getInventory().getSize()), Menus.exit(back != null), e -> {
             if (back != null) {
                 back.run();
             } else {
@@ -153,7 +154,35 @@ public abstract class GameMenu extends Menu implements GameScreen {
         });
     }
 
-    /** The token balance tile: "&amp;eYou have &amp;6N tokens". */
+    /**
+     * 0.59.0: How to play, just left of the way out (48 on a 54-slot screen, 21 on a 27-slot one), the same place on
+     * every games screen that has one there ({@link MenuStyle#helpSlot}).
+     */
+    protected void helpTile(List<String> rules) {
+        set(MenuStyle.helpSlot(getInventory().getSize()), rulesTile(rules), null);
+    }
+
+    /**
+     * 0.59.0: the header of a game's first screen, row 0's middle (4): the game's own tile, exactly as the Games
+     * screen shows it (its picture, its name and its key fact, the player's best), so the screen a tap opens looks
+     * like the tile that was tapped. Nothing happens on a click.
+     */
+    protected void headerTile() {
+        if (game != null) {
+            set(4, game.tile(viewer), null);
+        }
+    }
+
+    /** 0.59.0: a title in the house style ({@link MenuStyle#title(String, String)}), as a component. */
+    protected static net.kyori.adventure.text.Component screenTitle(String screen, String part) {
+        return Text.of(MenuStyle.title(screen, part));
+    }
+
+    /** 0.59.0: a title in the house style ({@link MenuStyle#title(String)}), as a component. */
+    protected static net.kyori.adventure.text.Component screenTitle(String screen) {
+        return Text.of(MenuStyle.title(screen));
+    }
+
     /**
      * 0.41.0, the kid screen (a cabinet tapped in the Clubhouse's Arcade Room): Play again as one big green picture
      * over every slot in {@code slots}, the same button in each, so a thumb on a controller can't miss it.
@@ -191,6 +220,7 @@ public abstract class GameMenu extends Menu implements GameScreen {
         return out;
     }
 
+    /** The token balance tile: "&amp;eYou have &amp;6N tokens". */
     protected ItemStack balanceTile() {
         int tokens = plugin.tokens() == null ? 0 : plugin.tokens().balance(viewer.getUniqueId());
         return Menus.icon(Material.SUNFLOWER, "&eYou have &6" + tokens + " token" + (tokens == 1 ? "" : "s"));

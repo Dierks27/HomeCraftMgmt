@@ -96,9 +96,9 @@ class FreshMenuTest {
 
     @Test
     void theTitleAndHeaderFollowTheCadence() {
-        assertEquals("&eThis week's courses", FreshMenu.title(7), "weekly, shipped");
-        assertEquals("&eToday's courses", FreshMenu.title(1), "daily");
-        assertEquals("&eThe current courses", FreshMenu.title(3), "every 3 days");
+        assertEquals("&2This week's courses", FreshMenu.title(7), "weekly, shipped");
+        assertEquals("&2Today's courses", FreshMenu.title(1), "daily");
+        assertEquals("&2The current courses", FreshMenu.title(3), "every 3 days");
         assertEquals("&eThis week's courses &7- Mon 28 Sep-Sun 4 Oct", FreshMenu.headerName(7, 20_724),
                 "a week shows its first and last day");
         assertEquals("&eToday's courses &7- Tue 29 Sep", FreshMenu.headerName(1, 20_725), "a day, its date");

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.lava.FloorIsLava;
 import com.dierks.homecraft.games.lava.LavaText;
 import com.dierks.homecraft.games.lava.rules.LavaMode;
 import com.dierks.homecraft.games.lava.rules.LavaResult;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -38,7 +39,7 @@ public final class LavaEndMenu extends GameMenu {
         });
         this.lava = lava;
         this.result = result;
-        init(27, Text.of("&6" + LavaText.NAME));
+        init(27, Text.of(MenuStyle.title(LavaText.NAME)));
         hold(KID_SETTLE_MS);
     }
 

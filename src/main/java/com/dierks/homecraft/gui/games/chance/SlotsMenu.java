@@ -21,6 +21,7 @@ import com.dierks.homecraft.games.chance.slots.SlotsEngine.LineOdds;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.Spin;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.StakeOdds;
 import com.dierks.homecraft.games.chance.slots.Symbol;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -144,7 +145,7 @@ public final class SlotsMenu extends GameMenu {
         this.stake = settings.offered().isEmpty() ? 0 : settings.offered().get(0);
         this.spinEngine = settings.engine();
         this.money = new MoneyPlay(plugin, plugin.games(), viewer);
-        init(54, Text.of("&6" + game.name()));
+        init(54, Text.of(MenuStyle.title(game.name())));
     }
 
     /** Whether the next spin is for dollars: always on a pot machine, else as the switch says. */

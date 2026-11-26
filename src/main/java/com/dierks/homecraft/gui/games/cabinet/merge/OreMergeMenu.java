@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.merge.MergeEngine;
 import com.dierks.homecraft.games.cabinet.merge.OreMerge;
 import com.dierks.homecraft.games.cabinet.merge.OreMergeSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -52,7 +53,7 @@ public final class OreMergeMenu extends GameMenu {
     public OreMergeMenu(HomeCraftManagement plugin, OreMerge merge, Player viewer, Runnable back) {
         super(plugin, merge, viewer, back);
         this.merge = merge;
-        init(54, Text.of("&b" + merge.name()));
+        init(54, Text.of(MenuStyle.title(merge.name())));
     }
 
     @Override

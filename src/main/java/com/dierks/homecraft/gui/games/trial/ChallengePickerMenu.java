@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.ScoresMenu;
@@ -41,7 +42,7 @@ public final class ChallengePickerMenu extends GameMenu {
         super(plugin, trials, viewer, back);
         this.trials = trials;
         this.page = Math.max(0, page);
-        init(54, Text.of("&6Challenge someone"));
+        init(54, Text.of(MenuStyle.title("Challenge someone")));
     }
 
     /**

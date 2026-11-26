@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.snake.Snake;
 import com.dierks.homecraft.games.cabinet.snake.SnakeEngine;
 import com.dierks.homecraft.games.cabinet.snake.SnakeSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -59,7 +60,7 @@ public final class SnakeMenu extends GameMenu {
     public SnakeMenu(HomeCraftManagement plugin, Snake snake, Player viewer, Runnable back) {
         super(plugin, snake, viewer, back);
         this.snake = snake;
-        init(54, Text.of("&b" + snake.name()));
+        init(54, Text.of(MenuStyle.title(snake.name())));
     }
 
     @Override

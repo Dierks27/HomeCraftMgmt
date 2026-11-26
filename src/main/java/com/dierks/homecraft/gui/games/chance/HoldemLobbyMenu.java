@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.holdem.Holdem;
 import com.dierks.homecraft.games.chance.holdem.HoldemSettings;
 import com.dierks.homecraft.games.chance.holdem.HoldemTable;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -36,7 +37,7 @@ public final class HoldemLobbyMenu extends GameMenu {
     public HoldemLobbyMenu(HomeCraftManagement plugin, Holdem game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.holdem = game;
-        init(27, Text.of("&2Texas Hold'em &8- pick a table"));
+        init(27, Text.of(MenuStyle.title("Texas Hold'em", "pick a table")));
     }
 
     @Override

@@ -25,7 +25,7 @@ public final class OrdersMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&bMy Orders"));
+        init(54, Text.of(MenuStyle.title("My Orders")));
     }
 
     @Override

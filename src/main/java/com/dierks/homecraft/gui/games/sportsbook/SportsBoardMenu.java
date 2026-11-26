@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.chance.sportsbook.Board;
 import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
 import com.dierks.homecraft.games.chance.sportsbook.SportsbookSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -48,7 +49,7 @@ public final class SportsBoardMenu extends GameMenu {
         this.sb = game;
         this.league = league;
         this.page = Math.max(0, page);
-        init(54, Text.of("&2Sports Board &8- tonight's games"));
+        init(54, Text.of(MenuStyle.title("Sports Board", "tonight's games")));
     }
 
     @Override

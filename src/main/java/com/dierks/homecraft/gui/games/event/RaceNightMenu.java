@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.event.EventCopy;
 import com.dierks.homecraft.games.event.NightRules;
 import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.event.RacePrizes;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
@@ -129,7 +130,7 @@ public final class RaceNightMenu extends GameMenu {
     public RaceNightMenu(HomeCraftManagement plugin, RaceNight game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.game = game;
-        init(SIZE, Text.of("&6Race Night"));
+        init(SIZE, Text.of(MenuStyle.title("Race Night")));
     }
 
     @Override

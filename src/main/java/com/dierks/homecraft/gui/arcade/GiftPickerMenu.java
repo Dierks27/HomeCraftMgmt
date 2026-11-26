@@ -8,6 +8,7 @@ import com.dierks.homecraft.arcade.PrizeService.GiftFacts;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ScoresMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -68,7 +69,7 @@ public final class GiftPickerMenu extends Menu {
         this.back = back;
         this.present = present;
         this.page = Math.max(0, page);
-        init(54, Text.of(present == null ? "&5Which present?" : "&5Who is it for?"));
+        init(54, Text.of(MenuStyle.title(present == null ? "Which present?" : "Who is it for?")));
     }
 
     /**
@@ -155,7 +156,7 @@ public final class GiftPickerMenu extends Menu {
                 "&7Pick a present, then", "&7pick who it's for."), null);
         List<Prize> rows = presents(plugin);
         if (rows.isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&7No presents right now", "&8Check back soon!"), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&7No presents right now", "&8Check back soon!"), null);
         }
         int p = clampPage(page, rows.size());
         int balance = plugin.tokens().balance(giver.getUniqueId());

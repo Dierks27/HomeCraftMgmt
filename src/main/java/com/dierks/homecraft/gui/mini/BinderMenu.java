@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.EventMinis;
 import com.dierks.homecraft.mini.MiniDef;
@@ -37,7 +38,7 @@ public final class BinderMenu extends Menu {
         super(plugin);
         this.player = player;
         this.album = album;
-        init(54, Text.of(album ? "&5Card Album &8· &7Set tracker" : "&5Card Binder"));
+        init(54, Text.of(album ? MenuStyle.title("Card Album", "Set tracker") : MenuStyle.title("Card Binder")));
     }
 
     @Override

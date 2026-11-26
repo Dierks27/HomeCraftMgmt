@@ -39,7 +39,7 @@ public final class CheckoutMenu extends Menu {
         this.item = item;
         this.qty = qty;
         this.onBack = onBack;
-        init(27, Text.of("&6Checkout"));
+        init(27, Text.of(MenuStyle.title("Checkout")));
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.admin;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -23,7 +24,7 @@ public final class SectionTitlesMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(27, Text.of("&6Section Titles"));
+        init(27, Text.of(MenuStyle.title("Section Titles")));
     }
 
     @Override

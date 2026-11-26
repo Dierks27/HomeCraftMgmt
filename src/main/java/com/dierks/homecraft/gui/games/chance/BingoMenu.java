@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.chance.bingo.Bingo.Phase;
 import com.dierks.homecraft.games.chance.bingo.BingoCard;
 import com.dierks.homecraft.games.chance.bingo.BingoSettings;
 import com.dierks.homecraft.games.chance.bingo.BingoTicket;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -77,7 +78,7 @@ public final class BingoMenu extends GameMenu {
         super(plugin, game, viewer, back);
         this.bingo = game;
         this.money = new MoneyPlay(plugin, game.games(), viewer);
-        init(54, Text.of("&2Bingo Night"));
+        init(54, Text.of(MenuStyle.title("Bingo Night")));
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig.AchievementDef;
 import com.dierks.homecraft.config.PluginConfig.AchievementType;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -37,7 +38,7 @@ public final class AchievementsMenu extends Menu {
         this.player = player;
         this.back = back;
         this.page = Math.max(0, page);
-        init(54, Text.of("&6Achievements"));
+        init(54, Text.of(MenuStyle.title("Achievements")));
     }
 
     /** One row of the screen: a group label followed by up to eight achievements. */

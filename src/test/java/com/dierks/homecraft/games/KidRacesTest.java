@@ -146,7 +146,7 @@ class KidRacesTest {
         // its own ledger source, never one of the games of chance's, and never on the Luck tab
         assertEquals(TokenService.Source.GAMES_KID_RACES, races.source());
         assertFalse(GamesDao.CHANCE_SOURCES.contains(races.source().name()));
-        assertEquals(Game.Tab.TOGETHER, KidRaces.TAB, "with the games played together, never Luck");
+        assertEquals(Game.Tab.LITTLE, KidRaces.TAB, "0.59.0: on Little ones with Picture Bingo, never Luck");
         assertTrue(races.inRoom(lilah.id), "its tile shows in the Arcade Room");
         races.guests(List.of());
         assertTrue(races.tiles(lilah.player).isEmpty(), "and only there");

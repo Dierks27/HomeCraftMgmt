@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.integration.HeadEntry;
 import com.dierks.homecraft.integration.HeadLibraryService;
@@ -46,7 +47,7 @@ public final class WebImportMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&bImport from Web"));
+        init(54, Text.of(MenuStyle.title("Import from Web")));
     }
 
     @Override
@@ -69,7 +70,7 @@ public final class WebImportMenu extends Menu {
             return;
         }
         if (error != null) {
-            set(20, Menus.icon(Material.BARRIER, "&cFetch failed",
+            set(20, Menus.icon(Material.GRAY_DYE, "&cFetch failed",
                     "&7" + error, "&8Try another category, or add a Mini by hand."), null);
             set(24, Menus.icon(Material.NAME_TAG, "&aAdd Mini manually instead"),
                     e -> new MiniEditMenu(plugin, player, plugin.miniService().blankDraft(), false, onBack).open(player));

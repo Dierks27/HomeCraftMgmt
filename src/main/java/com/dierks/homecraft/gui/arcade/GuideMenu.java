@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.BreakMenu;
 import com.dierks.homecraft.gui.games.Screens;
@@ -56,7 +57,7 @@ public final class GuideMenu extends Menu {
         this.player = player;
         this.page = Math.max(0, Math.min(TITLES.length - 1, page));
         this.back = back;
-        init(54, Text.of("&bHow It Works &8· &3" + TITLES[this.page]));
+        init(54, Text.of(MenuStyle.title("How It Works", TITLES[this.page])));
     }
 
     @Override

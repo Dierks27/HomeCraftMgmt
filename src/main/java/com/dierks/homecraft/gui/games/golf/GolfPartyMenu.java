@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.golf.GolfGroup;
 import com.dierks.homecraft.games.golf.GolfTogether;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.PartyLobby;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
@@ -76,7 +77,7 @@ public final class GolfPartyMenu extends GameMenu {
         super(plugin, golf, viewer, back);
         this.golf = golf;
         this.partyId = partyId;
-        init(SIZE, Text.of("&dGolf together"));
+        init(SIZE, Text.of(MenuStyle.title("Golf together")));
     }
 
     @Override

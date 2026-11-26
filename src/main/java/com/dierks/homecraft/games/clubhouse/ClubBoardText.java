@@ -120,7 +120,7 @@ public final class ClubBoardText {
 
     // ---- my stats ------------------------------------------------------------------------------------
 
-    public static final String STATS_TITLE = "&d&lMy stats";
+    public static final String STATS_TITLE = "&2My stats"; // 0.59.0: the house title style (MenuStyle)
 
     /** "&amp;d&amp;lMy stats &amp;7- Sam". */
     public static String statsTitle(String name) {
@@ -194,8 +194,8 @@ public final class ClubBoardText {
     }
 
     /** The Songs tile on the Games screen's Together tab, and the screen's title and header. */
-    public static final String SONGS_TILE = "&dSongs &7- pick a record for the room";
-    public static final String SONGS_TITLE = "&dSongs";
+    public static final String SONGS_TILE = "&6Songs &7- pick a record for the room";
+    public static final String SONGS_TITLE = "&2Songs"; // 0.59.0: the house title style (MenuStyle)
     public static final String SONGS_HEADER = "&dPick a record &7- it plays for the room";
     public static final String QUIET = "&cQuiet &7- stop the music";
     public static final String NOTHING_PLAYING = "&7Nothing playing";

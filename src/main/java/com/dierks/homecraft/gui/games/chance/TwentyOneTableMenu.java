@@ -12,6 +12,7 @@ import com.dierks.homecraft.games.chance.twentyone.TwentyOneSettings;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneTable;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneTable.Phase;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneTable.Seat;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -71,7 +72,7 @@ public final class TwentyOneTableMenu extends GameMenu {
         this.money = new MoneyPlay(plugin, game.games(), viewer);
         List<Integer> playable = game.settings().playable();
         this.stake = playable.isEmpty() ? 0 : playable.get(0);
-        init(54, Text.of("&2Twenty-One &8- the table"));
+        init(54, Text.of(MenuStyle.title("Twenty-One", "the table")));
     }
 
     /** Sit down, then show the table; a full table says so and stays shut. */

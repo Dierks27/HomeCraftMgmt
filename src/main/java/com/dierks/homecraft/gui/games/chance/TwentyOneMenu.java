@@ -32,7 +32,8 @@ import java.util.List;
  * {@link ChanceRounds}: Deal opens the round (the gate runs there), a Hit is written to the round
  * BEFORE its card is painted, a Double asks {@link ChanceRounds#raise} for the extra tokens (the
  * limits are checked again at that moment, R1.10) and the end settles once. The Arcade's hole card
- * is one shared face-down item — the same bytes whatever it hides — until the hand is over.
+ * is one face-down item — the same bytes whatever it hides (0.58.0: the card back, for a viewer
+ * with HCM's pack) — until the hand is over.
  *
  * <p>Closing the screen leaves the hand open; opening Twenty-One again resumes it. After a hand the
  * result stays on the table and Deal is where it always is: no prompt to go again.
@@ -42,9 +43,6 @@ import java.util.List;
  * never saw coming.
  */
 public final class TwentyOneMenu extends GameMenu {
-
-    /** The hole card, and any card not yet shown: one item for all of them (spec §10b). */
-    private static final ItemStack FACE_DOWN = Menus.icon(Material.MAP, "&8Face-down card");
 
     private static final int ARCADE_ROW = 0;
     private static final int YOUR_ROW = 18;
@@ -229,10 +227,10 @@ public final class TwentyOneMenu extends GameMenu {
             set(slot++, Menus.icon(Material.BOOK, "&f" + cards.size() + " cards &8· &ftotal "
                     + TwentyOneHand.best(cards)), null);
         }
+        boolean art = CardGameTiles.art(plugin, viewer);
         for (int i = from; i < cards.size(); i++) {
             Card c = cards.get(i);
-            set(slot++, i == hidden ? FACE_DOWN : CardGameTiles.card(c.name(), c.red(), c.value(),
-                    c.rank() == 1 ? "&7Counts as 1 or 11" : "&7Counts as " + c.value()), null);
+            set(slot++, i == hidden ? CardGameTiles.faceDown(art) : CardGameTiles.twentyOne(art, c), null);
         }
     }
 

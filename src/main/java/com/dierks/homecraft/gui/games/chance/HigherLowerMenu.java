@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLowerSettings;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.pack.CardFace;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -39,9 +40,6 @@ import java.util.List;
  * card before the player has seen it.
  */
 public final class HigherLowerMenu extends GameMenu {
-
-    /** The card spot before a run starts: one item, whatever comes next. */
-    private static final ItemStack NEXT_CARD = Menus.icon(Material.MAP, "&8The first card shows when you start");
 
     private static final int RUN_ROW = 0;
     private static final int RULES = 9;
@@ -213,12 +211,17 @@ public final class HigherLowerMenu extends GameMenu {
         }
     }
 
-    private static ItemStack cardTile(Card c) {
-        return CardGameTiles.card(c.name(), c.red(), c.rank(), "&7Aces are high.");
+    /** A card of the run: Aces high, so its count is its rank 2-14 (or none on its picture). */
+    private ItemStack cardTile(Card c) {
+        boolean art = CardGameTiles.art(plugin, viewer);
+        CardFace face = CardFace.aceHigh(c.rank(), c.suit());
+        return CardGameTiles.card(art, face, CardGameTiles.rankCount(art, face), "&7Aces are high.");
     }
 
+    /** The card spot before a run starts is one face-down item, whatever comes next. */
     private ItemStack shownCard() {
-        return run == null ? NEXT_CARD : cardTile(run.shown());
+        return run == null ? CardGameTiles.faceDown(CardGameTiles.art(plugin, viewer),
+                "&8The first card shows when you start") : cardTile(run.shown());
     }
 
     private void paintSide(int slot, Side side) {

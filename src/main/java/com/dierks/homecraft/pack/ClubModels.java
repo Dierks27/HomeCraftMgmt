@@ -283,10 +283,13 @@ public final class ClubModels {
                     }
                 }
                 if (m.name().equals("machine_video_poker")) { // five white cards side by side on the green screen
+                    // 0.57.1 (the owner: "the black and white boxes are clipping bad, they need to come out a bit"):
+                    // each card stands a unit proud of the screen and its corner a unit proud of the card (they
+                    // shared a face, and flickered through each other)
                     tex += ",\"card\":\"minecraft:block/white_concrete\",\"red\":\"minecraft:block/red_concrete\"";
                     for (int x = 3; x <= 11; x += 2) {
-                        parts.add(box(x, 12, 0, x + 2, 16, 1, "card"));
-                        parts.add(box(x, 15, 0, x + 1, 16, 1, x % 4 == 1 ? "red" : "body")); // each card's corner
+                        parts.add(box(x, 12, -1, x + 2, 16, 0, "card"));
+                        parts.add(box(x, 15, -2, x + 1, 16, -1, x % 4 == 1 ? "red" : "body")); // each card's corner
                     }
                 }
                 if (m.name().equals("cabinet_connect")) { // a blue grid with red and yellow counters in it

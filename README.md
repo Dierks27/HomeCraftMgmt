@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.57.0-family-games`
+- **Version:** `0.57.1-stand-up`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -252,6 +252,19 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
+**0.57.1: getting up from a seat leaves you where you are; the Sports Board's wall turns its pages; Twenty-One's totals.** The owner: "when you stand up, it auto warps you to
+the location you come into the clubhouse. Even if you are in the parlor". Standing up from a chair, stool or cushion
+(26.3) is a small "dismount" teleport, which the games read as a nudge and answered by sending a Clubhouse visitor
+back to an arrival spot. Now only a visitor who is out of the room (fallen through, or moved out) goes back. The Hub
+had the same rule for getting off a horse, out of a boat or out of bed: now only a real fall (under the world's floor)
+sends a Hub visitor back. **The Sports Board's wall turns its pages** (the owner: "The games should rotate through,
+they only show the first 4-5 games"): every game on the board, five at a time, the next five every 8 seconds, the
+heading saying which page ("2/7"). **Twenty-One shows each hand's total** in a tile of its own right after its cards
+(the number as its count: green, gold at 21, red over 21; "7 or 17" for a soft hand still in play; the Arcade's
+"shows 9" while its hole card is down), so nobody has to hover over a player (the owner: "can we show the Totals more
+obvious"). **Video Poker's cabinet:** its cards stand out from the screen (they flickered into it). **Back to
+0.57.0:** the jar alone.
+
 **0.57.0: four new games, a free Picture Bingo, and a harder Floor Is Lava.** The owner: "Let's do the games you
 mentioned next!" and "the floor is lava game is WAY too easy... when you get in through the arcade machine you should
 be able to pick any level you want... if the room could change maybe that would be more fun".
@@ -326,7 +339,7 @@ to 0.52.1:** the jar alone (a race entry left open settles by its own data eithe
 
 **0.52.1: the Game Parlor's way in is a secret book.** The owner: their four-year-old "walked right up to that lever
 and boom straight into the parlor" ("lets make it much harder to find the secret parlor"). The lever is gone: the way
-in is the top row's second book from the fireplace end of the 19th Hole's wall of books, and only a **crouched** tap
+in is the top row's second book from the left (as you face it) of the 19th Hole's wall of books, and only a **crouched** tap
 opens it. Nothing is drawn, and a plain tap does nothing. (To keep a child out for good, take the permission away:
 `/lp user <name> permission set hcm.clubhouse.parlor false`; then nothing happens even crouched.) **Back to
 0.52.0:** the jar alone (the lever comes back).
@@ -5119,8 +5132,9 @@ Picks on tonight's real games, in dollars, in the Game Parlor. Behind the same d
 `hcm.games.money`, money play on, the day's money limit (picks count toward it), the most a play may put in and the
 most it may pay. No child ever sees it.
 
-- **The wall board (0.56.0).** On the Parlor's east wall, 7 blocks wide: the next 5 games to start and what $10 on
-  each side gives back, kept up to date ("Lines are updating" while they are; "No games in the next 24 hours" when
+- **The wall board (0.56.0).** On the Parlor's east wall, 7 blocks wide: the games to start and what $10 on
+  each side gives back, five at a time (0.57.1: every game on the board, the page turning every 8 seconds), kept up
+  to date ("Lines are updating" while they are; "No games in the next 24 hours" when
   there are none). Tap it (either click) to open the board. A counter and three stools stand in front of it.
 
 - **The lines.** Every `refresh_minutes` (5) HCM reads Kalshi's public market data (no account, nothing about any

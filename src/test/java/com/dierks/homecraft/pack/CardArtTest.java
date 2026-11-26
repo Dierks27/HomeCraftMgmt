@@ -116,7 +116,7 @@ class CardArtTest {
                 }
             }
             assertEquals(0, img.getRGB(0, 0) >>> 24, "clear around the card");
-            assertEquals(0, img.getRGB(3, 1) >>> 24, "a rounded corner");
+            assertEquals(0, img.getRGB(1, 1) >>> 24, "a rounded corner");
             assertEquals(255, img.getRGB(15, 0 + 2) >>> 24, "the card itself is solid");
             assertTrue(distinct.add(Arrays.toString(px)), "every card looks different: " + i);
         }
@@ -157,7 +157,7 @@ class CardArtTest {
             StringBuilder corner = new StringBuilder();
             int ink = 0;
             for (int y = 3; y < 8; y++) {
-                for (int x = 4; x < 9; x++) {
+                for (int x = 3; x < 8; x++) {
                     int p = px[y * 32 + x];
                     boolean on = (p >>> 16 & 0xFF) > 180 && (p >>> 8 & 0xFF) < 80;
                     corner.append(on ? '#' : '.');
@@ -300,5 +300,26 @@ class CardArtTest {
     private static JsonObject json(byte[] bytes) {
         assertNotNull(bytes);
         return JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+    }
+
+    /**
+     * 0.58.0 (the owner: "the number and letters bleed past the card borders"): nothing is drawn on the rim or the row
+     * just inside it: every rank, pip and figure has a clear pixel of card round it.
+     */
+    @Test
+    void nothingTouchesTheRim() {
+        for (CardFace f : CardFace.deck()) {
+            int[] px = CardArt.face(f);
+            int paper = px[16 * 32 + 2]; // just inside the left rim, half way down
+            for (int y = 2; y <= 30; y++) {
+                for (int x = 2; x <= 28; x++) {
+                    boolean nextToRim = x == 2 || x == 28 || y == 2 || y == 30;
+                    boolean roundedCorner = (x == 2 || x == 28) && (y == 2 || y == 30);
+                    if (nextToRim && !roundedCorner) {
+                        assertEquals(paper, px[y * 32 + x], f.longName() + ": ink against the rim at " + x + "," + y);
+                    }
+                }
+            }
+        }
     }
 }

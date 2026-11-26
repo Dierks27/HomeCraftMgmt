@@ -60,9 +60,11 @@ public final class CardArt {
     private static final int NAVY = 0xFF203C86;
     private static final int LATTICE = 0xFF4469C2;
 
-    // ---- the card's shape: x 3..27, y 1..31 (25 x 31: one middle column, one middle row) ----------------------------
-    private static final int X0 = 3;
-    private static final int X1 = 27;
+    // ---- the card's shape: x 1..29, y 1..31 (29 x 31: one middle column, one middle row) ----------------------------
+    // 0.58.0 (the owner: "make them a tiny bigger so the whole card is on the card itself ... the number and letters
+    // bleed past the card borders"): two pixels wider each side (it was x 3..27), the ranks a clear pixel in from the rim
+    private static final int X0 = 1;
+    private static final int X1 = 29;
     private static final int Y0 = 1;
     private static final int Y1 = 31;
     /** The pip columns' and the middle row's centres. */
@@ -139,8 +141,8 @@ public final class CardArt {
         // the rank in both corners, against the rim; the lower one upright too: turned half round, a 9 in so small a
         // font is a 6 (and a 6 a 9) to a child reading it
         String mark = card.rankMark();
-        text(px, mark, X0 + 1, Y0 + 2, ink);
-        text(px, mark, X1 - width(mark), Y1 - 6, ink);
+        text(px, mark, X0 + 2, Y0 + 2, ink);
+        text(px, mark, X1 - 1 - width(mark), Y1 - 7, ink);
         return px;
     }
 

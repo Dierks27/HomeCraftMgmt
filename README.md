@@ -252,14 +252,18 @@ launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for go
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
 
-**0.57.1: getting up from a seat leaves you where you are; the Sports Board's wall turns its pages.** The owner: "when you stand up, it auto warps you to
+**0.57.1: getting up from a seat leaves you where you are; the Sports Board's wall turns its pages; Twenty-One's totals.** The owner: "when you stand up, it auto warps you to
 the location you come into the clubhouse. Even if you are in the parlor". Standing up from a chair, stool or cushion
 (26.3) is a small "dismount" teleport, which the games read as a nudge and answered by sending a Clubhouse visitor
 back to an arrival spot. Now only a visitor who is out of the room (fallen through, or moved out) goes back. The Hub
 had the same rule for getting off a horse, out of a boat or out of bed: now only a real fall (under the world's floor)
 sends a Hub visitor back. **The Sports Board's wall turns its pages** (the owner: "The games should rotate through,
 they only show the first 4-5 games"): every game on the board, five at a time, the next five every 8 seconds, the
-heading saying which page ("2/7"). **Back to 0.57.0:** the jar alone.
+heading saying which page ("2/7"). **Twenty-One shows each hand's total** in a tile of its own right after its cards
+(the number as its count: green, gold at 21, red over 21; "7 or 17" for a soft hand still in play; the Arcade's
+"shows 9" while its hole card is down), so nobody has to hover over a player (the owner: "can we show the Totals more
+obvious"). **Video Poker's cabinet:** its cards stand out from the screen (they flickered into it). **Back to
+0.57.0:** the jar alone.
 
 **0.57.0: four new games, a free Picture Bingo, and a harder Floor Is Lava.** The owner: "Let's do the games you
 mentioned next!" and "the floor is lava game is WAY too easy... when you get in through the arcade machine you should

@@ -29,8 +29,10 @@ import java.util.List;
  * same cards.
  *
  * <pre>
- *  row 0     0 the Arcade (its total) · 1-8 its cards (the hole card face down until it plays)
- *  rows 1-4  one seat each: its player and total · up to 7 cards · what it put in, or how it came out
+ *  row 0     0 the Arcade (its total) · 1-7 its cards (the hole card face down until it plays) · 8 its total
+ *  rows 1-4  one seat each: its player and total · up to 6 cards · its total · what it put in, or how it came out
+ *            (0.57.1, the owner: "can we show the Totals more obvious ... it would be nice not to have to [mouse
+ *            over]": each hand's total is its own big tile, the number as its count, just after its cards)
  *  row 5     taking stakes: 45 the chips' total · 46-48 stakes or chips · 49 Leave · 50 Ready · 51 your balance
  *                           52 Hurry Up · 53 tokens or money
  *            cards out:     46 Hit · 47 Stand · 48 Double · 49 Leave · 50 whose move it is · 51 your balance
@@ -146,7 +148,9 @@ public final class TwentyOneTableMenu extends GameMenu {
             total = b > 21 ? "over 21" : Integer.toString(b);
         }
         set(ARCADE_ROW, Menus.icon(Material.NAME_TAG, "&7The Arcade &8· &f" + total), null);
-        paintCards(ARCADE_ROW + 1, 8, cards, round.holeHidden() ? 1 : -1);
+        paintCards(ARCADE_ROW + 1, 7, cards, round.holeHidden() ? 1 : -1);
+        set(ARCADE_ROW + 8, totalTile("The Arcade", round.holeHidden() ? cards.subList(0, 1) : cards,
+                round.holeHidden(), false), null); // the Arcade's total is never "or": it plays its own rule
     }
 
     private void paintSeat(int row, Seat seat, TableRound round, Seat me) {
@@ -165,7 +169,8 @@ public final class TwentyOneTableMenu extends GameMenu {
             total = " &8· " + (b > 21 ? "&cover 21"
                     : hand.playing() && TwentyOneHand.soft(hand.cards()) && b != 21 ? "&f" + (b - 10) + " or " + b
                     : "&f" + b);
-            paintCards(row + 1, 7, hand.cards(), -1);
+            paintCards(row + 1, 6, hand.cards(), -1);
+            set(row + 7, totalTile(mine ? "You" : seat.name(), hand.cards(), false, hand.playing()), null);
         }
         if (npc) {
             // an NPC player: a picture of one (its stars as the count), pretend chips, and between rounds a tap sends
@@ -248,6 +253,42 @@ public final class TwentyOneTableMenu extends GameMenu {
             case LOSE, ARCADE_TWENTY_ONE -> "The Arcade's hand";
         };
         return "&7" + head + " &8(pretend chips)";
+    }
+
+    /**
+     * 0.57.1: a hand's total as a tile of its own, the number as its count so it reads without hovering: green while
+     * it's in play, gold at 21, red over 21; a soft hand still being played says both ("7 or 17"); the Arcade's while
+     * its hole card is down is what its up card shows.
+     */
+    static ItemStack totalTile(String whose, List<Card> cards, boolean upCardOnly, boolean playing) {
+        Total t = total(cards, upCardOnly, playing);
+        ItemStack icon = Menus.icon(t.material(), t.name(), "&7" + stripColour(whose) + "'s total");
+        return Menus.count(t.material() == Material.GOLD_BLOCK ? Menus.glint(icon, true) : icon, t.count());
+    }
+
+    /** What a total tile shows (pure): its block, its name and its count. */
+    record Total(Material material, String name, int count) {
+    }
+
+    static Total total(List<Card> cards, boolean upCardOnly, boolean playing) {
+        int b = TwentyOneHand.best(cards);
+        if (upCardOnly) {
+            return new Total(Material.LIGHT_GRAY_CONCRETE, "&fShows " + b, Math.max(1, b));
+        }
+        if (b > 21) {
+            return new Total(Material.RED_CONCRETE, "&cOver 21 &7(" + b + ")", Math.min(64, b));
+        }
+        if (b == 21) {
+            return new Total(Material.GOLD_BLOCK, "&e&l21!", 21);
+        }
+        if (playing && TwentyOneHand.soft(cards)) {
+            return new Total(Material.LIME_CONCRETE, "&aTotal: &f" + (b - 10) + " or " + b, b);
+        }
+        return new Total(Material.LIME_CONCRETE, "&aTotal: &f" + b, Math.max(1, b));
+    }
+
+    private static String stripColour(String s) {
+        return s == null ? "" : s.replaceAll("&[0-9a-fk-orA-FK-OR]", "");
     }
 
     private static String cash(boolean dollars, int amount) {

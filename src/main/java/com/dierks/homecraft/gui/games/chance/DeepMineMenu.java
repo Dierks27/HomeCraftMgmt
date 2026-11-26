@@ -46,7 +46,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *  row 2   result ▶  reel  reel  reel  ◀  Spin   (21 22 23: the middle row; result 19, Spin 25)
  *  row 3            ▶  reel  reel  reel  ◀        (30 31 32: the bottom row)
  *  row 4          what goes on each row: stake buttons centred on 40, or the chips (39 40 41) and their amount (42)
- *  row 5   46 gives back about N · 47 plays left · 48 today · 49 Back · 50 balance · 53 tokens or money
+ *  row 5   46 gives back about N · 47 plays left · 48 today · 49 Back · 51 balance (0.59.0: it was 50) ·
+ *          53 tokens or money
  * </pre>
  *
  * <p>The player picks what goes on EACH row; a spin always plays all three, and the Spin button says so
@@ -71,7 +72,8 @@ public final class DeepMineMenu extends GameMenu {
     private static final int GIVE_BACK = 46;
     private static final int PLAYS = 47;
     private static final int TODAY = 48;
-    private static final int BALANCE = 50;
+    /** 0.59.0: 51, where every other game of chance shows the balance (it was 50). */
+    private static final int BALANCE = 51;
     private static final int SWITCH = 53;
     private static final int[] CHIPS = {39, 40, 41};
     private static final int CHIPS_BACK = 42;

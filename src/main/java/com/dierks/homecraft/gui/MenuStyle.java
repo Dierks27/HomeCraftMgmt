@@ -89,17 +89,39 @@ public final class MenuStyle {
      * An '&amp;'-coded line cut into lines of at most {@code width} letters, at spaces (a single word longer than that
      * stays whole). Each new line opens with the colour and formats in force where it was cut, so a grey sentence
      * stays grey on its second line. Colour codes don't count as letters.
+     *
+     * <p>The lines are balanced: as few as {@code width} allows, then as even as they can be, so a sentence a little
+     * over the width splits in two halves rather than leaving one word alone on the second line.
      */
     public static List<String> wrap(String line, int width) {
-        List<String> out = new ArrayList<>();
         if (line == null) {
+            List<String> out = new ArrayList<>();
             out.add("");
             return out;
         }
         if (visible(line) <= width) {
+            List<String> out = new ArrayList<>();
             out.add(line);
             return out;
         }
+        List<String> best = greedy(line, width);
+        int longest = 1;
+        for (String word : line.split(" ")) {
+            longest = Math.max(longest, visible(word));
+        }
+        for (int w = width - 1; w >= longest; w--) {
+            List<String> tighter = greedy(line, w);
+            if (tighter.size() > best.size()) {
+                break;
+            }
+            best = tighter;
+        }
+        return best;
+    }
+
+    /** {@link #wrap} without the balancing: each line as full as {@code width} allows. */
+    private static List<String> greedy(String line, int width) {
+        List<String> out = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         int currentLen = 0;
         boolean started = false;

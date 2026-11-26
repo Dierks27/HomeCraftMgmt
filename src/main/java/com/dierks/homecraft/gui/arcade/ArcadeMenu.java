@@ -247,9 +247,9 @@ public final class ArcadeMenu extends Menu {
             return; // nothing to play together
         }
         String join = RaceNight.hubSuffix(games);
-        doors.add(new Button(Menus.glint(Menus.icon(Material.CAKE, "&dTogether" + join,
-                "&7Race Night, Falling Floors,", "&7the Floor Is Lava and more.", "&eClick to see them"),
-                !join.isEmpty()), e -> tab(Game.Tab.TOGETHER)));
+        String name = "&dTogether &7(" + counts.get(Game.Tab.TOGETHER) + ")" + join;
+        doors.add(new Button(Menus.glint(Menus.icon(Material.CAKE, name, "&7Race Night, Falling Floors,",
+                "&7the Floor Is Lava and more.", "&eClick to see them"), !join.isEmpty()), e -> tab(Game.Tab.TOGETHER)));
     }
 
     /**

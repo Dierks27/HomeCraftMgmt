@@ -24,7 +24,8 @@ class MenuStyleTest {
     @Test
     void aLongLoreLineWrapsAtSpacesAndKeepsItsColour() {
         List<String> lines = MenuStyle.wrap("&7Slide the ores. Two the same merge into the next one.", 40);
-        assertEquals(List.of("&7Slide the ores. Two the same merge into", "&7the next one."), lines);
+        assertEquals(List.of("&7Slide the ores. Two the same", "&7merge into the next one."), lines,
+                "two even lines, not one with a word left over");
         for (String l : lines) {
             assertTrue(MenuStyle.visible(l) <= 40, l);
         }
@@ -33,7 +34,10 @@ class MenuStyleTest {
     @Test
     void aColourChangedMidLineCarriesOnToTheNextLine() {
         List<String> lines = MenuStyle.wrap("&7Each pays &6five whole tokens for every one of the medals &7once.", 30);
-        assertEquals("&7Each pays &6five whole tokens", lines.get(0));
+        assertTrue(lines.get(0).startsWith("&7Each pays &6five"), lines.toString());
+        for (String l : lines) {
+            assertTrue(MenuStyle.visible(l) <= 30, l);
+        }
         assertTrue(lines.get(1).startsWith("&6"), "the gold goes on: " + lines.get(1));
         assertTrue(lines.get(lines.size() - 1).endsWith("&7once."), lines.toString());
     }

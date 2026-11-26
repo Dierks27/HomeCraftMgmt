@@ -261,30 +261,9 @@ public final class TwentyOneTableMenu extends GameMenu {
      * its hole card is down is what its up card shows.
      */
     static ItemStack totalTile(String whose, List<Card> cards, boolean upCardOnly, boolean playing) {
-        Total t = total(cards, upCardOnly, playing);
+        TwentyOneTotals.Total t = TwentyOneTotals.total(cards, upCardOnly, playing);
         ItemStack icon = Menus.icon(t.material(), t.name(), "&7" + stripColour(whose) + "'s total");
         return Menus.count(t.material() == Material.GOLD_BLOCK ? Menus.glint(icon, true) : icon, t.count());
-    }
-
-    /** What a total tile shows (pure): its block, its name and its count. */
-    record Total(Material material, String name, int count) {
-    }
-
-    static Total total(List<Card> cards, boolean upCardOnly, boolean playing) {
-        int b = TwentyOneHand.best(cards);
-        if (upCardOnly) {
-            return new Total(Material.LIGHT_GRAY_CONCRETE, "&fShows " + b, Math.max(1, b));
-        }
-        if (b > 21) {
-            return new Total(Material.RED_CONCRETE, "&cOver 21 &7(" + b + ")", Math.min(64, b));
-        }
-        if (b == 21) {
-            return new Total(Material.GOLD_BLOCK, "&e&l21!", 21);
-        }
-        if (playing && TwentyOneHand.soft(cards)) {
-            return new Total(Material.LIME_CONCRETE, "&aTotal: &f" + (b - 10) + " or " + b, b);
-        }
-        return new Total(Material.LIME_CONCRETE, "&aTotal: &f" + b, Math.max(1, b));
     }
 
     private static String stripColour(String s) {

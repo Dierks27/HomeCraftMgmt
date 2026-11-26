@@ -342,6 +342,12 @@ final class ClubhouseAdmin implements GameAdmin {
             out.add("&e" + m.id() + " &7- " + m.size() + " &8| " + (owners.contains(m.name()) ? "&ayours"
                     : "&7placeholder"));
         }
+        // 0.58.0: the card games' 52 faces and back, one line for all of them
+        java.util.Set<String> repainted = pack == null ? java.util.Set.of() : pack.repainted();
+        long ours = com.dierks.homecraft.pack.CardArt.names().stream().filter(owners::contains).count();
+        out.add("&ehcm:card_<rank>_<suit> &7(and &ehcm:card_back&7) - 53 flat 32 x 32 item icons, e.g. card_ace_spades,"
+                + " card_10_hearts, card_queen_clubs &8| &a" + ours + " yours&8, &a" + repainted.size()
+                + " repainted &7(a PNG at assets/hcm/textures/item/cards/<rank>_<suit>.png)");
         out.add(pack == null || !pack.active() ? "&cCraftBridge isn't taking HCM's models: everyone sees the vanilla"
                 + " stand-ins." : "&7Drop yours in plugins/CraftBridge/pack/sources/<folder>/assets/hcm/...");
         return out;

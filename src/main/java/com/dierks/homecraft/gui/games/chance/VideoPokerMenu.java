@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.chance.poker.VideoPokerSettings;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.pack.CardFace;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -259,8 +260,9 @@ public final class VideoPokerMenu extends GameMenu {
 
     private void paintCards() {
         if (deal == null) {
+            boolean art = CardGameTiles.art(plugin, viewer);
             for (int slot : CARDS) {
-                set(slot, Menus.icon(Material.MAP, "&8A card is dealt here", "&7Pick your stake, then Deal."), null);
+                set(slot, CardGameTiles.faceDown(art, "&8A card is dealt here", "&7Pick your stake, then Deal."), null);
             }
             return;
         }
@@ -271,19 +273,24 @@ public final class VideoPokerMenu extends GameMenu {
         }
     }
 
-    /** A card: its name (red suits red), the stack its count; held ones glow and say HELD. */
+    /**
+     * A card: its short form and name ("&amp;cQ♥ &amp;7Queen of Hearts"), the stack its rank (Aces high, none on its
+     * picture); held ones glow and say HELD (and are a filled map on a plain card).
+     */
     private ItemStack cardTile(int card, int i) {
-        String name = (PokerHand.red(card) ? "&c" : "&f") + PokerHand.name(card) + " &8(" + PokerHand.shortName(card)
-                + ")";
+        boolean art = CardGameTiles.art(plugin, viewer);
+        CardFace face = CardFace.aceHigh(PokerHand.rank(card) + 2, PokerHand.suit(card));
+        int count = CardGameTiles.rankCount(art, face);
         if (!playing()) {
-            return CardGameTiles.card(name, PokerHand.red(card), PokerHand.count(card));
+            return CardGameTiles.card(art, face, count);
         }
         boolean held = deal.held(i);
+        String name = CardGameTiles.name(face);
         ItemStack icon = Menus.icon(held ? Material.FILLED_MAP : Material.PAPER,
                 held ? "&a&lHELD &8· " + name : name,
                 held ? "&aHeld: it stays when you Draw." : "&7It is replaced when you Draw.",
                 held ? "&eTap to let it go" : "&eTap to hold it");
-        return Menus.glint(Menus.count(icon, PokerHand.count(card)), held);
+        return Menus.glint(CardGameTiles.drawn(Menus.count(icon, count), CardGameTiles.model(art, face)), held);
     }
 
     private void paintDeal(VideoPokerSettings.Odds next) {

@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.chance.holdem.PokerCard;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.pack.CardFace;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -46,7 +47,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class HoldemMenu extends GameMenu {
 
-    private static final ItemStack FACE_DOWN = Menus.icon(Material.MAP, "&8Face-down card");
     private static final int POT = 0;
     private static final int[] BOARD = {2, 3, 4, 5, 6};
     private static final int INFO = 8;
@@ -330,7 +330,7 @@ public final class HoldemMenu extends GameMenu {
         if (p != null && !p.folded()) {
             boolean show = mine || hand.street() == HoldemHand.Street.SHOWDOWN;
             for (int k = 0; k < 2; k++) {
-                set(slot + 1 + k, show ? card(p.hole().get(k)) : FACE_DOWN, null);
+                set(slot + 1 + k, show ? card(p.hole().get(k)) : faceDown(), null);
             }
         }
     }
@@ -348,7 +348,8 @@ public final class HoldemMenu extends GameMenu {
     private void paintMine(Seat me, HoldemHand hand) {
         HoldemHand.Player p = hand == null ? null : table.inHand(me);
         if (p == null) {
-            set(MY_CARDS, Menus.icon(Material.MAP, "&8Your cards come with the next hand"), null);
+            set(MY_CARDS, CardGameTiles.faceDown(CardGameTiles.art(plugin, viewer),
+                    "&8Your cards come with the next hand"), null);
             return;
         }
         set(MY_CARDS, card(p.hole().get(0)), null);
@@ -598,8 +599,28 @@ public final class HoldemMenu extends GameMenu {
         }
     }
 
-    /** A card: its suit's colour picture (four colours, so a flush reads at a glance), its rank as the count. */
-    static ItemStack card(PokerCard c) {
+    /** A face-up card, for this screen's viewer. */
+    private ItemStack card(PokerCard c) {
+        return card(CardGameTiles.art(plugin, viewer), c);
+    }
+
+    /** A face-down card (another player's, while they are in), for this screen's viewer. */
+    private ItemStack faceDown() {
+        return CardGameTiles.faceDown(CardGameTiles.art(plugin, viewer), "&8Face-down card");
+    }
+
+    /**
+     * A card. Without HCM's pack: its suit's colour picture (four colours, so a flush reads at a glance), named in the
+     * same colour ("&amp;9J♦ &amp;7Jack of Diamonds"). With it: the card's own picture, red and black as on a real
+     * deck, named so too. 0.58.0: the count is the rank with Aces high (an Ace 14, as in Video Poker; it was 1), or no
+     * number on a picture ({@link CardGameTiles#rankCount}).
+     */
+    static ItemStack card(boolean art, PokerCard c) {
+        CardFace face = CardFace.aceHigh(c.rank(), c.suit());
+        int count = CardGameTiles.rankCount(art, face);
+        if (art) {
+            return CardGameTiles.card(true, face, count);
+        }
         Material m = switch (c.suit()) {
             case 0 -> Material.INK_SAC;
             case 1 -> Material.RED_DYE;
@@ -612,7 +633,7 @@ public final class HoldemMenu extends GameMenu {
             case 2 -> "&9";
             default -> "&a";
         };
-        return Menus.count(Menus.icon(m, colour + c.shortName() + " &7" + c.name()), c.rank() == 14 ? 1 : c.rank());
+        return Menus.count(Menus.icon(m, CardGameTiles.name(colour, face)), count);
     }
 
     private static String plain(String name) {

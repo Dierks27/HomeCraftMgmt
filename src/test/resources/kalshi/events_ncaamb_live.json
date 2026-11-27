@@ -1,0 +1,645 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV26BAYGONZ",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-25T08:07:10.841652Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T04:30:00Z",
+     "created_time": "2026-11-25T08:04:20.322952Z",
+     "custom_strike": {
+      "basketball_team": "b43e542a-b2dc-47f5-acf8-0fe10d31dc53"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV26BAYGONZ",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T07:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.9800",
+     "latest_expiration_time": "2026-11-29T04:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.0200",
+     "no_bid_dollars": "0.0100",
+     "no_sub_title": "Gonzaga",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T07:30:00Z",
+     "open_interest_fp": "1652481.82",
+     "open_time": "2026-11-25T08:07:00Z",
+     "previous_price_dollars": "0.6200",
+     "previous_yes_ask_dollars": "0.6200",
+     "previous_yes_bid_dollars": "0.6000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Gonzaga wins the Baylor vs Gonzaga men's college basketball game originally scheduled for Nov 26, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV26BAYGONZ-GONZ",
+     "title": "Gonzaga wins",
+     "updated_time": "2026-11-25T08:07:00.974336Z",
+     "volume_24h_fp": "3080022.75",
+     "volume_fp": "3249783.15",
+     "yes_ask_dollars": "0.9900",
+     "yes_ask_size_fp": "52284.70",
+     "yes_bid_dollars": "0.9800",
+     "yes_bid_size_fp": "13405.12",
+     "yes_sub_title": "Gonzaga"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T04:30:00Z",
+     "created_time": "2026-11-25T08:04:20.322952Z",
+     "custom_strike": {
+      "basketball_team": "c38f00d4-0e48-4efd-b9f1-02f31e7d4dca"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV26BAYGONZ",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T07:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0200",
+     "latest_expiration_time": "2026-11-29T04:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.9900",
+     "no_bid_dollars": "0.9800",
+     "no_sub_title": "Baylor",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T07:30:00Z",
+     "open_interest_fp": "1915120.02",
+     "open_time": "2026-11-25T08:07:00Z",
+     "previous_price_dollars": "0.4000",
+     "previous_yes_ask_dollars": "0.4000",
+     "previous_yes_bid_dollars": "0.3900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Baylor wins the Baylor vs Gonzaga men's college basketball game originally scheduled for Nov 26, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV26BAYGONZ-BAY",
+     "title": "Baylor wins",
+     "updated_time": "2026-11-25T08:07:00.974336Z",
+     "volume_24h_fp": "2986225.63",
+     "volume_fp": "3153887.48",
+     "yes_ask_dollars": "0.0200",
+     "yes_ask_size_fp": "19601.68",
+     "yes_bid_dollars": "0.0100",
+     "yes_bid_size_fp": "40149.13",
+     "yes_sub_title": "Baylor"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BAY vs GONZ (Nov 26)",
+   "title": "Baylor vs Gonzaga"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV26TTUORE",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-25T07:07:31.963977Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T04:30:00Z",
+     "created_time": "2026-11-25T07:04:30.037568Z",
+     "custom_strike": {
+      "basketball_team": "c30c39d4-f735-40c2-a458-c351c5686a63"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV26TTUORE",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T07:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.5800",
+     "latest_expiration_time": "2026-11-29T04:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.4200",
+     "no_bid_dollars": "0.4100",
+     "no_sub_title": "Oregon",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T07:30:00Z",
+     "open_interest_fp": "1332308.75",
+     "open_time": "2026-11-25T07:06:00Z",
+     "previous_price_dollars": "0.2000",
+     "previous_yes_ask_dollars": "0.2000",
+     "previous_yes_bid_dollars": "0.1900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Oregon wins the Texas Tech vs Oregon men's college basketball game originally scheduled for Nov 26, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV26TTUORE-ORE",
+     "title": "Oregon wins",
+     "updated_time": "2026-11-25T07:06:00.936474Z",
+     "volume_24h_fp": "2251277.64",
+     "volume_fp": "2704266.21",
+     "yes_ask_dollars": "0.5900",
+     "yes_ask_size_fp": "39783.03",
+     "yes_bid_dollars": "0.5800",
+     "yes_bid_size_fp": "12330.04",
+     "yes_sub_title": "Oregon"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T04:30:00Z",
+     "created_time": "2026-11-25T07:04:30.037568Z",
+     "custom_strike": {
+      "basketball_team": "75e829e3-6dc0-40da-86d1-80717b456f73"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV26TTUORE",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T07:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.4200",
+     "latest_expiration_time": "2026-11-29T04:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.5900",
+     "no_bid_dollars": "0.5800",
+     "no_sub_title": "Texas Tech",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T07:30:00Z",
+     "open_interest_fp": "1029384.06",
+     "open_time": "2026-11-25T07:06:00Z",
+     "previous_price_dollars": "0.8100",
+     "previous_yes_ask_dollars": "0.8100",
+     "previous_yes_bid_dollars": "0.8000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Texas Tech wins the Texas Tech vs Oregon men's college basketball game originally scheduled for Nov 26, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV26TTUORE-TTU",
+     "title": "Texas Tech wins",
+     "updated_time": "2026-11-25T07:06:00.936474Z",
+     "volume_24h_fp": "1046378.40",
+     "volume_fp": "1407598.34",
+     "yes_ask_dollars": "0.4200",
+     "yes_ask_size_fp": "12849.32",
+     "yes_bid_dollars": "0.4100",
+     "yes_bid_size_fp": "32185.36",
+     "yes_sub_title": "Texas Tech"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "TTU vs ORE (Nov 26)",
+   "title": "Texas Tech vs Oregon"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV27UVAXAV",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-23T16:08:36.636552Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T16:00:00Z",
+     "created_time": "2026-11-23T16:07:08.250717Z",
+     "custom_strike": {
+      "basketball_team": "7f82faca-4511-4549-91c9-844180387779"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV27UVAXAV",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2600",
+     "latest_expiration_time": "2026-11-29T16:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7500",
+     "no_bid_dollars": "0.7400",
+     "no_sub_title": "Xavier",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T19:00:00Z",
+     "open_interest_fp": "5808.27",
+     "open_time": "2026-11-23T16:08:00Z",
+     "previous_price_dollars": "0.2000",
+     "previous_yes_ask_dollars": "0.2100",
+     "previous_yes_bid_dollars": "0.1900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Xavier wins the Virginia vs Xavier men's college basketball game originally scheduled for Nov 27, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV27UVAXAV-XAV",
+     "title": "Xavier wins",
+     "updated_time": "2026-11-23T16:08:01.618165Z",
+     "volume_24h_fp": "7410.63",
+     "volume_fp": "8195.55",
+     "yes_ask_dollars": "0.2600",
+     "yes_ask_size_fp": "12427.15",
+     "yes_bid_dollars": "0.2500",
+     "yes_bid_size_fp": "495.00",
+     "yes_sub_title": "Xavier"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T16:00:00Z",
+     "created_time": "2026-11-23T16:07:08.250717Z",
+     "custom_strike": {
+      "basketball_team": "6ce2364b-90a0-4162-ad9c-ac6dd07105fe"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV27UVAXAV",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7500",
+     "latest_expiration_time": "2026-11-29T16:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2600",
+     "no_bid_dollars": "0.2500",
+     "no_sub_title": "Virginia",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T19:00:00Z",
+     "open_interest_fp": "13264.75",
+     "open_time": "2026-11-23T16:08:00Z",
+     "previous_price_dollars": "0.8200",
+     "previous_yes_ask_dollars": "0.8200",
+     "previous_yes_bid_dollars": "0.7900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Virginia wins the Virginia vs Xavier men's college basketball game originally scheduled for Nov 27, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV27UVAXAV-UVA",
+     "title": "Virginia wins",
+     "updated_time": "2026-11-23T16:08:01.618165Z",
+     "volume_24h_fp": "14992.86",
+     "volume_fp": "16413.09",
+     "yes_ask_dollars": "0.7500",
+     "yes_ask_size_fp": "114.28",
+     "yes_bid_dollars": "0.7400",
+     "yes_bid_size_fp": "3868.73",
+     "yes_sub_title": "Virginia"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "UVA vs XAV (Nov 27)",
+   "title": "Virginia vs Xavier"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV27USTLIB",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-23T17:07:17.296041Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T17:00:00Z",
+     "created_time": "2026-11-23T17:05:39.809978Z",
+     "custom_strike": {
+      "basketball_team": "c403e7ee-c530-4968-a9c7-3034df684de6"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV27USTLIB",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.5100",
+     "latest_expiration_time": "2026-11-29T17:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.5000",
+     "no_bid_dollars": "0.4900",
+     "no_sub_title": "Liberty",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T20:00:00Z",
+     "open_interest_fp": "3736.54",
+     "open_time": "2026-11-23T17:07:00Z",
+     "previous_price_dollars": "0.5700",
+     "previous_yes_ask_dollars": "0.5500",
+     "previous_yes_bid_dollars": "0.4900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Liberty wins the St. Thomas vs Liberty men's college basketball game originally scheduled for Nov 27, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV27USTLIB-LIB",
+     "title": "Liberty wins",
+     "updated_time": "2026-11-23T17:07:01.104106Z",
+     "volume_24h_fp": "3876.88",
+     "volume_fp": "3882.05",
+     "yes_ask_dollars": "0.5100",
+     "yes_ask_size_fp": "557.00",
+     "yes_bid_dollars": "0.5000",
+     "yes_bid_size_fp": "1975.96",
+     "yes_sub_title": "Liberty"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-29T17:00:00Z",
+     "created_time": "2026-11-23T17:05:39.809978Z",
+     "custom_strike": {
+      "basketball_team": "e798c18d-8218-41e9-bdc7-451b2e0c6355"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV27USTLIB",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-27T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.5000",
+     "latest_expiration_time": "2026-11-29T17:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.5100",
+     "no_bid_dollars": "0.5000",
+     "no_sub_title": "St. Thomas",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-27T20:00:00Z",
+     "open_interest_fp": "2397.73",
+     "open_time": "2026-11-23T17:07:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.5400",
+     "previous_yes_bid_dollars": "0.4300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If St. Thomas wins the St. Thomas vs Liberty men's college basketball game originally scheduled for Nov 27, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV27USTLIB-UST",
+     "title": "St. Thomas wins",
+     "updated_time": "2026-11-23T17:07:01.104106Z",
+     "volume_24h_fp": "2496.25",
+     "volume_fp": "2496.25",
+     "yes_ask_dollars": "0.5000",
+     "yes_ask_size_fp": "3920.19",
+     "yes_bid_dollars": "0.4900",
+     "yes_bid_size_fp": "722.00",
+     "yes_sub_title": "St. Thomas"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "UST vs LIB (Nov 27)",
+   "title": "St. Thomas vs Liberty"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "c38f00d4-0e48-4efd-b9f1-02f31e7d4dca",
+    "home_team_id": "b43e542a-b2dc-47f5-acf8-0fe10d31dc53",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV26BAYGONZ",
+    "source": "statsperform",
+    "source_id": "2997882",
+    "status": "in_progress",
+    "tier": "B"
+   },
+   "id": "0552e355-1f58-5e4c-9150-6981bf25c8c5",
+   "last_updated_ts": "2026-11-27T06:35:31.468007Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV26BAYGONZ",
+    "KXNCAAMBSPREAD-26NOV26BAYGONZ",
+    "KXNCAAMBTOTAL-26NOV26BAYGONZ",
+    "KXNCAAMB1HSPREAD-26NOV26BAYGONZ",
+    "KXNCAAMB1HTOTAL-26NOV26BAYGONZ"
+   ],
+   "source_ids": {
+    "source_1_id": "2997882",
+    "source_6_id": "18783672"
+   },
+   "start_date": "2026-11-27T04:30:00Z",
+   "title": "Baylor at Gonzaga",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "e798c18d-8218-41e9-bdc7-451b2e0c6355",
+    "home_team_id": "c403e7ee-c530-4968-a9c7-3034df684de6",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV27USTLIB",
+    "source": "statsperform",
+    "source_id": "3007241",
+    "status": "scheduled",
+    "tier": "D"
+   },
+   "id": "ed6e5368-b9ff-5dda-bcb4-8b8772433a82",
+   "last_updated_ts": "2026-11-27T06:35:32.371512Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV27USTLIB",
+    "KXNCAAMBSPREAD-26NOV27USTLIB",
+    "KXNCAAMBTOTAL-26NOV27USTLIB"
+   ],
+   "source_ids": {
+    "source_1_id": "3007241"
+   },
+   "start_date": "2026-11-27T17:00:00Z",
+   "title": "St. Thomas at Liberty",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "75e829e3-6dc0-40da-86d1-80717b456f73",
+    "home_team_id": "c30c39d4-f735-40c2-a458-c351c5686a63",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV26TTUORE",
+    "source": "statsperform",
+    "source_id": "3038525",
+    "status": "in_progress",
+    "tier": "B"
+   },
+   "id": "e762922a-9e5a-5481-9441-28c40083976f",
+   "last_updated_ts": "2026-11-27T06:35:31.762161Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV26TTUORE",
+    "KXNCAAMBSPREAD-26NOV26TTUORE",
+    "KXNCAAMBTOTAL-26NOV26TTUORE",
+    "KXNCAAMB1HSPREAD-26NOV26TTUORE",
+    "KXNCAAMB1HTOTAL-26NOV26TTUORE"
+   ],
+   "source_ids": {
+    "source_1_id": "3038525",
+    "source_6_id": "18783671"
+   },
+   "start_date": "2026-11-27T04:30:00Z",
+   "title": "Texas Tech at Oregon",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "6ce2364b-90a0-4162-ad9c-ac6dd07105fe",
+    "home_team_id": "7f82faca-4511-4549-91c9-844180387779",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV27UVAXAV",
+    "source": "statsperform",
+    "source_id": "3028568",
+    "status": "scheduled",
+    "tier": "B"
+   },
+   "id": "927ac0e3-b2a2-56c1-9f47-828df126828d",
+   "last_updated_ts": "2026-11-27T06:35:32.047322Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV27UVAXAV",
+    "KXNCAAMBSPREAD-26NOV27UVAXAV",
+    "KXNCAAMBTOTAL-26NOV27UVAXAV",
+    "KXNCAAMB1HSPREAD-26NOV27UVAXAV",
+    "KXNCAAMB1HTOTAL-26NOV27UVAXAV"
+   ],
+   "source_ids": {
+    "source_1_id": "3028568",
+    "source_2_id": "20261127AC30814F",
+    "source_6_id": "18528417"
+   },
+   "start_date": "2026-11-27T16:00:00Z",
+   "title": "Virginia at Xavier",
+   "type": "basketball_game"
+  }
+ ]
+}

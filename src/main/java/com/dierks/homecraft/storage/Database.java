@@ -1107,6 +1107,12 @@ public final class Database {
             CREATE INDEX IF NOT EXISTS idx_sports_picks_open ON sports_picks (status, ticker);
             CREATE INDEX IF NOT EXISTS idx_sports_picks_player ON sports_picks (player, placed_at);
             CREATE INDEX IF NOT EXISTS idx_sports_picks_day ON sports_picks (day)
+            """,
+            // v43 — the Sports Board's history (0.60.0): final_score is the real game's final score as the live scores
+            //   read it ("Final: CGY 6  PIT 3"), kept on a pick when it is settled (or when the score comes in after),
+            //   so My picks shows how the game ended. NULL for a pick settled before 0.60.0, or with no score read.
+            """
+            ALTER TABLE sports_picks ADD COLUMN final_score TEXT
             """
     };
 

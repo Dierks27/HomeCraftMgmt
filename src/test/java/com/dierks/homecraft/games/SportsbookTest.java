@@ -134,7 +134,29 @@ class SportsbookTest {
             }
             return out.append("]}").toString();
         }
+        if (path.startsWith("/live_data/")) { // 0.60.0: a game's live score, by its milestone
+            String milestone = path.substring(path.lastIndexOf('/') + 1);
+            String reply = live.get(milestone);
+            if (reply != null) {
+                return reply;
+            }
+        }
         throw new IOException("HTTP 404");
+    }
+
+    /** 0.60.0: what Kalshi's live data answers, by milestone id. */
+    private final Map<String, String> live = new HashMap<>();
+    /** San Antonio at Sacramento's milestone (events_nba.json). */
+    static final String SAS_MILESTONE = "f480c1f2-3eb7-51bc-903f-cb687af34d21";
+    /** Calgary at Ottawa's (events_nhl.json): under way when the replies were saved. */
+    static final String CGY_MILESTONE = "00d0f698-056d-5b24-a8a1-c8dd4c71a8da";
+
+    private static String liveReply(String type, int away, int home, int period, String clock, String status,
+                                    String widget) {
+        return "{\"live_data\":{\"details\":{\"away_points\":" + away + ",\"home_points\":" + home
+                + ",\"period\":" + period + ",\"period_remaining_time\":\"" + clock + "\",\"status\":\"" + status
+                + "\",\"widget_status\":\"" + widget + "\",\"winner\":\"\"},\"milestone_id\":\"x\",\"type\":\""
+                + type + "\"}}";
     }
 
     private static String fixture(String name) {
@@ -492,6 +514,75 @@ class SportsbookTest {
         }
         assertEquals(Map.of("Utah", "$62.06", "Los Angeles L", "$10.52"), utah,
                 "the Lakers at 85.5 in 100 still pay back more than the $10 put in");
+    }
+
+    // ---- 0.60.0: the live scores, and how a pick ended ------------------------------------------------------
+
+    @Test
+    void theGamesUnderWayHaveTheirScoresReadAndASettledPickKeepsItsFinalScore() throws Exception {
+        sb.watched(() -> true);
+        sb.refresh();
+        assertNotNull(sb.scores().get("KXNHLGAME-26NOV23CGYOTT"), "Calgary at Ottawa was under way");
+        assertNotNull(sb.scores().get("KXNHLGAME-26NOV23ANASEA"), "and Anaheim at Seattle had just started");
+        int followed = sb.scores().size();
+        live.put(CGY_MILESTONE, liveReply("hockey_match", 2, 1, 3, "04:12", "inprogress", "live"));
+        requests = 0;
+        assertTrue(sb.refreshScores(), "a round of scores went out");
+        assertEquals(followed, requests, "one request a game under way (the others aren't answered: left out)");
+        List<com.dierks.homecraft.games.chance.sportsbook.ScoreScreens.Item> items = sb.scoreItems();
+        assertEquals(1, items.size(), "only a game with a score is shown");
+        assertEquals("NHL", items.get(0).league());
+        assertEquals("CGY", items.get(0).away());
+        assertEquals("OTT", items.get(0).home());
+        assertEquals("P3 4:12", items.get(0).live().when());
+        assertEquals(4, sb.nextGames(4).size(), "and the next games for a TV with none under way");
+
+        assertNull(sb.place(alex.player, quote(SAS, 10)));
+        host.move(3 * 3_600_000L); // San Antonio at Sacramento is played (it started at 3:00 UTC)
+        sb.refresh();
+        assertNotNull(sb.scores().get("KXNBAGAME-26NOV23SASSAC"), "the game is followed once it starts");
+        live.put(SAS_MILESTONE, liveReply("basketball_game", 112, 104, 4, "00:00", "closed", "finished"));
+        assertTrue(sb.refreshScores());
+        assertEquals("Final: SAS 112  SAC 104", sb.scores().finalFor(SAS));
+        markets.put(SAS, new String[] {"finalized", "yes"});
+        sb.refresh();
+        Pick p = games.dao().sports().history(alex.id).get(0);
+        assertEquals(SportsPicksDao.WON, p.status());
+        assertEquals("Final: SAS 112  SAC 104", p.finalScore(), "kept with the pick");
+        assertTrue(alex.heard().contains("Your pick on San Antonio won: $12.41. Final: SAS 112  SAC 104."),
+                alex.heard());
+
+        // a pick settled before its final score came in takes it when it does
+        sb.refresh();
+        live.put(CGY_MILESTONE, liveReply("hockey_match", 4, 1, 3, "00:00", "closed", "finished"));
+        Pick early = games.dao().sports().add(alex.id, "KXNHLGAME-26NOV23CGYOTT-CGY", "yes", 5, 500, 1000, NOW, 0,
+                NOW - 3_600_000L, "nhl", "Calgary vs Ottawa", "Calgary");
+        assertTrue(games.dao().sports().settle(early.id(), SportsPicksDao.WON, 1000, NOW));
+        assertTrue(sb.refreshScores());
+        assertEquals("Final: CGY 4  OTT 1", games.dao().sports().pick(early.id()).finalScore());
+        assertEquals(0, games.dao().sports().finalScore("KXNHLGAME-26NOV23CGYOTT", "x"),
+                "a final score is kept once: a pick that has one isn't changed");
+
+        // the scores are kept for a restart
+        build();
+        assertEquals("Final: CGY 4  OTT 1", sb.scores().finalFor("KXNHLGAME-26NOV23CGYOTT-CGY"));
+    }
+
+    @Test
+    void scoresAreReadOnlyWhileSomeoneIsOnOrAPickWaitsAndNeverWithScoresSwitchedOff() throws Exception {
+        sb.watched(() -> false);
+        sb.refresh();
+        requests = 0;
+        assertFalse(sb.refreshScores(), "nobody on and no pick waiting: nothing is read");
+        assertEquals(0, requests);
+        SportsbookSettings off = new SportsbookSettings(true, List.of("nba", "nhl", "ncaawb"), 5, 24, 90, 7,
+                SportsbookSettings.API_BASE, false, 60, 16);
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "sportsbook", off);
+        games = GamesKit.service(host, List.of(Sportsbook.SPEC));
+        sb = (Sportsbook) games.game("sportsbook");
+        sb.watched(() -> true);
+        assertFalse(sb.refreshScores(), "live_scores: false");
+        assertTrue(sb.scoreItems().isEmpty());
     }
 
     @Test

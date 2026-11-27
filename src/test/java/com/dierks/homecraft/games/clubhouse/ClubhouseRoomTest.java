@@ -384,7 +384,7 @@ class ClubhouseRoomTest {
     void theAdminsTabCompletionAndStatus() {
         ClubhouseAdmin admin = new ClubhouseAdmin(null);
         assertEquals(List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox", "feast", "cabinet",
-                "trophyroom", "door", "secret", "parlor", "arcade", "edit", "save", "discard", "saves", "restore", "spot", "models", "generated",
+                "trophyroom", "door", "secret", "parlor", "arcade", "edit", "save", "discard", "saves", "restore", "spot", "models", "tv", "generated",
                 "rebuild", "off"), admin.tab(null, new String[]{""}), "every subcommand");
         assertEquals(List.of("arcade", "trophy"), admin.tab(null, new String[]{"door", ""}), "the two doors");
         assertEquals(List.of("clear"), admin.tab(null, new String[]{"door", "arcade", "c"}), "and clear");
@@ -395,6 +395,8 @@ class ClubhouseRoomTest {
                 "0.38.3: the walls' boards");
         assertEquals(List.of("playing"), admin.tab(null, new String[]{"board", "p"}), "a start");
         assertEquals(List.of("generated"), admin.tab(null, new String[]{"g"}), "a start");
+        assertEquals(List.of("add", "remove", "list"), admin.tab(null, new String[]{"tv", ""}), "0.60.0: score TVs");
+        assertEquals(List.of("1", "2", "3", "4", "5", "6"), admin.tab(null, new String[]{"tv", "add", ""}), "sizes");
         List<String> status = ClubhouseAdmin.status(room(), 2, "off");
         assertTrue(status.get(1).contains("generated room") && status.get(status.size() - 1).contains("2 in it"),
                 status.toString());

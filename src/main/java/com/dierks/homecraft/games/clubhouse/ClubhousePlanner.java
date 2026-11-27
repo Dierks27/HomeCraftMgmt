@@ -73,9 +73,14 @@ public final class ClubhousePlanner {
      * trophies at its far end), the grown Parlor laid out again round Mob Races' table ({@link #grownParlor}: a card
      * corner, the machines down the east wall, the slots corner, the sports corner and its lounge), and the secret room
      * tidied to match (its trophies at its far end, a runner to its big cup). The main room, the Arcade Room and Mob
-     * Races' table are block for block as they were, and a wing kept at its old size is still plan 12's room.
+     * Races' table are block for block as they were, and a wing kept at its old size is still plan 12's room. 16
+     * (0.60.0; the owner: "For the bar, can you make several TVs?"): three TVs in the grown Parlor's sports corner
+     * ({@link #sportsTvs}): one in the east wall beside the Sports Board, and two hung from the beams either end of the
+     * lounge, a screen on each side; and a video wall seven by four set into the east wall's bare north end, for the
+     * owner's Collins screen ({@link #videoWall(Box)}). Nothing else moved, and a wing kept at its old size is still
+     * plan 12's room.
      */
-    public static final int ALGO = 15;
+    public static final int ALGO = 16;
     /** The plan's "slot" name. */
     public static final String SLOT = "clubhouse";
 
@@ -2098,7 +2103,142 @@ public final class ClubhousePlanner {
         raceTable(b);
         lounge(b);
         sportsbook(b);
+        sportsTvs(b);
     }
+
+    /**
+     * Plan 16, the sports corner's TVs (0.60.0; the owner: "For the bar, can you make several TVs?"), each a black
+     * screen in a polished blackstone frame, with a live score on it ({@code SportsBar} draws the scores, for everyone:
+     * nothing needs the pack):
+     * <ul>
+     *   <li><b>the wall TV</b>: set into the east wall south of the Sports Board, a screen two wide and two high
+     *   ({@link #WALL_TV_Z0} to 61) in a frame whose foot is on the floor, one frame block between it and the board;</li>
+     *   <li><b>two hanging TVs</b>, one under each beam either end of the lounge ({@link #HANG_TV_Z}), a screen three
+     *   wide and two high ({@link #HANG_TV_X0} to 8) between two frame posts, a picture on both sides; their foot is two
+     *   blocks over the floor, so everyone walks under them, and the beams' lanterns are where they were.</li>
+     * </ul>
+     * The Sports Board, its counter and stools, the lounge's armchairs, every machine and Mob Races' table are where
+     * they were.
+     */
+    private static void sportsTvs(Builder b) {
+        int wall = ARCADE_X0 + 15;
+        for (int k = WALL_TV_Z0 - 1; k <= WALL_TV_Z0 + 2; k++) {
+            for (int j = UP_FLOOR + 1; j <= UP_FLOOR + 4; j++) {
+                boolean face = k >= WALL_TV_Z0 && k <= WALL_TV_Z0 + 1 && j >= UP_FLOOR + 2 && j <= UP_FLOOR + 3;
+                b.set(wall, j, k, face ? TV_SCREEN : TV_FRAME);
+            }
+        }
+        for (int k : HANG_TV_Z) {
+            for (int j = UP_TOP - 2; j <= UP_TOP - 1; j++) {
+                for (int i = HANG_TV_X0 - 1; i <= HANG_TV_X0 + 3; i++) {
+                    boolean post = i == HANG_TV_X0 - 1 || i == HANG_TV_X0 + 3;
+                    b.set(ARCADE_X0 + i, j, k, post ? TV_FRAME : TV_SCREEN);
+                }
+            }
+        }
+        videoWall(b);
+    }
+
+    /**
+     * Plan 16, the video wall (0.60.0; the owner plays real video with their own Collins plugin, which draws a video on
+     * a flat rectangle of blocks they mark): a black screen {@value #VIDEO_W} wide and {@value #VIDEO_H} high set flush
+     * into the east wall's north end ({@link #VIDEO_Z0} to 40, beside Mob Races' track, where the wall is bare), its
+     * foot on the floor, in a polished blackstone frame (a post either end, and a row over it under the roof). Nothing
+     * of HCM's stands or is drawn in front of it; it is only blocks, for the owner to make a Collins screen of
+     * ({@link #videoWall(Box)} gives its corners).
+     */
+    private static void videoWall(Builder b) {
+        int wall = ARCADE_X0 + 15;
+        for (int k = VIDEO_Z0 - 1; k <= VIDEO_Z0 + VIDEO_W; k++) {
+            for (int j = UP_FLOOR + 1; j <= UP_FLOOR + VIDEO_H + 1; j++) {
+                boolean screen = k >= VIDEO_Z0 && k < VIDEO_Z0 + VIDEO_W && j <= UP_FLOOR + VIDEO_H;
+                b.set(wall, j, k, screen ? TV_SCREEN : TV_FRAME);
+            }
+        }
+    }
+
+    /** The video wall's first row (z), and its size (blocks: along the wall, and up from the floor). */
+    static final int VIDEO_Z0 = MAIN_Z + 2;
+    public static final int VIDEO_W = 7;
+    public static final int VIDEO_H = 4;
+
+    /**
+     * The video wall's screen in {@code box} (plan 16): its two corner blocks, {x1, y1, z1, x2, y2, z2} (the lower
+     * north one, then the upper south one), the blocks to mark for a Collins screen; {@code null} in a wing kept at its
+     * old size. Its face looks west into the Parlor.
+     */
+    public static int[] videoWall(Box box) {
+        if (!grown(box)) {
+            return null;
+        }
+        int x = box.minX() + ARCADE_X0 + 15;
+        return new int[]{x, box.minY() + UP_FLOOR + 1, box.minZ() + VIDEO_Z0, x, box.minY() + UP_FLOOR + VIDEO_H,
+                box.minZ() + VIDEO_Z0 + VIDEO_W - 1};
+    }
+
+    /** Plan 16: a TV's frame and its screen. */
+    public static final String TV_FRAME = MAT;
+    public static final String TV_SCREEN = "minecraft:black_concrete";
+    /** The wall TV's screen's first row (z): two wide, in the east wall, its frame one row either side. */
+    static final int WALL_TV_Z0 = MAIN_Z + 28;
+    /** The hanging TVs' rows (under the beams either end of the lounge) and their screens' first column (x). */
+    static final int[] HANG_TV_Z = {MAIN_Z + 20, MAIN_Z + 28};
+    static final int HANG_TV_X0 = 6;
+    /** A hanging TV's screen is this many wide. */
+    static final int HANG_TV_W = 3;
+
+    /**
+     * A TV's screen (plan 16): the middle of its face (on the face itself), the way it faces (a yaw, as a machine's),
+     * and its size in blocks.
+     */
+    public record Tv(Place3 at, double width, double height) {
+    }
+
+    /**
+     * The sports corner's TV screens in {@code box} (plan 16): the wall TV's, then each hanging TV's south face and
+     * north face. None in a wing kept at its old size.
+     */
+    public static List<Tv> parlorTvs(Box box) {
+        if (!grown(box)) {
+            return List.of();
+        }
+        List<Tv> out = new ArrayList<>();
+        out.add(new Tv(new Place3(box.minX() + ARCADE_X0 + 15.0, box.minY() + UP_FLOOR + 3.0,
+                box.minZ() + WALL_TV_Z0 + 1.0, 90f), 2, 2));
+        for (int k : HANG_TV_Z) {
+            double x = box.minX() + ARCADE_X0 + HANG_TV_X0 + HANG_TV_W / 2.0;
+            double y = box.minY() + UP_TOP - 1.0;
+            out.add(new Tv(new Place3(x, y, box.minZ() + k + 1.0, 0f), HANG_TV_W, 2));
+            out.add(new Tv(new Place3(x, y, box.minZ() + k, 180f), HANG_TV_W, 2));
+        }
+        return out;
+    }
+
+    /**
+     * The score ticker (plan 16, drawn only: no block is its own): a long thin dark strip hung under the beams over the
+     * Sports Board's counter, its face to the room (west), from under one beam to under the next.
+     *
+     * @param at     the middle of its face, its bottom edge's height, the way it faces
+     * @param length how long it is (blocks, along z)
+     * @param height how tall
+     */
+    public record Ticker(Place3 at, double length, double height) {
+    }
+
+    /** The score ticker's face in {@code box} (plan 16), or {@code null} in a wing kept at its old size. */
+    public static Ticker parlorTicker(Box box) {
+        if (!grown(box)) {
+            return null;
+        }
+        double z0 = HANG_TV_Z[0] + 0.5;
+        double z1 = HANG_TV_Z[1] + 0.5;
+        return new Ticker(new Place3(box.minX() + ARCADE_X0 + BOOK_COUNTER_X + TICKER_IN, box.minY() + UP_TOP
+                - TICKER_H, box.minZ() + (z0 + z1) / 2, 90f), z1 - z0, TICKER_H);
+    }
+
+    /** The ticker's height, and how far into the counter's column its face is (from the column's west side). */
+    static final double TICKER_H = 0.45;
+    static final double TICKER_IN = 0.45;
 
     /**
      * A card table one block high (felt on the floor: no jumping), its north-west felt block at {@code t}, the cards in

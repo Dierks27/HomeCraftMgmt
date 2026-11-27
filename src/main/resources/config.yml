@@ -2990,6 +2990,14 @@ games:
     settle_days: 7
     # Kalshi's public API.
     api_base: "https://api.elections.kalshi.com/trade-api/v2"
+    # The live scores of the games under way (0.60.0): the sports corner's TVs and score ticker,
+    # and the final score on a settled pick in My picks. false = no scores are read.
+    live_scores: true
+    # Seconds between readings of the live scores (30-600). Only games that have started are read,
+    # and only while someone is on the server or a pick is waiting on the game.
+    score_seconds: 60
+    # The most games read each time (1-30); the rest are read next time.
+    score_games: 16
   # Texas Hold'em in the Clubhouse's Game Parlor (0.57.0): 2 to 6 players play each other at a
   # card table; the Arcade only deals and keeps nothing. Three tables: the friendly table plays
   # free play chips (NPC players join in), the tokens table is 1 chip = 1 token, and the money

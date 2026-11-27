@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.59.0-party-room`
+- **Version:** `0.60.0-sports-bar`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,27 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.60.0: the sports bar.** The owner: "For the bar, can you make several TVs? ... a ticker that shows the scores of
+the games. Also, any place we can check our bets after the fact to show how we did?" The Clubhouse rebuilds once (plan 16).
+
+- **Score TVs.** The Parlor's sports corner has three TVs: one in the wall beside the Sports Board and two hanging from
+  the beams at either end of the lounge, with a picture on both sides. Each shows a real game's live score (league,
+  clock, both teams and their points, the winner in green when it's over) and moves to the next game every 8 seconds.
+  With nothing on, they list the next games. Scores come from Kalshi, the Sports Board's own source, about once a
+  minute while someone is on; finished games stay up for about 12 hours.
+- **A score ticker** hangs over the counter and scrolls every score along.
+- **Your own score TVs.** Build a screen anywhere in the Clubhouse, look at the middle of it and type
+  `/hcm games clubhouse tv add` (add a number from 1 to 6 for how many blocks wide it is). It stays through restarts
+  and rebuilds; `tv remove` takes the nearest one down and `tv list` lists them.
+- **A video wall for Collins.** The Parlor's east wall by the race track has a big flat black wall, 7 wide and 4 high,
+  ready to become a Collins video screen (YouTube and Twitch, live too). In the games world, look at the bottom corner
+  block `6095 170 8578` and run `/collins pos1`, look at the top corner block `6095 173 8584` and run `/collins pos2`,
+  then `/collins create sportswall` and `/collins seturl sportswall <link>`. Stand east of the race track while you
+  do it. `/hcm games clubhouse tv list` prints the corners too. HCM never removes Collins' screen.
+- **My picks is your full history:** every pick, newest first, page by page, each finished one with the game's final
+  score. A summary says how many you won and lost, what went in and came back, and whether you're up or down overall
+  and this week, next to everyone's record together. The "your pick won" message now gives the final score.
 
 **0.59.0: the Kids' Party Room, a tidier Parlor, a ball pit that moves, and a face lift for every menu.**
 The owner: "The trophy room is massive now and very empty... The Parlor needs to be reworked... The ball pit in the

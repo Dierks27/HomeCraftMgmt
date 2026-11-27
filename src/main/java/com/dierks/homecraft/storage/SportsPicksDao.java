@@ -32,7 +32,7 @@ public final class SportsPicksDao {
     public static final String LAPSED = "LAPSED";
 
     private static final String COLUMNS = "id, player, ticker, side, stake, price, payout, placed_at, status, "
-            + "settled_at, paid, day, starts_at, league, game, pick";
+            + "settled_at, paid, day, starts_at, league, game, pick, final_score";
 
     /**
      * One pick.
@@ -53,14 +53,30 @@ public final class SportsPicksDao {
      * @param league    the league's config name
      * @param game      the game as the screen showed it ("San Antonio vs Sacramento")
      * @param pick      who was picked ("San Antonio")
+     * @param finalScore 0.60.0 (v43): the real game's final score ("Final: CGY 6  PIT 3"), or {@code null} for none
      */
     public record Pick(long id, UUID player, String ticker, String side, int stake, int price, long payout,
                        long placedAt, String status, long settledAt, long paid, long day, long startsAt,
-                       String league, String game, String pick) {
+                       String league, String game, String pick, String finalScore) {
+
+        /** A pick with no final score. */
+        public Pick(long id, UUID player, String ticker, String side, int stake, int price, long payout,
+                    long placedAt, String status, long settledAt, long paid, long day, long startsAt,
+                    String league, String game, String pick) {
+            this(id, player, ticker, side, stake, price, payout, placedAt, status, settledAt, paid, day, startsAt,
+                    league, game, pick, null);
+        }
 
         public boolean open() {
             return OPEN.equals(status);
         }
+    }
+
+    /**
+     * 0.60.0: how everyone's settled picks went, all together: {picks settled, won, lost, dollars put in, cents
+     * given back}.
+     */
+    public record Totals(long picks, long won, long lost, long in, long back) {
     }
 
     private final Database database;
@@ -109,18 +125,64 @@ public final class SportsPicksDao {
      * it. @return true only for the call that moved it (pay then); false when it was already settled
      */
     public boolean settle(long id, String status, long paid, long now) throws SQLException {
+        return settle(id, status, paid, now, null);
+    }
+
+    /** {@link #settle(long, String, long, long)}, keeping the game's final score with it ({@code null}: none known). */
+    public boolean settle(long id, String status, long paid, long now, String finalScore) throws SQLException {
         if (OPEN.equals(status)) {
             throw new IllegalArgumentException("a pick is settled to WON, LOST, VOID or LAPSED");
         }
         Connection c = database.connection();
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE sports_picks SET status = ?, paid = ?, settled_at = ? WHERE id = ? AND status = 'OPEN'")) {
+                    "UPDATE sports_picks SET status = ?, paid = ?, settled_at = ?, final_score = ? WHERE id = ?"
+                            + " AND status = 'OPEN'")) {
                 ps.setString(1, status);
                 ps.setLong(2, Math.max(0, paid));
                 ps.setLong(3, now);
-                ps.setLong(4, id);
+                ps.setString(4, finalScore);
+                ps.setLong(5, id);
                 return ps.executeUpdate() == 1;
+            }
+        }
+    }
+
+    /**
+     * 0.60.0: a game's final score came in: kept on every settled pick on its markets ({@code event}'s, whose tickers
+     * are {@code event-...}) that has none yet. @return how many picks took it
+     */
+    public int finalScore(String event, String finalScore) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE sports_picks SET final_score = ? WHERE final_score IS NULL AND status <> 'OPEN'"
+                            + " AND substr(ticker, 1, ?) = ?")) {
+                ps.setString(1, finalScore);
+                ps.setInt(2, event.length() + 1);
+                ps.setString(3, event + "-");
+                return ps.executeUpdate();
+            }
+        }
+    }
+
+    /** 0.60.0: every pick a player made, newest first: the open ones, then the settled ones, latest settled first. */
+    public List<Pick> history(UUID player) throws SQLException {
+        return mine(player, Integer.MAX_VALUE);
+    }
+
+    /** 0.60.0: everyone's settled picks together ({@link Totals}). */
+    public Totals everyone() throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT COUNT(*),"
+                    + " COALESCE(SUM(CASE WHEN status = 'WON' THEN 1 ELSE 0 END), 0),"
+                    + " COALESCE(SUM(CASE WHEN status = 'LOST' THEN 1 ELSE 0 END), 0),"
+                    + " COALESCE(SUM(stake), 0), COALESCE(SUM(paid), 0)"
+                    + " FROM sports_picks WHERE status <> 'OPEN'");
+                 ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? new Totals(rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getLong(4),
+                        rs.getLong(5)) : new Totals(0, 0, 0, 0, 0);
             }
         }
     }
@@ -215,7 +277,7 @@ public final class SportsPicksDao {
                                 rs.getInt("stake"), rs.getInt("price"), rs.getLong("payout"), rs.getLong("placed_at"),
                                 rs.getString("status"), rs.getLong("settled_at"), rs.getLong("paid"),
                                 rs.getLong("day"), rs.getLong("starts_at"), rs.getString("league"),
-                                rs.getString("game"), rs.getString("pick")));
+                                rs.getString("game"), rs.getString("pick"), rs.getString("final_score")));
                     }
                     return out;
                 }

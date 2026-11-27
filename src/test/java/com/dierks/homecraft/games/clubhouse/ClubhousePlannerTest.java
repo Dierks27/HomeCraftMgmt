@@ -43,12 +43,14 @@ class ClubhousePlannerTest {
     private static final Box BOX = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.SIZE_Z);
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
     /**
-     * Plan 15's room, pinned (plan 14's was a7cb5894496a: plan 15 made the grown wing's Trophy Room the Kids' Party Room,
+     * Plan 16's room, pinned (plan 15's was 8785b0ad0218: plan 16 put the sports corner's three TVs and the video wall
+     * in the grown Parlor, nothing else; SportsBarPlanTest puts those blocks back and gets plan 15's hash). Plan 15's
+     * (plan 14's was a7cb5894496a: plan 15 made the grown wing's Trophy Room the Kids' Party Room,
      * laid the grown Parlor out again round Mob Races' table and tidied the secret room; the main room and the Arcade
      * Room are block for block as they were); and plan 12's, which a wing kept at its old size (48 deep) still is, block
      * for block (unchanged since plan 13).
      */
-    static final String HASH = "8785b0ad0218";
+    static final String HASH = "0f814e2931bb";
     static final String OLD_HASH = "f483b6018e6f";
     /** The box at its old size: the main room and the wing's first 16 rows. */
     static final Box OLD = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.OLD_SIZE_Z);
@@ -103,7 +105,7 @@ class ClubhousePlannerTest {
                 "moving the box moves the same room");
         assertNotEquals(SITE.plan().hash(), ClubhousePlanner.plan(moved).plan().hash(), "a hash names the blocks where"
                 + " they are");
-        assertEquals(15, ClubhousePlanner.ALGO, "plan 15, the Kids' Party Room and the Parlor laid out again: every"
+        assertEquals(16, ClubhousePlanner.ALGO, "plan 16, the sports corner's TVs and the video wall: every"
                 + " server builds it once");
         assertEquals(OLD_HASH, ClubhousePlanner.plan(OLD).plan().hash(), "a wing kept at its old size is plan 12's"
                 + " room, block for block");
@@ -1108,8 +1110,8 @@ class ClubhousePlannerTest {
         }
         // displays only: no block is theirs (the plan is the planner's alone, pinned)
         assertEquals(HASH, SITE.plan().hash(), "no block is a slot machine's");
-        assertEquals(15, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's, 13 the grown wing,"
-                + " 14 the Hold'em table, 15 the Party Room and the Parlor laid out again; the slot machines changed no"
+        assertEquals(16, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's, 13 the grown wing,"
+                + " 14 the Hold'em table, 15 the Party Room and the Parlor laid out again, 16 the TVs; the slot machines changed no"
                 + " plan");
         assertEquals(6 + 4, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were,"
                 + " then plan 14's four");
@@ -1188,8 +1190,8 @@ class ClubhousePlannerTest {
         assertEquals("machine_deepmine", com.dierks.homecraft.pack.ClubModels.machineFor("deep_mine").name());
         assertEquals("machine_mobs", com.dierks.homecraft.pack.ClubModels.machineFor("mob_slots").name());
         assertEquals(HASH, SITE.plan().hash(), "no block is theirs: they are displays only");
-        assertEquals(15, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's, 13 the grown wing,"
-                + " 14 the Hold'em table, 15 the Party Room and the Parlor laid out again; the slot machines changed no"
+        assertEquals(16, ClubhousePlanner.ALGO, "plan 10 was Mob Races' table, 11 the Arcade Room's, 13 the grown wing,"
+                + " 14 the Hold'em table, 15 the Party Room and the Parlor laid out again, 16 the TVs; the slot machines changed no"
                 + " plan");
         assertEquals(6 + 4, ClubhousePlanner.parlorMachines(BOX).size(), "the first six machines are where they were,"
                 + " then plan 14's four");

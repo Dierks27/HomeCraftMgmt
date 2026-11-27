@@ -89,6 +89,21 @@ final class FloorPlans {
         for (ClubhousePlanner.Board b : ClubhousePlanner.parlorBoards(box)) {
             m.add(marker(box, b.at(), "SB", new Color(0xFF6D00), "Sports Board (on the wall, " + b.width() + " wide)"));
         }
+        for (ClubhousePlanner.Tv tv : ClubhousePlanner.parlorTvs(box)) { // plan 16
+            m.add(marker(box, tv.at(), "TV", new Color(0x2979FF), "score TV screen (" + (int) tv.width() + " wide;"
+                    + " the arrow is the way it faces)"));
+        }
+        ClubhousePlanner.Ticker tk = ClubhousePlanner.parlorTicker(box);
+        if (tk != null) {
+            m.add(marker(box, tk.at(), "ST", new Color(0xFFD740), "score ticker (hung under the beams, "
+                    + (int) tk.length() + " long)"));
+        }
+        int[] vw = ClubhousePlanner.videoWall(box);
+        if (vw != null) {
+            m.add(new Marker(vw[0] - box.minX() + 0.5, (vw[2] + vw[5] + 1) / 2.0 - box.minZ(), "VW", new Color(0xFF1744),
+                    "video wall for a Collins screen (" + ClubhousePlanner.VIDEO_W + " x " + ClubhousePlanner.VIDEO_H
+                    + ", in the east wall)", 90f));
+        }
         ClubhouseSite.Spot a = ClubhousePlanner.parlorArrival(box);
         m.add(new Marker(a.x() - box.minX(), a.z() - box.minZ(), "IN", Color.WHITE, "Parlor arrival", a.yaw()));
         ClubhouseSite.Spot s = ClubhousePlanner.secretArrival(box);

@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.clubhouse.ClubBoardText;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.clubhouse.Songs;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -55,7 +56,7 @@ public final class SongMenu extends GameMenu {
     public SongMenu(HomeCraftManagement plugin, Clubhouse clubhouse, Player viewer, Corner corner) {
         super(plugin, clubhouse, viewer, null);
         this.corner = corner;
-        init(54, Text.of(ClubBoardText.SONGS_TITLE));
+        init(54, Text.of(MenuStyle.title(ClubBoardText.SONGS_TITLE))); // 0.59.0: the house title style
     }
 
     @Override

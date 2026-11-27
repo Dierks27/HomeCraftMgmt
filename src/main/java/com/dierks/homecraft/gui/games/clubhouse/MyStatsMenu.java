@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.clubhouse.ClubBoardText;
 import com.dierks.homecraft.games.clubhouse.FameBoard;
 import com.dierks.homecraft.games.clubhouse.StatsCard;
 import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -45,7 +46,7 @@ public final class MyStatsMenu extends GameMenu {
     public MyStatsMenu(HomeCraftManagement plugin, Game clubhouse, Player viewer, StatsCard.Mine mine) {
         super(plugin, clubhouse, viewer, null);
         this.mine = mine;
-        init(54, Text.of(ClubBoardText.STATS_TITLE));
+        init(54, Text.of(MenuStyle.title(ClubBoardText.STATS_TITLE))); // 0.59.0: the wall card keeps its pink
     }
 
     @Override

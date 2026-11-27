@@ -172,6 +172,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private RaceShow kidShow;
     /** 0.50.0: the back bar's bottles, to drink. */
     private BarDrinks drinks;
+    /** 0.59.0: the Party Room's trampoline, Mini World and maze prize, and the Arcade Room's moving balls. */
+    private PartyRoom party;
+    private BallPit ballPit;
 
     /** 0.51.1: the blocks a click is a tap on (the jukebox, the bar's bottles), so no held kit item acts on it. */
     private final java.util.function.Predicate<org.bukkit.block.Block> tapBlock = b -> {
@@ -440,6 +443,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         sideRooms = new SideRooms(this);
         decor = new ClubDecor(this);
         drinks = new BarDrinks(this);
+        party = new PartyRoom(this);
+        ballPit = new BallPit(decor);
         com.dierks.homecraft.games.world.KitGuardListener.tapBlocks(tapBlock); // 0.51.1
         raceShow = new RaceShow(this);
         kidShow = new RaceShow(this, RaceShow.ARCADE);
@@ -618,6 +623,12 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (drinks != null) {
             drinks.stop();
         }
+        if (party != null) {
+            party.stop(); // 0.59.0: nobody stays small
+        }
+        if (ballPit != null) {
+            ballPit.clear();
+        }
         if (sideRooms != null) {
             sideRooms.remove();
         }
@@ -688,6 +699,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     public void onJoin(Player player) {
         if (watch != null) {
             watch.joined(player);
+        }
+        if (party != null) {
+            party.joined(player); // 0.59.0: never small after a crash or a restart (the size is never saved anyway)
         }
         ClubhouseRoom r = room;
         if (r != null && r.planChanged() && player.hasPermission("hcm.games.admin")
@@ -948,6 +962,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (drinks != null) {
             drinks.gone(id, p); // nobody leaves tiny
         }
+        if (party != null) {
+            party.gone(id, p); // 0.59.0: nor small from the Mini World
+        }
         arriving.remove(id);
         kits.remove(id);
         toldGuarded.remove(id);
@@ -981,6 +998,12 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (drinks != null) {
             drinks.tick(); // 0.50.0: the bar's drinks: the gulps, then something silly for a while
+        }
+        if (party != null) {
+            party.tick(r, visits::in, now()); // 0.59.0: the trampoline's bounce, the Mini World's size, the maze's prize
+        }
+        if (ballPit != null) {
+            ballPit.tick(r); // 0.59.0: the ball pit's balls scatter and jiggle
         }
         sweepArrivals();
         if (raceShow != null) {

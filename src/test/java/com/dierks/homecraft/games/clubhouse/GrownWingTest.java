@@ -150,8 +150,16 @@ class GrownWingTest {
                 ClubhousePlanner.OLD_CABINETS), "the nine cabinet places, in their game order");
         assertEquals(ClubhousePlanner.arcadeTable(OLD), ClubhousePlanner.arcadeTable(BOX), "the kid race's table");
         assertEquals(ClubhousePlanner.raceTable(OLD), ClubhousePlanner.raceTable(BOX), "Mob Races' table");
-        assertEquals(ClubhousePlanner.parlorMachines(OLD), ClubhousePlanner.parlorMachines(BOX).subList(0, 6),
-                "the Parlor's machines (plan 14 adds four after them)");
+        // the Parlor's machines: plan 14 added four after the first six; plan 15 laid the grown Parlor out again, so the
+        // same games (by their index) stand at new places there, and a Parlor at its old size keeps its own
+        assertEquals(6, ClubhousePlanner.parlorMachines(OLD).size());
+        assertEquals(ClubhousePlanner.PARLOR_GAMES.size(), ClubhousePlanner.parlorMachines(BOX).size());
+        for (int n = 0; n < ClubhousePlanner.PARLOR_WALL.length; n++) {
+            assertEquals(OLD.minX() + ClubhousePlanner.PARLOR_WALL[n][0] + 0.5,
+                    ClubhousePlanner.parlorMachines(OLD).get(n).x(), 1e-9, "the old size's wall machine " + n);
+            assertEquals(OLD.minZ() + ClubhousePlanner.PARLOR_WALL[n][1] + 0.5,
+                    ClubhousePlanner.parlorMachines(OLD).get(n).z(), 1e-9);
+        }
         assertEquals(ClubhousePlanner.parlorArrival(OLD), ClubhousePlanner.parlorArrival(BOX));
         assertEquals(ClubhousePlanner.secretArrival(OLD), ClubhousePlanner.secretArrival(BOX));
         assertEquals(ClubhousePlanner.door(OLD, true), ClubhousePlanner.door(BOX, true), "the archways' signs");
@@ -164,10 +172,14 @@ class GrownWingTest {
         assertEquals(ClubhousePlanner.parlorTicket(OLD).z() + 16, ClubhousePlanner.parlorTicket(BOX).z(), 1e-9);
         List<ClubhousePlanner.Pedestal> ps = ClubhousePlanner.pedestals(BOX);
         List<ClubhousePlanner.Pedestal> oldPs = ClubhousePlanner.pedestals(OLD);
+        assertEquals(oldPs.size(), ps.size(), "the podium's three and the eight records, in the same order");
         for (int n = 0; n < ps.size(); n++) {
-            double dz = n < 3 ? 16 : 0;
+            // plan 13 moved the podium back with the wall; plan 15 moved the records to the Party Room's trophy end
+            double dz = n < 3 ? 16 : ClubhousePlanner.PARTY_RECORD_Z[(n - 3) % 4] - ClubhousePlanner.RECORD_Z[(n - 3) % 4];
             assertEquals(oldPs.get(n).trophy().z() + dz, ps.get(n).trophy().z(), 1e-9, "the podium at the back, the"
-                    + " records on the side walls where they were: " + n);
+                    + " records on the same side walls, at the trophy end: " + n);
+            assertEquals(oldPs.get(n).trophy().x(), ps.get(n).trophy().x(), 1e-9, "the same wall: " + n);
+            assertEquals(oldPs.get(n).trophy().yaw(), ps.get(n).trophy().yaw(), "facing the same way: " + n);
         }
         // the main room, and the Arcade Room's old north part (its cabinets, table and rug), block for block
         Map<Long, String> old = RegularSpots.blocks(OLD_SITE.plan());
@@ -427,51 +439,117 @@ class GrownWingTest {
 
     // ---- the Game Parlor ------------------------------------------------------------------------------------------
 
+    /**
+     * Plan 15 (the owner: "The Parlor needs to be reworked as well so the tables and casino cabinets fit a bit better"):
+     * like with like. A card corner of four tables in a two by two grid (Twenty-One and Higher or Lower, then Hold'em and
+     * a spare table set for the next card game), an aisle two wide down its middle and three rows between its rows; the
+     * Wheel, Coin Flip, Bingo Night and Video Poker down the east wall beside it, three apart; both Ore Slots and Creeper
+     * Fuse in the slots corner by the back row; the lounge facing the Sports Board. Every machine's index is what it was.
+     */
     @Test
-    void theParlorHasALoungeAndRoomForTwoMoreCardTables() {
+    void theParlorHasACardCornerAMachineRowASlotsCornerAndASportsCorner() {
         WalkGrid.Cell up = WAYS.upTo();
         assertNotNull(up);
         int x0 = BOX.minX() + ClubhousePlanner.ARCADE_X0;
+        int z0 = BOX.minZ();
+        // the lounge: armchairs facing east across to the board, a side table between them, floor lamps
         for (int k : ClubhousePlanner.LOUNGE_CHAIR_Z) {
-            String chair = at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, BOX.minZ() + k);
+            String chair = at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, z0 + k);
             assertEquals(ClubhousePlanner.chair("west"), chair, "an armchair facing east, across to the board");
-            assertTrue(at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, BOX.minZ() + k - 1).contains("_trapdoor"));
-            assertTrue(at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, BOX.minZ() + k + 1).contains("_trapdoor"));
+            assertTrue(at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, z0 + k - 1).contains("_trapdoor"));
+            assertTrue(at(x0 + ClubhousePlanner.LOUNGE_CHAIR_X, UP_FEET, z0 + k + 1).contains("_trapdoor"));
         }
         for (int[] t : ClubhousePlanner.LOUNGE_TABLES) {
-            assertTrue(at(x0 + t[0], UP_FEET, BOX.minZ() + t[1]).contains("_fence"), "a side table's post");
-            assertEquals(ClubhousePlanner.SIDE_TABLE_TOP, at(x0 + t[0], UP_FEET + 1, BOX.minZ() + t[1]), "its top");
+            assertTrue(at(x0 + t[0], UP_FEET, z0 + t[1]).contains("_fence"), "a side table's post");
+            assertEquals(ClubhousePlanner.SIDE_TABLE_TOP, at(x0 + t[0], UP_FEET + 1, z0 + t[1]), "its top");
         }
         for (int[] l : ClubhousePlanner.LOUNGE_LAMPS) {
-            assertEquals(ClubhousePlanner.STANDING, at(x0 + l[0], UP_FEET + 1, BOX.minZ() + l[1]), "a floor lamp");
+            assertEquals(ClubhousePlanner.STANDING, at(x0 + l[0], UP_FEET + 1, z0 + l[1]), "a floor lamp");
         }
-        // plan 14: Texas Hold'em's table on the first spare table's place: felt, four chairs, its cards on top
-        int[] h = ClubhousePlanner.HOLDEM_TABLE;
-        assertArrayEquals(ClubhousePlanner.PARLOR_SPARE_TABLE[0], h, "the first spare table's place");
-        for (int k = h[1]; k < h[1] + ClubhousePlanner.PARLOR_TABLE_D; k++) {
-            for (int i = h[0]; i < h[0] + ClubhousePlanner.PARLOR_TABLE_W; i++) {
-                assertEquals(ClubhousePlanner.FELT_BLOCK, at(x0 + i, UP_FEET, BOX.minZ() + k), "Hold'em's felt");
-            }
-        }
-        List<ClubhousePlanner.Place3> machines = ClubhousePlanner.parlorMachines(BOX);
-        assertEquals("holdem", ClubhousePlanner.PARLOR_GAMES.get(machines.size() - 1), "its cards are the last machine");
-        // room for one more card table: its felt's and its chairs' places plain carpet, lit, walked to
-        for (int[] t : java.util.List.of(ClubhousePlanner.PARLOR_SPARE_TABLE[1])) {
-            for (int k = t[1]; k < t[1] + ClubhousePlanner.PARLOR_TABLE_D; k++) {
-                for (int i = t[0] - 1; i <= t[0] + ClubhousePlanner.PARLOR_TABLE_W; i++) {
-                    int x = x0 + i;
-                    int z = BOX.minZ() + k;
-                    assertEquals(ClubhousePlanner.PARLOR_CARPET, at(x, UP_FEET, z), "plain carpet at " + where(x, 0, z));
-                    standsAndIsReached(x, UP_FEET, z, up, "a spare table's place");
+        // the card corner: four tables, felt and four chairs each, in two columns and two rows
+        int[][] tables = {ClubhousePlanner.GROWN_PARLOR_TABLE[0], ClubhousePlanner.GROWN_PARLOR_TABLE[1],
+                ClubhousePlanner.HOLDEM_TABLE, ClubhousePlanner.SPARE_TABLE};
+        int w = ClubhousePlanner.PARLOR_TABLE_W;
+        int d = ClubhousePlanner.PARLOR_TABLE_D;
+        List<ClubhousePlanner.Seat> seats = ClubhousePlanner.parlorSeats(BOX);
+        for (int[] t : tables) {
+            for (int k = t[1]; k < t[1] + d; k++) {
+                for (int i = t[0]; i < t[0] + w; i++) {
+                    assertEquals(ClubhousePlanner.FELT_BLOCK, at(x0 + i, UP_FEET, z0 + k), "felt at " + i + "," + k);
+                }
+                for (int i : new int[]{t[0] - 1, t[0] + w}) {
+                    boolean corner = k == t[1] || k == t[1] + d - 1;
+                    String here = at(x0 + i, UP_FEET, z0 + k);
+                    assertEquals(corner, here != null && here.contains("_stairs"), "a chair at each corner: " + i + ","
+                            + k);
+                    if (corner) {
+                        int i0 = i;
+                        int k0 = k;
+                        ClubhousePlanner.Seat s = seats.stream().filter(c -> Math.floor(c.x()) == x0 + i0
+                                && Math.floor(c.z()) == z0 + k0).findFirst().orElseThrow();
+                        assertNotNull(GRID.path(up, GRID.at(s.x(), s.y(), s.z()), Set.of()), "sat on: " + s);
+                    }
                 }
             }
-            for (ClubhousePlanner.Place3 m : machines) {
-                assertTrue(Math.abs(m.z() - (BOX.minZ() + t[1])) >= 3 || Math.abs(m.x() - (x0 + t[0])) >= 3,
-                        "clear of the tables there are: " + m);
+        }
+        assertEquals(tables[0][0], tables[2][0], "Hold'em under Twenty-One");
+        assertEquals(tables[1][0], tables[3][0], "the spare table under Higher or Lower");
+        assertEquals(tables[0][1], tables[1][1], "a row of two");
+        assertEquals(tables[2][1], tables[3][1]);
+        assertTrue(tables[2][1] - (tables[0][1] + d) >= 3, "three rows between the rows of tables");
+        for (int k = tables[0][1]; k < tables[2][1] + d; k++) { // the aisle down the middle, two wide
+            for (int i = tables[0][0] + w + 1; i < tables[1][0] - 1; i++) {
+                standsAndIsReached(x0 + i, UP_FEET, z0 + k, up, "the card corner's middle aisle");
+            }
+            assertTrue(tables[1][0] - 1 - (tables[0][0] + w + 1) >= 2, "two wide");
+        }
+        int trackEnd = ClubhousePlanner.TRACK_Z0 + RaceTrack.DEPTH; // the way round Mob Races' table ends here
+        assertTrue(tables[0][1] - trackEnd >= 2, "a clear row more between the way round the track and the tables");
+        for (int i = 2; i <= 13; i++) {
+            for (int k = trackEnd + 1; k < tables[0][1]; k++) {
+                assertEquals(ClubhousePlanner.PARLOR_CARPET, at(x0 + i, UP_FEET, z0 + k), "breathing room: " + i + "," + k);
             }
         }
-        assertEquals(ClubhousePlanner.PARLOR_TABLE[0][0], ClubhousePlanner.PARLOR_SPARE_TABLE[0][0], "in line with them");
-        assertEquals(ClubhousePlanner.PARLOR_TABLE[1][0], ClubhousePlanner.PARLOR_SPARE_TABLE[1][0]);
+        // the machines: their games in the order they always were; each in its group, a lane in front of it
+        List<ClubhousePlanner.Place3> machines = ClubhousePlanner.parlorMachines(BOX);
+        assertEquals("holdem", ClubhousePlanner.PARLOR_GAMES.get(machines.size() - 1), "its cards are the last machine");
+        List<String> eastRow = List.of("wheel", "coin_flip", "bingo", "video_poker");
+        List<String> slots = List.of("ore_slots", "creeper_fuse");
+        double lastEast = -1;
+        for (int n = 0; n < machines.size(); n++) {
+            String g = ClubhousePlanner.PARLOR_GAMES.get(n);
+            ClubhousePlanner.Place3 m = machines.get(n);
+            if (eastRow.contains(g)) {
+                assertEquals(x0 + 14.5, m.x(), 1e-9, g + " on the east wall");
+                assertEquals(90f, m.yaw(), g + " facing into the room");
+                assertTrue(m.z() >= z0 + tables[0][1] - 1 && m.z() <= z0 + tables[2][1] + d, g + " beside the card corner");
+                assertTrue(lastEast < 0 || m.z() - lastEast >= 3, g + " three on from the last");
+                lastEast = m.z();
+            } else if (slots.contains(g)) {
+                assertEquals(x0 + 1.5, m.x(), 1e-9, g + " on the west wall");
+                assertTrue(m.z() > z0 + tables[2][1] + d, g + " south of the card corner, in the slots corner");
+                assertTrue(z0 + ClubhousePlanner.SIDE_Z1 - m.z() <= 10, g + " near the back row's slot machines");
+            } else {
+                assertTrue(Math.floor(m.y()) == UP_FEET + 1, g + " is a card table's cards");
+            }
+            if (!(eastRow.contains(g) || slots.contains(g))) {
+                continue;
+            }
+            double rad = Math.toRadians(m.yaw());
+            int fx = (int) Math.floor(m.x() - Math.sin(rad));
+            int fz = (int) Math.floor(m.z() + Math.cos(rad));
+            for (int step = 0; step < 2; step++) { // a lane two deep in front of it, nobody's chair in it
+                int lx = fx - (int) Math.round(Math.sin(rad)) * step;
+                standsAndIsReached(lx, UP_FEET, fz, up, "the lane in front of " + g);
+            }
+            for (int[] t : tables) {
+                assertTrue(Math.abs(m.z() - (z0 + t[1] + 1)) >= 3 || Math.abs(m.x() - (x0 + t[0] + 0.5)) >= 5,
+                        g + " clear of the card table at " + t[0] + "," + t[1]);
+            }
+        }
+        assertEquals(6, ClubhousePlanner.parlorMachines(OLD).size(), "a Parlor at its old size: the first six");
+        assertEquals(ClubhousePlanner.PARLOR_WALL.length, ClubhousePlanner.GROWN_PARLOR_WALL.length,
+                "the first four are still the wall machines the regulars stand at");
     }
 
     @Test

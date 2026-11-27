@@ -119,8 +119,9 @@ class RaceTableTest {
             }
         }
         assertEquals(24, cells.size());
-        assertEquals(14, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's; plan 13 grew the"
-                + " wing round it; plan 14 the Parlor's Hold'em table");
+        assertEquals(15, ClubhousePlanner.ALGO, "plan 10 built this table; plan 11 the Arcade Room's; plan 13 grew the"
+                + " wing round it; plan 14 the Parlor's Hold'em table; plan 15 laid the Parlor out again round it, the"
+                + " table itself block for block as it was (the owner: \"the race track is the big hit still\")");
     }
 
     @Test
@@ -173,7 +174,8 @@ class RaceTableTest {
             assertFalse(onTable(mx, mz) || onTheWayRound(mx, mz), "a machine is clear of the table and the way round"
                     + " it: " + m);
         }
-        for (int[] w : ClubhousePlanner.PARLOR_WALL) { // the wall machines: a player stands on the cell in front
+        // plan 15: the grown Parlor's places (a Parlor at its old size keeps PARLOR_WALL and PARLOR_TABLE)
+        for (int[] w : ClubhousePlanner.GROWN_PARLOR_WALL) { // the wall machines: a player stands on the cell in front
             int front = BOX.minX() + w[0] + (w[2] < 0 ? 1 : -1);
             int z = BOX.minZ() + w[1];
             assertFalse(onTable(front, z) || onTheWayRound(front, z), "a wall machine's standing place is its own: "
@@ -189,8 +191,10 @@ class RaceTableTest {
         int wide = ClubhousePlanner.PARLOR_TABLE_W;
         int deep = ClubhousePlanner.PARLOR_TABLE_D;
         assertEquals(6, wide * deep, "the card tables are 2 x 3 (the owner: make the 4 person tables a bit larger)");
-        for (int[] t : ClubhousePlanner.PARLOR_TABLE) {
-            assertEquals(Z1 + 3, BOX.minZ() + t[1], "two clear rows between the track and the card tables");
+        for (int[] t : new int[][]{ClubhousePlanner.GROWN_PARLOR_TABLE[0], ClubhousePlanner.GROWN_PARLOR_TABLE[1],
+                ClubhousePlanner.HOLDEM_TABLE, ClubhousePlanner.SPARE_TABLE}) {
+            assertTrue(BOX.minZ() + t[1] >= Z1 + 4, "three clear rows between the track and the card tables (plan 15;"
+                    + " two before): the way round it and a row more");
             int chairs = 0;
             for (int dz = 0; dz < deep; dz++) {
                 int z = BOX.minZ() + t[1] + dz;
@@ -211,10 +215,10 @@ class RaceTableTest {
             assertEquals(4, chairs, "four seats, as the Twenty-One table has");
         }
         // the floor is red carpet, so the green tables stand out (the owner)
-        assertEquals(ClubhousePlanner.PARLOR_CARPET, b.get(key(BOX.minX() + 7, FEET, BOX.minZ() + 44)));
+        assertEquals(ClubhousePlanner.PARLOR_CARPET, b.get(key(BOX.minX() + 6, FEET, BOX.minZ() + 46)));
         assertFalse(ClubhousePlanner.PARLOR_CARPET.contains("green"));
         // two clear columns between each end of the table and the machines' mats on the side walls
-        for (int[] w : ClubhousePlanner.PARLOR_WALL) {
+        for (int[] w : ClubhousePlanner.GROWN_PARLOR_WALL) {
             int mx = BOX.minX() + w[0];
             assertTrue(Math.min(Math.abs(mx - X0), Math.abs(mx - X1)) == 3, "wall machine at " + w[0]);
         }

@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.58.0-card-faces`
+- **Version:** `0.59.0-party-room`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -251,6 +251,28 @@ for more than an evening, set `enabled: false` on `firework_grand` and `firework
 launcher** (0.38.0 places it as a plain dropper, and the launcher is gone for good) **and don't use a
 Grand or Mega Firework Show** (one used then is spent as a three-second show). Nothing else is lost:
 a launcher in the bag and an unused show are as they were after the upgrade.
+
+**0.59.0: the Kids' Party Room, a tidier Parlor, a ball pit that moves, and a face lift for every menu.**
+The owner: "The trophy room is massive now and very empty... The Parlor needs to be reworked... The ball pit in the
+arcade would be amazing if the balls moved!! ... the menus for the Games menu when you click on the console are a bit
+messy again." The Clubhouse rebuilds once (plan 15); the main room, the Arcade Room and Mob Races' table are unchanged.
+
+- **The Kids' Party Room** (where the Trophy Room was). A light-up dance floor kept open for party games, balloons and
+  bunting; a slime **trampoline** that bounces you as you land (crouch to stop; nobody in the Clubhouse takes fall
+  damage); and the **Mini World**: walk through the little purple doorway and you're a third of your size, walk out and
+  you're yourself again (also on leaving, quitting or a restart: the size is never saved). Inside are a hedge maze with
+  a cake and a star at its middle (it chimes and sparkles when you get there) and a two-floor doll's house. Every
+  trophy is now at the room's far end: the weekly podium, the record cups along both side walls, and the secret
+  room's door. The secret room's cups sit in its far half with a red runner up to the big gold cup.
+- **The Game Parlor**, laid out again around Mob Races' table: a card corner (Twenty-One, Higher or Lower, Texas
+  Hold'em, a spare table), the machines down the east wall with a wide lane in front, a slots corner by the back row,
+  and the Sports Board with its counter and lounge.
+- **The ball pit's balls scatter** when someone jumps in, then roll back.
+- **Every menu** follows one house style: dark titles that read on the title bar; page arrows in the bottom corners,
+  Back or Close in the middle with How to play beside it; a barrier only ever means "way out"; long descriptions wrap
+  neatly. The Games screen shows All as one row per kind of game, Picture Bingo and the kid race have their own
+  **Little ones** tab, and every game has its own picture. The Arcade hub packs its buttons side by side and shows a
+  door only when there's something behind it.
 
 **0.58.0: playing cards you can read at a glance.** The owner: "Can we make it so Jacks show a J, Queens are Q and such
 on the cards? Any way we can make a bit of art for the cards to show what the cards are a bit better than a paper?"

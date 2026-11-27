@@ -46,7 +46,8 @@ class RegularWalkTest {
 
     @Test
     void theGridIsBuiltOncePerPlanAndQuickly() {
-        assertSame(GRID, WalkGrid.of(SITE.plan()), "cached by the plan's hash");
+        assertSame(GRID, WalkGrid.of(SITE.plan(), ClubhousePlanner.keepOut(BOX)), "cached by the plan's hash (and"
+                + " what is kept out of it: 0.59.0, the Party Room's Mini World)");
         assertTrue(GRID.size() > 1000, "a floor's worth of cells: " + GRID.size());
         long ms = GRID.buildNanos() / 1_000_000;
         System.out.println("walk grid: " + GRID.size() + " cells in " + ms + " ms");

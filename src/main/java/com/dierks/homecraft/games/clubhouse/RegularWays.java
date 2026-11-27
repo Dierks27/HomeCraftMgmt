@@ -32,10 +32,14 @@ final class RegularWays {
         this.upTo = way ? upTo : null;
     }
 
-    /** The ways of {@code site} with {@code rooms} built (the grid is the plan's, built once per plan). */
+    /**
+     * The ways of {@code site} with {@code rooms} built (the grid is the plan's, built once per plan). 0.59.0: never
+     * into the Party Room's Mini World ({@link ClubhousePlanner#keepOut}): it is no way to anywhere, a regular has no
+     * place in it, and a walk round a player on the garden path never goes through its maze.
+     */
     static RegularWays of(ClubhouseSite site, ClubhousePlanner.Rooms rooms) {
-        WalkGrid g = WalkGrid.of(site.plan());
         Box box = site.box();
+        WalkGrid g = WalkGrid.of(site.plan(), rooms.trophy() ? ClubhousePlanner.keepOut(box) : List.of());
         WalkGrid.Cell up = null;
         WalkGrid.Cell from = null;
         if (rooms.parlor()) {

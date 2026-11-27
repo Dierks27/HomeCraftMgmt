@@ -243,23 +243,25 @@ class LiveScoresTest {
         List<ScoreScreens.Item> items = List.of(item("NBA", "MIL", "TOR", 98, 101, "inprogress"),
                 item("NHL", "CGY", "PIT", 6, 3, "closed"), item("NBA", "MIA", "NYK", 50, 40, "inprogress"));
         List<ScoreScreens.Line> first = ScoreScreens.tv(items, List.of(), 0, 0);
-        assertEquals("NBA · Q4 2:31", first.get(0).text());
+        assertEquals("NBA", first.get(0).text());
         assertEquals(ScoreScreens.Kind.HEAD, first.get(0).kind());
-        assertEquals("MIL  98", first.get(1).text());
-        assertEquals("TOR  101", first.get(2).text());
-        assertEquals(ScoreScreens.Kind.TEAM, first.get(2).kind(), "no winner while it's being played");
-        assertEquals("1 of 3", first.get(3).text());
+        assertEquals("Q4 2:31", first.get(1).text(), "the clock on a line of its own: it fits a small screen");
+        assertEquals("MIL  98", first.get(2).text());
+        assertEquals("TOR  101", first.get(3).text());
+        assertEquals(ScoreScreens.Kind.TEAM, first.get(3).kind(), "no winner while it's being played");
+        assertEquals("1 of 3", first.get(4).text());
         assertEquals(first, ScoreScreens.tv(items, List.of(), ScoreScreens.TV_SECONDS - 1, 0), "still the same game");
         List<ScoreScreens.Line> next = ScoreScreens.tv(items, List.of(), ScoreScreens.TV_SECONDS, 0);
-        assertEquals("NHL · Final", next.get(0).text());
-        assertEquals(ScoreScreens.Kind.LEAD, next.get(1).kind(), "Calgary won: green");
-        assertEquals(ScoreScreens.Kind.TEAM, next.get(2).kind());
-        assertEquals("MIL  98", ScoreScreens.tv(items, List.of(), 3 * ScoreScreens.TV_SECONDS, 0).get(1).text(),
+        assertEquals("NHL", next.get(0).text());
+        assertEquals("Final", next.get(1).text());
+        assertEquals(ScoreScreens.Kind.LEAD, next.get(2).kind(), "Calgary won: green");
+        assertEquals(ScoreScreens.Kind.TEAM, next.get(3).kind());
+        assertEquals("MIL  98", ScoreScreens.tv(items, List.of(), 3 * ScoreScreens.TV_SECONDS, 0).get(2).text(),
                 "round and round");
-        assertEquals("CGY  6", ScoreScreens.tv(items, List.of(), 0, 1).get(1).text(),
+        assertEquals("CGY  6", ScoreScreens.tv(items, List.of(), 0, 1).get(2).text(),
                 "the next TV starts one game on");
-        assertEquals("MIA  50", ScoreScreens.tv(items, List.of(), 0, 2).get(1).text());
-        assertEquals(3, ScoreScreens.tv(items.subList(0, 1), List.of(), 0, 0).size(), "one game: no \"1 of 1\"");
+        assertEquals("MIA  50", ScoreScreens.tv(items, List.of(), 0, 2).get(2).text());
+        assertEquals(4, ScoreScreens.tv(items.subList(0, 1), List.of(), 0, 0).size(), "one game: no \"1 of 1\"");
     }
 
     @Test
@@ -270,10 +272,10 @@ class LiveScoresTest {
                 new ScoreScreens.Upcoming("NHL", "SEA", "EDM", "7:00 PM"));
         List<ScoreScreens.Line> page = ScoreScreens.tv(List.of(), next, 0, 0);
         assertEquals("Next up", page.get(0).text());
-        assertEquals("NBA ATL at BOS", page.get(1).text());
-        assertEquals("7:00 PM", page.get(2).text());
+        assertEquals("ATL at BOS", page.get(1).text());
+        assertEquals("NBA · 7:00 PM", page.get(2).text());
         assertEquals(1 + 2 * ScoreScreens.TV_NEXT, page.size());
-        assertEquals("NHL PIT at BUF", ScoreScreens.tv(List.of(), next, ScoreScreens.TV_SECONDS, 0).get(1).text(),
+        assertEquals("PIT at BUF", ScoreScreens.tv(List.of(), next, ScoreScreens.TV_SECONDS, 0).get(1).text(),
                 "then the next page");
         assertEquals(List.of(new ScoreScreens.Line(ScoreScreens.NONE, ScoreScreens.Kind.HEAD)),
                 ScoreScreens.tv(List.of(), List.of(), 5, 0));
@@ -297,5 +299,7 @@ class LiveScoresTest {
         assertEquals("short", ScoreScreens.window("short", 7, 10), "a line that fits stands still");
         assertFalse(ScoreScreens.scrolls("short", 10));
         assertEquals(4, ScoreScreens.TICKER_TICKS, "the ticker moves every 4 ticks: 5 times a second, no more");
+        assertEquals("College BB", Sportsbook.screenTab(SportsbookSettings.league("ncaamb")), "short on a small screen");
+        assertEquals("NBA", Sportsbook.screenTab(SportsbookSettings.league("nba")));
     }
 }

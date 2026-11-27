@@ -9,7 +9,7 @@ import java.util.List;
  * scores of the games."
  *
  * <ul>
- *   <li><b>A TV</b> shows one game at a time, big: its league and clock, then each side's short name and points. It
+ *   <li><b>A TV</b> shows one game at a time, big: its league, its clock, then each side's short name and points. It
  *   turns to the next game every {@value #TV_SECONDS} seconds; each TV starts at a different game ({@code offset}), so
  *   the screens side by side show different games. With no game being played or just over, it lists the next games
  *   to start, or says there are none.</li>
@@ -77,7 +77,10 @@ public final class ScoreScreens {
             Item it = items.get(i);
             Scores.Live l = it.live();
             String when = l == null ? "" : l.when();
-            out.add(new Line(it.league() + (when.isEmpty() ? "" : " · " + when), Kind.HEAD));
+            out.add(new Line(it.league(), Kind.HEAD));
+            if (!when.isEmpty()) {
+                out.add(new Line(when, Kind.HEAD));
+            }
             boolean done = l != null && l.phase() == Scores.Phase.FINAL;
             int a = l == null ? 0 : l.away();
             int h = l == null ? 0 : l.home();
@@ -94,8 +97,8 @@ public final class ScoreScreens {
             out.add(new Line("Next up", Kind.HEAD));
             for (int k = p * TV_NEXT; k < next.size() && k < (p + 1) * TV_NEXT; k++) {
                 Upcoming u = next.get(k);
-                out.add(new Line(u.league() + " " + u.away() + " at " + u.home(), Kind.TEAM));
-                out.add(new Line(u.starts(), Kind.NOTE));
+                out.add(new Line(u.away() + " at " + u.home(), Kind.TEAM));
+                out.add(new Line(u.league() + " · " + u.starts(), Kind.NOTE));
             }
             return out;
         }

@@ -226,8 +226,10 @@ class SportsBarPlanTest {
             assertTrue(Set.of("minecraft:air", "minecraft:light").contains(id(b.get(key(i, ClubhousePlanner.UP_TOP
                     - 1, k)))), "the ticker hangs in clear air at z " + k);
         }
-        assertTrue(SportsBar.textHigh(4, (float) (wall.width() * SportsBar.TV_SCALE_PER_BLOCK)) < wall.height(),
-                "a game's four lines fit the wall TV's screen");
+        assertTrue(SportsBar.textHigh(5, (float) (wall.width() * SportsBar.TV_SCALE_PER_BLOCK)) < wall.height(),
+                "a game's five lines fit the wall TV's screen");
+        assertTrue(SportsBar.textHigh(5, (float) (3 * SportsBar.TV_SCALE_PER_BLOCK)) < 2.0,
+                "and a hanging TV's");
         assertTrue(SportsBar.textHigh(1 + 2 * com.dierks.homecraft.games.chance.sportsbook.ScoreScreens.TV_NEXT,
                 (float) (3 * SportsBar.TV_SCALE_PER_BLOCK)) < 2.0, "and the next games' lines a hanging TV's");
         assertTrue(SportsBar.LINE_HIGH * SportsBar.TICKER_SCALE < t.height(), "the ticker's line fits its strip");

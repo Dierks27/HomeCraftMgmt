@@ -872,12 +872,23 @@ public final class Sportsbook implements Game {
         return out;
     }
 
+    /** Each league's name on a TV or the ticker: its tab, a college league's shortened to fit a small screen. */
     private Map<String, String> tabs() {
         Map<String, String> tabs = new LinkedHashMap<>();
         for (SportsbookSettings.League l : settings().boardLeagues()) {
-            tabs.put(l.key(), l.tab());
+            tabs.put(l.key(), screenTab(l));
         }
         return tabs;
+    }
+
+    /** A league's name on a TV (pure): "College FB", "College BB", "Women's BB", else its tab. */
+    public static String screenTab(SportsbookSettings.League l) {
+        return switch (l.key()) {
+            case "ncaaf" -> "College FB";
+            case "ncaamb" -> "College BB";
+            case "ncaawb" -> "Women's BB";
+            default -> l.tab();
+        };
     }
 
     // ---- the wall board (the Clubhouse draws it) -------------------------------------------------------------

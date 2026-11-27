@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniIds;
 import com.dierks.homecraft.mini.Pack;
@@ -27,7 +28,7 @@ public final class PacksAdminMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&5Card Packs"));
+        init(54, Text.of(MenuStyle.title("Card Packs")));
     }
 
     @Override

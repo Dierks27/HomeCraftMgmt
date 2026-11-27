@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.lava.FloorIsLava;
 import com.dierks.homecraft.games.lava.LavaText;
 import com.dierks.homecraft.games.lava.rules.LavaMode;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -37,7 +38,7 @@ public final class LavaKidMenu extends GameMenu {
     public LavaKidMenu(HomeCraftManagement plugin, FloorIsLava lava, Player viewer) {
         super(plugin, lava, viewer, null);
         this.lava = lava;
-        init(27, Text.of("&6" + LavaText.NAME));
+        init(27, Text.of(MenuStyle.title(LavaText.NAME)));
         hold(KID_SETTLE_MS); // the tap on the cabinet never lands on a picture
     }
 

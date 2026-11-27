@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase;
 import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
 import com.dierks.homecraft.games.kidrace.KidRaces;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -48,7 +49,7 @@ public final class KidRacesMenu extends GameMenu {
     public KidRacesMenu(HomeCraftManagement plugin, KidRaces game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.races = game;
-        init(54, Text.of("&2Mob Races"));
+        init(54, Text.of(MenuStyle.title("Mob Races")));
     }
 
     /** This screen as the kid screen after a race {@code winner} won ({@code mine}: it was the viewer's pick). */

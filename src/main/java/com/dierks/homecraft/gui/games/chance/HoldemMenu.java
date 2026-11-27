@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.chance.holdem.HoldemTable.Kind;
 import com.dierks.homecraft.games.chance.holdem.HoldemTable.Phase;
 import com.dierks.homecraft.games.chance.holdem.HoldemTable.Seat;
 import com.dierks.homecraft.games.chance.holdem.PokerCard;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -96,7 +97,7 @@ public final class HoldemMenu extends GameMenu {
         this.money = new MoneyPlay(plugin, game.games(), viewer);
         List<Integer> b = game.settings().buyIns();
         this.buyIn = b.isEmpty() ? 0 : b.get(Math.min(1, b.size() - 1));
-        init(54, Text.of("&2Texas Hold'em &8- " + table.kind().label.toLowerCase(java.util.Locale.ROOT)));
+        init(54, Text.of(MenuStyle.title("Texas Hold'em", table.kind().label.toLowerCase(java.util.Locale.ROOT))));
     }
 
     /** Sit down (or watch a full table), then show it. */

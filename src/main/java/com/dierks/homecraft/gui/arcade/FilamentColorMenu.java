@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.DyeColor;
@@ -38,7 +39,7 @@ public final class FilamentColorMenu extends Menu {
         this.player = player;
         this.prize = prize;
         this.back = back;
-        init(45, Text.of("&5Pick a filament colour"));
+        init(45, Text.of(MenuStyle.title("Pick a filament colour")));
     }
 
     @Override

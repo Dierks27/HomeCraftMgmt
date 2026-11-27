@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.admin.GenOps;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.gui.MenuStyle;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -148,7 +149,7 @@ public final class FreshAdmin {
 
     /** The tools screen's title (D5: the course's name at the cadence). */
     public static String title(Slots.Def def, GenOps.Tools t) {
-        return "&dAdmin tools: " + courseName(def, t);
+        return MenuStyle.title("Admin tools", courseName(def, t)); // 0.59.0: the house title style
     }
 
     /** The tools screen's header NAME (slot 4): the course, and what is picked, for Bedrock (D5, D8). */

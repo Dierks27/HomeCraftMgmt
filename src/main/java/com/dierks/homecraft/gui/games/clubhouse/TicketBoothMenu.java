@@ -6,6 +6,7 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.arcade.ScratchTicketMenu;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -36,7 +37,7 @@ public final class TicketBoothMenu extends GameMenu {
 
     public TicketBoothMenu(HomeCraftManagement plugin, Game clubhouse, Player viewer) {
         super(plugin, clubhouse, viewer, null);
-        init(27, Text.of("&aScratch Ticket"));
+        init(27, Text.of(MenuStyle.title("Scratch Ticket")));
     }
 
     @Override

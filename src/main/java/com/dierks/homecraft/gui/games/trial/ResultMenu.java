@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.trial.DropperText;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -40,7 +41,7 @@ public final class ResultMenu extends GameMenu {
         super(plugin, trials, viewer, () -> trials.open(viewer, null));
         this.trials = trials;
         this.result = result;
-        init(27, Text.of("&b" + result.courseName()));
+        init(27, Text.of(MenuStyle.title(result.courseName())));
     }
 
     @Override

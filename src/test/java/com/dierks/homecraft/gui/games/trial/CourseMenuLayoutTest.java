@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The final maps after the events batch and the Clubhouse were merged:
  * <ul>
- *   <li>the course screen (27): 4, 10-16 and 22 fixed; 18 Admin tools (an admin on a Fresh course, WP-ADM);
+ *   <li>the course screen (27): 4, 11-16, 21 and 22 fixed; 18 Admin tools (an admin on a Fresh course, WP-ADM);
  *       20 Race with friends; 24 the Cup; 26 Take a rider (every combination of the four on its own slots);</li>
  *   <li>the party screen (54): 4 the party, 11 the last race, 13 Start, 15 Leave, 19-25 and 28-34 the
  *       members, 36 Go to the Clubhouse, 37 Watch, 38 Invite, 39 Take a rider, 40 Ready, 42 Warm up
@@ -43,7 +43,8 @@ class CourseMenuLayoutTest {
         assertFalse(CourseMenu.FIXED_SLOTS.contains(CourseMenu.CHALLENGE_SLOT), "on a slot of its own");
         assertEquals(24, CupLink.SLOT, "the Cup: right of the way out");
         assertEquals(26, CourseMenu.RIDER_SLOT, "Take a rider (a boat course): the bottom row's right end");
-        assertEquals(List.of(4, 10, 11, 12, 13, 14, 15, 16, 22), CourseMenu.FIXED_SLOTS, "the fixed tiles");
+        assertEquals(List.of(4, 11, 12, 13, 14, 15, 16, 21, 22), CourseMenu.FIXED_SLOTS,
+                "the fixed tiles (0.59.0: How to play beside the way out, 21; it was 10)");
         assertTrue(CourseMenu.FIXED_SLOTS.contains(22), "the way out is the 27-slot screen's bottom middle (22)");
         Set<Integer> taken = new HashSet<>(CourseMenu.FIXED_SLOTS);
         for (int slot : List.of(CourseMenu.PARTY_SLOT, CupLink.SLOT, CourseMenu.RIDER_SLOT)) {

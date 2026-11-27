@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ScoresMenu;
 import com.dierks.homecraft.trade.TradeService;
@@ -47,7 +48,7 @@ public final class TradePickerMenu extends Menu {
         this.viewer = viewer;
         this.back = back;
         this.page = Math.max(0, page);
-        init(54, Text.of("&5Who do you want to trade with?"));
+        init(54, Text.of(MenuStyle.title("Who do you want to trade with?")));
     }
 
     @Override
@@ -77,11 +78,11 @@ public final class TradePickerMenu extends Menu {
             set(GRID_START + i, icon, note == null ? e -> ask(id) : null);
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new TradePickerMenu(plugin, trades, viewer, back, p - 1).open(viewer));
         }
         if (p < pages(people.size()) - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new TradePickerMenu(plugin, trades, viewer, back, p + 1).open(viewer));
         }
         boolean on = trades.takesTrades(viewer.getUniqueId());

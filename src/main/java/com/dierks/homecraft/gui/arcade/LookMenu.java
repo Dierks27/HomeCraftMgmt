@@ -8,6 +8,7 @@ import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.LookDao.Look;
 import com.dierks.homecraft.util.Bedrock;
@@ -45,7 +46,7 @@ public final class LookMenu extends Menu {
         this.id = id;
         this.back = back;
         Prize p = plugin.config().arcade().prize(id);
-        init(27, Text.of("&d" + (p == null ? "My Looks" : Text.plain(p.display()))));
+        init(27, Text.of(MenuStyle.title(p == null ? "My Looks" : Text.plain(p.display()))));
     }
 
     @Override

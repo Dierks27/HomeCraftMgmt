@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.mini;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.MiniAuctionDao;
 import com.dierks.homecraft.trade.AuctionService;
@@ -36,7 +37,7 @@ public final class AuctionMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&6Mini Auction House"));
+        init(54, Text.of(MenuStyle.title("Mini Auction House")));
     }
 
     @Override
@@ -74,7 +75,7 @@ public final class AuctionMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -84,7 +85,7 @@ public final class AuctionMenu extends Menu {
                 e -> new AuctionCreateMenu(plugin, player, this::reopen).open(player));
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
         if ((page + 1) * PAGE_SIZE < list.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

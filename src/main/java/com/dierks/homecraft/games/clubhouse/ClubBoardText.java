@@ -194,7 +194,7 @@ public final class ClubBoardText {
     }
 
     /** The Songs tile on the Games screen's Together tab, and the screen's title and header. */
-    public static final String SONGS_TILE = "&dSongs &7- pick a record for the room";
+    public static final String SONGS_TILE = "&6Songs &7- pick a record for the room";
     public static final String SONGS_TITLE = "&dSongs";
     public static final String SONGS_HEADER = "&dPick a record &7- it plays for the room";
     public static final String QUIET = "&cQuiet &7- stop the music";

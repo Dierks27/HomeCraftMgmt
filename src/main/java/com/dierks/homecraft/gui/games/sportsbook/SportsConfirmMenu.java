@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.chance.sportsbook.Board;
 import com.dierks.homecraft.games.chance.sportsbook.Lines;
 import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -45,7 +46,7 @@ public final class SportsConfirmMenu extends GameMenu {
         this.sb = game;
         this.event = event;
         this.quote = quote;
-        init(27, Text.of("&2Sports Board &8- lock it in?"));
+        init(27, Text.of(MenuStyle.title("Sports Board", "lock it in?")));
     }
 
     @Override

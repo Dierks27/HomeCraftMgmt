@@ -36,7 +36,7 @@ public final class MailboxMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&eMailbox"));
+        init(54, Text.of(MenuStyle.title("Mailbox")));
     }
 
     @Override
@@ -66,7 +66,7 @@ public final class MailboxMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -79,7 +79,7 @@ public final class MailboxMenu extends Menu {
             }
         });
         if ((page + 1) * PAGE_SIZE < renders.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

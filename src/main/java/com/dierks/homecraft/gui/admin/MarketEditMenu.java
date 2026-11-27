@@ -5,6 +5,7 @@ import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.MarketLabels;
 import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketDraft;
 import com.dierks.homecraft.market.MarketItem;
@@ -44,7 +45,7 @@ public final class MarketEditMenu extends Menu {
         this.draft = draft;
         this.existing = existing;
         this.onBack = onBack;
-        init(54, Text.of(existing ? "&aEdit commodity" : "&aNew commodity"));
+        init(54, Text.of(MenuStyle.title(existing ? "Edit commodity" : "New commodity")));
     }
 
     /** Every id in the catalog except this draft's own — the duplicate check. */

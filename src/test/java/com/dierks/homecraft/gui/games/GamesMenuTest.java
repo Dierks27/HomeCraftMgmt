@@ -100,14 +100,16 @@ class GamesMenuTest {
     }
 
     @Test
-    void theTogetherTabIsAtSevenAndShowsOnlyOnceItHasATile() {
-        // EVENTS-DROPPER-SPEC §A.6: row 0 is 0 balance, 2-7 the tabs, 8 an invite
-        assertEquals(2, GamesMenu.tabSlot(null), "All");
-        assertEquals(3, GamesMenu.tabSlot(Game.Tab.LUCK), "Luck");
-        assertEquals(4, GamesMenu.tabSlot(Game.Tab.CABINETS), "Cabinets");
-        assertEquals(5, GamesMenu.tabSlot(Game.Tab.COURSES), "Courses");
-        assertEquals(6, GamesMenu.tabSlot(Game.Tab.GOLF), "Golf");
-        assertEquals(7, GamesMenu.tabSlot(Game.Tab.TOGETHER), "Together takes the free slot 7");
+    void theTogetherTabIsAtSixAndShowsOnlyOnceItHasATile() {
+        // EVENTS-DROPPER-SPEC §A.6: row 0 is 0 balance, the tabs, 8 an invite; 0.59.0: the tabs moved one left (1-7)
+        // to make room for Little ones
+        assertEquals(1, GamesMenu.tabSlot(null), "All");
+        assertEquals(2, GamesMenu.tabSlot(Game.Tab.LUCK), "Luck");
+        assertEquals(3, GamesMenu.tabSlot(Game.Tab.CABINETS), "Cabinets");
+        assertEquals(4, GamesMenu.tabSlot(Game.Tab.COURSES), "Courses");
+        assertEquals(5, GamesMenu.tabSlot(Game.Tab.GOLF), "Golf");
+        assertEquals(6, GamesMenu.tabSlot(Game.Tab.TOGETHER), "Together");
+        assertEquals(7, GamesMenu.tabSlot(Game.Tab.LITTLE), "Little ones, last");
         java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (int slot : GamesMenu.TAB_SLOTS) {
             assertTrue(slot > 0 && slot < 8, slot + " stays clear of the balance (0) and the invite (8)");

@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenScheduler;
 import com.dierks.homecraft.games.gen.engine.GenService;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.storage.GamesDao;
@@ -74,7 +75,7 @@ public final class FreshMenu extends GameMenu {
 
     /** The screen's title: "&amp;eThis week's courses", "&amp;eToday's courses", "&amp;eThe current courses". */
     static String title(int cadence) {
-        return "&e" + GenCopy.current(cadence);
+        return MenuStyle.title(GenCopy.current(cadence)); // 0.59.0: the house title style
     }
 
     /**

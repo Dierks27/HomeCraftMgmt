@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.marketplace;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.DepartmentIcons;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.PalletDao;
 import com.dierks.homecraft.util.Items;
@@ -35,7 +36,7 @@ public final class MarketplaceMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&6Crate Marketplace"));
+        init(54, Text.of(MenuStyle.title("Crate Marketplace")));
     }
 
     @Override
@@ -65,7 +66,7 @@ public final class MarketplaceMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -79,7 +80,7 @@ public final class MarketplaceMenu extends Menu {
         });
         set(50, Menus.balance(plugin, player), null);
         if ((page + 1) * GRID_SIZE < listings.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

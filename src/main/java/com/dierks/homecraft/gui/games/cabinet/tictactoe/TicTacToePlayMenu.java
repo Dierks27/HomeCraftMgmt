@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToe;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeAI;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeBoard;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeMatch;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -80,7 +81,7 @@ public final class TicTacToePlayMenu extends GameMenu {
             mark[s] = Menus.icon(MARK[s], NAME[s]);
             winning[s] = Menus.glint(Menus.icon(MARK[s], NAME[s] + " &7★ three in a row"), true);
         }
-        init(54, Text.of("&bTic-Tac-Toe"));
+        init(54, Text.of(MenuStyle.title("Tic-Tac-Toe")));
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.BreakMenu;
 import com.dierks.homecraft.gui.games.Screens;
@@ -56,7 +57,7 @@ public final class GuideMenu extends Menu {
         this.player = player;
         this.page = Math.max(0, Math.min(TITLES.length - 1, page));
         this.back = back;
-        init(54, Text.of("&bHow It Works &8· &3" + TITLES[this.page]));
+        init(54, Text.of(MenuStyle.title("How It Works", TITLES[this.page])));
     }
 
     @Override
@@ -79,11 +80,11 @@ public final class GuideMenu extends Menu {
             default -> arcade();
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious: " + TITLES[page - 1]),
+            set(45, Menus.icon(Material.ARROW, "&f◀ " + TITLES[page - 1]),
                     e -> new GuideMenu(plugin, player, page - 1, back).open(player));
         }
         if (page < TITLES.length - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext: " + TITLES[page + 1]),
+            set(53, Menus.icon(Material.ARROW, "&f" + TITLES[page + 1] + " ▶"),
                     e -> new GuideMenu(plugin, player, page + 1, back).open(player));
         }
         set(49, Menus.icon(Material.BARRIER, back != null ? "&cBack" : "&cClose"), e -> {

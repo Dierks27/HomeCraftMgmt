@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.util.Text;
@@ -28,7 +29,7 @@ public final class MiniPickerMenu extends Menu {
         this.player = player;
         this.onPick = onPick;
         this.onBack = onBack;
-        init(54, Text.of("&aPick a Mini"));
+        init(54, Text.of(MenuStyle.title("Pick a Mini")));
     }
 
     @Override
@@ -59,7 +60,7 @@ public final class MiniPickerMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -79,7 +80,7 @@ public final class MiniPickerMenu extends Menu {
             }
         });
         if ((page + 1) * PAGE_SIZE < list.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

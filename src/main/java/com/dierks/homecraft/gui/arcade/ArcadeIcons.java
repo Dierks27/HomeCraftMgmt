@@ -10,7 +10,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,11 +38,7 @@ public final class ArcadeIcons {
         if (meta != null) {
             meta.displayName(Text.of(name));
             if (lore.length > 0) {
-                List<net.kyori.adventure.text.Component> lines = new ArrayList<>(lore.length);
-                for (String line : lore) {
-                    lines.add(Text.of(line));
-                }
-                meta.lore(lines);
+                meta.lore(com.dierks.homecraft.gui.Menus.lore(lore)); // 0.59.0: wrapped, as every icon's
             }
             item.setItemMeta(meta);
         }

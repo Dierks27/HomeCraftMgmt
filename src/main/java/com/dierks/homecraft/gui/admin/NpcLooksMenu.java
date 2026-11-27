@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.cpu.CpuRoster;
 import com.dierks.homecraft.games.cpu.NpcProfiles;
 import com.dierks.homecraft.games.cpu.NpcSkin;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -38,7 +39,7 @@ public final class NpcLooksMenu extends Menu {
         this.admin = admin;
         this.npc = npc;
         this.back = back;
-        init(npc == null ? 27 : 54, Text.of(npc == null ? "&eNPC players" : "&eNPC: " + npc.key()));
+        init(npc == null ? 27 : 54, Text.of(npc == null ? MenuStyle.title("NPC players") : MenuStyle.title("NPC", npc.key())));
     }
 
     private CpuPlayers npcs() {

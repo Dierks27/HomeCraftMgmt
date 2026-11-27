@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.golf;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.mini.MiniDef;
@@ -47,7 +48,7 @@ public final class GolfBallMenu extends GameMenu {
         super(plugin, golf, viewer, back);
         this.golf = golf;
         this.page = Math.max(0, page);
-        init(54, Text.of("&dPick your ball"));
+        init(54, Text.of(MenuStyle.title("Pick your ball")));
     }
 
     /**
@@ -143,11 +144,11 @@ public final class GolfBallMenu extends GameMenu {
                     "&7can be your ball."), null);
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new GolfBallMenu(plugin, golf, viewer, p - 1, back).open(viewer));
         }
         if (p < pages - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new GolfBallMenu(plugin, golf, viewer, p + 1, back).open(viewer));
         }
     }

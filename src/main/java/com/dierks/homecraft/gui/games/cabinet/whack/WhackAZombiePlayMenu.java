@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.whack.WhackAZombie;
 import com.dierks.homecraft.games.cabinet.whack.WhackEngine;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -90,7 +91,7 @@ public final class WhackAZombiePlayMenu extends GameMenu {
         this.hole = Menus.icon(Material.COARSE_DIRT, "&8Empty hole");
         this.zombie = Menus.icon(Material.ZOMBIE_HEAD, "&a&lWhack it! &7+1");
         this.villager = Menus.icon(Material.VILLAGER_SPAWN_EGG, "&c&lVillager! &7Don't bonk!");
-        init(54, Text.of("&bWhack-a-Zombie"));
+        init(54, Text.of(MenuStyle.title("Whack-a-Zombie")));
     }
 
     @Override

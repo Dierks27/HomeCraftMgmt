@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.kidbingo.KidBingo.Entry;
 import com.dierks.homecraft.games.kidbingo.KidBingo.Phase;
 import com.dierks.homecraft.games.kidbingo.Picture;
 import com.dierks.homecraft.games.kidbingo.PictureCard;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -56,7 +57,7 @@ public final class KidBingoMenu extends GameMenu {
     public KidBingoMenu(HomeCraftManagement plugin, KidBingo game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.bingo = game;
-        init(54, Text.of("&2Picture Bingo"));
+        init(54, Text.of(MenuStyle.title("Picture Bingo")));
     }
 
     /** This screen as the kid screen after a round ({@code won}: the viewer's card won). */

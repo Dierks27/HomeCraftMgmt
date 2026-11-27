@@ -228,7 +228,13 @@ public interface Game {
          * Floors put their tiles here through {@link Game#tiles}. No {@link GameKind} maps to it
          * ({@link #of}): a game chooses it for its own tiles.
          */
-        TOGETHER;
+        TOGETHER,
+        /**
+         * 0.59.0, the face lift: the free games made for a child who can't read yet (Picture Bingo, the Arcade Room's
+         * kid race), on a tab of their own rather than among the grown-ups' games on Together. Like Together, no
+         * {@link GameKind} maps to it: a game chooses it for its tiles, and it shows only while it has one.
+         */
+        LITTLE;
 
         /** The tab a game of this kind shows on. */
         public static Tab of(GameKind kind) {

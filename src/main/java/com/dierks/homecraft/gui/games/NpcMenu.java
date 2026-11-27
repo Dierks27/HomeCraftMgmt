@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.cpu.CpuChoice;
 import com.dierks.homecraft.games.cpu.CpuPlayers;
 import com.dierks.homecraft.games.cpu.CpuRoster;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -55,7 +56,7 @@ public final class NpcMenu extends GameMenu {
         this.target = target;
         this.targetName = targetName;
         this.admin = admin;
-        init(27, Text.of(admin ? "&bNPC players &8- " + targetName : "&bNPC players"));
+        init(27, Text.of(admin ? MenuStyle.title("NPC players", targetName) : MenuStyle.title("NPC players")));
     }
 
     private CpuPlayers npcs() {

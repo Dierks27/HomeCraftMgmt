@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.admin;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -23,7 +24,7 @@ public final class SectionTitlesMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(27, Text.of("&6Section Titles"));
+        init(27, Text.of(MenuStyle.title("Section Titles")));
     }
 
     @Override
@@ -50,7 +51,7 @@ public final class SectionTitlesMenu extends Menu {
         set(16, titleIcon(Material.COMPASS, "Store URL (display only)", store.displayUrl()),
                 e -> prompt("store.display_url", "Enter the store display URL (e.g. www.Crate.com):"));
 
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

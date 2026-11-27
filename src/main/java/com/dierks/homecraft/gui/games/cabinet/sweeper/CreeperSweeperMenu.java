@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeper;
 import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeperSettings;
 import com.dierks.homecraft.games.cabinet.sweeper.SweeperEngine;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -64,7 +65,7 @@ public final class CreeperSweeperMenu extends GameMenu {
     public CreeperSweeperMenu(HomeCraftManagement plugin, CreeperSweeper sweeper, Player viewer, Runnable back) {
         super(plugin, sweeper, viewer, back);
         this.sweeper = sweeper;
-        init(54, Text.of("&b" + sweeper.name()));
+        init(54, Text.of(MenuStyle.title(sweeper.name())));
     }
 
     @Override

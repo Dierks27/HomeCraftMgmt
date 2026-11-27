@@ -24,8 +24,8 @@ class FloorsTextTest {
 
     @Test
     void theTilesNameCarriesTheKeyFact() {
-        assertEquals("&eFalling Floors &7- 2 playing · join!", FloorsText.tile(2, true), "the spec's tile");
-        assertEquals("&eFalling Floors &7- play solo or together", FloorsText.tile(0, true), "nobody in yet");
+        assertEquals("&6Falling Floors &7- 2 playing · join!", FloorsText.tile(2, true), "the spec's tile");
+        assertEquals("&6Falling Floors &7- play solo or together", FloorsText.tile(0, true), "nobody in yet");
         assertEquals("&7Falling Floors &7- opening soon", FloorsText.tile(3, false), "not open");
     }
 

@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.integration.HeadEntry;
 import com.dierks.homecraft.mini.MiniDef;
@@ -39,7 +40,7 @@ public final class ImportMetadataMenu extends Menu {
         this.heads = heads;
         this.onBack = onBack;
         this.meta = plugin.miniService().blankDraft();
-        init(54, Text.of("&2Import " + heads.size() + " head(s)"));
+        init(54, Text.of(MenuStyle.title("Import " + heads.size() + " head(s)")));
     }
 
     @Override
@@ -95,13 +96,13 @@ public final class ImportMetadataMenu extends Menu {
             refresh();
         });
 
-        set(14, Menus.icon(meta.craftable() ? Material.CRAFTING_TABLE : Material.BARRIER,
+        set(14, Menus.icon(meta.craftable() ? Material.CRAFTING_TABLE : Material.GRAY_DYE,
                 "&eCraftable", "&f" + (meta.craftable() ? "Yes" : "No"), "&7Click to toggle"), e -> {
             meta.setCraftable(!meta.craftable());
             refresh();
         });
 
-        set(19, Menus.icon(Material.BARRIER, "&eMint cap",
+        set(19, Menus.icon(Material.IRON_BARS, "&eMint cap",
                 "&f" + (meta.uncapped() ? "Unlimited" : Long.toString(meta.cap())),
                 "&7Click to set a number or 'unlimited'"),
                 e -> plugin.chatPrompts().prompt(player, "Enter a mint cap number, or 'unlimited':", this::setCapThenReopen));

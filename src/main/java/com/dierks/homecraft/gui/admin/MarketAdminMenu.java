@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.MarketLabels;
 import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketDraft;
 import com.dierks.homecraft.market.MarketItem;
@@ -35,7 +36,7 @@ public final class MarketAdminMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&aMarket Catalog"));
+        init(54, Text.of(MenuStyle.title("Market Catalog")));
     }
 
     @Override
@@ -61,7 +62,7 @@ public final class MarketAdminMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -81,7 +82,7 @@ public final class MarketAdminMenu extends Menu {
                 "&7Stock lives in the database and is",
                 "&7kept even when a row is removed."), null);
         if ((page + 1) * PAGE_SIZE < list.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

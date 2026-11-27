@@ -68,7 +68,7 @@ public final class MarketNewsMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(SIZE, Text.of("&6Crate Market News"));
+        init(SIZE, Text.of(MenuStyle.title("Crate Market News")));
     }
 
     /** Open the news menu; Back runs {@code onBack} (or closes the menu when it is null). */

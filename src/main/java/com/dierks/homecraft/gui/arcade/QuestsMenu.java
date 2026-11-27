@@ -5,6 +5,7 @@ import com.dierks.homecraft.config.PluginConfig.Quest;
 import com.dierks.homecraft.config.PluginConfig.QuestPeriod;
 import com.dierks.homecraft.config.PluginConfig.Quests;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -30,7 +31,7 @@ public final class QuestsMenu extends Menu {
         super(plugin);
         this.player = player;
         this.back = back;
-        init(54, Text.of("&5&lQuests"));
+        init(54, Text.of(MenuStyle.title("Quests")));
     }
 
     @Override
@@ -45,7 +46,7 @@ public final class QuestsMenu extends Menu {
                 "&7New ones every day and every week!"), null);
 
         if (quests == null || !quests.enabled() || quests.all().isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&cNo quests right now",
+            set(22, Menus.icon(Material.GRAY_DYE, "&cNo quests right now",
                     "&7Check back later!"), null);
             exit();
             return;

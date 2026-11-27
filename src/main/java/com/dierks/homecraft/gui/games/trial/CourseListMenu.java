@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.trial;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -38,7 +39,7 @@ public final class CourseListMenu extends GameMenu {
         super(plugin, trials, viewer, back);
         this.trials = trials;
         this.page = Math.max(0, page);
-        init(54, Text.of("&b" + trials.name()));
+        init(54, Text.of(MenuStyle.title(trials.name())));
     }
 
     @Override
@@ -63,11 +64,11 @@ public final class CourseListMenu extends GameMenu {
                     this::reopen).open(viewer));
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new CourseListMenu(plugin, trials, viewer, back, p - 1).open(viewer));
         }
         if (p < pages - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new CourseListMenu(plugin, trials, viewer, back, p + 1).open(viewer));
         }
         set(48, rulesTile(trials.rules()), null);

@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.mini;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
@@ -39,7 +40,7 @@ public final class VendingMenu extends Menu {
         this.player = player;
         this.loc = loc;
         this.blockOwner = blockOwner;
-        init(54, Text.of("&dMini Vending Machine"));
+        init(54, Text.of(MenuStyle.title("Mini Vending Machine")));
     }
 
     @Override
@@ -52,7 +53,7 @@ public final class VendingMenu extends Menu {
         page = Math.max(0, Math.min(page, pages - 1));
 
         if (listings.isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&7Nothing for sale yet",
+            set(22, Menus.icon(Material.GRAY_DYE, "&7Nothing for sale yet",
                     blockOwner ? "&eStock a Mini with the button below." : "&7Check back later."), null);
         }
 
@@ -88,7 +89,7 @@ public final class VendingMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -111,7 +112,7 @@ public final class VendingMenu extends Menu {
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
         set(50, Menus.balance(plugin, player), null);
         if ((page + 1) * PAGE_SIZE < listings.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

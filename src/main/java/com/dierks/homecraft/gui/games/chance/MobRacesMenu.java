@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.chance.mobraces.MobRaces.Phase;
 import com.dierks.homecraft.games.chance.mobraces.MobRacesSettings;
 import com.dierks.homecraft.games.chance.mobraces.RaceCard;
 import com.dierks.homecraft.games.chance.mobraces.Racer;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -67,7 +68,7 @@ public final class MobRacesMenu extends GameMenu {
         this.money = new MoneyPlay(plugin, game.games(), viewer);
         List<Integer> open = game.settings().open();
         this.stake = open.isEmpty() ? 0 : open.get(0);
-        init(54, Text.of("&2Mob Races"));
+        init(54, Text.of(MenuStyle.title("Mob Races")));
     }
 
     @Override

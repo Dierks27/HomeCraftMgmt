@@ -12,6 +12,7 @@ import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.LookDao;
 import com.dierks.homecraft.storage.LookDao.Look;
@@ -79,7 +80,7 @@ public final class MyLooksMenu extends Menu {
         this.player = player;
         this.back = back;
         this.page = Math.max(0, page);
-        init(54, Text.of("&dMy Looks"));
+        init(54, Text.of(MenuStyle.title("My Looks")));
     }
 
     // ---- what a tile is ---------------------------------------------------------------------
@@ -302,11 +303,11 @@ public final class MyLooksMenu extends Menu {
         fill(TRAIL_SLOTS, trails, p, now, "&7No trails yet");
 
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new MyLooksMenu(plugin, player, back, p - 1).open(player));
         }
         if (p < pageCount - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new MyLooksMenu(plugin, player, back, p + 1).open(player));
         }
         hideTile();

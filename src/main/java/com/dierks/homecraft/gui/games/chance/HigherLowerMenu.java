@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLowerRun;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Card;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Side;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -27,6 +28,19 @@ import java.util.List;
  * The Higher or Lower table (spec §5.6): the card on show in the middle with Lower and Higher on
  * either side, Cash out underneath, the run's cards along the top, and the stakes, Start and "How
  * it pays" along the bottom.
+ *
+ * <pre>
+ *  row 0   0 this run (how many right) · 1-8 its cards so far
+ *  row 1   9 how to play · 11 what it gives back · 13 the run now · 15 today
+ *  row 2   20 Lower · 22 the card on show · 24 Higher
+ *  row 3   31 Cash out
+ *  row 4   36-44 more stakes, when there are more than three
+ *  row 5   45 the chips' total · 46-48 stakes or chips · 49 Back · 50 Start · 51 your balance · 52 how it pays
+ *          53 tokens or money
+ * </pre>
+ *
+ * <p>0.59.0: this map, which the screen never had. Like every game of chance its How to play stays in its own info
+ * row (9), not beside the way out: row 5 is the stake row.
  *
  * <p>Each button that can be used names what it does in tokens: Higher reads "right: 15 tokens",
  * Cash out reads "15 tokens". A side that could not grow the pot is never offered (it stays grey,
@@ -84,7 +98,7 @@ public final class HigherLowerMenu extends GameMenu {
             this.run = HigherLowerRun.replay(resume.seed(), saved.terms(), saved.actions());
             onTable(resume, saved);
         }
-        init(54, Text.of("&3Higher or Lower"));
+        init(54, Text.of(MenuStyle.title("Higher or Lower")));
     }
 
     /** A resumed run that was already over (a crash between its card and its payout) settles now. */

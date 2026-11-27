@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.chance.wheel.WheelOdds;
 import com.dierks.homecraft.games.chance.wheel.WheelRing;
 import com.dierks.homecraft.games.chance.wheel.WheelSettings;
 import com.dierks.homecraft.games.chance.wheel.WheelSpin;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -95,7 +96,7 @@ public final class WheelMenu extends GameMenu {
         List<Integer> open = settings.open();
         this.stake = open.isEmpty() ? 0 : open.get(0);
         this.money = new MoneyPlay(plugin, plugin.games(), viewer);
-        init(54, Text.of("&5The Wheel"));
+        init(54, Text.of(MenuStyle.title("The Wheel")));
     }
 
     /** The settings the next spin plays: the screen's own, or the ring solved for the dollars the chips add up to. */

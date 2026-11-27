@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.storage.MiniListingDao;
@@ -32,7 +33,7 @@ public final class DisplayCaseMenu extends Menu {
         this.player = player;
         this.loc = loc;
         this.blockOwner = blockOwner;
-        init(27, Text.of("&bMini Display Case"));
+        init(27, Text.of(MenuStyle.title("Mini Display Case")));
     }
 
     @Override
@@ -52,7 +53,7 @@ public final class DisplayCaseMenu extends Menu {
                     reopen();
                 });
             } else {
-                set(13, Menus.icon(Material.BARRIER, "&7Empty display case"), null);
+                set(13, Menus.icon(Material.GRAY_DYE, "&7Empty display case"), null);
             }
         } else {
             MiniListingDao.Listing listing = opt.get();

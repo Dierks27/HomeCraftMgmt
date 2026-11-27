@@ -315,7 +315,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     @Override
     public ItemStack tile(Player viewer) {
         boolean open = room != null && room.open();
-        return Menus.icon(Material.CAKE, open ? "&6The Clubhouse &7- " + visits.size() + " here · visit!"
+        // 0.59.0: its door, as on the Arcade hub (the cake is the Together tab's own picture)
+        return Menus.icon(Material.BIRCH_DOOR, open ? "&6The Clubhouse &7- " + visits.size() + " here · visit!"
                 : "&7The Clubhouse &8- closed right now", "&7Hang out with friends,", "&7before and after your games.",
                 "&7/hcm play clubhouse");
     }

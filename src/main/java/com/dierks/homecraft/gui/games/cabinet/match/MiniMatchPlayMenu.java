@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.match.MatchEngine;
 import com.dierks.homecraft.games.cabinet.match.MiniMatch;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -84,7 +85,7 @@ public final class MiniMatchPlayMenu extends GameMenu {
             }
             found.add(Menus.glint(f, true));
         }
-        init(54, Text.of("&bMini Match"));
+        init(54, Text.of(MenuStyle.title("Mini Match")));
     }
 
     @Override

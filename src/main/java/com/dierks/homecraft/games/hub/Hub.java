@@ -157,7 +157,7 @@ public final class Hub implements Game {
 
     @Override
     public ItemStack tile(Player viewer) {
-        return Menus.icon(Material.BEACON, "&bThe Hub &7- " + here() + " here", "&7The big spawn, where the"
+        return Menus.icon(Material.BEACON, "&6The Hub &7- " + here() + " here", "&7The big spawn, where the"
                 + " events are.", "&7What you win comes home", "&7in Your Bag.", "&eClick to go");
     }
 

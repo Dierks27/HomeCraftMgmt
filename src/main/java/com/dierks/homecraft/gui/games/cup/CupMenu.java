@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.cup.live.CupDesk;
 import com.dierks.homecraft.games.cup.live.CupWords;
 import com.dierks.homecraft.games.cup.live.WeeklyCup;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -38,7 +39,7 @@ public final class CupMenu extends GameMenu {
         super(plugin, cup, viewer, back);
         this.cup = cup;
         this.course = course;
-        init(27, Text.of("&6Weekly Cup: " + course.name()));
+        init(27, Text.of(MenuStyle.title("Weekly Cup", course.name())));
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.holdem.Holdem;
 import com.dierks.homecraft.games.chance.holdem.HoldemSettings;
 import com.dierks.homecraft.games.chance.holdem.HoldemTable;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -19,11 +20,11 @@ import java.util.List;
  * Texas Hold'em's three tables, to pick one (27 slots; 0.57.0):
  *
  * <pre>
- *  4 how to play
+ *  4 Texas Hold'em's own tile, as on the Games screen (0.59.0; How to play was here)
  *  11 the friendly table (free play chips, NPC players)
  *  13 the tokens table   (one chip, one token)
  *  15 the money table    (one chip, one dollar; only for a player who may play for money here)
- *  22 Back / Close
+ *  21 how to play · 22 Back / Close
  * </pre>
  *
  * A tap sits you down (or, at a full table, lets you watch). Nothing here moves tokens or money: buying chips is on the
@@ -36,13 +37,14 @@ public final class HoldemLobbyMenu extends GameMenu {
     public HoldemLobbyMenu(HomeCraftManagement plugin, Holdem game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.holdem = game;
-        init(27, Text.of("&2Texas Hold'em &8- pick a table"));
+        init(27, Text.of(MenuStyle.title("Texas Hold'em", "pick a table")));
     }
 
     @Override
     protected void build() {
         fill();
-        set(4, rulesTile(holdem.rules()), null);
+        headerTile(); // 0.59.0: its Games screen tile on top, How to play beside the way out (it was at 4)
+        helpTile(holdem.rules());
         HoldemSettings s = holdem.settings();
         table(11, HoldemTable.Kind.FRIENDLY, Material.LIME_WOOL, List.of(
                 "&7Free play chips: nothing goes in,", "&7nothing comes out.",

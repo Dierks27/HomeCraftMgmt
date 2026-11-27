@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
@@ -46,7 +47,7 @@ public final class MiniInfoMenu extends Menu {
         this.ref = ref;
         this.display = display;
         this.onBack = onBack;
-        init(27, Text.of("&5Mini Info Card"));
+        init(27, Text.of(MenuStyle.title("Mini Info Card")));
     }
 
     @Override

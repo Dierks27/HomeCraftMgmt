@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -27,7 +28,7 @@ public final class CrateListMenu extends Menu {
         super(plugin);
         this.player = player;
         this.back = back;
-        init(54, Text.of("&6Crates"));
+        init(54, Text.of(MenuStyle.title("Crates")));
     }
 
     @Override

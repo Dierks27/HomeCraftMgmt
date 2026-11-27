@@ -106,7 +106,7 @@ public final class MarketMenu extends Menu {
         }
 
         if (state.page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 state.page--;
                 refresh();
             });
@@ -145,7 +145,7 @@ public final class MarketMenu extends Menu {
             refresh();
         });
         if ((state.page + 1) * Departments.PAGE_SIZE < items.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »",
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶",
                     "&8Page " + (state.page + 1) + " of " + pages), e -> {
                 state.page++;
                 refresh();

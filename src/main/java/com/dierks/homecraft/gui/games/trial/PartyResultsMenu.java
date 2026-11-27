@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.trial.PartyRace;
 import com.dierks.homecraft.games.trial.RaceStandings;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -35,7 +36,7 @@ public final class PartyResultsMenu extends GameMenu {
         this.trials = trials;
         this.courseName = courseName;
         this.lines = List.copyOf(lines);
-        init(54, Text.of("&6Race results"));
+        init(54, Text.of(MenuStyle.title("Race results")));
     }
 
     @Override

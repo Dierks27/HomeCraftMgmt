@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlip;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlipOdds;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlipSettings;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -48,7 +49,7 @@ public final class CoinFlipMenu extends GameMenu {
         this.coinFlip = coinFlip;
         this.settings = settings;
         this.stake = settings.odds(stake) != null || settings.open().isEmpty() ? stake : settings.open().get(0);
-        init(27, Text.of("&5Coin Flip"));
+        init(27, Text.of(MenuStyle.title("Coin Flip")));
     }
 
     private void reopen() {

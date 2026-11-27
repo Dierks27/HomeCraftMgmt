@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.golf.GolfCard;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
@@ -45,7 +46,7 @@ public final class GolfScorecardMenu extends GameMenu {
         super(plugin, golf, viewer, back);
         this.golf = golf;
         this.card = card;
-        init(54, Text.of("&d" + card.courseName() + " &8· &5Scorecard"));
+        init(54, Text.of(MenuStyle.title(card.courseName(), "Scorecard")));
     }
 
     @Override

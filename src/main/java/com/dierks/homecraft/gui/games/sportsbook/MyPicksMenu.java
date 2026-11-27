@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.sportsbook.Lines;
 import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.storage.SportsPicksDao;
@@ -29,7 +30,7 @@ public final class MyPicksMenu extends GameMenu {
     public MyPicksMenu(HomeCraftManagement plugin, Sportsbook game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.sb = game;
-        init(54, Text.of("&2Sports Board &8- my picks"));
+        init(54, Text.of(MenuStyle.title("Sports Board", "my picks")));
     }
 
     @Override

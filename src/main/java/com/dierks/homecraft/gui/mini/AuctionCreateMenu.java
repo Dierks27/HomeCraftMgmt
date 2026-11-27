@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.trade.AuctionService;
@@ -27,7 +28,7 @@ public final class AuctionCreateMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(27, Text.of("&6Sell a Mini"));
+        init(27, Text.of(MenuStyle.title("Sell a Mini")));
     }
 
     @Override
@@ -78,7 +79,7 @@ public final class AuctionCreateMenu extends Menu {
             }
         });
 
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> back());
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private double parse(String s, double fallback) {

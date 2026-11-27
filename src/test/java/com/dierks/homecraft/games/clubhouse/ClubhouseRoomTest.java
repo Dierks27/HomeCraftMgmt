@@ -474,10 +474,12 @@ class ClubhouseRoomTest {
         } else {
             chairs.addAll(ClubhousePlanner.parlorSeats(BOX)); // 0.50.0: the Parlor's chairs too, while it is built
             chairs.addAll(ClubhousePlanner.arcadeSeats(BOX)); // plan 13: the viewing stools and the bean bags
-            chairs.addAll(ClubhousePlanner.trophySeats(BOX)); // and the armchairs facing the Trophy Room's podium
+            chairs.addAll(ClubhousePlanner.trophySeats(BOX)); // and the Party Room's (plan 15; the Trophy Room's before)
             assertEquals(chairs, generated.seats(), "a cushion's place on every chair (26.3), the side rooms' too");
-            assertEquals(17 + 7 + 2, chairs.size() - ClubhousePlanner.seats(BOX).size(), "the Parlor's seventeen, the"
-                    + " Arcade Room's seven (three stools, four bean bags) and the Trophy Room's two");
+            assertEquals(21 + 7 + 6, chairs.size() - ClubhousePlanner.seats(BOX).size(), "the Parlor's twenty-one (plan"
+                    + " 15: the spare card table's four more), the Arcade Room's seven (three stools, four bean bags) and"
+                    + " the Party Room's six (four stools by the trampoline and the dance floor, two armchairs facing the"
+                    + " podium)");
         }
 
         ClubhouseRoom r = room();

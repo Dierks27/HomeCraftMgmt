@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.marketplace;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.marketplace.PalletService;
 import com.dierks.homecraft.storage.PalletDao;
@@ -34,7 +35,7 @@ public final class MarketplaceCheckoutMenu extends Menu {
         this.player = player;
         this.listing = listing;
         this.onBack = onBack;
-        init(27, Text.of("&6Checkout"));
+        init(27, Text.of(MenuStyle.title("Checkout")));
     }
 
     @Override

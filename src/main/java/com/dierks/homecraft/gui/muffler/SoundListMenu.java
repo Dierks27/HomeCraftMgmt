@@ -87,7 +87,7 @@ final class SoundListMenu extends Menu {
         SoundMufflerService svc = plugin.soundMufflers();
         Muffler m = svc == null ? null : svc.at(pos);
         if (m == null) {
-            set(22, Menus.icon(Material.BARRIER, "&cThis muffler is gone", "&7It was broken or moved."), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&cThis muffler is gone", "&7It was broken or moved."), null);
             set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
             return;
         }
@@ -140,7 +140,7 @@ final class SoundListMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -157,7 +157,7 @@ final class SoundListMenu extends Menu {
         set(51, Menus.icon(Material.PAPER, "&8" + keys.size() + " sound" + (keys.size() == 1 ? "" : "s")
                 + (pages > 1 ? " · page " + (page + 1) + "/" + pages : "")), null);
         if (page + 1 < pages) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });
@@ -255,7 +255,7 @@ final class SoundListMenu extends Menu {
                 }
                 yield Menus.icon(Material.CLOCK, "&7Nothing heard yet", lore.toArray(new String[0]));
             }
-            case SEARCH -> Menus.icon(Material.BARRIER, "&7No sound matches \"" + shorten(query) + "\"",
+            case SEARCH -> Menus.icon(Material.GRAY_DYE, "&7No sound matches \"" + shorten(query) + "\"",
                     "&7Try one word, like &fchicken &7or &fdoor&7.");
             case PICKS -> Menus.icon(Material.BOOK, "&7No single sounds picked yet",
                     "&7Pick one from &bHeard nearby", "&7or &bFind a sound&7.");

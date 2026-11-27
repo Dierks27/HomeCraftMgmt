@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.chance;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlip;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlipOdds;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -46,7 +47,7 @@ public final class CoinFlipConfirmMenu extends GameMenu {
         this.inviteId = inviteId;
         this.offer = coinFlip.offer(inviteId);
         this.odds = offer == null ? null : coinFlip.settings().odds(offer.stake());
-        init(27, Text.of("&5Coin Flip"));
+        init(27, Text.of(MenuStyle.title("Coin Flip")));
     }
 
     @Override

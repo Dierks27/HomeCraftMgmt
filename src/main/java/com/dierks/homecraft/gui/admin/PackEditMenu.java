@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.mini.PackRevealMenu;
 import com.dierks.homecraft.mini.MiniDef;
@@ -46,7 +47,7 @@ public final class PackEditMenu extends Menu {
         this.player = player;
         this.packId = packId;
         this.onBack = onBack;
-        init(54, Text.of("&5Pack: &f" + packId));
+        init(54, Text.of(MenuStyle.title("Pack", packId)));
     }
 
     /** A pack deleted in the meantime: go back rather than open an empty screen. */

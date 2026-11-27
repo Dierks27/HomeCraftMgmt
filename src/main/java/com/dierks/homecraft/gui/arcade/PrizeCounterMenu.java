@@ -12,6 +12,7 @@ import com.dierks.homecraft.config.PluginConfig.PrizeTab;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.LookDao.Look;
 import com.dierks.homecraft.util.Heads;
@@ -98,7 +99,7 @@ public final class PrizeCounterMenu extends Menu {
         this.back = back;
         this.tab = tab == null ? PrizeTab.BOOSTS : tab;
         this.page = Math.max(0, page);
-        init(54, Text.of("&5&lPrize Counter &8· &5" + this.tab.label()));
+        init(54, Text.of(MenuStyle.title("Prize Counter", this.tab.label())));
     }
 
     @Override
@@ -137,7 +138,7 @@ public final class PrizeCounterMenu extends Menu {
         }
         List<Prize> rows = plugin.prizes().visible(player, tab);
         if (rows.isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&7Nothing here yet", "&8Check back soon!"), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&7Nothing here yet", "&8Check back soon!"), null);
         }
         int[] shelf = PrizeShelves.slots(tab, rows.stream().map(Prize::type).toList(), GRID_SIZE / PrizeShelves.PER_ROW);
         if (shelf != null) {
@@ -156,11 +157,11 @@ public final class PrizeCounterMenu extends Menu {
             set(GRID_START + i, tile(p, tokens), e -> click(p));
         }
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new PrizeCounterMenu(plugin, player, back, tab, page - 1).open(player));
         }
         if (from + GRID_SIZE < rows.size()) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new PrizeCounterMenu(plugin, player, back, tab, page + 1).open(player));
         }
         setWayOut();
@@ -204,7 +205,7 @@ public final class PrizeCounterMenu extends Menu {
             set(slot, keeperTile(p, owned, tokens), e -> keeperClick(p, owned));
         }
         if (!any) {
-            set(22, Menus.icon(Material.BARRIER, "&7Nothing here yet", "&8Check back soon!"), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&7Nothing here yet", "&8Check back soon!"), null);
         }
         set(KEEPER_MY_LOOKS, Menus.icon(Material.ARMOR_STAND, "&dMy Looks", "&7Your hats, caps and trails."),
                 e -> new MyLooksMenu(plugin, player, this::reopen).open(player));

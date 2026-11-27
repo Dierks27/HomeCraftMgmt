@@ -1251,6 +1251,44 @@ public final class ClubhouseRoom {
     /** How near the owner-built shelf's start counts as being at it. */
     static final double SHELF_REACH = 2 * SHELF_PAIRS;
 
+    // ---- plan 15 (0.59.0): the Kids' Party Room and the ball pit, for PartyRoom and BallPit ----------------
+
+    /** Whether the generated room's grown wing has its Party Room built in (none in an owner-built room). */
+    private boolean partyBuilt() {
+        return !hand && trophyBuilt() && ClubhousePlanner.grown(site.box());
+    }
+
+    /** Plan 15: where a visitor is small (the Mini World, {@link ClubhousePlanner#miniWorld}), or {@code null}. */
+    public Box miniWorld() {
+        return partyBuilt() ? ClubhousePlanner.miniWorld(site.box()) : null;
+    }
+
+    /** Plan 15: the block whose being there says the Mini World is (its doorway's lintel), or {@code null}. */
+    public int[] miniLintel() {
+        return partyBuilt() ? ClubhousePlanner.miniLintel(site.box()) : null;
+    }
+
+    /** Plan 15: the Mini World's doorways, or none. */
+    public List<ClubhousePlanner.Place3> miniDoors() {
+        return partyBuilt() ? ClubhousePlanner.miniDoors(site.box()) : List.of();
+    }
+
+    /** Plan 15: the maze's gold middle, or {@code null}. */
+    public ClubhousePlanner.Place3 mazeGoal() {
+        return partyBuilt() ? ClubhousePlanner.mazeGoal(site.box()) : null;
+    }
+
+    /** Plan 15: the trampoline's slime and the air over it, or {@code null}. */
+    public Box trampoline() {
+        return partyBuilt() ? ClubhousePlanner.trampoline(site.box()) : null;
+    }
+
+    /** Plan 15: the ball pit's inside (its balls move when someone is in it), or {@code null}. */
+    public Box ballPit() {
+        return !hand && arcadeBuilt() && ClubhousePlanner.grown(site.box()) ? ClubhousePlanner.ballPitInside(site.box())
+                : null;
+    }
+
     /** Whether the generated room's Arcade Room is built in (open, the side rooms' box in, and switched on). */
     private boolean arcadeBuilt() {
         return site != null && annexIn && rooms.arcade() && open();

@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniDraft;
@@ -35,7 +36,7 @@ public final class MiniEditMenu extends Menu {
         this.draft = draft;
         this.existing = existing;
         this.onBack = onBack;
-        init(54, Text.of(existing ? "&4Edit Mini" : "&2Add Mini"));
+        init(54, Text.of(MenuStyle.title(existing ? "Edit Mini" : "Add Mini")));
     }
 
     @Override
@@ -81,14 +82,14 @@ public final class MiniEditMenu extends Menu {
             refresh();
         });
 
-        set(16, Menus.icon(draft.craftable() ? Material.CRAFTING_TABLE : Material.BARRIER,
+        set(16, Menus.icon(draft.craftable() ? Material.CRAFTING_TABLE : Material.GRAY_DYE,
                 "&eCraftable", "&f" + (draft.craftable() ? "Yes" : "No"),
                 "&7Click to toggle", "&8Recipe wiring lands in a later pass"), e -> {
             draft.setCraftable(!draft.craftable());
             refresh();
         });
 
-        set(19, Menus.icon(Material.BARRIER, "&eMint cap",
+        set(19, Menus.icon(Material.IRON_BARS, "&eMint cap",
                 "&f" + (draft.uncapped() ? "Unlimited" : Long.toString(draft.cap())),
                 "&7Click to set a number or 'unlimited'"),
                 e -> promptText("Enter a mint cap number, or 'unlimited':", this::setCap));

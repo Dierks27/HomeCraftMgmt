@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFour;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFourBoard;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFourMatch;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
@@ -81,7 +82,7 @@ public final class ConnectFourPlayMenu extends GameMenu {
             winning[s] = Menus.glint(Menus.icon(PIECE[s], COLOUR[s] + "&l★ Four in a row ★"), true);
             strip[s] = Menus.icon(STRIP[s], " ");
         }
-        init(54, Text.of("&bConnect Four"));
+        init(54, Text.of(MenuStyle.title("Connect Four")));
     }
 
     @Override

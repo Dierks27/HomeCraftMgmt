@@ -109,7 +109,8 @@ public final class VideoPoker implements Game {
         List<Integer> open = s.open();
         String range = open.isEmpty() ? "no" : open.size() == 1 ? Integer.toString(open.get(0))
                 : open.get(0) + " to " + open.get(open.size() - 1);
-        return Menus.icon(Material.PAPER, "&aVideo Poker &7- " + range + " tokens in", lore.toArray(new String[0]));
+        // 0.59.0: a machine of its own (it was the same paper as Twenty-One and Texas Hold'em on the Games screen)
+        return Menus.icon(Material.OBSERVER, "&aVideo Poker &7- " + range + " tokens in", lore.toArray(new String[0]));
     }
 
     /** Resume the player's open hand, or (gate steps 0-4) open the machine. */

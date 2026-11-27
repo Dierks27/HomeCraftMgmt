@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Parlor;
 import com.dierks.homecraft.games.chance.sportsbook.Board;
 import com.dierks.homecraft.games.chance.sportsbook.Lines;
 import com.dierks.homecraft.games.chance.sportsbook.Sportsbook;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -54,7 +55,7 @@ public final class SportsStakeMenu extends GameMenu {
         this.ticker = ticker;
         this.side = side;
         this.stake = Math.max(0, stake);
-        init(54, Text.of("&2Sports Board &8- your pick"));
+        init(54, Text.of(MenuStyle.title("Sports Board", "your pick")));
     }
 
     @Override

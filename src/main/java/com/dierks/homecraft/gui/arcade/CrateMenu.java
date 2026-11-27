@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.CrateReward;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.util.Text;
@@ -30,7 +31,7 @@ public final class CrateMenu extends Menu {
         this.player = player;
         this.crateId = crateId;
         this.onBack = onBack;
-        init(54, Text.of("&5Crate"));
+        init(54, Text.of(MenuStyle.title("Crate")));
     }
 
     @Override
@@ -40,7 +41,7 @@ public final class CrateMenu extends Menu {
         }
         PluginConfig.Crate crate = plugin.arcade().crate(crateId);
         if (crate == null) {
-            set(22, Menus.icon(Material.BARRIER, "&cCrate not found"), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&cCrate not found"), null);
             set(49, back(), e -> onBack.run());
             return;
         }

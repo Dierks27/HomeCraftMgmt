@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.cpu.CpuLevel;
 import com.dierks.homecraft.games.cpu.CpuPlayer;
 import com.dierks.homecraft.games.cpu.CpuPlayers;
 import com.dierks.homecraft.games.cpu.CpuRoster;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -33,7 +34,7 @@ public final class NpcPickMenu extends GameMenu {
                        Consumer<CpuPlayer> chosen) {
         super(plugin, game, viewer, back);
         this.chosen = chosen;
-        init(27, Text.of("&bPlay an NPC"));
+        init(27, Text.of(MenuStyle.title("Play an NPC")));
     }
 
     @Override

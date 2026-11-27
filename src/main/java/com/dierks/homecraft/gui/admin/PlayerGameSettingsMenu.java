@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.NpcMenu;
 import com.dierks.homecraft.util.Text;
@@ -38,7 +39,7 @@ public final class PlayerGameSettingsMenu extends Menu {
         super(plugin);
         this.admin = admin;
         this.back = back;
-        init(54, Text.of("&ePlayer game settings"));
+        init(54, Text.of(MenuStyle.title("Player game settings")));
     }
 
     @Override

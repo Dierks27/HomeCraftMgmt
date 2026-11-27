@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.mini;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.CardSpec;
 import com.dierks.homecraft.mini.FilamentItems;
@@ -39,7 +40,7 @@ public final class PrinterMenu extends Menu {
         this.player = player;
         this.printer = printer;
         this.isPublic = plugin.printers().isPublic(printer);
-        init(27, Text.of(isPublic ? "&bMini Printer &8· &aPublic" : "&bMini Printer &8· &7Private"));
+        init(27, Text.of(MenuStyle.title("Mini Printer", isPublic ? "Public" : "Private")));
     }
 
     @Override

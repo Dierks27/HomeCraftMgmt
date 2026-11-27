@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -37,7 +38,7 @@ public final class MaterialPickerMenu extends Menu {
         this.filter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
         this.onPick = onPick;
         this.onBack = onBack;
-        init(54, Text.of("&2Pick a material"));
+        init(54, Text.of(MenuStyle.title("Pick a material")));
     }
 
     /** Every tradable material, filtered and alphabetical. */
@@ -78,7 +79,7 @@ public final class MaterialPickerMenu extends Menu {
         }
 
         if (page > 0) {
-            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"), e -> {
                 page--;
                 refresh();
             });
@@ -100,7 +101,7 @@ public final class MaterialPickerMenu extends Menu {
         });
         set(51, Menus.icon(Material.PAPER, "&8" + list.size() + " material(s)"), null);
         if ((page + 1) * PAGE_SIZE < list.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"), e -> {
                 page++;
                 refresh();
             });

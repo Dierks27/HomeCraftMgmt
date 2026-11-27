@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.cabinet.connect;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFour;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFourAI;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -22,9 +23,9 @@ import java.util.List;
  * waiting on and calls it off when tapped.
  *
  * <pre>
- *   .  .  .  .  ?  .  .  .  .      4 how to play
- *   .  E  N  H  .  F  .  S  .      10 easy · 11 normal · 12 hard · 14 a friend · 16 high scores
- *   .  .  I  .  X  .  .  .  .      20 friend invites on/off · 22 back / close
+ *   .  .  .  .  G  .  .  .  .      4 the game's own tile (0.59.0: How to play moved beside the way out)
+ *   .  E  N  H  .  F  C  S  .      10 easy · 11 normal · 12 hard · 14 a friend · 15 an NPC · 16 high scores
+ *   .  .  I  ?  X  .  .  .  .      20 friend invites on/off · 21 how to play · 22 back / close
  * </pre>
  */
 public final class ConnectFourMenu extends GameMenu {
@@ -34,7 +35,7 @@ public final class ConnectFourMenu extends GameMenu {
     public ConnectFourMenu(HomeCraftManagement plugin, ConnectFour game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.connect = game;
-        init(27, Text.of("&bConnect Four"));
+        init(27, Text.of(MenuStyle.title("Connect Four")));
     }
 
     @Override
@@ -42,7 +43,8 @@ public final class ConnectFourMenu extends GameMenu {
         fill();
         List<String> rules = new ArrayList<>(connect.rules());
         rules.add("Closing a game ends it.");
-        set(4, rulesTile(rules), null);
+        headerTile(); // 0.59.0: the tile that was tapped, as the header; How to play beside the way out
+        helpTile(rules);
 
         boolean token = connect.rewardLeft(viewer);
         int reward = connect.settings().dailyReward();

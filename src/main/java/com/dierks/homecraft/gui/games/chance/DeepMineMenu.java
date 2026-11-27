@@ -17,6 +17,7 @@ import com.dierks.homecraft.games.chance.slots.SlotsEngine.LineOdds;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.Spin;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.StakeOdds;
 import com.dierks.homecraft.games.chance.slots.Symbol;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -45,7 +46,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *  row 2   result ▶  reel  reel  reel  ◀  Spin   (21 22 23: the middle row; result 19, Spin 25)
  *  row 3            ▶  reel  reel  reel  ◀        (30 31 32: the bottom row)
  *  row 4          what goes on each row: stake buttons centred on 40, or the chips (39 40 41) and their amount (42)
- *  row 5   46 gives back about N · 47 plays left · 48 today · 49 Back · 50 balance · 53 tokens or money
+ *  row 5   46 gives back about N · 47 plays left · 48 today · 49 Back · 51 balance (0.59.0: it was 50) ·
+ *          53 tokens or money
  * </pre>
  *
  * <p>The player picks what goes on EACH row; a spin always plays all three, and the Spin button says so
@@ -70,7 +72,8 @@ public final class DeepMineMenu extends GameMenu {
     private static final int GIVE_BACK = 46;
     private static final int PLAYS = 47;
     private static final int TODAY = 48;
-    private static final int BALANCE = 50;
+    /** 0.59.0: 51, where every other game of chance shows the balance (it was 50). */
+    private static final int BALANCE = 51;
     private static final int SWITCH = 53;
     private static final int[] CHIPS = {39, 40, 41};
     private static final int CHIPS_BACK = 42;
@@ -109,7 +112,7 @@ public final class DeepMineMenu extends GameMenu {
         for (int r = 0; r < DeepMineEngine.LINES; r++) {
             shown.add(blank());
         }
-        init(54, Text.of("&6" + game.name()));
+        init(54, Text.of(MenuStyle.title(game.name())));
     }
 
     /** What goes on each row for the next spin: the tokens picked, or the chips' dollars. */

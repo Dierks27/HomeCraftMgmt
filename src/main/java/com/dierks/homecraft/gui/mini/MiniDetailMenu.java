@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.storage.MiniDao;
@@ -30,7 +31,7 @@ public final class MiniDetailMenu extends Menu {
         this.player = player;
         this.def = def;
         this.onBack = onBack;
-        init(27, Text.of("&5" + def.name()));
+        init(27, Text.of(MenuStyle.title(def.name())));
     }
 
     @Override

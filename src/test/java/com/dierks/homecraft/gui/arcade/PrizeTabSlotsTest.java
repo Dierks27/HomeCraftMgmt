@@ -4,7 +4,7 @@ import com.dierks.homecraft.arcade.Keepers;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
-import com.dierks.homecraft.games.GameKind;
+import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.mini.Rarity;
 import org.junit.jupiter.api.Test;
 
@@ -77,21 +77,25 @@ class PrizeTabSlotsTest {
         int[] tabs = hubTabs();
         assertArrayEquals(new int[] {19, 20, 21, 22, 23, 24, 25, 26}, tabs, "row 2 after its label at 18");
         assertArrayEquals(tabs, ArcadeMenu.TABS, "the source and the class agree");
-        assertEquals(33, ArcadeMenu.PACKS, "the Luck row, next to the Scratch Ticket");
         assertEquals(4, ArcadeMenu.WALLET);
         assertEquals(8, ArcadeMenu.WILD, "the wild-Mini tracker: row 0, out of the Luck row");
-        // labels 9 (Play), 18, 27 (Luck), 36 (You); crates 28-31, the ticket 32, Games of luck 34, Take a break 35;
-        // Quests, Achievements, My Looks, How It Works, Give a present 37-41; Close 49
-        Set<Integer> taken = new HashSet<>(Set.of(ArcadeMenu.WALLET, ArcadeMenu.WILD, 18, 27, 28, 29, 30, 31, 32, 34,
-                35, 36, 37, 38, 39, 40, 41, 49));
+        // labels 9 (Play), 18, 27 (Luck), 36 (You); 0.59.0: the Luck row 28-35 packed (crates, All crates, the ticket,
+        // Card Packs, Games of luck, Take a break); Quests, Achievements, My Looks, How It Works, Give a present
+        // 37-41; Close 49
+        assertArrayEquals(new int[] {28, 29, 30, 31, 32, 33, 34, 35}, ArcadeMenu.LUCK_ROW, "row 3 after its label");
+        assertTrue(ArcadeMenu.HUB_CRATES + 5 <= ArcadeMenu.LUCK_ROW.length,
+                "three crates, All crates, the ticket, Card Packs, Games of luck and Take a break all fit");
+        Set<Integer> taken = new HashSet<>(Set.of(ArcadeMenu.WALLET, ArcadeMenu.WILD, 18, 27, 36, 37, 38, 39, 40, 41,
+                49));
         for (int s : ArcadeMenu.PLAY) {
             assertTrue(taken.add(s), "slot " + s + " is used twice");
         }
         for (int s : tabs) {
             assertTrue(taken.add(s), "slot " + s + " is used twice");
         }
-        assertTrue(taken.add(ArcadeMenu.PACKS), "Card Packs on a slot of its own");
-        assertTrue(ArcadeMenu.PACKS >= 27 && ArcadeMenu.PACKS < 36, "in the Luck row (27-35), shown with the games off");
+        for (int s : ArcadeMenu.LUCK_ROW) {
+            assertTrue(taken.add(s), "slot " + s + " is used twice");
+        }
         for (int anchor : new int[] {45, 53}) {
             assertFalse(taken.contains(anchor), anchor + " is a page arrow's slot");
         }
@@ -100,32 +104,40 @@ class PrizeTabSlotsTest {
     @Test
     void theHubsPlayRowIsOnTop() {
         assertArrayEquals(new int[] {9, 10, 11, 12, 13, 14, 15, 16, 17}, ArcadeMenu.PLAY,
-                "label, All games, Today's pick, Courses, Mini golf, Cabinets, Together, the Clubhouse, High scores");
+                "label, the doors packed from 10 (0.59.0), High scores at the end");
         for (int s : ArcadeMenu.PLAY) {
             assertTrue(s >= 9 && s < 18, "row 1, right under the Wallet: " + s);
             assertTrue(s != 45 && s != 49 && s != 53, "never on a nav anchor: " + s);
         }
     }
 
+    /**
+     * 0.59.0: a door is drawn exactly when its Games screen tab has something on it (the hub counts as the screen
+     * does), so it can never open onto "Nothing to play here yet" (0.51.1: golf with no course, the Clubhouse's Songs
+     * lighting Courses) and every tab with a tile has its door (Together used to miss the Floor Is Lava).
+     */
     @Test
-    void theCoursesDoorLightsOnlyForACourseTile() {
-        assertTrue(ArcadeMenu.courseTile(GameKind.TRIAL, true, 3), "Time Trials with three open courses");
-        assertTrue(ArcadeMenu.courseTile(GameKind.TRIAL, true, 1), "Fresh Courses (its parkour levels)");
-        assertFalse(ArcadeMenu.courseTile(GameKind.TRIAL, true, 0),
-                "the Clubhouse, Race Night, Falling Floors and the Cup: TRIAL-kind with nothing to play");
-        assertFalse(ArcadeMenu.courseTile(GameKind.TRIAL, false, 3), "a closed game");
-        assertFalse(ArcadeMenu.courseTile(GameKind.GOLF, true, 3), "golf has its own door");
-        assertFalse(ArcadeMenu.courseTile(GameKind.CABINET, true, 1));
+    void aDoorIsDrawnExactlyWhenItsTabHasATile() {
+        Map<Game.Tab, Integer> counts = new java.util.EnumMap<>(Game.Tab.class);
+        counts.put(Game.Tab.CABINETS, 8);
+        counts.put(Game.Tab.COURSES, 0);
+        assertTrue(ArcadeMenu.doorOpen(counts, Game.Tab.CABINETS));
+        assertFalse(ArcadeMenu.doorOpen(counts, Game.Tab.COURSES), "an empty tab: no door");
+        assertFalse(ArcadeMenu.doorOpen(counts, Game.Tab.GOLF), "a tab not counted at all: no door");
+        assertFalse(ArcadeMenu.doorOpen(null, Game.Tab.GOLF));
     }
 
     @Test
-    void theGolfDoorLightsForAGolfTile() {
-        assertTrue(ArcadeMenu.golfTile(GameKind.GOLF, true, false), "Mini golf");
-        assertTrue(ArcadeMenu.golfTile(GameKind.TRIAL, true, true), "Fresh Courses: its set is on the Golf tab too");
-        assertFalse(ArcadeMenu.golfTile(GameKind.GOLF, false, false), "Mini golf off");
-        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, false, true), "Fresh Courses off");
-        assertFalse(ArcadeMenu.golfTile(GameKind.TRIAL, true, false), "Time Trials: the Courses door");
-        assertFalse(ArcadeMenu.golfTile(GameKind.CABINET, true, false));
+    void theHubsRowsPackTheirButtonsFromTheLeft() {
+        assertArrayEquals(new int[] {28, 29, 30}, ArcadeMenu.pack(ArcadeMenu.LUCK_ROW, 3),
+                "one crate, Card Packs and Take a break: side by side, no gap");
+        assertArrayEquals(new int[] {}, ArcadeMenu.pack(ArcadeMenu.DOORS, 0));
+        assertArrayEquals(ArcadeMenu.DOORS, ArcadeMenu.pack(ArcadeMenu.DOORS, 12), "never past the row");
+        assertEquals(7, ArcadeMenu.DOORS.length,
+                "All games, Today's pick, Cabinets, Courses, Mini golf, Together, the Clubhouse");
+        for (int s : ArcadeMenu.DOORS) {
+            assertTrue(s > ArcadeMenu.PLAY[0] && s < ArcadeMenu.PLAY[8], "between the label and High scores: " + s);
+        }
     }
 
     private static PluginConfig.Arcade arcade(List<Prize> prizes) {

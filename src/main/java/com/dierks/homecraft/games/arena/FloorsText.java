@@ -121,12 +121,12 @@ public final class FloorsText {
     /** Under the 3-2-1. */
     public static final String HOLD_SMALL = "&7Get ready!";
 
-    /** The tile's NAME: the key fact is how many are playing, and that you can join. */
+    /** The tile's NAME: the key fact is how many are playing, and that you can join (0.59.0: gold, as all of Together). */
     public static String tile(int playing, boolean open) {
         if (!open) {
             return "&7" + ArenaText.NAME + " &7- opening soon";
         }
-        return playing > 0 ? "&e" + ArenaText.NAME + " &7- " + playing + " playing · join!"
-                : "&e" + ArenaText.NAME + " &7- play solo or together";
+        return playing > 0 ? "&6" + ArenaText.NAME + " &7- " + playing + " playing · join!"
+                : "&6" + ArenaText.NAME + " &7- play solo or together";
     }
 }

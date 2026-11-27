@@ -21,6 +21,7 @@ import com.dierks.homecraft.games.chance.slots.SlotsEngine.LineOdds;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.Spin;
 import com.dierks.homecraft.games.chance.slots.SlotsEngine.StakeOdds;
 import com.dierks.homecraft.games.chance.slots.Symbol;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -51,7 +52,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *  row 2            ▶  reel  reel  reel  ◀        (21 22 23: the one line, nothing above or below)
  *  row 3                  Spin (31)
  *  row 4          stake buttons, centred on 40 (a glint on the one picked); a pot machine: the pot (40)
- *  row 5   46 gives back about N · 47 plays left · 48 today's tokens · 49 Back · 50 balance
+ *  row 5   46 gives back about N · 47 plays left · 48 today's tokens · 49 Back · 51 balance (0.59.0: it was 50,
+ *          the one game of chance with it there) · 53 tokens or money
  * </pre>
  *
  * <p>The spin is decided and paid before the reels move ({@code ChanceRounds.play}); this screen
@@ -87,7 +89,8 @@ public final class SlotsMenu extends GameMenu {
     private static final int GIVE_BACK = 46;
     private static final int PLAYS = 47;
     private static final int TODAY = 48;
-    private static final int BALANCE = 50;
+    /** 0.59.0: 51, where every other game of chance shows the balance (it was 50). */
+    private static final int BALANCE = 51;
     /** 0.46.0, in the Game Parlor: tokens or money, the chips (on the stakes' row) and what they add up to. */
     private static final int SWITCH = 53;
     private static final int[] CHIPS = {39, 40, 41};
@@ -144,7 +147,7 @@ public final class SlotsMenu extends GameMenu {
         this.stake = settings.offered().isEmpty() ? 0 : settings.offered().get(0);
         this.spinEngine = settings.engine();
         this.money = new MoneyPlay(plugin, plugin.games(), viewer);
-        init(54, Text.of("&6" + game.name()));
+        init(54, Text.of(MenuStyle.title(game.name())));
     }
 
     /** Whether the next spin is for dollars: always on a pot machine, else as the switch says. */

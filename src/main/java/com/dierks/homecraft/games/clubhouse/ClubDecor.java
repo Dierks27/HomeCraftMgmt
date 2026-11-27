@@ -99,6 +99,14 @@ final class ClubDecor {
             return null;
         }
         if (p.block()) {
+            if ("diamond".equals(p.look())) {
+                // 0.59.0: a bunting flag, turned on its corner about its middle (its place is its middle)
+                return w.spawn(new Location(w, p.x(), p.y(), p.z(), p.yaw(), 0f), BlockDisplay.class, e -> {
+                    WorldEntities.tag(e, club, null);
+                    e.setBlock(m.createBlockData());
+                    e.setTransformation(diamond(p.sx(), p.sy(), p.sz()));
+                });
+            }
             return w.spawn(new Location(w, p.x(), p.y(), p.z()), BlockDisplay.class, e -> {
                 WorldEntities.tag(e, club, null);
                 e.setBlock(m.createBlockData());
@@ -123,6 +131,32 @@ final class ClubDecor {
             e.setTransformation(new Transformation(new Vector3f(), left, new Vector3f(p.sx(), p.sy(), p.sz()),
                     new Quaternionf()));
         });
+    }
+
+    /**
+     * A block {@code sx} x {@code sy} x {@code sz} turned a quarter of the way round on its face (45 degrees about the
+     * z axis), its middle on the display's place: the display draws {@code turn * (scale * v) + shift}, so the shift is
+     * the turned middle taken back to the place (pure).
+     */
+    static Transformation diamond(float sx, float sy, float sz) {
+        Quaternionf turn = new Quaternionf().rotateZ((float) (Math.PI / 4));
+        Vector3f middle = turn.transform(new Vector3f(sx / 2, sy / 2, sz / 2));
+        return new Transformation(middle.negate(), turn, new Vector3f(sx, sy, sz), new Quaternionf());
+    }
+
+    /** A display standing now: its decoration and its entity. */
+    record Placed(ClubhousePlanner.Prop prop, UUID id) {
+    }
+
+    /** 0.59.0: the displays standing now whose key starts with {@code prefix} (the ball pit's balls: {@link BallPit}). */
+    java.util.List<Placed> placed(String prefix) {
+        java.util.List<Placed> out = new java.util.ArrayList<>();
+        for (Map.Entry<String, Shown> e : shown.entrySet()) {
+            if (e.getKey().startsWith(prefix)) {
+                out.add(new Placed(e.getValue().prop(), e.getValue().id()));
+            }
+        }
+        return out;
     }
 
     /**

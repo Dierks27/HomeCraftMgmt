@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.courier.CourierJob;
 import com.dierks.homecraft.courier.CourierService;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -22,7 +23,7 @@ public final class HandoverMenu extends Menu {
     public HandoverMenu(HomeCraftManagement plugin, Player player) {
         super(plugin);
         this.player = player;
-        init(45, Text.of("&2Delivery &8· &7hand it over"));
+        init(45, Text.of(MenuStyle.title("Delivery", "hand it over")));
     }
 
     @Override

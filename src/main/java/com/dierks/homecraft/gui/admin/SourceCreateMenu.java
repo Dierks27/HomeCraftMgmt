@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.util.Text;
@@ -39,7 +40,7 @@ public final class SourceCreateMenu extends Menu {
         if (!lists.isEmpty()) {
             this.listId = lists.get(0).id();
         }
-        init(45, Text.of("&5New Drop Source"));
+        init(45, Text.of(MenuStyle.title("New Drop Source")));
     }
 
     @Override
@@ -89,7 +90,7 @@ public final class SourceCreateMenu extends Menu {
 
         set(39, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Create source",
                 "&7trigger + target → list @ chance"), e -> create());
-        set(36, Menus.icon(Material.ARROW, "&cBack"), e -> back());
+        set(36, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private void setTrigger(Loot.Trigger t) {

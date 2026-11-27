@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.courier.CourierJob;
 import com.dierks.homecraft.courier.CourierService;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
@@ -30,7 +31,7 @@ public final class JobBoardMenu extends Menu {
         super(plugin);
         this.player = player;
         this.back = back;
-        init(45, Text.of("&2Courier &8· &7job board"));
+        init(45, Text.of(MenuStyle.title("Courier", "job board")));
     }
 
     @Override

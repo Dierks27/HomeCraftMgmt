@@ -246,7 +246,8 @@ public final class CreeperFuse implements Game {
         List<Integer> open = s.open();
         String range = open.isEmpty() ? "no" : open.size() == 1 ? Integer.toString(open.get(0))
                 : open.get(0) + " to " + open.get(open.size() - 1);
-        return Menus.icon(Material.CREEPER_HEAD, "&aCreeper Fuse &7- " + range + " tokens in",
+        // 0.59.0: the fuse's TNT (it was Creeper Sweeper's creeper head on the Games screen)
+        return Menus.icon(Material.TNT, "&aCreeper Fuse &7- " + range + " tokens in",
                 lore.toArray(new String[0]));
     }
 

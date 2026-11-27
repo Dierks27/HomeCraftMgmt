@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.trial.PartyRace;
 import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.Warmup;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -55,7 +56,7 @@ public final class PartyMenu extends GameMenu {
         super(plugin, trials, viewer, back);
         this.trials = trials;
         this.party = trials.party();
-        init(54, Text.of("&dRace with friends"));
+        init(54, Text.of(MenuStyle.title("Race with friends")));
     }
 
     @Override

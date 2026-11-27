@@ -71,8 +71,8 @@ public final class KidRaces implements Game {
     static final long TRACK_MS = 5_000;
     /** The most NPC entries in one race. */
     public static final int MAX_NPCS = 2;
-    /** The Games screen's tab its tile is on: the games played together, never Luck. */
-    public static final Tab TAB = Tab.TOGETHER;
+    /** The Games screen's tab its tile is on: 0.59.0, Little ones (it was on Together); never Luck. */
+    public static final Tab TAB = Tab.LITTLE;
 
     static final Refusal NOT_HERE = Refusal.of("This Mob Races is run on the track in the Clubhouse's Arcade Room.");
     static final Refusal NO_TRACK = Refusal.of("Mob Races has no track in the Arcade Room yet.");
@@ -203,7 +203,7 @@ public final class KidRaces implements Game {
             lore.add("&7" + line);
         }
         lore.add("&7Tap the track in the Arcade Room.");
-        return Menus.icon(Material.SADDLE, "&aMob Races &7- free, in the Arcade Room", lore.toArray(new String[0]));
+        return Menus.icon(Material.SADDLE, "&dMob Races &7- free", lore.toArray(new String[0]));
     }
 
     /** Its tile is shown only where it can be played: to a player standing in the Arcade Room. */

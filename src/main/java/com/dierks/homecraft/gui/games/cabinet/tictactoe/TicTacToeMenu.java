@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.games.cabinet.tictactoe;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToe;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeAI;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -21,9 +22,9 @@ import java.util.List;
  * says in its NAME whether today's token is still there (a win on easy, a draw or better on hard).
  *
  * <pre>
- *   .  .  .  .  ?  .  .  .  .      4 how to play
- *   .  .  E  H  .  F  .  S  .      11 easy · 12 hard · 14 a friend · 16 high scores
- *   .  .  I  .  X  .  .  .  .      20 friend invites on/off · 22 back / close
+ *   .  .  .  .  G  .  .  .  .      4 the game's own tile (0.59.0: How to play moved beside the way out)
+ *   .  .  E  H  .  F  C  S  .      11 easy · 12 hard · 14 a friend · 15 an NPC · 16 high scores
+ *   .  .  I  ?  X  .  .  .  .      20 friend invites on/off · 21 how to play · 22 back / close
  * </pre>
  */
 public final class TicTacToeMenu extends GameMenu {
@@ -33,7 +34,7 @@ public final class TicTacToeMenu extends GameMenu {
     public TicTacToeMenu(HomeCraftManagement plugin, TicTacToe game, Player viewer, Runnable back) {
         super(plugin, game, viewer, back);
         this.ttt = game;
-        init(27, Text.of("&bTic-Tac-Toe"));
+        init(27, Text.of(MenuStyle.title("Tic-Tac-Toe")));
     }
 
     @Override
@@ -41,7 +42,8 @@ public final class TicTacToeMenu extends GameMenu {
         fill();
         List<String> rules = new ArrayList<>(ttt.rules());
         rules.add("Closing a game ends it.");
-        set(4, rulesTile(rules), null);
+        headerTile(); // 0.59.0: the tile that was tapped, as the header; How to play beside the way out
+        helpTile(rules);
 
         boolean token = ttt.rewardLeft(viewer);
         int reward = ttt.settings().dailyReward();

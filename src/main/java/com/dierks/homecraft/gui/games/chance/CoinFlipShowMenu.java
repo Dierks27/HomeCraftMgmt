@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlip;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlipOdds;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlipRules;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Bedrock;
@@ -69,7 +70,7 @@ public final class CoinFlipShowMenu extends GameMenu {
         boolean bedrock = Bedrock.is(viewer);
         this.faces = CoinFlipRules.faces(inviterWins, bedrock ? BEDROCK_FRAMES : JAVA_FRAMES);
         this.schedule = CoinFlipRules.schedule(faces.length, bedrock ? BEDROCK_TICKS : JAVA_TICKS);
-        init(27, Text.of("&5Coin Flip"));
+        init(27, Text.of(MenuStyle.title("Coin Flip")));
     }
 
     @Override

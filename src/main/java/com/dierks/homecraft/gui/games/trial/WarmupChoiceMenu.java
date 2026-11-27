@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.games.trial.Warmup;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -29,7 +30,7 @@ public final class WarmupChoiceMenu extends GameMenu {
         super(plugin, trials, viewer, null);
         this.trials = trials;
         this.course = course;
-        init(27, Text.of("&b" + course.name()));
+        init(27, Text.of(MenuStyle.title(course.name())));
     }
 
     @Override

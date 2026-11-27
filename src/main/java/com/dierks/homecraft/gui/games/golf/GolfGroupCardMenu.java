@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.golf.GolfGroup;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.PartyLobby;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -76,7 +77,7 @@ public final class GolfGroupCardMenu extends GameMenu {
         this.golf = golf;
         this.card = card;
         this.page = Math.max(0, Math.min(page, pages(card) - 1));
-        init(SIZE, Text.of("&d" + card.courseName() + " &8· &5Together"));
+        init(SIZE, Text.of(MenuStyle.title(card.courseName(), "Together")));
     }
 
     @Override

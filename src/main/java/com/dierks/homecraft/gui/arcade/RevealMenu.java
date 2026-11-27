@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -31,7 +32,7 @@ public final class RevealMenu extends Menu {
         this.player = player;
         this.outcome = outcome;
         this.onBack = onBack;
-        init(27, Text.of(outcome.win() ? "&5You won!" : "&8No prize this time"));
+        init(27, Text.of(MenuStyle.title(outcome.win() ? "You won!" : "No prize this time")));
     }
 
     /**

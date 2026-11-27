@@ -176,11 +176,11 @@ class FreshAdminReviewTest {
         assertTrue(String.join(" ", cancel.lore()).contains("gets its own new course"), "as before");
 
         GenOps.Tools daily = new GenOps.Tools(true, true, 1, null, false, null, null, false, false);
-        assertEquals("&dAdmin tools: Golf of the Day", FreshAdmin.title(GOLF, daily), "golf's name at the cadence");
+        assertEquals("&2Admin tools &8- Golf of the Day", FreshAdmin.title(GOLF, daily), "golf's name at the cadence");
         assertTrue(FreshAdmin.headerName(GOLF, daily).startsWith("&dAdmin tools &7- Golf of the Day"),
                 FreshAdmin.headerName(GOLF, daily));
-        assertEquals("&dAdmin tools: Parkour", FreshAdmin.title(PARKOUR, daily), "any other course keeps its name");
-        assertEquals("&dAdmin tools: Golf of the Week", FreshAdmin.title(GOLF, null), "the shipped name when unknown");
+        assertEquals("&2Admin tools &8- Parkour", FreshAdmin.title(PARKOUR, daily), "any other course keeps its name");
+        assertEquals("&2Admin tools &8- Golf of the Week", FreshAdmin.title(GOLF, null), "the shipped name when unknown");
     }
 
     // ---- D6: Choose says when it replaces a pick --------------------------------------------------------

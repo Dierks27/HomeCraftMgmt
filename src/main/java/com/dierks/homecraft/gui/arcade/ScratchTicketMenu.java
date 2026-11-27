@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -48,7 +49,7 @@ public final class ScratchTicketMenu extends Menu implements com.dierks.homecraf
         this.outcome = outcome;
         this.back = back;
         this.symbols = symbols(outcome);
-        init(27, Text.of("&aScratch Ticket"));
+        init(27, Text.of(MenuStyle.title("Scratch Ticket")));
     }
 
     /**

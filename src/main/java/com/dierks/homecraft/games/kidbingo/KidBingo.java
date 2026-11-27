@@ -69,8 +69,8 @@ public final class KidBingo implements Game {
     public static final int MAX_NPCS = 2;
     /** The level every NPC plays Picture Bingo at. */
     public static final CpuLevel NPC_LEVEL = CpuLevel.EASY;
-    /** The Games screen's tab its tile is on: the games played together. */
-    public static final Tab TAB = Tab.TOGETHER;
+    /** The Games screen's tab its tile is on: 0.59.0, Little ones (it was on Together, among the grown-ups' games). */
+    public static final Tab TAB = Tab.LITTLE;
 
     /** Where the round is. */
     public enum Phase {
@@ -218,11 +218,11 @@ public final class KidBingo implements Game {
             lore.add("&7" + line);
         }
         lore.add("&7Tap its cabinet in the Arcade Room.");
-        return Menus.icon(Material.PIG_SPAWN_EGG, "&aPicture Bingo &7- free, for little ones",
+        return Menus.icon(Material.PIG_SPAWN_EGG, "&dPicture Bingo &7- free",
                 lore.toArray(new String[0]));
     }
 
-    /** Its tile is on the Together tab, shown where the Arcade Room's own games are: to someone in the room. */
+    /** Its tile is on the Little ones tab, shown where the Arcade Room's own games are: to someone in the room. */
     @Override
     public List<GameTile> tiles(Player viewer) {
         if (viewer == null || !inArcadeRoom(viewer.getUniqueId())) {

@@ -267,7 +267,8 @@ public final class Bingo implements Game {
             lore.add("&7Each card " + RtpLimits.playerLine(low) + ".");
         }
         lore.add("&e" + s.dailyLimit() + " rounds a day");
-        return Menus.icon(Material.FILLED_MAP, "&aBingo Night &7- " + s.cardPrice() + " tokens a card",
+        // 0.59.0: a picture of its own (it was the Scratch Ticket's map on the Games screen)
+        return Menus.icon(Material.TARGET, "&aBingo Night &7- " + s.cardPrice() + " tokens a card",
                 lore.toArray(new String[0]));
     }
 

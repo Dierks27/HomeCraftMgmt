@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.mini.MiniDef;
@@ -30,7 +31,7 @@ public final class LootListEditMenu extends Menu {
         this.player = player;
         this.listId = listId;
         this.onBack = onBack;
-        init(54, Text.of("&5Loot list: &f" + listId));
+        init(54, Text.of(MenuStyle.title("Loot list", listId)));
     }
 
     @Override

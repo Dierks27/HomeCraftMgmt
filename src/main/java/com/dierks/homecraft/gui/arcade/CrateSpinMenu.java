@@ -5,6 +5,7 @@ import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.CrateReward;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Sounds;
@@ -57,7 +58,7 @@ public final class CrateSpinMenu extends Menu {
         int frames = Bedrock.is(player) ? reveal.bedrockFrames() : reveal.frames();
         this.delays = delays(reveal.spinTicks(), frames);
         this.strip = buildStrip(frames);
-        init(27, Text.of("&5Opening…"));
+        init(27, Text.of(MenuStyle.title("Opening…")));
     }
 
     /**

@@ -5,6 +5,7 @@ import com.dierks.homecraft.arcade.TokenService;
 import com.dierks.homecraft.arcade.looks.LookRules;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.TokenDao;
 import com.dierks.homecraft.util.Text;
@@ -39,7 +40,7 @@ public final class WalletMenu extends Menu {
         super(plugin);
         this.player = player;
         this.back = back;
-        init(54, Text.of("&6Wallet"));
+        init(54, Text.of(MenuStyle.title("Wallet")));
     }
 
     @Override

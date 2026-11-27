@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -24,7 +25,7 @@ public final class CategoriesMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&eMini Categories"));
+        init(54, Text.of(MenuStyle.title("Mini Categories")));
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.Breaks;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.gui.ConfirmMenu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.GamesDao.BreakRow;
 import com.dierks.homecraft.util.GameClock;
@@ -66,7 +67,7 @@ public final class BreakMenu extends GameMenu {
 
     public BreakMenu(HomeCraftManagement plugin, Player viewer, Runnable back) {
         super(plugin, null, viewer, back);
-        init(54, Text.of("&bTake a break"));
+        init(54, Text.of(MenuStyle.title("Take a break")));
     }
 
     // ---- the words (pure, tested) ---------------------------------------------------------

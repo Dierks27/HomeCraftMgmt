@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.muffler;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.muffler.EntityHush;
 import com.dierks.homecraft.muffler.MuffleLevel;
@@ -47,7 +48,7 @@ public final class MufflerMenu extends Menu {
         super(plugin);
         this.player = player;
         this.pos = pos;
-        init(54, Text.of("&8Sound Muffler"));
+        init(54, Text.of(MenuStyle.title("Sound Muffler")));
     }
 
     @Override
@@ -58,7 +59,7 @@ public final class MufflerMenu extends Menu {
         SoundMufflerService svc = plugin.soundMufflers();
         Muffler m = svc == null ? null : svc.at(pos);
         if (m == null) {
-            set(22, Menus.icon(Material.BARRIER, "&cThis muffler is gone", "&7It was broken or moved."), null);
+            set(22, Menus.icon(Material.GRAY_DYE, "&cThis muffler is gone", "&7It was broken or moved."), null);
             set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
             return;
         }

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.Breaks;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.GamesDao.BreakRow;
 import com.dierks.homecraft.util.Bedrock;
@@ -48,7 +49,7 @@ public final class InvitePicker extends GameMenu {
         this.eligible = eligible;
         this.chosen = chosen;
         this.page = Math.max(0, page);
-        init(54, Text.of("&bPick a player"));
+        init(54, Text.of(MenuStyle.title("Pick a player")));
     }
 
     /**
@@ -85,11 +86,11 @@ public final class InvitePicker extends GameMenu {
             set(GRID + i, icon, e -> pick(id));
         }
         if (p > 0) {
-            set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
+            set(45, Menus.icon(Material.ARROW, "&f◀ Previous page"),
                     e -> new InvitePicker(plugin, game, viewer, eligible, chosen, p - 1, back).open(viewer));
         }
         if (p < GamesMenu.pages(players.size()) - 1) {
-            set(53, Menus.icon(Material.ARROW, "&fNext page"),
+            set(53, Menus.icon(Material.ARROW, "&fNext page ▶"),
                     e -> new InvitePicker(plugin, game, viewer, eligible, chosen, p + 1, back).open(viewer));
         }
     }

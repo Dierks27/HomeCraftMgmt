@@ -123,10 +123,18 @@ final class WalkGrid {
 
     /** The grid of {@code plan} (its box), built once per plan hash. */
     static WalkGrid of(Plan plan) {
-        String key = plan.hash() + "@" + plan.half();
+        return of(plan, List.of());
+    }
+
+    /**
+     * The grid of {@code plan} with no cell in any of {@code keepOut} (0.59.0: the Party Room's Mini World, where no
+     * regular ever walks), built once per plan hash and keep-out.
+     */
+    static WalkGrid of(Plan plan, List<Box> keepOut) {
+        String key = plan.hash() + "@" + plan.half() + "-" + keepOut;
         WalkGrid g = CACHE.get(key);
         if (g == null) {
-            g = build(RegularSpots.blocks(plan), plan.half());
+            g = build(RegularSpots.blocks(plan), plan.half(), keepOut);
             CACHE.put(key, g);
         }
         return g;
@@ -134,19 +142,33 @@ final class WalkGrid {
 
     /** The grid of {@code blocks} (by {@link RegularSpots#key}; missing: air) inside {@code box}. */
     static WalkGrid build(Map<Long, String> blocks, Box box) {
+        return build(blocks, box, List.of());
+    }
+
+    /** {@link #build(Map, Box)} with no cell in any of {@code keepOut}. */
+    static WalkGrid build(Map<Long, String> blocks, Box box, List<Box> keepOut) {
         long started = System.nanoTime();
         Map<Long, Cell> cells = new HashMap<>();
         for (int x = box.minX(); x <= box.maxX(); x++) {
             for (int z = box.minZ(); z <= box.maxZ(); z++) {
                 for (int y = box.minY() + 1; y < box.maxY(); y++) {
                     Cell c = cell(blocks, x, y, z);
-                    if (c != null) {
+                    if (c != null && !kept(keepOut, x, y, z)) {
                         cells.put(c.key(), c);
                     }
                 }
             }
         }
         return new WalkGrid(box, cells, started);
+    }
+
+    private static boolean kept(List<Box> keepOut, int x, int y, int z) {
+        for (Box k : keepOut) {
+            if (k.contains(x, y, z)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Cell cell(Map<Long, String> b, int x, int y, int z) {
@@ -336,16 +358,28 @@ final class WalkGrid {
                 }
             }
         }
+        // 0.59.0: a seat is on the biggest floor it can be stepped onto from (it took the first one: a chair against a
+        // wall, with a pocket of floor between it and the next chair, was put on that pocket's floor of one cell)
+        Map<Integer, Integer> size = new HashMap<>();
+        for (int f : floors.values()) {
+            size.merge(f, 1, Integer::sum);
+        }
         for (Cell s : order) {
             if (!s.seat()) {
                 continue;
             }
+            int best = -1;
             for (int[] d : DIRS) {
                 Cell c = stepTo(s, d[0], d[1]);
                 if (c != null && !c.seat() && c.h() <= s.h() + EPS && walkTo(c, -d[0], -d[1], null, s) != null) {
-                    floors.put(s.key(), floors.getOrDefault(c.key(), -1));
-                    break;
+                    int f = floors.getOrDefault(c.key(), -1);
+                    if (best < 0 || size.getOrDefault(f, 0) > size.getOrDefault(best, 0)) {
+                        best = f;
+                    }
                 }
+            }
+            if (best >= 0) {
+                floors.put(s.key(), best);
             }
         }
     }

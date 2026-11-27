@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.Menu;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -26,7 +27,7 @@ public final class QuestRerollMenu extends Menu {
         this.player = player;
         this.prize = prize;
         this.back = back;
-        init(54, Text.of("&5Swap a Quest"));
+        init(54, Text.of(MenuStyle.title("Swap a Quest")));
     }
 
     @Override

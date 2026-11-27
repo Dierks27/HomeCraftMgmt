@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.chance.coinflip.CoinFlip;
 import com.dierks.homecraft.games.cpu.CpuPlayer;
 import com.dierks.homecraft.games.cpu.CpuPlayers;
 import com.dierks.homecraft.games.cpu.CpuRoster;
+import com.dierks.homecraft.gui.MenuStyle;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
@@ -46,7 +47,7 @@ public final class CoinFlipNpcMenu extends GameMenu {
         this.npc = npc;
         CpuPlayers npcs = CpuPlayers.any(plugin.games());
         this.label = npcs == null ? npc.name() : npcs.label(npc);
-        init(27, Text.of("&5Pretend Coin Flip"));
+        init(27, Text.of(MenuStyle.title("Pretend Coin Flip")));
     }
 
     @Override

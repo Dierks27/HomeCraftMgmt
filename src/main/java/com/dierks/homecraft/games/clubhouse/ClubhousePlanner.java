@@ -1552,7 +1552,8 @@ public final class ClubhousePlanner {
     /**
      * A little doorway into the Mini World at (i, k): two blocks of air under a purple lintel, between two purple pillars
      * with a glowing cap on each (along the hedge it stands in: {@code alongX} for one in a hedge running east-west), a
-     * purple carpet on its sill. Walking through it makes a visitor small; walking back out, their own size.
+     * purple sill set in the floor (flat: nothing to step up onto under the lintel). Walking through it makes a visitor
+     * small; walking back out, their own size.
      */
     private static void miniDoor(Builder b, int i, int k, boolean alongX) {
         int di = alongX ? 1 : 0;
@@ -1563,7 +1564,8 @@ public final class ClubhousePlanner {
             }
             b.set(i + side * di, 4, k + side * dk, ARCH_CAP);
         }
-        b.set(i, 1, k, ARCH_SILL);
+        b.set(i, 0, k, ARCH_SILL); // set in the floor: a sill on it would be a step up under the lintel
+        b.set(i, 1, k, AIR);
         b.set(i, 2, k, AIR);
         b.set(i, 3, k, ARCH);
     }
@@ -1729,7 +1731,7 @@ public final class ClubhousePlanner {
     static final String GOAL_CARPET = "minecraft:yellow_carpet";
     static final String ARCH = "minecraft:purple_concrete";
     static final String ARCH_CAP = "minecraft:pearlescent_froglight[axis=y]";
-    static final String ARCH_SILL = "minecraft:purple_carpet";
+    static final String ARCH_SILL = ARCH;
     /** Plan 15, the lane along the Mini World's south hedge (z), and the porch (x) in front of the doll's house. */
     static final int LANE_Z0 = MAIN_Z + 20;
     static final int LANE_Z1 = MAIN_Z + 21;

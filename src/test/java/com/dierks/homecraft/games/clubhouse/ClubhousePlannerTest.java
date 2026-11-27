@@ -48,7 +48,7 @@ class ClubhousePlannerTest {
      * Room are block for block as they were); and plan 12's, which a wing kept at its old size (48 deep) still is, block
      * for block (unchanged since plan 13).
      */
-    static final String HASH = "70c1304df26b";
+    static final String HASH = "8785b0ad0218";
     static final String OLD_HASH = "f483b6018e6f";
     /** The box at its old size: the main room and the wing's first 16 rows. */
     static final Box OLD = Box.sized(MAIN.minX(), MAIN.minY(), MAIN.minZ(), 32, 16, ClubhouseSettings.OLD_SIZE_Z);

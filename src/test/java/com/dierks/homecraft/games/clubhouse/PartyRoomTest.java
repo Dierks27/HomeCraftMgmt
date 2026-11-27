@@ -373,7 +373,8 @@ class PartyRoomTest {
                 }
                 if (door) {
                     doors++;
-                    assertEquals(ClubhousePlanner.ARCH_SILL, at(x, FEET, z), "its sill");
+                    assertEquals(ClubhousePlanner.ARCH_SILL, at(x, FLOOR, z), "its sill, in the floor");
+                    assertNull(at(x, FEET, z), "a flat floor under the lintel: no step up");
                     assertNull(at(x, FEET + 1, z), "two high to walk through");
                     assertEquals(ClubhousePlanner.ARCH, at(x, FEET + 2, z), "under its lintel");
                     continue;
@@ -421,8 +422,9 @@ class PartyRoomTest {
             assertTrue(s.room() >= TALL, "a space only a small visitor fits at " + where(s.x(), s.z()) + " at "
                     + (s.h() - FLOOR) + " (" + s.room() + " high)");
             String under = at(s.x(), (int) Math.round(s.h()) - 1, s.z());
-            assertFalse(ClubhousePlanner.SHRUB.equals(under) || ClubhousePlanner.ARCH.equals(under)
-                    || (s.h() > FEET + 0.5 && ClubhousePlanner.ARCH_CAP.equals(under)) || ClubhousePlanner.PLANTER.equals(under),
+            boolean raised = s.h() > FEET + 0.5; // (the doorways' sills and the dance floor's tiles are in the floor)
+            assertFalse(ClubhousePlanner.SHRUB.equals(under) || ClubhousePlanner.PLANTER.equals(under)
+                    || (raised && (ClubhousePlanner.ARCH.equals(under) || ClubhousePlanner.ARCH_CAP.equals(under))),
                     "never on a hedge's or a doorway's top: " + way(s));
             String feetIn = at(s.x(), feet(s), s.z()); // (in an armchair's arm is no place: ClubhousePlannerTest's rule)
             assertTrue((feetIn != null && feetIn.contains("_trapdoor"))

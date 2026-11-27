@@ -164,6 +164,8 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     private ClubCushions cushions;
     /** 0.41.0: the Arcade Room's cabinets, the Trophy Room's cups and the door signs; null with no server. */
     private SideRooms sideRooms;
+    /** 0.60.0: the sports corner's TVs and score ticker, and the owner's own score TVs. */
+    private SportsBar sportsBar;
     /** 0.42.0: the decoration that isn't blocks (the Feast Pot, the bar, the jukebox's records, the green, prizes). */
     private ClubDecor decor;
     /** Mob Races in the Game Parlor: the model racetrack on its table and the tiny mobs that run on it. */
@@ -442,6 +444,7 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         feastTable = new FeastTable(this);
         cushions = new ClubCushions(log());
         sideRooms = new SideRooms(this);
+        sportsBar = new SportsBar(this);
         decor = new ClubDecor(this);
         drinks = new BarDrinks(this);
         party = new PartyRoom(this);
@@ -632,6 +635,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (sideRooms != null) {
             sideRooms.remove();
+        }
+        if (sportsBar != null) {
+            sportsBar.remove(); // 0.60.0
         }
         if (decor != null) {
             decor.remove();
@@ -1006,6 +1012,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (ballPit != null) {
             ballPit.tick(r); // 0.59.0: the ball pit's balls scatter and jiggle
         }
+        if (sportsBar != null && r != null && r.open()) {
+            sportsBar.tick(); // 0.60.0: the score ticker moves along
+        }
         sweepArrivals();
         if (raceShow != null) {
             raceShow.tick(); // Mob Races' racers move every tick
@@ -1057,6 +1066,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
             }
             if (sideRooms != null) {
                 sideRooms.remove();
+            }
+            if (sportsBar != null) {
+                sportsBar.remove(); // 0.60.0
             }
             if (decor != null) {
                 decor.remove();
@@ -1128,6 +1140,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (sideRooms != null) {
             sideRooms.second(r, now); // 0.41.0
+        }
+        if (sportsBar != null) {
+            sportsBar.second(r, now); // 0.60.0: the sports corner's TVs and score ticker
         }
         if (decor != null) {
             decor.second(r, visits.size() > 0); // 0.42.0
@@ -1256,6 +1271,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         }
         if (sideRooms != null) {
             sideRooms.remove();
+        }
+        if (sportsBar != null) {
+            sportsBar.remove(); // 0.60.0
         }
         if (decor != null) {
             decor.remove();
@@ -2241,7 +2259,12 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
     }
 
     /** The running room, or {@code null} while the Clubhouse is off. */
-    ClubhouseRoom room() {
+    /** 0.60.0: the score TVs and ticker, or {@code null} before the start. */
+    SportsBar sportsBar() {
+        return sportsBar;
+    }
+
+        ClubhouseRoom room() {
         return room;
     }
 

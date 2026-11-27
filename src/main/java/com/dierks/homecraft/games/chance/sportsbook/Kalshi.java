@@ -51,7 +51,16 @@ public final class Kalshi {
      * events it held, and the earliest start among them (epoch ms; {@link Long#MAX_VALUE} for none known): Kalshi
      * lists a league's games soonest first, so a page that starts after the board's window ends the reading.
      */
-    public record Page(List<Board.Game> games, String cursor, int events, long earliest) {
+    public record Page(List<Board.Game> games, String cursor, int events, long earliest, List<Board.Game> started) {
+
+        public Page {
+            games = List.copyOf(games);
+            started = started == null ? List.of() : List.copyOf(started);
+        }
+
+        public Page(List<Board.Game> games, String cursor, int events, long earliest) {
+            this(games, cursor, events, earliest, List.of());
+        }
     }
 
     /** What a market says about how it ended. */
@@ -123,6 +132,14 @@ public final class Kalshi {
      * @throws IllegalArgumentException when the reply is Kalshi's error, or isn't a page of events at all
      */
     public static Page events(String json, String league, long now, long until) {
+        return events(json, league, now, until, now);
+    }
+
+    /**
+     * 0.60.0: as {@link #events(String, String, long, long)}, and also the games that started after {@code since} and
+     * by {@code now} ({@link Page#started}: under way, or just over; their sides may be gone), for the live scores.
+     */
+    public static Page events(String json, String league, long now, long until, long since) {
         JsonObject root = object(json);
         JsonArray events = array(root, "events");
         if (events == null) {
@@ -130,6 +147,7 @@ public final class Kalshi {
         }
         Map<String, Milestone> starts = milestones(array(root, "milestones"));
         List<Board.Game> out = new ArrayList<>();
+        List<Board.Game> started = new ArrayList<>();
         long earliest = Long.MAX_VALUE;
         for (JsonElement e : events) {
             if (!e.isJsonObject()) {
@@ -142,9 +160,12 @@ public final class Kalshi {
             Board.Game g = game(e.getAsJsonObject(), league, starts);
             if (g != null && g.startsAt() > now && g.startsAt() <= until && !g.sides().isEmpty()) {
                 out.add(g);
+            } else if (g != null && since < now && g.startsAt() > since && g.startsAt() <= now
+                    && !g.milestone().isEmpty()) {
+                started.add(g);
             }
         }
-        return new Page(out, text(root, "cursor"), events.size(), earliest);
+        return new Page(out, text(root, "cursor"), events.size(), earliest, started);
     }
 
     /**
@@ -177,8 +198,8 @@ public final class Kalshi {
         return new Market(text(m, "ticker"), text(m, "status"), text(m, "result"));
     }
 
-    /** A game's start and state, from its milestone. */
-    private record Milestone(long startsAt, String state) {
+    /** A game's start and state, from its milestone; 0.60.0: its id and type (its live score is read by them). */
+    private record Milestone(long startsAt, String state, String id, String type) {
     }
 
     private static Map<String, Milestone> milestones(JsonArray list) {
@@ -197,7 +218,7 @@ public final class Kalshi {
             }
             JsonObject details = m.has("details") && m.get("details").isJsonObject() ? m.getAsJsonObject("details")
                     : new JsonObject();
-            Milestone ms = new Milestone(start, text(details, "status"));
+            Milestone ms = new Milestone(start, text(details, "status"), text(m, "id"), text(m, "type"));
             String main = text(details, "main_game_event_ticker");
             if (!main.isEmpty()) {
                 out.put(main, ms);
@@ -249,7 +270,9 @@ public final class Kalshi {
         if (title.isEmpty()) {
             title = text(e, "sub_title");
         }
-        return new Board.Game(event, league, title, ms.startsAt(), ms.state(), sides);
+        String[] teams = Scores.teams(text(e, "sub_title"), title);
+        return new Board.Game(event, league, title, ms.startsAt(), ms.state(), sides, ms.id(), ms.type(), teams[0],
+                teams[1]);
     }
 
     /** One side of a market. */

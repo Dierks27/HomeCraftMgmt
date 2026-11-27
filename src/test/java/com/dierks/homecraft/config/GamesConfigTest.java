@@ -311,6 +311,9 @@ class GamesConfigTest {
         assertEquals(90.0, s.rtp());
         assertEquals(7, s.settleDays());
         assertEquals("https://api.elections.kalshi.com/trade-api/v2", s.apiBase());
+        assertTrue(s.liveScores(), "0.60.0: the live scores are read as shipped");
+        assertEquals(60, s.scoreSeconds());
+        assertEquals(16, s.scoreGames());
         assertEquals("sportsbook", com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC.id(),
                 "the id the Parlor's wall board is tapped as (machine:sportsbook)");
         assertTrue(com.dierks.homecraft.games.chance.sportsbook.Sportsbook.SPEC.kind().chance(),
@@ -318,7 +321,8 @@ class GamesConfigTest {
         List<String> blocks = new ArrayList<>(bundled().getConfigurationSection("games").getKeys(false));
         assertEquals("sportsbook", blocks.get(blocks.size() - 6),
                 "appended at the end of games: (0.57.0's Hold'em, two bingos, Video Poker and Creeper Fuse after it)");
-        assertEquals(List.of("enabled", "leagues", "refresh_minutes", "hours_ahead", "rtp", "settle_days", "api_base"),
+        assertEquals(List.of("enabled", "leagues", "refresh_minutes", "hours_ahead", "rtp", "settle_days", "api_base",
+                "live_scores", "score_seconds", "score_games"),
                 com.dierks.homecraft.games.chance.sportsbook.SportsbookSettings.KEYS);
         List<String> warns = new ArrayList<>();
         com.dierks.homecraft.games.chance.sportsbook.SportsbookSettings read =

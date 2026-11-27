@@ -70,6 +70,8 @@ public final class Sportsbook implements Game {
     static final String KEY_BOARD = "gen.sportsbook.board";
     /** An admin switched picks off ({@code 1}). */
     static final String KEY_OFF = "gen.sportsbook.off";
+    /** 0.60.0: the games followed for their live scores, and their last scores, kept for a restart. */
+    static final String KEY_SCORES = "gen.sportsbook.scores";
     /** How many settled picks My picks shows. */
     public static final int SETTLED_SHOWN = 14;
     /** The stake the wall board prices at. */
@@ -129,6 +131,19 @@ public final class Sportsbook implements Game {
     private Runner runner;
     private KalshiClient.Sleeper sleeper = Thread::sleep;
 
+    /** 0.60.0: the games under way and just over, with their live scores ({@link LiveScores}). */
+    private LiveScores scores = new LiveScores();
+    /** A round of live scores is in flight. */
+    private boolean scoresBusy;
+    /** When the last round of live scores started (0: none this run). */
+    private long scoresTry;
+    /** What the last round couldn't read, or {@code null}. */
+    private String scoresError;
+    /** The live scores' outage had its one console line. */
+    private boolean scoresWarned;
+    /** Whether anyone is on the server to see the scores (a test sets its own). */
+    private java.util.function.BooleanSupplier watched;
+
     public Sportsbook(GameContext ctx) {
         this.ctx = ctx;
     }
@@ -141,6 +156,11 @@ public final class Sportsbook implements Game {
         this.fetcher = fetcher;
         this.runner = runner;
         this.sleeper = ms -> { };
+    }
+
+    /** For tests: whether anyone is on the server to see the live scores. */
+    public void watched(java.util.function.BooleanSupplier anyone) {
+        this.watched = anyone;
     }
 
     public GamesService games() {
@@ -235,6 +255,7 @@ public final class Sportsbook implements Game {
         running = true;
         if (ctx.plugin() != null) {
             games().every(this, 100, 1200, this::tick); // once a minute: a refresh when one is due
+            games().every(this, 200, 200, this::scoreTick); // 0.60.0: every 10 s, a round of live scores when due
         }
     }
 
@@ -243,6 +264,7 @@ public final class Sportsbook implements Game {
         running = false;
         generation++; // a reading in flight is dropped
         busy = false;
+        scoresBusy = false;
     }
 
     /**
@@ -332,8 +354,8 @@ public final class Sportsbook implements Game {
     /** One minute passed: refresh when one is due. */
     void tick() {
         long now = games().clock().nowMillis();
-        if (!busy && now - lastTry >= settings().refreshMs()) {
-            refresh();
+        if (!busy && !scoresBusy && now - lastTry >= settings().refreshMs()) {
+            refresh(); // one reader at a time: a round of scores in flight puts it off to the next minute
         }
     }
 
@@ -377,13 +399,14 @@ public final class Sportsbook implements Game {
         busy = true;
         int gen = generation;
         long until = now + s.hoursAhead() * 3_600_000L;
+        long since = now - LiveScores.KEEP_MS;
         List<SportsbookSettings.League> leagues = s.boardLeagues();
         List<String> asked = List.copyOf(tickers);
         KalshiClient.Sleeper sleep = sleeper;
         run.async(() -> {
             KalshiClient.Result r;
             try {
-                r = KalshiClient.fetch(f, sleep, leagues, asked, now, until, lines);
+                r = KalshiClient.fetch(f, sleep, leagues, asked, now, until, lines, since);
             } catch (RuntimeException e) {
                 r = new KalshiClient.Result(null, Map.of(), KalshiClient.describe(e));
             }
@@ -406,6 +429,8 @@ public final class Sportsbook implements Game {
             lastOk = games().clock().nowMillis();
             outage = false;
             metaSet(KEY_BOARD, board.toJson());
+            scores.seen(r.started(), askedAt); // 0.60.0: the games under way, for their live scores
+            scores.seen(board.games(), askedAt);
         }
         if (r.error() != null) {
             failed(r.error(), lines && r.games() == null);
@@ -530,6 +555,29 @@ public final class Sportsbook implements Game {
         }
     }
 
+    /**
+     * 0.60.0 (the owner: "any place we can check our bets after the fact to show how we did?"): every pick a player
+     * made, newest first, the open ones then every settled one ({@code null} when they can't be read).
+     */
+    public List<Pick> history(UUID player) {
+        try {
+            return games().dao().sports().history(player);
+        } catch (SQLException e) {
+            log().log(Level.WARNING, "[Sports Board] Could not read a player's picks", e);
+            return null;
+        }
+    }
+
+    /** 0.60.0: everyone's settled picks together, or {@code null} when they can't be read. */
+    public SportsPicksDao.Totals everyone() {
+        try {
+            return games().dao().sports().everyone();
+        } catch (SQLException e) {
+            log().log(Level.WARNING, "[Sports Board] Could not read everyone's picks", e);
+            return null;
+        }
+    }
+
     // ---- settling ------------------------------------------------------------------------------------------
 
     /** Settle every open pick whose market was decided, then give back the ones undecided too long. */
@@ -609,8 +657,9 @@ public final class Sportsbook implements Game {
      * Parlor keeps what the bank refuses (or can't reach) as owed and pays it when it can.
      */
     private boolean finish(Pick p, String status, long cents, long now) {
+        String fin = scores.finalFor(p.ticker()); // 0.60.0: the game's final score, when the live scores have it
         try {
-            if (!games().dao().sports().settle(p.id(), status, cents, now)) {
+            if (!games().dao().sports().settle(p.id(), status, cents, now, fin)) {
                 return false; // already settled: it paid there
             }
         } catch (SQLException e) {
@@ -623,9 +672,19 @@ public final class Sportsbook implements Game {
         }
         log().info("[Sports Board] Pick " + p.id() + " on " + p.pick() + " (" + p.ticker() + " " + p.side() + "): "
                 + status + (cents > 0 ? ", " + Parlor.money(cents) + " to " + p.player() : ""));
-        games().notice(p.player(), told(p, status, cents, settings().settleDays()),
+        games().notice(p.player(), told(p, status, cents, settings().settleDays(), fin),
                 games().online(p.player()) == null);
         return true;
+    }
+
+    /**
+     * What the player reads when their pick is settled (pure), with the game's final score after it when it is known
+     * (0.60.0: "Your pick on Calgary won: $12.41. Final: CGY 6  PIT 3.").
+     */
+    public static String told(Pick p, String status, long cents, int settleDays, String finalScore) {
+        String said = told(p, status, cents, settleDays);
+        return finalScore == null || finalScore.isBlank() || SportsPicksDao.LAPSED.equals(status) ? said
+                : said + " &7" + finalScore + ".";
     }
 
     /** What the player reads when their pick is settled (pure). */
@@ -639,6 +698,186 @@ public final class Sportsbook implements Game {
             default -> "&7Your pick on " + p.pick() + " had no result after " + settleDays + " days, so your &6"
                     + Parlor.money(cents) + " &7came back.";
         };
+    }
+
+    // ---- 0.60.0: the live scores (the sports corner's TVs and ticker draw them) -----------------------------------
+
+    /** Every ten seconds: a round of live scores when one is due. */
+    void scoreTick() {
+        long now = games().clock().nowMillis();
+        if (!scoresBusy && !busy && now - scoresTry >= settings().scoreMs() - 1_000L) {
+            refreshScores();
+        }
+    }
+
+    /**
+     * Read the live scores now (off the main thread, one game after another): the games on the board that have
+     * started and aren't known to be over, at most {@code score_games}, the ones with open picks first. Only while
+     * someone is on the server to see them, or a pick waits on the game; never while the lines are being read.
+     *
+     * @return whether a round went out
+     */
+    public boolean refreshScores() {
+        SportsbookSettings s = settings();
+        if (!s.liveScores() || scoresBusy || busy) {
+            return false;
+        }
+        load();
+        long now = games().clock().nowMillis();
+        scoresTry = now;
+        scores.seen(board.games(), now);
+        boolean pruned = scores.prune(now);
+        java.util.Set<String> wanted = new java.util.HashSet<>();
+        try {
+            for (String t : games().dao().sports().openTickers()) {
+                wanted.add(event(t));
+            }
+        } catch (SQLException e) {
+            log().log(Level.WARNING, "[Sports Board] Could not read the open picks for the live scores", e);
+        }
+        boolean anyone = watched != null ? watched.getAsBoolean()
+                : ctx.plugin() == null || !ctx.plugin().getServer().getOnlinePlayers().isEmpty();
+        List<LiveScores.Game> due = new ArrayList<>();
+        for (LiveScores.Game g : scores.due(now, anyone ? s.scoreGames() : Integer.MAX_VALUE, wanted)) {
+            if ((anyone || wanted.contains(g.event())) && due.size() < s.scoreGames()) {
+                due.add(g);
+            }
+        }
+        if (due.isEmpty()) {
+            if (pruned) {
+                metaSet(KEY_SCORES, scores.toJson());
+            }
+            return false;
+        }
+        KalshiClient.Fetcher f;
+        try {
+            f = fetcher != null ? fetcher : KalshiClient.http(s.apiBase());
+        } catch (IllegalArgumentException e) {
+            scoresFailed(e.getMessage());
+            return false;
+        }
+        Runner run = runner != null ? runner : bukkit(ctx.plugin());
+        if (run == null) {
+            return false;
+        }
+        Map<String, String[]> asked = new LinkedHashMap<>();
+        for (LiveScores.Game g : due) {
+            asked.put(g.event(), new String[]{g.kind(), g.milestone()});
+        }
+        scoresBusy = true;
+        int gen = generation;
+        KalshiClient.Sleeper sleep = sleeper;
+        run.async(() -> {
+            KalshiClient.ScoresRead r;
+            try {
+                r = KalshiClient.scores(f, sleep, asked);
+            } catch (RuntimeException e) {
+                r = new KalshiClient.ScoresRead(Map.of(), KalshiClient.describe(e));
+            }
+            KalshiClient.ScoresRead result = r;
+            run.main(() -> {
+                scoresBusy = false;
+                if (gen != generation && running) {
+                    return;
+                }
+                games().guard(this, () -> readScores(result));
+            });
+        });
+        return true;
+    }
+
+    /** A round of live scores came back (main thread): each game's score, and a finished game's final kept. */
+    void readScores(KalshiClient.ScoresRead r) {
+        long now = games().clock().nowMillis();
+        for (Map.Entry<String, Scores.Live> e : r.scores().entrySet()) {
+            if (scores.read(e.getKey(), e.getValue(), now)) {
+                LiveScores.Entry done = scores.get(e.getKey());
+                try {
+                    games().dao().sports().finalScore(e.getKey(), done.line());
+                } catch (SQLException ex) {
+                    log().log(Level.WARNING, "[Sports Board] Could not keep a final score on its picks", ex);
+                }
+            }
+        }
+        if (r.error() != null) {
+            scoresFailed(r.error());
+        } else {
+            if (scoresWarned) {
+                log().info("[Sports Board] The live scores read again.");
+            }
+            scoresWarned = false;
+            scoresError = null;
+        }
+        metaSet(KEY_SCORES, scores.toJson());
+    }
+
+    /** One console line for a whole outage of the live scores; the scores shown stay as they were. */
+    private void scoresFailed(String why) {
+        scoresError = why;
+        if (!scoresWarned) {
+            scoresWarned = true;
+            log().warning("[Sports Board] A live score could not be read (" + why + ") - the last scores stay up and"
+                    + " are read again in " + settings().scoreSeconds() + " seconds.");
+        }
+    }
+
+    /** A market's event: its ticker without the last part ({@code KXNBAGAME-26NOV27MIANYK-NYK}: the game's). */
+    static String event(String ticker) {
+        int dash = ticker == null ? -1 : ticker.lastIndexOf('-');
+        return dash <= 0 ? (ticker == null ? "" : ticker) : ticker.substring(0, dash);
+    }
+
+    /** The live scores as kept (for the tests and the status). */
+    public LiveScores scores() {
+        load();
+        return scores;
+    }
+
+    /**
+     * What the TVs and the ticker show: the games being played, then those just over, each with its league's tab
+     * and its last score. A plain read: nothing is fetched.
+     */
+    public List<ScoreScreens.Item> scoreItems() {
+        load();
+        List<ScoreScreens.Item> out = new ArrayList<>();
+        if (!settings().liveScores()) {
+            return out;
+        }
+        Map<String, String> tabs = tabs();
+        for (LiveScores.Entry e : scores.shown()) {
+            LiveScores.Game g = e.game();
+            out.add(new ScoreScreens.Item(tabs.getOrDefault(g.league(), g.league().toUpperCase(Locale.ROOT)),
+                    g.away(), g.home(), e.live()));
+        }
+        return out;
+    }
+
+    /** The next {@code max} games to start, for a TV with no game under way. A plain read. */
+    public List<ScoreScreens.Upcoming> nextGames(int max) {
+        long now = games().clock().nowMillis();
+        Map<String, String> tabs = tabs();
+        List<ScoreScreens.Upcoming> out = new ArrayList<>();
+        for (Board.Game g : board().upcoming(now, null)) {
+            if (out.size() >= max) {
+                break;
+            }
+            String[] t = g.away().isEmpty() || g.home().isEmpty() ? Scores.teams("", g.title())
+                    : new String[]{g.away(), g.home()};
+            if (t[0].isEmpty()) {
+                continue;
+            }
+            out.add(new ScoreScreens.Upcoming(tabs.getOrDefault(g.league(), g.league().toUpperCase(Locale.ROOT)),
+                    t[0], t[1], when(g.startsAt(), now, games().clock().zone())));
+        }
+        return out;
+    }
+
+    private Map<String, String> tabs() {
+        Map<String, String> tabs = new LinkedHashMap<>();
+        for (SportsbookSettings.League l : settings().boardLeagues()) {
+            tabs.put(l.key(), l.tab());
+        }
+        return tabs;
     }
 
     // ---- the wall board (the Clubhouse draws it) -------------------------------------------------------------
@@ -763,6 +1002,9 @@ public final class Sportsbook implements Game {
             log().log(Level.WARNING, "[Sports Board] Could not read today's picks", e);
         }
         SportsbookSettings s = settings();
+        out.add("&7Live scores: &f" + (!s.liveScores() ? "off" : scores.size() + " games followed, "
+                + scores.shown().size() + " shown; read " + (scoresTry <= 0 ? "not yet this run"
+                : Menus.duration(now - scoresTry) + " ago")) + (scoresError != null ? " &c(" + scoresError + ")" : ""));
         out.add("&7Leagues: &f" + String.join(", ", s.leagues()) + " &7- every " + s.refreshMinutes() + " min, "
                 + s.hoursAhead() + " h ahead, " + percent(s.rtp()) + " of every 100 back");
         return out;
@@ -885,6 +1127,10 @@ public final class Sportsbook implements Game {
         String kept = meta(KEY_BOARD);
         if (kept != null && board.fetchedAt() == 0) {
             board = Board.fromJson(kept);
+        }
+        String followed = meta(KEY_SCORES); // 0.60.0
+        if (followed != null && scores.size() == 0) {
+            scores = LiveScores.fromJson(followed);
         }
     }
 

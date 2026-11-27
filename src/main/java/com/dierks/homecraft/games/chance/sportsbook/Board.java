@@ -37,11 +37,25 @@ public record Board(long fetchedAt, List<Game> games) {
      * @param startsAt when it starts (epoch ms): picks close then
      * @param state    the game's state as Kalshi has it ({@code scheduled}, {@code inprogress}, ...; "" for unknown)
      * @param sides    who can be picked, each with its price
+     * @param milestone 0.60.0: the game's milestone at Kalshi (its live score is read by it), "" for unknown
+     * @param kind      the milestone's type ({@code basketball_game}, {@code hockey_match}, ...), "" for unknown
+     * @param away      the visitors' short name ("MIA"), "" for unknown
+     * @param home      the home side's short name ("NYK"), "" for unknown
      */
-    public record Game(String event, String league, String title, long startsAt, String state, List<Side> sides) {
+    public record Game(String event, String league, String title, long startsAt, String state, List<Side> sides,
+                       String milestone, String kind, String away, String home) {
 
         public Game {
             sides = List.copyOf(sides);
+            milestone = milestone == null ? "" : milestone;
+            kind = kind == null ? "" : kind;
+            away = away == null ? "" : away;
+            home = home == null ? "" : home;
+        }
+
+        /** A game with no milestone or short names (a board kept before 0.60.0, and the tests' own). */
+        public Game(String event, String league, String title, long startsAt, String state, List<Side> sides) {
+            this(event, league, title, startsAt, state, sides, "", "", "", "");
         }
 
         /** Whether picks may still be made on it at {@code now}: before its start, and not under way at Kalshi. */
@@ -122,6 +136,12 @@ public record Board(long fetchedAt, List<Game> games) {
             o.addProperty("t", g.title());
             o.addProperty("s", g.startsAt());
             o.addProperty("st", g.state());
+            if (!g.milestone().isEmpty()) { // 0.60.0
+                o.addProperty("ms", g.milestone());
+                o.addProperty("mt", g.kind());
+                o.addProperty("aw", g.away());
+                o.addProperty("hm", g.home());
+            }
             JsonArray ss = new JsonArray();
             for (Side s : g.sides()) {
                 JsonObject x = new JsonObject();
@@ -139,6 +159,11 @@ public record Board(long fetchedAt, List<Game> games) {
         }
         root.add("games", gs);
         return root.toString();
+    }
+
+    private static String opt(JsonObject o, String k) {
+        JsonElement e = o.get(k);
+        return e == null || e.isJsonNull() ? "" : e.getAsString();
     }
 
     /** A board kept by {@link #toJson}, or {@link #EMPTY} for nothing or nonsense. */
@@ -159,7 +184,8 @@ public record Board(long fetchedAt, List<Game> games) {
                             x.get("p").getAsInt()));
                 }
                 games.add(new Game(o.get("e").getAsString(), o.get("l").getAsString(), o.get("t").getAsString(),
-                        o.get("s").getAsLong(), o.get("st").getAsString(), sides));
+                        o.get("s").getAsLong(), o.get("st").getAsString(), sides, opt(o, "ms"), opt(o, "mt"),
+                        opt(o, "aw"), opt(o, "hm")));
             }
             return new Board(root.get("at").getAsLong(), games);
         } catch (RuntimeException e) {

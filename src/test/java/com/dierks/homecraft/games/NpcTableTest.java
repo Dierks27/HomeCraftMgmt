@@ -290,7 +290,7 @@ class NpcTableTest {
     }
 
     @Test
-    void aShowAtTheEmptyTableIsDroppedTheMomentARealPlayerSits() {
+    void aShowAtTheEmptyTableIsDroppedTheMomentARealPlayerSits() throws Exception {
         npcs.audience = true;
         for (int i = 0; i < 600 && table.phase() != Phase.PLAYING; i++) {
             seconds(1);
@@ -302,8 +302,17 @@ class NpcTableTest {
         assertNotNull(sit(alex));
         assertEquals(Phase.OPEN, table.phase(), "Alex never waits on a show: its round is over at once");
         table.ready(alex.player, true);
-        assertEquals(Phase.PLAYING, table.phase(), "Alex's cards come at once (the NPCs are always ready)");
-        assertTrue(table.seat(alex.id).hand() >= 0);
+        // the shoe is mid-way through the show's cards, so the deal is random: a dealer's two-card 21 settles the
+        // round as it is dealt and the table is OPEN again at once. Either way Alex was dealt in straight away.
+        assertTrue(table.seat(alex.id).hand() >= 0, "Alex's cards come at once (the NPCs are always ready)");
+        assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE player = '" + alex.id + "'"),
+                "Alex's round was opened");
+        if (table.phase() == Phase.OPEN) {
+            assertEquals(1, count("SELECT COUNT(*) FROM game_rounds WHERE player = '" + alex.id
+                    + "' AND state = 'SETTLED'"), "a table OPEN again means Alex's round is already settled");
+        } else {
+            assertEquals(Phase.PLAYING, table.phase());
+        }
     }
 
     @Test

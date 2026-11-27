@@ -411,6 +411,9 @@ public final class Clubhouse implements Game, ClubDoor, com.dierks.homecraft.gam
         if (sideRooms != null) {
             out.add("side rooms up: " + sideRooms.statusLine()); // 0.41.0
         }
+        if (sportsBar != null) {
+            out.add("score TVs and ticker up: " + sportsBar.count()); // 0.60.0
+        }
         if (raceShow != null) {
             out.add(raceShow.statusLine());
         }

@@ -39,6 +39,9 @@ import java.util.Locale;
  *       on their shelf, back to the wall, the row to their right) and the signs over its two doorways. Optional.</li>
  *   <li>{@code arcade mob_races [clear]} (plan 11): the Arcade Room's race table for the free kid race, the one the
  *       admin stands on (a corner of it, facing along it), as {@code parlor mob_races} is the Parlor's.</li>
+ *   <li>{@code tv add [size]|remove|list} (0.60.0): the owner's own score TVs ({@link ClubTvs}): the live scores on
+ *       the block face the admin looks at, inside the Clubhouse, kept through restarts and rebuilds; {@code tv list}
+ *       also gives the Parlor video wall's corner blocks for a Collins screen.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>

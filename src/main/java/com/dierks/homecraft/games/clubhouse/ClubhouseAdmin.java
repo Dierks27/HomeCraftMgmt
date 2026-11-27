@@ -39,6 +39,9 @@ import java.util.Locale;
  *       on their shelf, back to the wall, the row to their right) and the signs over its two doorways. Optional.</li>
  *   <li>{@code arcade mob_races [clear]} (plan 11): the Arcade Room's race table for the free kid race, the one the
  *       admin stands on (a corner of it, facing along it), as {@code parlor mob_races} is the Parlor's.</li>
+ *   <li>{@code tv add [size]|remove|list} (0.60.0): the owner's own score TVs ({@link ClubTvs}): the live scores on
+ *       the block face the admin looks at, inside the Clubhouse, kept through restarts and rebuilds; {@code tv list}
+ *       also gives the Parlor video wall's corner blocks for a Collins screen.</li>
  *   <li>{@code generated}: back to the generated room (built and checked first).</li>
  *   <li>{@code rebuild confirm}: build the generated room again now and check it, claiming the box
  *       even with blocks in it (they are cleared).</li>
@@ -55,7 +58,7 @@ final class ClubhouseAdmin implements GameAdmin {
     /** Its subcommands, in help order. */
     static final List<String> SUBS = List.of("status", "tp", "here", "podium", "board", "trophies", "jukebox",
             "feast", "cabinet", "trophyroom", "door", "secret", "parlor", "arcade", "edit", "save", "discard", "saves", "restore",
-            "spot", "models", "generated", "rebuild", "off");
+            "spot", "models", "tv", "generated", "rebuild", "off");
 
     private final Clubhouse game;
 
@@ -171,6 +174,7 @@ final class ClubhouseAdmin implements GameAdmin {
                 }
             }
             case "models" -> out.addAll(models(game.plugin() == null ? null : game.plugin().packModels()));
+            case "tv" -> out.addAll(tv(sender, room, args));
             case "spot" -> {
                 if (!(sender instanceof Player p)) {
                     out.add("&cOnly a player can do that - stand where it goes first.");
@@ -333,6 +337,48 @@ final class ClubhouseAdmin implements GameAdmin {
         };
     }
 
+    /**
+     * 0.60.0, {@code tv add [size]|remove|list}: the owner's own score TVs ({@link ClubTvs}): the live scores on the
+     * block face the admin looks at (a TV they built), the nearest one taken down, or the list.
+     */
+    private List<String> tv(CommandSender sender, ClubhouseRoom room, String[] args) {
+        String verb = args != null && args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "list";
+        SportsBar bar = game.sportsBar();
+        if (room == null) {
+            return List.of(notRunning(closedWhy()));
+        }
+        if (bar == null) {
+            return List.of("&cThe Clubhouse isn't started yet.");
+        }
+        if (verb.equals("list")) {
+            return bar.list(room);
+        }
+        if (!(sender instanceof Player p)) {
+            return List.of("&cOnly a player can do that - look at where it goes first.");
+        }
+        return switch (verb) {
+            case "add" -> {
+                int size = ClubTvs.SIZE;
+                if (args.length > 2) {
+                    try {
+                        size = Integer.parseInt(args[2]);
+                    } catch (NumberFormatException e) {
+                        yield List.of("&cThe size is how many blocks across the screen is: "
+                                + ClubTvs.SIZE_MIN + " to " + ClubTvs.SIZE_MAX + ".");
+                    }
+                }
+                yield List.of(bar.add(room, p, size));
+            }
+            case "remove" -> List.of(bar.removeNearest(room, p));
+            default -> List.of(TV_USAGE);
+        };
+    }
+
+    static final String TV_USAGE = "&e/hcm games clubhouse tv add [size]|remove|list &7- a score TV: the live scores"
+            + " on the block face you look at (a TV you built; size is blocks across, " + ClubTvs.SIZE_MIN + "-"
+            + ClubTvs.SIZE_MAX + "), kept through restarts and rebuilds; &etv list &7also gives the Parlor video wall's"
+            + " corners for a Collins screen";
+
     /** 0.42.0, {@code models}: each model's id, its size, and whether it's the owner's own or HCM's placeholder. */
     static List<String> models(com.dierks.homecraft.pack.PackModels pack) {
         List<String> out = new ArrayList<>();
@@ -450,6 +496,18 @@ final class ClubhouseAdmin implements GameAdmin {
             if ("clear".startsWith(last)) {
                 out.add("clear");
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("tv")) {
+            for (String v : List.of("add", "remove", "list")) {
+                if (v.startsWith(last)) {
+                    out.add(v);
+                }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("tv") && args[1].equalsIgnoreCase("add")) {
+            for (int n = ClubTvs.SIZE_MIN; n <= ClubTvs.SIZE_MAX; n++) {
+                if (String.valueOf(n).startsWith(last)) {
+                    out.add(String.valueOf(n));
+                }
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("podium")) {
             for (String n : List.of("1", "2", "3")) {
                 if (n.startsWith(last)) {
@@ -475,6 +533,7 @@ final class ClubhouseAdmin implements GameAdmin {
             "&e/hcm games clubhouse edit|save [confirm]|discard|saves|restore <n> &7- decorate HCM's room yourself and"
                     + " save it as the Clubhouse",
             "&e/hcm games clubhouse spot <name> [clear] &7- move a spot of your edited room; &emodels &7- the model list",
+            TV_USAGE,
             "&e/hcm games clubhouse generated [confirm]|rebuild confirm|off &7- the built room, build it again, switch"
                     + " it off");
 

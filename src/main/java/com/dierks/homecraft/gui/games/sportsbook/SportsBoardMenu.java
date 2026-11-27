@@ -79,8 +79,9 @@ public final class SportsBoardMenu extends GameMenu {
                         refresh();
                     });
         }
-        set(MY_PICKS, Menus.icon(Material.WRITABLE_BOOK, "&eMy picks", "&7Your open picks and what they pay,",
-                "&7and how the last ones went.", "&eClick to see them"),
+        set(MY_PICKS, Menus.icon(Material.WRITABLE_BOOK, "&eMy picks &7- how you did",
+                "&7Your open picks and what they pay,", "&7every pick you made and how it went,",
+                "&7and whether you're up or down.", "&eClick to see them"),
                 e -> new MyPicksMenu(plugin, sb, viewer, this::reopen).open(viewer));
 
         List<Board.Game> games = league == null ? List.of() : board.upcoming(now, league);

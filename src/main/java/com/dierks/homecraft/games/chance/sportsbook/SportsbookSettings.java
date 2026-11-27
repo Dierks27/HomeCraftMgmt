@@ -23,14 +23,19 @@ import java.util.Map;
  * @param rtp            what a pick gives back over time, a percent inside the band
  * @param settleDays     a pick whose game is still undecided this many days after it started is given back
  * @param apiBase        Kalshi's public market data, no key ({@code .../trade-api/v2})
+ * @param liveScores     0.60.0: the games under way have their live scores read (the sports corner's TVs and ticker,
+ *                       and a settled pick's final score)
+ * @param scoreSeconds   how often the live scores are read
+ * @param scoreGames     the most games whose scores are read each time
  */
 public record SportsbookSettings(boolean enabled, List<String> leagues, int refreshMinutes, int hoursAhead, double rtp,
-                                 int settleDays, String apiBase) {
+                                 int settleDays, String apiBase, boolean liveScores, int scoreSeconds,
+                                 int scoreGames) {
 
     public static final String ID = "sportsbook";
     /** The leaves under {@code games.sportsbook}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "leagues", "refresh_minutes", "hours_ahead", "rtp",
-            "settle_days", "api_base");
+            "settle_days", "api_base", "live_scores", "score_seconds", "score_games");
     /** Kalshi's public API, as shipped. */
     public static final String API_BASE = "https://api.elections.kalshi.com/trade-api/v2";
 
@@ -40,6 +45,10 @@ public record SportsbookSettings(boolean enabled, List<String> leagues, int refr
     public static final int HOURS_MAX = 72;
     public static final int SETTLE_MIN = 1;
     public static final int SETTLE_MAX = 30;
+    public static final int SCORE_SECONDS_MIN = 30;
+    public static final int SCORE_SECONDS_MAX = 600;
+    public static final int SCORE_GAMES_MIN = 1;
+    public static final int SCORE_GAMES_MAX = 30;
     /** The most leagues the board has tabs for. */
     public static final int MAX_LEAGUES = 8;
 
@@ -76,14 +85,20 @@ public record SportsbookSettings(boolean enabled, List<String> leagues, int refr
         leagues = List.copyOf(leagues);
     }
 
+    /** The settings with the live scores as shipped (read every minute, 16 games at a time). */
+    public SportsbookSettings(boolean enabled, List<String> leagues, int refreshMinutes, int hoursAhead, double rtp,
+                              int settleDays, String apiBase) {
+        this(enabled, leagues, refreshMinutes, hoursAhead, rtp, settleDays, apiBase, true, 60, 16);
+    }
+
     /**
      * The shipped settings: the big leagues' game winners (a league out of season simply has no games), read every 5
      * minutes, games starting in the next 24 hours, 90 of every 100 back, a pick still undecided a week after its game
-     * given back.
+     * given back; 0.60.0: the live scores of the games under way read every minute, 16 games at a time.
      */
     public static SportsbookSettings defaults() {
         return new SportsbookSettings(true, List.of("nfl", "nba", "nhl", "mlb", "ncaaf", "ncaamb"), 5, 24, 90, 7,
-                API_BASE);
+                API_BASE, true, 60, 16);
     }
 
     /** Read {@code games.sportsbook} over {@code d}; never throws. */
@@ -118,7 +133,15 @@ public record SportsbookSettings(boolean enabled, List<String> leagues, int refr
         while (api.endsWith("/")) {
             api = api.substring(0, api.length() - 1);
         }
-        return new SportsbookSettings(enabled, leagues, refresh, hours, rtp, settle, api);
+        boolean live = n.bool("live_scores", d.liveScores());
+        int every = n.whole("score_seconds", d.scoreSeconds(), SCORE_SECONDS_MIN, SCORE_SECONDS_MAX);
+        int most = n.whole("score_games", d.scoreGames(), SCORE_GAMES_MIN, SCORE_GAMES_MAX);
+        return new SportsbookSettings(enabled, leagues, refresh, hours, rtp, settle, api, live, every, most);
+    }
+
+    /** How often the live scores are read, in milliseconds. */
+    public long scoreMs() {
+        return scoreSeconds * 1_000L;
     }
 
     /** A league by its config name or series ticker (any case), or {@code null} for neither. */

@@ -56,8 +56,18 @@ public final class KalshiClient {
      * @param games   the board's games, or {@code null} when the lines weren't asked for or couldn't be read
      * @param markets the open picks' markets that were read, by ticker
      * @param error   why something couldn't be read, or {@code null} when everything was
+     * @param started 0.60.0: the games that started lately (for the live scores; empty when the lines weren't read)
      */
-    public record Result(List<Board.Game> games, Map<String, Kalshi.Market> markets, String error) {
+    public record Result(List<Board.Game> games, Map<String, Kalshi.Market> markets, String error,
+                         List<Board.Game> started) {
+
+        public Result {
+            started = started == null ? List.of() : List.copyOf(started);
+        }
+
+        public Result(List<Board.Game> games, Map<String, Kalshi.Market> markets, String error) {
+            this(games, markets, error, List.of());
+        }
     }
 
     private KalshiClient() {
@@ -70,7 +80,14 @@ public final class KalshiClient {
      */
     public static Result fetch(Fetcher fetcher, Sleeper sleeper, List<SportsbookSettings.League> leagues,
                                List<String> tickers, long now, long until, boolean lines) {
+        return fetch(fetcher, sleeper, leagues, tickers, now, until, lines, now);
+    }
+
+    /** {@link #fetch(Fetcher, Sleeper, List, List, long, long, boolean)}, keeping the games started after {@code since}. */
+    public static Result fetch(Fetcher fetcher, Sleeper sleeper, List<SportsbookSettings.League> leagues,
+                               List<String> tickers, long now, long until, boolean lines, long since) {
         List<Board.Game> games = lines ? new ArrayList<>() : null;
+        List<Board.Game> started = new ArrayList<>();
         Map<String, Kalshi.Market> markets = new LinkedHashMap<>();
         String error = null;
         boolean first = true;
@@ -84,8 +101,9 @@ public final class KalshiClient {
                         }
                         first = false;
                         Kalshi.Page p = Kalshi.events(get(fetcher, sleeper, Kalshi.eventsPath(l.series(), cursor)),
-                                l.key(), now, until);
+                                l.key(), now, until, since);
                         games.addAll(p.games());
+                        started.addAll(p.started());
                         cursor = p.cursor();
                         if (cursor == null || cursor.isBlank() || p.events() < Kalshi.PAGE || p.earliest() > until) {
                             break; // the last page, or one whose games all start after the board's window
@@ -95,6 +113,7 @@ public final class KalshiClient {
             }
         } catch (IOException | IllegalArgumentException e) {
             games = null;
+            started.clear();
             error = describe(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -115,7 +134,43 @@ public final class KalshiClient {
             Thread.currentThread().interrupt();
             error = "interrupted";
         }
-        return new Result(games, markets, error);
+        return new Result(games, markets, error, started);
+    }
+
+    /**
+     * 0.60.0: one round of live scores: each game's {@code /live_data} read in turn, {@link #SPACING_MS} apart (a
+     * "too many requests" asked again as any read is). A game that can't be read is left out (its last score stays);
+     * a "too many requests" that won't clear ends the round there.
+     *
+     * @param games the games to read, by event ticker: {milestone type, milestone id}
+     * @return the scores read, by event ticker, and the first reason one couldn't be read ({@code null} for none)
+     */
+    public static ScoresRead scores(Fetcher fetcher, Sleeper sleeper, Map<String, String[]> games) {
+        Map<String, Scores.Live> out = new LinkedHashMap<>();
+        String error = null;
+        boolean first = true;
+        for (Map.Entry<String, String[]> g : games.entrySet()) {
+            try {
+                if (!first) {
+                    sleeper.sleep(SPACING_MS);
+                }
+                first = false;
+                out.put(g.getKey(), Scores.parse(get(fetcher, sleeper, Scores.path(g.getValue()[0], g.getValue()[1]))));
+            } catch (TooMany e) {
+                error = error != null ? error : describe(e);
+                break; // Kalshi wants a rest: the rest wait for the next round
+            } catch (IOException | IllegalArgumentException e) {
+                error = error != null ? error : describe(e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return new ScoresRead(out, "interrupted");
+            }
+        }
+        return new ScoresRead(out, error);
+    }
+
+    /** What one round of live scores read: the scores by event ticker, and why one couldn't be read. */
+    public record ScoresRead(Map<String, Scores.Live> scores, String error) {
     }
 
     /** One GET, asked again up to {@link #RETRIES} times, each a little later, after a "too many requests". */

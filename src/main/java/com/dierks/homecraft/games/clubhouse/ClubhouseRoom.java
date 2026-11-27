@@ -1498,6 +1498,24 @@ public final class ClubhouseRoom {
         return out;
     }
 
+    /**
+     * Plan 16: the generated Parlor's TV screens ({@link ClubhousePlanner#parlorTvs}), none in an owner-built room
+     * (the owner's own TVs are {@link ClubTvs}').
+     */
+    public List<ClubhousePlanner.Tv> parlorTvs() {
+        return hand || !parlorBuilt() ? List.of() : ClubhousePlanner.parlorTvs(site.box());
+    }
+
+    /** Plan 16: the generated Parlor's score ticker ({@link ClubhousePlanner#parlorTicker}), or {@code null}. */
+    public ClubhousePlanner.Ticker parlorTicker() {
+        return hand || !parlorBuilt() ? null : ClubhousePlanner.parlorTicker(site.box());
+    }
+
+    /** Plan 16: the generated Parlor's video wall's corner blocks ({@link ClubhousePlanner#videoWall(Box)}), or null. */
+    public int[] videoWall() {
+        return hand || !parlorBuilt() ? null : ClubhousePlanner.videoWall(site.box());
+    }
+
     /** Mob Races' id: its place in the Parlor is a whole table's, never a machine's. */
     static final String MOB_RACES = com.dierks.homecraft.games.chance.mobraces.MobRacesSettings.ID;
 

@@ -147,7 +147,7 @@ class DatabaseMigrationTest {
     @Test
     void aNewerDatabaseIsNamedOnceAndLeftAlone() throws SQLException {
         Database.open(conn, Logger.getAnonymousLogger());
-        exec("UPDATE hcm_meta SET value = '43' WHERE key = 'schema_version'");
+        exec("UPDATE hcm_meta SET value = '44' WHERE key = 'schema_version'");
         exec("CREATE TABLE later_things (id INTEGER PRIMARY KEY)");
 
         List<java.util.logging.LogRecord> records = new ArrayList<>();
@@ -169,11 +169,11 @@ class DatabaseMigrationTest {
         });
         Database.open(conn, log);
 
-        assertEquals(43, version(), "never lowered");
+        assertEquals(44, version(), "never lowered");
         assertTrue(table("later_things"), "the newer table is left alone");
         assertEquals(1, records.size(), "one line, and no migration ran");
         assertEquals(java.util.logging.Level.WARNING, records.get(0).getLevel());
-        assertEquals("This database was written by a newer HomeCraft (schema v43); rows this version doesn't know"
+        assertEquals("This database was written by a newer HomeCraft (schema v44); rows this version doesn't know"
                 + " are skipped.", records.get(0).getMessage());
         assertNull(Database.newerSchemaWarning(Database.latestVersion()), "this build's own: nothing");
         assertNull(Database.newerSchemaWarning(0), "an empty database: nothing");
@@ -249,9 +249,9 @@ class DatabaseMigrationTest {
 
     @Test
     void v40IsTheNewestAndV37IsTheWardrobe() {
-        assertEquals(42, Database.latestVersion(),
+        assertEquals(43, Database.latestVersion(),
                 "v37 the wardrobe, v38 the trade log (SHOP-V2-SPEC §7.8), v39 splits, v40 graves, v41 money rounds,"
-                        + " v42 the Sports Board's picks");
+                        + " v42 the Sports Board's picks, v43 their final scores");
         assertTrue(Database.migration(36).contains("cup_settlements"), "v36 is Race Night and the Cup, unchanged");
         String v37 = Database.migration(37);
         for (String column : List.of("kind TEXT NOT NULL DEFAULT 'TRAIL'", "since INTEGER NOT NULL DEFAULT 0",
@@ -275,7 +275,7 @@ class DatabaseMigrationTest {
     @Test
     void v37ToV40OnAnEmptyDatabase() throws SQLException {
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version());
+        assertEquals(43, version());
         assertEquals(COSMETICS_V37, columns("cosmetics_owned"), "§3.2: the five columns after the four of v30");
         assertEquals(TRADES, columns("trades"), "§4.12");
         assertTrue(index("idx_trades_a"));
@@ -306,7 +306,7 @@ class DatabaseMigrationTest {
         exec("INSERT INTO cosmetics_owned(player, cosmetic_id, expires_at, enabled) VALUES('p', 'trail_leaves_2026', 900, 0)");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the upgrade ran v37, v38, v39 and v40");
+        assertEquals(43, version(), "the upgrade ran v37, v38, v39 and v40");
         assertEquals(COSMETICS_V37, columns("cosmetics_owned"));
         assertTrue(table("trades"));
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("SELECT cosmetic_id, expires_at,"
@@ -327,7 +327,7 @@ class DatabaseMigrationTest {
             assertFalse(rs.next());
         }
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "opening again runs nothing twice");
+        assertEquals(43, version(), "opening again runs nothing twice");
     }
 
     // ---- v39 (checkpoint splits, 0.38.4) -------------------------------------------------------------------
@@ -342,7 +342,7 @@ class DatabaseMigrationTest {
         exec("INSERT INTO game_scores(player, game, board, score, at, runs) VALUES('p', 'trials', 'course:x', 61000, 1, 1)");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the upgrade ran v39 and v40");
+        assertEquals(43, version(), "the upgrade ran v39 and v40");
         assertEquals(List.of("player", "course", "layout", "times", "at"), columns("game_splits"));
         assertTrue(Database.migration(39).contains("PRIMARY KEY (player, course, layout)"),
                 "one row per player, course and layout: a Fresh course's next edition is another row");
@@ -355,7 +355,7 @@ class DatabaseMigrationTest {
             assertEquals(61000, rs.getLong(1), "unchanged");
         }
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "opening again runs nothing twice");
+        assertEquals(43, version(), "opening again runs nothing twice");
     }
 
     // ---- v40 (graves, 0.39.0) ---------------------------------------------------------------------------------
@@ -368,7 +368,7 @@ class DatabaseMigrationTest {
         exec("INSERT INTO game_splits(player, course, layout, times, at) VALUES('p', 'c', 1, '100,200', 5)");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the upgrade ran v40");
+        assertEquals(43, version(), "the upgrade ran v40");
         assertEquals(List.of("id", "owner", "owner_name", "world", "x", "y", "z", "created_at", "xp", "items", "state",
                 "closed_at", "closed_by", "notice"), columns("graves"));
         assertTrue(index("idx_graves_owner"));
@@ -384,7 +384,7 @@ class DatabaseMigrationTest {
         exec("UPDATE graves SET state = 'LOOTED'");
         exec("INSERT INTO graves(owner, world, x, y, z, created_at) VALUES('p', 'w', 1, 2, 3, 5)");
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "opening again runs nothing twice");
+        assertEquals(43, version(), "opening again runs nothing twice");
     }
 
     // ---- v41 (the Game Parlor's money rounds, 0.46.0) ---------------------------------------------------------
@@ -398,7 +398,7 @@ class DatabaseMigrationTest {
                 + " VALUES('p', 'twenty_one', 20000, 5, 0, 'OPEN', 7, 'v=2', 1, 1)");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the upgrade ran v41 and v42");
+        assertEquals(43, version(), "the upgrade ran v41 and v42");
         assertTrue(columns("game_rounds").containsAll(List.of("money", "owed")));
         assertTrue(index("idx_game_rounds_owed"));
         try (Statement st = conn.createStatement();
@@ -411,7 +411,7 @@ class DatabaseMigrationTest {
             assertEquals("v=2", rs.getString(5));
         }
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "opening again runs nothing twice");
+        assertEquals(43, version(), "opening again runs nothing twice");
     }
 
     // ---- v42 (the Game Parlor's Sports Board, 0.55.0) ---------------------------------------------------------
@@ -429,10 +429,11 @@ class DatabaseMigrationTest {
                 + " money, owed) VALUES('p', 'wheel', 20000, 10, 18, 'SETTLED', 7, 'v=1', 1, 1, 1, 18)");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the upgrade ran v42");
+        assertEquals(43, version(), "the upgrade ran v42 and v43");
         assertTrue(table("sports_picks"));
         assertEquals(List.of("id", "player", "ticker", "side", "stake", "price", "payout", "placed_at", "status",
-                "settled_at", "paid", "day", "starts_at", "league", "game", "pick"), columns("sports_picks"));
+                "settled_at", "paid", "day", "starts_at", "league", "game", "pick", "final_score"),
+                columns("sports_picks"));
         assertTrue(index("idx_sports_picks_open"));
         assertTrue(index("idx_sports_picks_player"));
         assertTrue(index("idx_sports_picks_day"));
@@ -455,7 +456,45 @@ class DatabaseMigrationTest {
             assertEquals("SETTLED", rs.getString(3));
         }
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "opening again runs nothing twice");
+        assertEquals(43, version(), "opening again runs nothing twice");
+    }
+
+    // ---- v43 (the Sports Board's history, 0.60.0) -------------------------------------------------------------
+
+    /**
+     * v43 adds a pick's final score to a v42 database (0.55.0-0.59.0's): the picks already there keep every value
+     * and have none (NULL), and a pick settled from now on can keep one.
+     */
+    private static final java.util.UUID PICKER = java.util.UUID.fromString("00000000-0000-0000-0000-000000000043");
+
+    @Test
+    void v43AddsAFinalScoreThatOldPicksDontHave() throws SQLException {
+        Database.openAt(conn, Logger.getAnonymousLogger(), 42);
+        assertEquals(42, version(), "a database as 0.59.0 left it");
+        exec("INSERT INTO sports_picks(player, ticker, side, stake, price, payout, placed_at, status, settled_at, paid,"
+                + " day, game, pick) VALUES('" + PICKER + "', 'KXNHLGAME-26NOV25CGYPIT-CGY', 'yes', 10, 500, 1800, 5,"
+                + " 'WON', 9,"
+                + " 1800, 20000, 'Calgary vs Pittsburgh', 'Calgary')");
+        assertFalse(columns("sports_picks").contains("final_score"));
+
+        Database db = Database.open(conn, Logger.getAnonymousLogger());
+        assertEquals(43, version(), "the upgrade ran v43");
+        assertTrue(columns("sports_picks").contains("final_score"));
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT status, paid, game, final_score FROM sports_picks")) {
+            assertTrue(rs.next(), "the old pick is still there");
+            assertEquals("WON", rs.getString(1));
+            assertEquals(1800, rs.getLong(2));
+            assertEquals("Calgary vs Pittsburgh", rs.getString(3));
+            assertNull(rs.getString(4), "an old pick has no final score");
+        }
+        SportsPicksDao dao = new SportsPicksDao(db);
+        assertEquals(1, dao.finalScore("KXNHLGAME-26NOV25CGYPIT", "Final: CGY 6  PIT 3"),
+                "a final score read later is kept on it");
+        assertEquals("Final: CGY 6  PIT 3", dao.history(PICKER).get(0).finalScore());
+        assertEquals(0, dao.finalScore("KXNHLGAME-26NOV25CGYPIT", "Final: CGY 1  PIT 0"), "and never changed");
+        Database.open(conn, Logger.getAnonymousLogger());
+        assertEquals(43, version(), "opening again runs nothing twice");
     }
 
     /** What 0.37's own trail queries answer for {@code player}, in their exact shapes (PrizeDao at 0.37.2). */
@@ -558,7 +597,7 @@ class DatabaseMigrationTest {
         assertTrue(conn.getAutoCommit(), "the connection is back to normal");
 
         Database.open(conn, Logger.getAnonymousLogger());
-        assertEquals(42, version(), "the real v37 to v40 run cleanly afterwards");
+        assertEquals(43, version(), "the real v37 to v40 run cleanly afterwards");
         assertEquals(COSMETICS_V37, columns("cosmetics_owned"));
     }
 
